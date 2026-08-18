@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.ruff_cache/
+data/state.json
+data/state.json.bak
+muxpanel/web/custom.css

@@ -1,0 +1,27 @@
+[project]
+name = "muxpanel"
+version = "0.1.0"
+description = "Folder-organised, CLI-agnostic terminal sessions in a browser, persisted in tmux"
+requires-python = ">=3.11"
+dependencies = []          # deliberate: stdlib only, so it still starts in two years
+
+[project.scripts]
+muxpanel = "muxpanel.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["muxpanel*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]          # long lines are almost always a comment explaining why
+
+[tool.ruff.lint.per-file-ignores]
+"tools/*" = ["E402"]       # sys.path insert before imports, on purpose

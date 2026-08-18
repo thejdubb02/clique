@@ -1,0 +1,45 @@
+# CLI type registry.
+#
+# Adding a coding CLI to muxpanel is adding a block here. If a new CLI ever
+# needs a Python change, this design has failed — say so rather than patching
+# around it.
+#
+# Placeholders usable in `args` and `resume`:
+#   {id}              muxpanel's session id (full uuid)
+#   {uuid}            alias for {id}
+#   {name}            the session name the user typed
+#   {cwd}             working directory
+#   {mode}            current autonomy mode; only valid if `modes` is set
+#   {cli_session_id}  the CLI's own session id; `resume` only
+#
+# Optional keys:
+#   modes       list of autonomy/permission modes. Presence of this key is what
+#               makes the mode pill appear in the UI; omit it and the pill is
+#               hidden for this CLI. No per-CLI code branch anywhere.
+#   mode_key    the key muxpanel sends into the pane to cycle mode
+#   mode_label  text shown in the pill, {mode} substituted
+#   resume      argv used instead of `args` when reattaching to a known
+#               {cli_session_id}
+
+[cli.claude]
+label      = "Claude Code"
+command    = "claude"
+args       = ["--permission-mode", "{mode}", "--session-id", "{id}", "--name", "{name}"]
+resume     = ["--permission-mode", "{mode}", "--resume", "{cli_session_id}"]
+color      = "#c7915b"
+modes      = ["auto", "default", "acceptEdits", "plan"]
+mode_key   = "S-Tab"
+mode_label = "{mode} mode on (shift+tab to cycle)"
+
+[cli.grok]
+label   = "Grok CLI"
+command = "grok"
+args    = []
+color   = "#6f42c1"
+# No `modes` key, so no mode pill. Nothing else differs.
+
+[cli.shell]
+label   = "Shell"
+command = "bash"
+args    = ["-l"]
+color   = "#8b8b8b"
