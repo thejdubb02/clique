@@ -25,7 +25,7 @@ body {
   font: 17px/1.45 "Iowan Old Style", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
 }
 
-code, pre, kbd, .url, .stats, .ah, .fold, .sess, .tab, .term, .bar, .search, .copy, .gh, .chrome {
+code, pre, kbd, .stats, .ah, .fold, .sess, .tab, .term, .bar, .search, .copy, .gh {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -60,13 +60,13 @@ header {
   letter-spacing: .01em;
 }
 .gh {
-  font-size: .78rem;
-  color: var(--mute);
+  font-size: .82rem;
+  color: var(--ink);
   text-decoration: none;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--ink);
   padding-bottom: 1px;
 }
-.gh:hover { color: var(--ink); border-color: var(--ink); }
+.gh:hover { border-bottom-width: 2px; }
 
 main { flex: 1; }
 h1 {
@@ -157,36 +157,12 @@ footer a { color: var(--ink); }
 
 .stage {
   margin: 0;
-  background: #111;
-  display: flex;
-  flex-direction: column;
+  background: var(--app-bg);
+  position: sticky;
+  top: 0;
+  height: 100svh;
   min-height: 100svh;
   overflow: hidden;
-}
-.chrome {
-  display: flex;
-  align-items: center;
-  gap: .7rem;
-  height: 36px;
-  padding: 0 .8rem;
-  background: #2a2a2a;
-  color: #9a9a9a;
-  font-size: 11px;
-  flex: 0 0 36px;
-}
-.dots {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: #3c3c3c;
-  box-shadow: 16px 0 0 #3c3c3c, 32px 0 0 #3c3c3c;
-  margin-right: 28px;
-}
-.url {
-  background: #1e1e1e;
-  color: #8b8b8b;
-  padding: .22rem .7rem;
-  border-radius: 4px;
-  flex: 1;
-  max-width: 16rem;
 }
 
 .app {
@@ -371,7 +347,9 @@ footer a { color: var(--ink); }
   .split { display: flex; flex-direction: column; }
   .stage {
     order: -1;
-    min-height: 54svh;
+    position: relative;
+    height: 54svh;
+    min-height: 22rem;
     max-height: 58svh;
   }
   .sheet {
@@ -383,7 +361,6 @@ footer a { color: var(--ink); }
   .copy { padding: .4rem .7rem; min-height: 44px; }
   .app aside { width: 168px; flex-basis: 168px; }
   .stats { display: none; }
-  .url { max-width: none; }
 }
 
 @media (max-width: 520px) {
