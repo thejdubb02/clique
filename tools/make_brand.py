@@ -168,7 +168,7 @@ def svg_lockup() -> str:
         f'stroke-width="{round_w:.2f}" stroke-linejoin="round"/>'
         for pts, round_w in polygons()
     )
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" width="420" height="100" role="img" aria-label="CLIque — Your private clique of CLIs">
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" width="420" height="100" role="img" aria-label="CLIque: a folder for every CLI on the box">
   <defs>
     <linearGradient id="cq" gradientUnits="userSpaceOnUse" x1="{DIAGONAL[0] * 100:.1f}" y1="{DIAGONAL[0] * 100:.1f}" x2="{DIAGONAL[1] * 100:.1f}" y2="{DIAGONAL[1] * 100:.1f}">
       <stop offset="0" stop-color="{GRAD_FROM}"/>

@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="clique/web/brand/social-preview.png" alt="CLIque — Your private clique of CLIs" width="800">
+  <img src="clique/web/brand/social-preview.png" alt="CLIque: a folder for every CLI on the box" width="800">
 </p>
 
 <p align="center">
-  <strong>Folder-organised, CLI-agnostic coding sessions in a browser, kept alive in tmux.</strong><br>
-  One panel for every agent on the box — Claude Code, Grok, Gemini, Codex, or anything you add in four lines of config.
+  <strong>A folder for every CLI on the box. Coding sessions in the browser, kept alive in tmux.</strong><br>
+  Claude Code, Grok, Gemini, Codex, or anything you add in four lines of config.
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@ If you run more than two coding agents at once, you already know the problem: te
 
 ## Who it is for
 
-You already run more than one coding agent — Claude Code, Grok, Gemini, Codex, or the next one — and you have lost track of which terminal is waiting on you. CLIque is the panel in front of them. It is not an IDE, not a chat client, and not a replacement for the CLIs themselves.
+You already run more than one coding agent. Claude Code, Grok, Gemini, Codex, or the next one, and you have lost track of which terminal is waiting on you. CLIque is the panel in front of them. It is not an IDE, not a chat client, and not a replacement for the CLIs themselves.
 
 If you are happy with a tmux session per project, you do not need this. If you want the tool to *be* the agent, look elsewhere.
 
@@ -36,12 +36,12 @@ If you are happy with a tmux session per project, you do not need this. If you w
 
 | | |
 |---|---|
-| **Command palette** | `Ctrl`/`Cmd`+`K` — fuzzy jump between sessions, most-recently-used first. `>` commands, `@` sessions, `~` past conversations. |
+| **Command palette** | `Ctrl`/`Cmd`+`K`: fuzzy jump between sessions, most-recently-used first. `>` commands, `@` sessions, `~` past conversations. |
 | **History** | Every conversation your CLIs have kept, filed by directory, resumable in one click. Repeated runs of the same scheduled agent fold into one row. |
 | **Folders** | A tree. Drag-drop, double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). |
-| **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Closing a tab is not killing the session — tmux and the CLI keep running. |
+| **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Closing a tab is not killing the session. tmux and the CLI keep running. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. |
-| **Links** | URLs in the pane are clickable — a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. |
+| **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. |
 | **Scroll lock** | Scroll up and the view detaches from the stream. A badge says how far behind you are; the bottom, the lock, or `Ctrl`/`Cmd`+`Shift`+`L` catches you up. |
 | **Paste a screenshot** | `Ctrl`/`Cmd`+`V` saves the image into the session's own directory and drops the path where you were typing. Nothing is sent until you press enter. |
 | **See what it made** | An agent writes a screenshot into the session's directory and a count appears in the tab bar. Grid, full size, and the path back into your prompt in one click. |
@@ -55,7 +55,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **API** | Every action in the panel is an HTTP call, with bearer tokens and read-only ones. Full reference in [API.md](API.md), kept honest by a drift check in the test suite. |
 | **Changelog** | Settings → Changelog: every release with the time it shipped, read from this repo's `CHANGELOG.md` so the two cannot disagree. |
 | **Told, not checked** | One webhook URL, POSTed when a session wants you, errors, finishes or dies. ntfy, Gotify, Discord, Mattermost and Uptime Kuma push all speak it. Real phone notifications, no app of ours. |
-| **Monitoring** | `GET /healthz` answers without a login — point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
+| **Monitoring** | `GET /healthz` answers without a login. Point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |
 | **Touch** | Long press a session for the menu right-click gives, with tap targets sized for a finger. |
 | **Installable** | PWA with a full icon set. (The layout is not mobile-optimised yet.) |
@@ -89,7 +89,7 @@ python3 -m clique password
 python3 -m clique
 ```
 
-It binds to loopback on purpose. Put a tunnel in front of it (Tailscale Serve, Caddy, nginx) if you want it from another machine — do not bind it to the public internet. Anyone who reaches the panel has a terminal as the user that started it.
+It binds to loopback on purpose. Put a tunnel in front of it (Tailscale Serve, Caddy, nginx) if you want it from another machine. Do not bind it to the public internet. Anyone who reaches the panel has a terminal as the user that started it.
 
 ```bash
 # optional: behind Tailscale
@@ -114,7 +114,7 @@ color   = "#6f42c1"
 
 There is no per-CLI branch in the codebase. If adding one ever needs a code change, the design has failed.
 
-Claude Code and Gemini CLI can also declare an **autonomy pill** (the mode above the prompt). That is four keys in the same block — `modes`, `mode_key`, `mode_label` — documented in the comments of `clis.toml`. Omit them and the pill stays hidden, which is the right default for a CLI whose approval is a launch flag.
+Claude Code and Gemini CLI can also declare an **autonomy pill** (the mode above the prompt). That is four keys in the same block (`modes`, `mode_key`, `mode_label`), documented in the comments of `clis.toml`. Omit them and the pill stays hidden, which is the right default for a CLI whose approval is a launch flag.
 
 ## Why it is stdlib-only
 
@@ -132,7 +132,7 @@ That also means the real ceiling on concurrent sessions is the agents, not this.
 
 ## Tests
 
-Neither suite is mocked. The failure modes worth catching — tmux quoting, a PTY that never gets its first byte — only exist across a real socket. GitHub Actions runs all three on every push.
+Neither suite is mocked. The failure modes worth catching (tmux quoting, a PTY that never gets its first byte) only exist across a real socket. GitHub Actions runs all three on every push.
 
 ```bash
 python3 tools/smoke.py                 # engine, against a real tmux server
@@ -145,7 +145,7 @@ They will not catch a UI that renders wrong. Open the page for that.
 
 ## Contributing
 
-Patches welcome, with a short filter: [CONTRIBUTING.md](CONTRIBUTING.md). Feature ideas that need to know which vendor is talking get refused — that is the product, not a freeze.
+Patches welcome, with a short filter: [CONTRIBUTING.md](CONTRIBUTING.md). Feature ideas that need to know which vendor is talking get refused. That is the product, not a freeze.
 
 ## Support the dev
 
