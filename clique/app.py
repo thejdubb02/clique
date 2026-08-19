@@ -160,6 +160,8 @@ class Panel:
                 "mode": session.mode,
                 "modes": list(cli.modes) if cli else [],
                 "mode_key": cli.mode_key if cli else None,
+                "mode_seq": cli.mode_seq if cli else "",
+                "mode_label": cli.mode_label if cli else "",
                 "adopted": session.adopted,
                 "archived": session.archived,
                 "created": session.created,

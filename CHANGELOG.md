@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.11.0 — 2026-08-19
+
+**The autonomy pill was static.** It showed whatever mode a session started in
+and never moved again — not when you clicked it, not when you cycled the mode
+yourself. Clicking sent the key to the CLI and then forgot to write down what
+it had just done.
+
+- Clicking the pill cycles it, and the change is remembered.
+- **Cycling by hand in the pane moves it too.** The key the registry declares
+  is now watched coming *out* of the keyboard as well as sent *into* the pane,
+  so the pill cannot drift out of step with what you did yourself. The key is
+  passed straight through — this observes it, it does not intercept it.
+- The label is the CLI's own wording from `mode_label`. It was hardcoded to
+  Claude Code's "(shift+tab to cycle)", which read as a lie on Gemini.
+- The mode persists, so a reload does not reset it and it follows you to
+  another device.
+
+**What the pill knows, and does not.** It tracks the mode CLIque last saw set —
+by a click, or by the cycle key going through the pane. It does not read the
+CLI's real state, because that means parsing someone's terminal output, which
+is the line this project does not cross. Those are the only two ways the mode
+moves, so in practice they agree.
+
+**How to get it for another CLI:** four lines in `config/clis.toml`, no code —
+documented in the README under *Adding a CLI*. Only Claude Code and Gemini
+declare modes today. The rest of the registry is a catalogue and none of them
+is installed here, so nobody has verified which key cycles what, and a pill
+that names the wrong mode is worse than no pill.
+
 ## 0.10.1 — 2026-08-19
 
 **Fixed: Running and Ungrouped could not be collapsed.** Clicking their headers

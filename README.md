@@ -55,9 +55,42 @@ args    = []
 color   = "#6f42c1"
 ```
 
-Declaring `modes = [...]` is what makes the autonomy pill appear for that CLI.
-Omit it and the pill is hidden. There is no per-CLI branch anywhere in the
-codebase; if adding one ever needs a code change, the design has failed.
+There is no per-CLI branch anywhere in the codebase. If adding one ever needs
+a code change, the design has failed.
+
+### The autonomy pill
+
+The pill above the prompt box belongs to whichever session you are looking at,
+and it comes entirely from that CLI's block. Four keys:
+
+```toml
+[cli.claude]
+modes      = ["auto", "default", "acceptEdits", "plan"]
+mode_key   = "S-Tab"                                # what cycles it
+mode_label = "{mode} mode on (shift+tab to cycle)"  # how it reads
+```
+
+- **`modes`** is what makes the pill appear at all. Omit it and the pill is
+  hidden — which is right for a CLI whose approval is a launch flag rather
+  than something you cycle, like Grok's `--always-approve`.
+- **`mode_key`** is cycled by clicking the pill *and* watched for coming out
+  of the keyboard, so cycling by hand inside the pane moves the pill too.
+  `S-Tab`, `Tab` and `C-<letter>` are understood; anything else means CLIque
+  can send the key but cannot notice you pressing it, and the pill will drift.
+- **`mode_label`** is that CLI's own wording. It used to be hardcoded to
+  Claude Code's, which read as a lie on anything else.
+
+**What the pill knows, and does not.** It tracks the mode CLIque *last saw
+set* — by you clicking it, or by the cycle key going through the pane. It
+cannot read the CLI's actual state, because doing that would mean parsing
+someone's terminal output, and that is the line this project does not cross.
+In practice the two agree, because those are the only two ways the mode moves.
+
+Only Claude Code and Gemini CLI declare modes today. The others in
+`clis.toml` are catalogue entries — none of them is installed on this box, so
+nobody has verified which key cycles what, and **a pill that names the wrong
+mode is worse than no pill**. Adding one is four lines and no code, once
+someone has actually watched it work.
 
 ## Design notes that are easy to get wrong
 
