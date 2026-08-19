@@ -52,16 +52,18 @@ per-IP lockout would lock out the only legitimate user along with the attacker
 
 ## Credentials
 
-- **Login password** — `/root/.clique/password`, mode 0600, an scrypt hash.
-  The server only ever verifies, so keeping the plaintext buys nothing and
-  costs everything if the file is read. Set it with
-  `python3 -m clique password`. **Vaultwarden holds the only copy of the
-  plaintext.**
-- **Cookie signing secret** — `/root/.clique/secret`, 0600, 32 random bytes,
-  persisted so a restart does not log everyone out. Deleting it invalidates
-  every session, which is the "log out everywhere" lever.
-- **API tokens** — `/root/.clique/tokens.json`, 0600, SHA-256 hashes only.
-  A leaked file is a list of names and dates, not working keys. Minted with
+All three live under `$CLIQUE_HOME` (set this to `~/.clique` unless you have a
+reason not to). Mode 0600.
+
+- **Login password** — `password`, an scrypt hash. The server only ever
+  verifies, so keeping the plaintext in this file buys nothing. Set it with
+  `python3 -m clique password`. Keep the plaintext in a password manager, not
+  next to the hash.
+- **Cookie signing secret** — `secret`, 32 random bytes, persisted so a restart
+  does not log everyone out. Deleting it invalidates every session, which is
+  the "log out everywhere" lever.
+- **API tokens** — `tokens.json`, SHA-256 hashes only. A leaked file is a list
+  of names and dates, not working keys. Minted with
   `python3 -m clique token create`, never through the API: an endpoint that
   mints credentials turns any other hole into permanent access.
 
@@ -95,5 +97,6 @@ per-IP lockout would lock out the only legitimate user along with the attacker
 
 ## Reporting
 
-It is a personal tool on a private tailnet; there is no disclosure process.
-If you are reading this because you found something, tell Justin directly.
+Open a [GitHub security advisory](https://github.com/thejdubb02/clique/security/advisories/new)
+if it is exploitable. Anything else can be an issue. Do not file a public issue
+for a hole that reaches a terminal.

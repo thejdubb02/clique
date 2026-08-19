@@ -3,4 +3,6 @@ __pycache__/
 .ruff_cache/
 data/state.json
 data/state.json.bak
+data/*.pre-adopt
 clique/web/custom.css
+
