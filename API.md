@@ -59,9 +59,16 @@ Each session carries `own_input` — whether this CLI draws its own input box,
 which is what `input_mode: "auto"` reads — plus `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
 `folder`, `mode` (and `modes`, `mode_label`), `adopted`, `archived`, `draft`,
 `created`, `last_seen`, `order`, plus the live facts: `alive`, `attached`,
-`command`, `activity` (tmux's own clock) and `busy` — output within the last
-two seconds. `busy` going false is what "this one finished" means here; there
-is no vendor API behind it, which is why it works for any CLI.
+`command`, `activity` (tmux's own clock) and `busy`.
+
+`busy` starts from the activity clock — output within the last two seconds —
+but does not end there. A redraw counts as output, so a CLI that animates while
+it waits ticks the clock forever and would sit permanently on "working". Once a
+pane has claimed to be busy for eight seconds it has to prove it: the visible
+screen is captured and compared, and text that has not changed for four seconds
+is not work whatever the clock says. Quiet panes are never captured, so this
+costs nothing in the ordinary case. There is still no vendor API behind any of
+it, which is why it works for any CLI.
 
 ### `GET /api/stats` · `GET /api/stats/history?minutes=60`
 
@@ -216,13 +223,22 @@ The last few lines of a pane, so "is that one waiting on me" can be answered
 without opening the tab and changing what you are looking at.
 
 ```json
-{"lines": ["Do you want me to apply this? (y/n)"], "alive": true, "activity": 1787200000}
+{"lines": ["Ran 1 shell command", "Flummoxing… (4m 41s · thinking)"],
+ "alive": true, "activity": 1787200000}
 ```
 
-Colour is stripped and trailing blank lines are dropped. `lines` is clamped to
-2–40. Nothing captures a pane until this is called — there is no poller behind
-it — and the answer is cached against the pane's own activity clock, so
-repeated calls while nothing is printed cost one capture.
+The lines that **said** something, not the last N raw rows. A modern CLI's pane
+is mostly frame — box rules, separators, an input box drawn around nothing —
+and showing that verbatim buries the one line that answers the question. A line
+is dropped when every character in it is a box-drawing glyph, a rule, a prompt
+mark or whitespace; that is a property of the text, not knowledge of any CLI,
+and a line with one real word in it is always kept.
+
+Colour is stripped. `lines` is how many to return, clamped to 2–40, default 6;
+a wider window of scrollback is searched to find them. Nothing captures a pane
+until this is called — there is no poller behind it — and the answer is cached
+against the pane's own activity clock, so repeated calls while nothing is
+printed cost one capture.
 
 ### `GET /api/sessions/<id>/artifacts`
 

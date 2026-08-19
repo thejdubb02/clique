@@ -19,7 +19,7 @@ from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from clique import notify, services, tmux
+from clique import notify, services, tmux, working
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
 
@@ -178,6 +178,46 @@ def main() -> int:
     check("a shell does not", not types["shell"].own_input)
     check("and it reaches the browser", reg.get("claude").as_dict()["own_input"] is True)
 
+    print("working, or only redrawing")
+    # The blind spot in tmux's activity clock, and the whole reason
+    # clique/working.py exists: a redraw counts as output, so a CLI that
+    # animates while it waits ticks the clock forever. Two panes that tick it
+    # identically, one of which is doing nothing.
+    tmux.create("sm-still", "/tmp", ["bash", "-c",
+        "while true; do printf '\\033[H\\033[2Jwaiting > '; sleep 0.4; done"], socket=SOCKET)
+    tmux.create("sm-moving", "/tmp", ["bash", "-c",
+        "i=0; while true; do i=$((i+1)); printf '\\033[H\\033[2Jline %s\\n' $i; sleep 0.4; done"],
+        socket=SOCKET)
+    time.sleep(1.0)
+    panes = {p.mux: p for p in tmux.list_sessions(SOCKET)}
+    check("both panes tick the activity clock",
+          all(time.time() - panes[n].activity < 2 for n in ("sm-still", "sm-moving")))
+    check("and both are called working at first",
+          working.busy(panes["sm-still"], SOCKET) and working.busy(panes["sm-moving"], SOCKET))
+
+    # Polled rather than sampled once, because "unchanged" is not a property
+    # of one observation — the first capture after SETTLE has nothing to
+    # compare against and correctly says nothing. The panel polls every three
+    # seconds; this does the same for long enough to decide.
+    deadline = time.time() + working.SETTLE + working.STILL + 12
+    verdicts = {}
+    while time.time() < deadline:
+        panes = {p.mux: p for p in tmux.list_sessions(SOCKET)}
+        for name in ("sm-still", "sm-moving"):
+            verdicts[name] = working.busy(panes[name], SOCKET)
+        if not verdicts["sm-still"]:
+            break
+        time.sleep(2)
+    check("a pane redrawing the same screen settles to not working",
+          not verdicts["sm-still"])
+    check("a pane whose output changes stays working", verdicts["sm-moving"])
+
+    working.forget(set())
+    check("and everything about a session that is gone is dropped",
+          not working._since and not working._seen)
+    for name in ("sm-still", "sm-moving"):
+        tmux.kill(name, SOCKET)
+
     print("service status")
     # The two things that make this feature honest rather than a widget: it
     # only ever asks about a CLI you actually have running, and it says
@@ -255,6 +295,16 @@ def main() -> int:
         tally = done.stdout.strip().splitlines()[-1] if done.stdout.strip() else "no output"
         check(f"front-end logic: {tally}", done.returncode == 0,
               done.stderr.strip()[:200])
+
+    print("the unit that keeps sessions alive")
+    # One line in a file nobody reads, and the entire promise of the product
+    # rests on it. systemd's default KillMode signals every process in the
+    # unit's cgroup, and the tmux server is a child of the panel — so with the
+    # default, upgrading CLIque kills every session it exists to protect.
+    unit = (ROOT / "deploy" / "clique.service").read_text()
+    check("the service unit does not take tmux down with it",
+          "KillMode=process" in unit,
+          "KillMode is missing — a restart will kill every session")
 
     print("icons")
     # The sprite is generated, and a hand-edit or a half-finished rename would

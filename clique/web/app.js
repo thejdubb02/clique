@@ -1100,7 +1100,7 @@ function nextLine(row) {
  * back and forth over a quiet sidebar is one capture rather than one a pass.
  */
 const PEEK_DELAY_MS = 450;      // long enough that crossing a row is not a request
-const PEEK_LINES = 8;
+const PEEK_LINES = 6;
 
 let peekTimer = null;
 let peekId = null;

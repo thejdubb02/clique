@@ -39,6 +39,7 @@ from . import (
     sysinfo,
     tmux,
     version_string,
+    working,
     workspace,
 )
 from .auth import Auth, landing_page, login_page
@@ -197,6 +198,9 @@ class Panel:
 
     def sessions_view(self) -> list[dict]:
         panes = self.live()
+        now = time.time()
+        # Sessions that have gone stop being remembered by the busy check.
+        working.forget(set(panes))
         out = []
         for session in sorted(self.store.sessions, key=lambda s: s.order):
             pane = panes.get(session.mux)
@@ -235,7 +239,11 @@ class Panel:
                 # what drives tab flashing and the optional chime. Derived from
                 # tmux's own activity clock, so it works for any CLI without
                 # CLIque knowing anything about it.
-                "busy": bool(pane and (time.time() - pane.activity) < 2),
+                # Not the raw clock any more: a CLI that animates while it
+                # waits ticks it forever. See clique/working.py — the clock
+                # still decides cheaply, and content decides when the clock
+                # has been saying yes for a while.
+                "busy": bool(pane and working.busy(pane, session.socket, now)),
                 # "waiting" or "error", from whichever tier of the attention
                 # ladder could answer. See Panel._signal.
                 "signal": self._signal(session, pane, cli),
@@ -551,11 +559,32 @@ MAX_COLS, MAX_ROWS = 500, 300
 
 #: A peek is a glance, not a window. Enough lines to see a question and the
 #: line before it; not so many that a tooltip becomes a second terminal.
-PEEK_DEFAULT, PEEK_MIN, PEEK_MAX = 8, 2, 40
+PEEK_DEFAULT, PEEK_MIN, PEEK_MAX = 6, 2, 40
+
+#: Scrollback searched to find those lines. Larger than what is shown, because
+#: the frame is dropped afterwards and a pane can be almost entirely frame.
+PEEK_WINDOW = 160
 
 #: How many panes keep a cached peek. Small on purpose — this is a convenience
 #: for the handful of rows a pointer actually crosses, not an index.
 PEEK_CACHE = 64
+
+#: Characters a line can be made *entirely* of and still be saying nothing:
+#: box drawing, block elements, rules and separators. A line with one real word
+#: in it is never dropped, however much frame is around the word.
+_RULE_CHARS = frozenset(
+    " \t─━│┃┄┅┆┇┈┉┊┋┌┐└┘├┤┬┴┼╌╍╎╏═║╔╗╚╝╠╣╦╩╬▀▄█▌▐░▒▓▁▂▃▅▆▇"
+    "-_=~*.·•+<>|/\\[](){}"
+    # The lookalikes are the point: these are the prompt glyphs CLIs
+    # actually draw, and a line that is only one of them is a bare prompt.
+    "❯❮›‹»«▸▶◂◀⟩⟨"  # noqa: RUF001
+)
+
+
+def _is_rule(line: str) -> bool:
+    """Whether this line is frame rather than content."""
+    return not (set(line) - _RULE_CHARS)
+
 
 #: mux -> ((mux, activity, lines), rows). Module level, because a request
 #: handler is built and thrown away per request and a cache on one would be a
@@ -856,16 +885,26 @@ class Handler(BaseHTTPRequestHandler):
                                    "activity": activity})
 
         try:
+            # A generous window, then filtered down to `lines`. Capturing only
+            # what is to be shown was wrong once the frame started being
+            # dropped: on a pane that is mostly box drawing, eight captured
+            # lines can contain one that says anything.
             text = tmux.capture(session.mux, session.socket,
-                                lines=lines, styled=False)
+                                lines=PEEK_WINDOW, styled=False)
         except (tmux.TmuxError, OSError):
             return self._json({"lines": [], "alive": True, "activity": activity})
 
-        # A pane's bottom is usually blank — a prompt sitting above empty rows.
-        # Those are the lines a peek would otherwise spend showing nothing.
+        # What a peek is for is the last thing that *said* something, and a
+        # modern CLI's pane is mostly frame: box rules, separators, an input
+        # box drawn around nothing. Showing eight raw lines of that buries the
+        # one line that answers the question under seven that do not.
+        #
+        # So the decoration is dropped. Not by knowing anything about any CLI —
+        # a line is dropped when every character in it is a box-drawing glyph,
+        # a rule or whitespace, which is a property of the text and true of
+        # every tool that draws a frame.
         rows = [row.rstrip() for row in text.splitlines()]
-        while rows and not rows[-1]:
-            rows.pop()
+        rows = [row for row in rows if row.strip() and not _is_rule(row)]
         rows = rows[-lines:]
         with _PEEK_LOCK:
             _PEEKED[session.mux] = (key, rows)

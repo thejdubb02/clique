@@ -6,6 +6,9 @@ After=network.target
 Type=simple
 # CHANGE THIS to wherever you cloned the repo. `python3 -m clique` needs
 # that directory on sys.path unless the package is installed.
+# Where the checkout is. `python3 -m clique` imports the package from here, so
+# this has to be the directory holding `clique/` — change it if you cloned
+# somewhere else, or the unit fails with status=200/CHDIR.
 WorkingDirectory=%h/clique
 # Password is an scrypt hash in $CLIQUE_HOME/password (0600). Do not pass
 # the plaintext here: unit files end up in git, and an environment
@@ -17,6 +20,21 @@ Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/python3 -m clique --host 127.0.0.1 --port 3200
 Restart=on-failure
 RestartSec=5
+
+# The whole product in one line.
+#
+# systemd's default is KillMode=control-group, which signals *every* process in
+# the unit's cgroup on stop — and the tmux server CLIque starts is a child, so
+# it lives in that cgroup. With the default, restarting the panel kills the
+# tmux server and every CLI session inside it: an upgrade, a reboot, or a
+# `systemctl restart` silently destroys the work that this tool exists to keep
+# alive. Sessions outliving the browser is the promise; they have to outlive
+# the panel too.
+#
+# KillMode=process signals only the main process. Leaving children behind is
+# exactly the intent here — the tmux server is deliberately independent of the
+# thing that started it, which is why a session survives a panel that crashed.
+KillMode=process
 # Sessions live in tmux, not in this process, so a restart costs a reconnect
 # and nothing else. Restarting freely is the right default.
 

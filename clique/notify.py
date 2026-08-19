@@ -43,6 +43,10 @@ TIMEOUT = 5
 #: nobody away from their desk needs to be told within three seconds.
 INTERVAL = 10
 
+#: A session younger than this cannot be reported as having finished. Long
+#: enough to cover a CLI drawing its opening screen and settling.
+YOUNG = 30
+
 
 #: Never a legitimate webhook target, and the classic way a "POST to a URL"
 #: feature becomes a credential leak: every major cloud serves instance
@@ -223,6 +227,13 @@ class Watcher:
             if was is None:
                 continue          # first look is a baseline, not news
             for event in self._events(was, state):
+                # A session that has just started produces its opening screen,
+                # then settles — which is a busy->quiet edge, and "it finished"
+                # about something twelve seconds old is never what you wanted
+                # to be told. It is the only event that can fire from a session
+                # simply having drawn itself.
+                if event == "finished" and time.time() - (row.get("created") or 0) < YOUNG:
+                    continue
                 post(url, secret, {
                     "event": event,
                     "at": int(time.time()),

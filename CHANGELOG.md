@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.37.0 — 2026-08-19 15:11 PDT
+
+**Restarting CLIque no longer kills every session.** This is the important one.
+The systemd unit did not set `KillMode`, so it took systemd's default —
+`control-group`, which signals *every* process in the unit's cgroup on stop.
+The tmux server CLIque starts is a child of the panel, so it lives in that
+cgroup: `systemctl restart clique`, an upgrade, or a reboot silently destroyed
+the sessions this tool exists to keep alive. Sessions outliving the browser is
+the promise; they have to outlive the panel too.
+
+`KillMode=process` is now in the unit, the test suite fails without it, and a
+session and its scrollback are verified to survive a restart. **If you installed
+the unit before this release, copy `deploy/clique.service` over your
+`~/.config/systemd/user/clique.service` and run `systemctl --user daemon-reload`
+— editing the repo file alone changes nothing.**
+
+**The working indicator stops spinning forever.** tmux's activity clock counts
+a *redraw* as output, so a CLI that animates while it waits ticks it endlessly
+and sat permanently on "working". Measured on a real Grok CLI left completely
+alone: the clock ticked every two seconds for as long as it was watched, while
+the captured pane stayed byte-identical the entire time.
+
+The clock still decides cheaply. Once a pane has claimed to be busy for eight
+seconds it has to prove it: the visible screen is captured and compared, and
+text that has not changed for four seconds is not work whatever the clock says.
+Quiet panes are never captured, so the ordinary case costs nothing, and eight
+sessions all stuck in the pathological state cost under two per cent of one
+core. The trade, stated plainly: a CLI that is genuinely busy while redrawing a
+*byte-identical* screen will read as idle. A spinner is not that, and neither
+is streamed output.
+
+A session that has just started also no longer fires a "finished" notification
+as it settles.
+
+**Peek shows what was said, not what was drawn.** A modern CLI's pane is mostly
+frame — box rules, separators, an input box around nothing — and eight raw
+lines of that buried the one line that answered the question. Lines made
+entirely of box-drawing glyphs, rules, prompt marks or whitespace are dropped,
+which is a property of the text rather than knowledge of any CLI; a line with
+one real word in it is always kept. A wider window of scrollback is searched so
+the filtering has something to find.
+
 ## 0.36.0 — 2026-08-19 14:54 PDT
 
 **Text no longer smears when you have a selection.** Fragments of old lines
