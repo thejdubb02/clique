@@ -585,10 +585,12 @@ button.primary:hover { filter: brightness(1.1); }
 
 /* One row, always. Wrapping would change the header's height per tab, which
    is the same jump this layout exists to remove. */
-#settings .tabs { display: flex; gap: 2px; flex: 0 0 auto; flex-wrap: nowrap;
-                  overflow-x: auto; scrollbar-width: none;
+/* The strip wraps rather than scrolls. It used to scroll with the scrollbar
+   hidden, which meant the last tab — About — was simply invisible: off the
+   edge, with nothing on screen to suggest there was more. Wrapping costs a
+   second row on a narrow sheet and is the same fix a phone needs anyway. */
+#settings .tabs { display: flex; gap: 2px 4px; flex: 0 0 auto; flex-wrap: wrap;
                   border-bottom: 1px solid var(--line); margin-bottom: 16px; }
-#settings .tabs::-webkit-scrollbar { display: none; }
 #settings .tabs button { flex: 0 0 auto; white-space: nowrap; }
 #settings .tabs button {
   background: none; border: 0; color: var(--dim); font: inherit; cursor: pointer;
