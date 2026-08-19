@@ -715,3 +715,31 @@ a.give-value { color: var(--accent); }
 /* The line across the pane marking where you stopped reading. */
 .since-line { border-bottom: 1px solid var(--accent); opacity: .55;
               pointer-events: none; }
+
+/* Changelog — twenty-nine releases in two days, so the day is a heading and
+   the time is what distinguishes one entry from the next. A rail down the left
+   holds them together as a run rather than a stack of unrelated boxes. */
+.clog { display: flex; flex-direction: column; }
+.clog-day { position: sticky; top: 0; z-index: 1; margin: 14px 0 8px;
+            padding: 4px 0; font-size: 11px; font-weight: 600;
+            letter-spacing: .04em; text-transform: uppercase;
+            color: var(--dim); background: var(--panel); }
+.clog-day:first-child { margin-top: 0; }
+.clog-entry { border-left: 2px solid var(--line); padding: 0 0 14px 12px;
+              margin-left: 3px; }
+.clog-entry:hover { border-left-color: var(--accent); }
+.clog-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+             margin-bottom: 4px; }
+.clog-ver { font-weight: 600; font-size: 13px; color: var(--fg); }
+.clog-when { font-size: 11px; color: var(--dim);
+             font-variant-numeric: tabular-nums; }
+.clog-now { font-size: 10px; padding: 1px 8px; border-radius: 999px;
+            background: var(--accent); color: var(--on-accent); }
+.clog-extra { font-size: 11px; color: var(--dim); }
+.clog-entry p { margin: 0 0 6px; font-size: 12px; line-height: 1.6;
+                color: var(--fg); }
+.clog-entry ul { margin: 0 0 6px; padding-left: 16px; }
+.clog-entry li { font-size: 12px; line-height: 1.6; margin-bottom: 4px;
+                 color: var(--fg); }
+.clog-entry code { font-size: 11px; padding: 1px 4px; border-radius: 3px;
+                   background: var(--field); }

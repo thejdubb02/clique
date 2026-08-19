@@ -28,7 +28,7 @@ from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import migrate, sysinfo, tmux, version_string
+from . import changelog, migrate, sysinfo, tmux, version_string
 from .auth import Auth, landing_page, login_page
 from .history import History as ConversationHistory
 from .registry import Registry, RegistryError
@@ -599,6 +599,10 @@ class Handler(BaseHTTPRequestHandler):
                     row["folder"] = auto_folder(conv.cwd, folders)
                     out.append(row)
                 return self._json(out)
+            if path == "/api/changelog":
+                # Parsed from the same CHANGELOG.md the repo ships, so the
+                # release notes in the app cannot drift from the ones on disk.
+                return self._json(changelog.entries())
             if path == "/api/adoptable":
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()

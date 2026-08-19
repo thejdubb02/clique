@@ -997,6 +997,116 @@ const SUPPORT = [
     icon: '<svg viewBox="0 0 32 32" class="give-icon" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#C2A633"/><text x="16" y="23" text-anchor="middle" fill="#fff" font-size="17" font-weight="700" font-family="ui-sans-serif, Helvetica, Arial, sans-serif">&#208;</text></svg>' },
 ];
 
+/* The changelog, out of CHANGELOG.md by way of /api/changelog.
+ *
+ * Fetched the first time the tab is opened rather than at load: it is the one
+ * pane most people look at twice a year, and a panel that starts in a quarter
+ * of a second should not spend any of that on release notes.
+ *
+ * The server sends structure, not markup, so every node here is built rather
+ * than assigned as HTML — nothing from a file becomes an element by accident.
+ */
+let clogLoaded = false;
+
+function dayLabel(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  // Built from parts on purpose: `new Date("2026-08-19")` is parsed as UTC
+  // midnight, which prints as the 18th anywhere west of Greenwich.
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+}
+
+function inlineSpan(span) {
+  const el = document.createElement(
+    span.c ? "code" : span.b ? "b" : span.i ? "i" : "span");
+  el.textContent = span.t;
+  return el;
+}
+
+function fillSpans(el, spans) {
+  for (const span of spans) el.appendChild(inlineSpan(span));
+  return el;
+}
+
+function changelogEntry(entry, running) {
+  const box = document.createElement("article");
+  box.className = "clog-entry";
+
+  const head = document.createElement("div");
+  head.className = "clog-head";
+  const ver = document.createElement("span");
+  ver.className = "clog-ver";
+  ver.textContent = entry.version;
+  head.appendChild(ver);
+
+  const when = document.createElement("span");
+  when.className = "clog-when";
+  when.textContent = entry.time ? `${entry.time} ${entry.zone}`.trim() : entry.date;
+  head.appendChild(when);
+
+  if (entry.version === running) {
+    const badge = document.createElement("span");
+    badge.className = "clog-now";
+    badge.textContent = "you are running this";
+    head.appendChild(badge);
+  }
+  if (entry.extra.length) {
+    head.appendChild(fillSpans(
+      Object.assign(document.createElement("span"), { className: "clog-extra" }),
+      entry.extra));
+  }
+  box.appendChild(head);
+
+  let list = null;
+  for (const block of entry.blocks) {
+    if (block.kind === "li") {
+      if (!list) { list = document.createElement("ul"); box.appendChild(list); }
+      list.appendChild(fillSpans(document.createElement("li"), block.spans));
+    } else {
+      list = null;
+      box.appendChild(fillSpans(document.createElement("p"), block.spans));
+    }
+  }
+  return box;
+}
+
+function renderChangelog(entries) {
+  const host = $("#changelog");
+  host.textContent = "";
+  if (!entries.length) {
+    host.textContent = "No CHANGELOG.md on this install.";
+    return;
+  }
+  // One heading per day, rather than the same date stamped on ten entries:
+  // on a busy day the date is noise and only the time carries information.
+  const running = (state.version || "").split("+")[0];
+  let day = null;
+  for (const entry of entries) {
+    if (entry.date !== day) {
+      day = entry.date;
+      const heading = document.createElement("h3");
+      heading.className = "clog-day";
+      heading.textContent = dayLabel(day);
+      host.appendChild(heading);
+    }
+    host.appendChild(changelogEntry(entry, running));
+  }
+}
+
+async function loadChangelog() {
+  if (clogLoaded) return;
+  const host = $("#changelog");
+  host.textContent = "Reading the changelog…";
+  try {
+    const entries = await api("/api/changelog");
+    clogLoaded = true;               // only latch on success, so a failure retries
+    renderChangelog(entries);
+  } catch {
+    host.textContent = "Could not read the changelog.";
+  }
+}
+
 function renderSupport() {
   const host = $("#support");
   if (!host || host.dataset.built) return;
@@ -1811,6 +1921,7 @@ function wire() {
     for (const pane of document.querySelectorAll(".pane")) {
       pane.hidden = pane.dataset.pane !== button.dataset.pane;
     }
+    if (button.dataset.pane === "changelog") loadChangelog();
   };
 
   $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });

@@ -15,6 +15,15 @@ Docs, each with one job — read the one that matches the question:
 | The full backlog, ops work included | the **CLIque** list in Nextcloud Tasks |
 | What shipped | `CHANGELOG.md` |
 
+## Releasing
+
+Bump `__version__`, write the `CHANGELOG.md` entry, then run
+`python3 tools/stamp_changelog.py` — it puts the wall-clock Pacific time on any
+heading that lacks one, taking it from the release commit where there is one.
+Skipping it leaves an entry the app renders without a time, and on a day with
+ten releases the date alone distinguishes nothing. It is idempotent; run it
+whenever.
+
 ## The three rules
 
 1. **Filesystem, tmux, and process state only** — optional git detection. If a

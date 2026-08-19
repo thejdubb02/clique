@@ -132,6 +132,7 @@
       <button data-pane="notify">Notifications</button>
       <button data-pane="css">Custom CSS</button>
       <button data-pane="api">API</button>
+      <button data-pane="changelog">Changelog</button>
       <button data-pane="about">About</button>
     </nav>
 
@@ -265,6 +266,13 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
       <p class="note">Then call it with <code>Authorization: Bearer &lt;token&gt;</code>.
          Full reference in <code>API.md</code>.</p>
       <div id="tokenRows" class="token-rows"></div>
+    </section>
+
+    <section class="pane" data-pane="changelog" hidden>
+      <p class="note">Every release, newest first, in the time zone the work
+         happened in. Read from the same <code>CHANGELOG.md</code> the repo
+         ships, so it cannot drift.</p>
+      <div id="changelog" class="clog"></div>
     </section>
 
     <section class="pane" data-pane="about" hidden>
