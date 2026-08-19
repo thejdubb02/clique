@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.1 — 2026-08-19
+
+**Fixed: Running and Ungrouped could not be collapsed.** Clicking their headers
+did nothing at all. Collapsing was written to flip a flag on a folder record,
+and those two are views over the sessions rather than folders — there is no
+record to flip, so the click fell through a guard and returned silently.
+Archived worked only because it had its own one-off boolean.
+
+All three now share one mechanism, and it lives in the browser rather than on
+the server. Same rule as sidebar width: which *folders* you keep shut is about
+the work and follows you between devices; which *views* you keep shut is about
+this screen and stays here. Archived still starts closed, since being out of
+the way is the entire point of it.
+
 ## 0.10.0 — 2026-08-19
 
 **The stats bar is a gauge now.** Every reading carries a dot that moves along
