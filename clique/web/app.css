@@ -829,3 +829,9 @@ a.give-value { color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .art-cell { transition: none; }
 }
+
+/* Report links in About. Kept as plain links rather than buttons: they leave
+   the app, and something that leaves should look like it does. */
+.about-links { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; }
+.about-links a { color: var(--accent); font-size: 12px; text-decoration: none; }
+.about-links a:hover { text-decoration: underline; }

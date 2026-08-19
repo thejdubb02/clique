@@ -32,3 +32,17 @@ Bump `__version__` in `clique/__init__.py`, write the `CHANGELOG.md` entry, then
 ## Security
 
 A hole that reaches a terminal is a [private advisory](https://github.com/thejdubb02/clique/security/advisories/new), not a public issue. See [SECURITY.md](SECURITY.md).
+
+## Where requests go, and how they get seen
+
+Issues and discussions are both on. The templates ask for the two things a
+report is useless without — what you were trying to do, and which version —
+and Settings → About links straight to them with the version and browser
+already filled in. Nothing is sent from the panel itself: a tool that phones
+home about its own bugs is a tool nobody self-hosts.
+
+On the maintaining side, `tools/feedback.py` pulls open issues, open
+discussions and outside mentions into `docs/feedback-inbox.md` and marks what
+is new since it last ran. That file is generated and overwritten — decisions
+belong in [docs/ideas-inbox.md](docs/ideas-inbox.md) and
+[ROADMAP.md](ROADMAP.md), which is the whole point of keeping them apart.
