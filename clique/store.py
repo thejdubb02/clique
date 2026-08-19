@@ -20,15 +20,11 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-#: Seeded on first run. Matches the folders already in use in CodemanPanel, so
-#: switching tools does not mean re-filing everything by hand.
+#: Seeded on first run. Empty match lists — fill these with your own trees
+#: in the panel. A match is a directory prefix that auto-files new sessions.
 DEFAULT_FOLDERS = [
-    {"id": "f-platform", "name": "WSG Platform", "color": "#c7915b", "match": ["/root/platform/"]},
-    {"id": "f-ventures", "name": "Ventures", "color": "#6f42c1", "match": ["/root/ventures/"]},
-    {"id": "f-personal", "name": "Personal", "color": "#2d7d46", "match": ["/root/personal/"]},
-    {"id": "f-clients", "name": "Clients", "color": "#1f6feb", "match": ["/root/clients/"]},
-    {"id": "f-skyhawk", "name": "Skyhawk", "color": "#0d7d8f", "match": ["/root/skyhawk"]},
-    {"id": "f-mark", "name": "Mark", "color": "#a63d2f", "match": ["/root/mark"]},
+    {"id": "f-work", "name": "Work", "color": "#c7915b", "match": []},
+    {"id": "f-personal", "name": "Personal", "color": "#2d7d46", "match": []},
 ]
 
 PALETTE = ["#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
@@ -162,9 +158,9 @@ def new_id() -> str:
 def auto_folder(cwd: str, folders: list[Folder]) -> str | None:
     """File a new session by where it runs.
 
-    Longest match wins, so ``/root/mark/duchamp`` beats ``/root/`` if both are
-    configured. A session the user has dragged somewhere keeps that folder —
-    this only ever decides the *initial* home.
+    Longest match wins, so ``/home/you/work/app`` beats ``/home/you/work`` if
+    both are configured. A session the user has dragged somewhere keeps that
+    folder — this only ever decides the *initial* home.
     """
     best: tuple[int, str] | None = None
     for folder in folders:

@@ -70,7 +70,7 @@ class Conversation:
 def _decode_dashed(
     name: str, roots: tuple[str, ...] = ("/root", "/home", "/tmp", "/opt", "/srv")
 ) -> str:
-    """Turn `-root-platform-agent-infra` back into `/root/platform/agent-infra`.
+    """Turn `-home-you-projects-app` back into `/home/you/projects/app`.
 
     The encoding is lossy — a directory with a literal "-" in its name encodes
     the same as a "/" — so this is a best guess, and it is checked against the
@@ -83,7 +83,7 @@ def _decode_dashed(
     if Path(guess).is_dir():
         return guess
     # Walk the segments and re-join with "-" wherever the "/" split does not
-    # exist on disk. Recovers "agent-infra" and "duchamp-events".
+    # exist on disk. Recovers names like "agent-infra" that contain a dash.
     parts = name[1:].split("-")
     path = ""
     for part in parts:

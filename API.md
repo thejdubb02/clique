@@ -97,7 +97,7 @@ names, no counts. With a cookie or a token it adds `version`, `uptime`, `tmux`
 ### `POST /api/sessions` → `201`
 
 ```json
-{"cli": "claude", "cwd": "/root/platform/clique", "name": "clique",
+{"cli": "claude", "cwd": "/home/you/project", "name": "project",
  "folder": "f-abc123", "mode": "default", "cli_session_id": null}
 ```
 
