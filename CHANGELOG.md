@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.30.0 — 2026-08-19 13:49 PDT
+
+**A security pass, from three independent reviews.** Nothing here was reported
+by a user; all of it came from reading the code with fresh eyes. Upgrade if you
+expose CLIque beyond your own machine.
+
+- **The `Origin` check could be defeated by anyone with a free tunnel.** It
+  fell back to the DNS-rebinding allowlist, which accepts any `ts.net`,
+  `trycloudflare.com` or `ngrok` host — correct for the `Host` header, and the
+  exact opposite of what is wanted for `Origin`. A page on someone else's ngrok
+  subdomain counted as our own page, which is the cross-site WebSocket attack
+  the check exists to stop. `Origin` must now match the `Host`, or a name you
+  configured.
+- **`/api/state` returned `webhook_secret` to any read-only token** — enough to
+  forge a signature your receiver trusts. It is write-only now: the page is
+  told whether one is set, never what it is. A blank field means "leave it
+  alone"; type a single `-` to remove one.
+- **`/brand/../app.js` served the application before login.** The public-asset
+  test was a `startswith`, and URL parsing does not collapse `..`. It resolves
+  the path and checks containment now.
+- **The webhook's link-local refusal had two holes**: redirects were followed
+  after the check had passed, and `::ffff:169.254.169.254` is not "in" the IPv4
+  network so the comparison waved it through. Redirects are refused outright —
+  a webhook receiver has no reason to redirect — and mapped addresses are
+  unwrapped before testing.
+- **`state.json` was world-readable** while the password, signing secret and
+  token store were all `0600`. It holds the webhook secret and every unsent
+  draft. Now `0600` from creation, and tightened on load for files written by
+  earlier versions.
+- **The login form read an unbounded body** — the one request an
+  unauthenticated caller may send. Capped before the read.
+- **Control frames were accepted up to 8 MB.** RFC 6455 allows 125 bytes and no
+  fragmentation; a socket with no write permission could send oversized pings
+  indefinitely.
+- **New sessions defaulted to `/root`**, which was a leftover from the machine
+  this was written on rather than a product default. It is now the home of
+  whoever started the server.
+
+Also fixed: a write to the PTY was one-shot and silently truncated a large
+paste; `tmux.exists` let a timeout escape into a request handler; the token
+store had no lock while being written from three threads; and a
+`Content-Length` that was not a number returned 500 instead of ignoring it.
+
+Every one of these is now covered by the test suite, which is the only way a
+fix stays fixed.
+
 ## 0.29.1 — 2026-08-19 13:06 PDT
 
 **You can tell which session you are in from the sidebar again.**

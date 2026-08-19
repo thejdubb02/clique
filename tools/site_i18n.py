@@ -1,15 +1,49 @@
 #!/usr/bin/env python3
-"""Write translated marketing pages under site/<lang>/index.html."""
+"""Build the public site from one copy table plus facts from the repo.
+
+English lives in PAGES['en']. The other languages must have the same keys.
+CLI names, the grok config example, and the Python version are read from
+clis.toml / pyproject.toml at generate time, so the site cannot advertise a
+CLI the catalogue dropped or a Python floor the package no longer claims.
+
+`python3 tools/site_i18n.py` writes site/<lang>/index.html (English at
+site/index.html) and site/i18n.lock.json.
+
+`python3 tools/site_i18n.py --check` is what CI runs. It fails when:
+
+- generated HTML does not match what is committed
+- a translation is missing a key
+- English changed and that language's string did not
+- a featured CLI id is not in clis.toml
+
+It does not machine-translate. New English still needs a person (or the
+other window) to write the other languages; the check is what makes that
+unskippable.
+"""
 from __future__ import annotations
 
+import argparse
+import hashlib
+import json
+import re
+import sys
+import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "site"
+REPO = Path(__file__).resolve().parents[1]
+ROOT = REPO / "site"
+LOCK = ROOT / "i18n.lock.json"
 
 STAR = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25"/></svg>'
 OCTO = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>'
 CLONE = "git clone https://github.com/thejdubb02/clique.git\ncd clique\npython3 -m clique password\npython3 -m clique"
-CLIS = "Claude Code · Grok · Gemini · Codex · OpenCode · Cursor · Cline · Shell"
+CSS_V = "11"
+
+#: Homepage strip. Editorial order; every id must exist in clis.toml.
+FEATURED = ("claude", "grok", "gemini", "codex", "opencode", "cursor", "cline", "shell")
+SHORT_LEDE = 4
+EXAMPLE_CLI = "grok"
+META_KEYS = {"html_lang", "locale"}
 
 HREFLANG = """\
 <link rel="alternate" hreflang="en" href="https://useclique.dev/">
@@ -38,7 +72,240 @@ def langs_html(current: str) -> str:
     return " · ".join(bits)
 
 
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
+def _toml_value(value) -> str:
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_value(v) for v in value) + "]"
+    return json.dumps(value)
+
+
+def load_clis() -> dict:
+    data = tomllib.loads((REPO / "clique" / "config" / "clis.toml").read_text())
+    return data.get("cli") or {}
+
+
+def python_floor() -> str:
+    text = (REPO / "pyproject.toml").read_text()
+    match = re.search(r'requires-python\s*=\s*">=([^"]+)"', text)
+    if not match:
+        raise SystemExit("pyproject.toml has no requires-python floor")
+    return match.group(1)
+
+
+def short_label(label: str) -> str:
+    return label[:-4] if label.endswith(" CLI") else label
+
+
+def facts() -> dict:
+    clis = load_clis()
+    missing = [cid for cid in FEATURED if cid not in clis]
+    if missing:
+        raise SystemExit(
+            "featured CLI id not in clis.toml: " + ", ".join(missing)
+            + "\nThe homepage strip is FEATURED in tools/site_i18n.py. "
+            "Remove it there, or put the CLI back in the catalogue."
+        )
+    names = [short_label(clis[cid]["label"]) for cid in FEATURED]
+    example = clis[EXAMPLE_CLI]
+    snippet = [f"[cli.{EXAMPLE_CLI}]"]
+    for key in ("label", "command", "args", "color"):
+        snippet.append(f"{key:<7} = {_toml_value(example[key])}")
+    version = python_floor()
+    return {
+        "cli_strip": " · ".join(names),
+        "cli_short": ", ".join(names[:SHORT_LEDE]),
+        "python": f"{version}+",
+        "python_badge": f"{version}%2B",
+        "cfg_example": "\n".join(snippet),
+    }
+
+
+def fill(text: str, values: dict) -> str:
+    for key, value in values.items():
+        text = text.replace("{" + key + "}", value)
+    return text
+
+
+def copy_keys() -> list[str]:
+    return sorted(k for k in PAGES["en"] if k not in META_KEYS)
+
+
+def page_path(slug: str) -> Path:
+    return ROOT / "index.html" if slug == "en" else ROOT / slug / "index.html"
+
+
+def render(slug: str, values: dict) -> str:
+    t = dict(PAGES[slug])
+    for key in copy_keys():
+        t[key] = fill(t[key], values)
+    prefix = "" if slug == "en" else "../"
+    canonical = "https://useclique.dev/" if slug == "en" else f"https://useclique.dev/{slug}/"
+    word = "/" if slug == "en" else f"/{slug}/"
+    return TMPL.format(
+        slug=slug,
+        prefix=prefix,
+        canonical=canonical,
+        word_href=word,
+        hreflang=HREFLANG,
+        star=STAR,
+        octo=OCTO,
+        clone=CLONE,
+        clis=values["cli_strip"],
+        python_badge=values["python_badge"],
+        cfg_example=values["cfg_example"],
+        css_v=CSS_V,
+        langs=langs_html(t["html_lang"]),
+        **t,
+    )
+
+
+def current_lock() -> dict:
+    return {
+        key: {lang: _sha(PAGES[lang][key]) for lang in PAGES}
+        for key in copy_keys()
+    }
+
+
+def translation_problems() -> list[str]:
+    problems = []
+    required = set(copy_keys()) | META_KEYS
+    for lang, table in PAGES.items():
+        missing = sorted(required - set(table))
+        extra = sorted(set(table) - required)
+        if missing:
+            problems.append(f"{lang}: missing {', '.join(missing)}")
+        if extra:
+            problems.append(f"{lang}: extra {', '.join(extra)}")
+    if not LOCK.exists():
+        problems.append(f"missing {LOCK.relative_to(REPO)} — run python3 tools/site_i18n.py")
+        return problems
+    previous = json.loads(LOCK.read_text())
+    for key in copy_keys():
+        was = previous.get(key) or {}
+        now_en = _sha(PAGES["en"][key])
+        if not was:
+            problems.append(f"{key}: new English string, translate it in every language then regenerate")
+            continue
+        if was.get("en") == now_en:
+            continue
+        for lang in PAGES:
+            if lang == "en":
+                continue
+            if _sha(PAGES[lang][key]) == was.get(lang):
+                problems.append(
+                    f"{lang}.{key}: English changed and this translation did not"
+                )
+    return problems
+
+
 PAGES = {
+    "en": dict(
+        html_lang="en",
+        locale="en_US",
+        title="CLIque: a folder for every CLI on the box",
+        desc="Coding sessions in folders, in a browser, kept alive in tmux. Self-host is free. Paid is for people who don't want to run it themselves.",
+        ogdesc="A browser panel for every coding CLI on the box. Self-host is free. Paid later if you don't want to run it yourself.",
+        kicker="self-hosted · MIT · 24 MB · no telemetry",
+        h1='A <em>folder</em> for every CLI on the box.',
+        lede="Coding sessions in folders, in a browser, kept alive in tmux. {cli_short}, or four lines of config for the next one. Self-host is free. Paid is for people who don't want to run it themselves.",
+        tag="Folders, tmux, a browser.",
+        copy="Copy",
+        copied="Copied",
+        then="Python {python} and tmux. Nothing else. Then open <code>http://127.0.0.1:3200</code>.",
+        self_b="Self-host",
+        self="Free forever. MIT. Clone it, it runs on your box, it binds loopback.",
+        paid_b="Don't want to self-host",
+        paid="Paid comes later. Sessions stay on a machine you control. We don't host a shell for you.",
+        f24_b="24 MB resident.",
+        f24="No framework, no <code>node_modules</code>, no build.",
+        flop_b="Loopback on purpose.",
+        flop="Anyone who reaches the panel has a terminal as you.",
+        fring_b="The ring is the status.",
+        fring="Spinning = working. Pulsing = waiting on you. Nothing = idle.",
+        cfg_h="Adding a CLI is config, never code.",
+        cfg_then="Reload the page. If adding one ever needs a code change, the design has failed.",
+        faq_h="Questions",
+        q1="Do I have to put it on the internet?",
+        a1="No. It binds loopback. Tunnel it if you need another machine. Don't hang it on the public internet. Anyone who reaches the panel has a terminal as you.",
+        q2="What does it cost?",
+        a2="Self-host is free, MIT. We'll charge later for the version you don't set up yourself. The panel still runs on your machine.",
+        q3="What do I need?",
+        a3="Python {python} and tmux. Nothing else. No Node, no Docker, no account.",
+        q4="How do I add another coding CLI?",
+        a4="Four lines in config. Reload the page. If it ever needs a code change, the design has failed.",
+        get_h="Clone it",
+        coffee='<a href="https://buymeacoffee.com/jdubb">Buy me a coffee</a> if it saved you an afternoon.',
+        search="Search sessions…",
+        fold_work="Work",
+        fold_home="Home",
+        s1="auth rewrite",
+        s2="landing page",
+        s3="migrations",
+        s4="weekly notes",
+        waiting="waiting on you",
+        term1="I'll stop here. The session store looks right;",
+        term2="the middleware still lets a stale cookie through.",
+        term3='Want me to patch <span class="file">app/auth.py</span>, or talk it through first?',
+        prompt="Type a prompt, or a shell command…",
+        run="Run",
+        shot="CLIque: folders of CLI sessions on the left, a terminal on the right. A ring around each logo shows working, waiting, or idle.",
+    ),
+    "zh": dict(
+        html_lang="zh-Hans",
+        locale="zh_CN",
+        title="CLIque: 给机器上每一套 CLI 一个文件夹",
+        desc="编程会话按文件夹排好，开在浏览器里，靠 tmux 一直活着。自托管免费。付费是给不想自己搭的人。",
+        ogdesc="浏览器里的编程会话面板。自托管免费。不想自己跑的话，以后再收费。",
+        kicker="自托管 · MIT · 24 MB · 无遥测",
+        h1="给机器上每一套 CLI 一个<em>文件夹</em>。",
+        lede="编程会话按文件夹排好，开在浏览器里，靠 tmux 一直活着。{cli_short}，或四行配置加上去的下一个。自托管免费。付费是给不想自己搭的人。",
+        tag="文件夹、tmux、浏览器。",
+        copy="复制",
+        copied="已复制",
+        then="需要 Python {python} 和 tmux。没了。然后打开 <code>http://127.0.0.1:3200</code>。",
+        self_b="自托管",
+        self="永远免费。MIT。克隆下来，跑在你的机器上，只绑回环地址。",
+        paid_b="不想自托管",
+        paid="付费稍后。会话仍留在你控制的机器上。我们不会替你托管一个 shell。",
+        f24_b="常驻 24 MB。",
+        f24="没有框架，没有 <code>node_modules</code>，没有构建步骤。",
+        flop_b="故意绑回环。",
+        flop="谁能摸到面板，谁就有你的终端。",
+        fring_b="环就是状态。",
+        fring="转 = 在干活。闪 = 在等你。没有环 = 空闲。",
+        cfg_h="加一套 CLI 是配置，永远不是改代码。",
+        cfg_then="刷新页面。如果加一套还得改代码，设计就失败了。",
+        faq_h="常见问题",
+        q1="一定要挂到公网吗？",
+        a1="不用。默认只绑回环地址。要从别的机器连，自己加隧道。别直接挂公网。谁能摸到面板，谁就有你的终端。",
+        q2="要花钱吗？",
+        a2="自托管免费，MIT。稍后会收不想自己搭的那一版。面板仍跑在你的机器上。",
+        q3="需要什么？",
+        a3="Python {python} 和 tmux。没了。不要 Node，不要 Docker，不要账号。",
+        q4="怎么再加一套编程 CLI？",
+        a4="配置里四行。刷新页面。如果还得改代码，设计就失败了。",
+        get_h="克隆下来",
+        coffee='<a href="https://buymeacoffee.com/jdubb">请我喝杯咖啡</a>，如果它替你省了一个下午。',
+        search="搜索会话…",
+        fold_work="工作",
+        fold_home="个人",
+        s1="登录改写",
+        s2="落地页",
+        s3="迁移",
+        s4="每周笔记",
+        waiting="在等你",
+        term1="先停在这里。会话存储看起来没问题；",
+        term2="中间件还是会放过过期的 cookie。",
+        term3='要我改 <span class="file">app/auth.py</span>，还是先一起看一眼？',
+        prompt="输入提示词，或一条 shell 命令…",
+        run="运行",
+        shot="CLIque：左边是按文件夹排好的 CLI 会话，右边是终端。标志周围的环表示工作中、在等你、或空闲。",
+    ),
     "ja": dict(
         html_lang="ja",
         locale="ja_JP",
@@ -47,11 +314,11 @@ PAGES = {
         ogdesc="ブラウザのコーディングセッションパネル。セルフホストは無料。自分で回したくなければ、有料は後から。",
         kicker="セルフホスト · MIT · 24 MB · テレメトリなし",
         h1='マシン上のすべての CLI に<em>フォルダ</em>を。',
-        lede="コーディングセッションをフォルダに分け、ブラウザで開き、tmux で生かし続ける。Claude、Grok、Gemini、Codex、または設定4行で足した CLI。セルフホストは無料。有料は自分で立てたくない人向け。",
+        lede="コーディングセッションをフォルダに分け、ブラウザで開き、tmux で生かし続ける。{cli_short}、または設定4行で足した CLI。セルフホストは無料。有料は自分で立てたくない人向け。",
         tag="フォルダ、tmux、ブラウザ。",
         copy="コピー",
         copied="コピーしました",
-        then="Python 3.11+ と tmux。それだけ。あとは <code>http://127.0.0.1:3200</code> を開きます。",
+        then="Python {python} と tmux。それだけ。あとは <code>http://127.0.0.1:3200</code> を開きます。",
         self_b="セルフホスト",
         self="永久無料。MIT。クローンして、自分のマシンで動かす。ループバックにだけバインドします。",
         paid_b="セルフホストしたくない",
@@ -70,7 +337,7 @@ PAGES = {
         q2="料金は？",
         a2="セルフホストは無料、MIT。自分で立てない版は後から有料になります。パネルはあなたのマシンで動きます。",
         q3="必要なものは？",
-        a3="Python 3.11+ と tmux。それだけ。Node も Docker もアカウントも不要です。",
+        a3="Python {python} と tmux。それだけ。Node も Docker もアカウントも不要です。",
         q4="コーディング CLI を足すには？",
         a4="設定に4行。ページを再読み込み。コード変更が要るなら、設計は失敗しています。",
         get_h="クローンする",
@@ -98,11 +365,11 @@ PAGES = {
         ogdesc="브라우저 코딩 세션 패널. 셀프호스트는 무료. 직접 돌리기 싫다면 유료는 나중입니다.",
         kicker="셀프호스트 · MIT · 24 MB · 텔레메트리 없음",
         h1='머신 위 모든 CLI에 <em>폴더</em>를.',
-        lede="코딩 세션을 폴더로 나누고, 브라우저에서 열고, tmux로 살려 둡니다. Claude, Grok, Gemini, Codex, 또는 설정 네 줄로 더한 CLI. 셀프호스트는 무료. 유료는 직접 돌리기 싫은 사람을 위한 겁니다.",
+        lede="코딩 세션을 폴더로 나누고, 브라우저에서 열고, tmux로 살려 둡니다. {cli_short}, 또는 설정 네 줄로 더한 CLI. 셀프호스트는 무료. 유료는 직접 돌리기 싫은 사람을 위한 겁니다.",
         tag="폴더, tmux, 브라우저.",
         copy="복사",
         copied="복사됨",
-        then="Python 3.11+와 tmux. 그게 전부입니다. 그다음 <code>http://127.0.0.1:3200</code>을 여세요.",
+        then="Python {python}와 tmux. 그게 전부입니다. 그다음 <code>http://127.0.0.1:3200</code>을 여세요.",
         self_b="셀프호스트",
         self="영원히 무료. MIT. 클론해서 당신 머신에서 돌립니다. 루프백에만 바인드합니다.",
         paid_b="셀프호스트하기 싫다면",
@@ -121,7 +388,7 @@ PAGES = {
         q2="비용은요?",
         a2="셀프호스트는 무료, MIT. 직접 돌리지 않는 버전은 나중에 유료입니다. 패널은 당신 머신에서 돌아갑니다.",
         q3="뭐가 필요한가요?",
-        a3="Python 3.11+와 tmux. 그게 전부입니다. Node도 Docker도 계정도 필요 없습니다.",
+        a3="Python {python}와 tmux. 그게 전부입니다. Node도 Docker도 계정도 필요 없습니다.",
         q4="코딩 CLI를 더하려면?",
         a4="설정에 네 줄. 페이지를 새로고침. 코드 변경이 필요하면 설계가 실패한 겁니다.",
         get_h="클론하세요",
@@ -149,11 +416,11 @@ PAGES = {
         ogdesc="Painel no navegador para cada CLI na máquina. Self-host é grátis. Pago depois se você não quiser rodar sozinho.",
         kicker="self-hosted · MIT · 24 MB · sem telemetria",
         h1='Uma <em>pasta</em> para cada CLI na máquina.',
-        lede="Sessões de código em pastas, no navegador, mantidas vivas no tmux. Claude, Grok, Gemini, Codex, ou qualquer CLI em quatro linhas. Self-host é grátis. Pago é para quem não quer rodar sozinho.",
+        lede="Sessões de código em pastas, no navegador, mantidas vivas no tmux. {cli_short}, ou qualquer CLI em quatro linhas. Self-host é grátis. Pago é para quem não quer rodar sozinho.",
         tag="Pastas, tmux, um navegador.",
         copy="Copiar",
         copied="Copiado",
-        then="Python 3.11+ e tmux. Só isso. Depois abra <code>http://127.0.0.1:3200</code>.",
+        then="Python {python} e tmux. Só isso. Depois abra <code>http://127.0.0.1:3200</code>.",
         self_b="Self-host",
         self="Grátis para sempre. MIT. Clone, rode na sua máquina, só escuta em loopback.",
         paid_b="Não quer self-host",
@@ -172,7 +439,7 @@ PAGES = {
         q2="Quanto custa?",
         a2="Self-host é grátis, MIT. Depois cobramos a versão que você não configura. O painel continua na sua máquina.",
         q3="O que eu preciso?",
-        a3="Python 3.11+ e tmux. Só isso. Sem Node, sem Docker, sem conta.",
+        a3="Python {python} e tmux. Só isso. Sem Node, sem Docker, sem conta.",
         q4="Como acrescento outra CLI de código?",
         a4="Quatro linhas na config. Recarregue a página. Se precisar mudar código, o desenho falhou.",
         get_h="Clone",
@@ -200,11 +467,11 @@ PAGES = {
         ogdesc="Ein Browser-Panel für jede CLI auf der Box. Self-Host ist kostenlos. Bezahlt später, wenn du es nicht selbst betreiben willst.",
         kicker="self-hosted · MIT · 24 MB · keine Telemetrie",
         h1='Ein <em>Ordner</em> für jede CLI auf der Box.',
-        lede="Coding-Sessions in Ordnern, im Browser, am Leben gehalten in tmux. Claude, Grok, Gemini, Codex oder jede CLI in vier Zeilen. Self-Host ist kostenlos. Bezahlt ist für Leute, die es nicht selbst betreiben wollen.",
+        lede="Coding-Sessions in Ordnern, im Browser, am Leben gehalten in tmux. {cli_short} oder jede CLI in vier Zeilen. Self-Host ist kostenlos. Bezahlt ist für Leute, die es nicht selbst betreiben wollen.",
         tag="Ordner, tmux, ein Browser.",
         copy="Kopieren",
         copied="Kopiert",
-        then="Python 3.11+ und tmux. Sonst nichts. Dann <code>http://127.0.0.1:3200</code> öffnen.",
+        then="Python {python} und tmux. Sonst nichts. Dann <code>http://127.0.0.1:3200</code> öffnen.",
         self_b="Self-Host",
         self="Für immer kostenlos. MIT. Klonen, auf deiner Box laufen lassen, nur Loopback.",
         paid_b="Kein Self-Host",
@@ -223,7 +490,7 @@ PAGES = {
         q2="Was kostet es?",
         a2="Self-Host ist kostenlos, MIT. Später kostet die Version, die du nicht selbst aufsetzt. Das Panel läuft weiter auf deiner Maschine.",
         q3="Was brauche ich?",
-        a3="Python 3.11+ und tmux. Sonst nichts. Kein Node, kein Docker, kein Konto.",
+        a3="Python {python} und tmux. Sonst nichts. Kein Node, kein Docker, kein Konto.",
         q4="Wie füge ich eine weitere Coding-CLI hinzu?",
         a4="Vier Zeilen in der Config. Seite neu laden. Wenn das Code braucht, ist das Design gescheitert.",
         get_h="Klonen",
