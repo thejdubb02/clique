@@ -695,3 +695,7 @@ button.primary:hover { filter: brightness(1.1); }
               word-break: break-all; color: var(--fg); }
 a.give-value { color: var(--accent); }
 .give-copy { margin-top: 6px; font-size: 11px; padding: 3px 10px; }
+
+.give-icon { width: 20px; height: 20px; flex: 0 0 auto; }
+.give-head { align-items: center; }
+.give-value { padding-left: 28px; }
