@@ -7,6 +7,8 @@ on a tool whose whole argument is that it adds nothing to the box.
 from __future__ import annotations
 
 import threading
+import time
+from collections import deque
 
 _lock = threading.Lock()
 _previous: tuple[int, int] | None = None  # (busy, total) jiffies
@@ -68,3 +70,54 @@ def memory() -> dict:
 def snapshot(clients: int = 0) -> dict:
     mem = memory()
     return {"cpu": cpu_percent(), "mem": mem, "clients": clients}
+
+
+class History:
+    """A rolling window of CPU and memory samples.
+
+    Exists to answer "was there a spike while I was away", which a live number
+    cannot. Kept in memory on purpose: it is diagnostic, not a record, and
+    writing a sample to disk every few seconds to answer a question asked twice
+    a week is the wrong trade on a box that is short of I/O.
+
+    Sampling happens on its own thread rather than on request, so the series
+    has an even spacing whether or not anyone is looking at it — a graph built
+    from poll-driven samples lies about quiet periods.
+    """
+
+    def __init__(self, interval: int = 5, window_minutes: int = 180) -> None:
+        self.interval = interval
+        self.capacity = max(1, (window_minutes * 60) // interval)
+        self._samples: deque[tuple[int, float, float]] = deque(maxlen=self.capacity)
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+
+    def start(self) -> None:
+        if self._thread:
+            return
+        # Prime the CPU delta so the first real sample is not a meaningless 0.
+        cpu_percent()
+        self._thread = threading.Thread(target=self._run, name="sysinfo", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            mem = memory()
+            with self._lock:
+                self._samples.append((int(time.time()), cpu_percent(), mem["percent"]))
+
+    def series(self, minutes: int = 60) -> dict:
+        cutoff = time.time() - minutes * 60
+        with self._lock:
+            rows = [s for s in self._samples if s[0] >= cutoff]
+        return {
+            "interval": self.interval,
+            "window_minutes": minutes,
+            "samples": [{"t": t, "cpu": c, "mem": m} for t, c, m in rows],
+            "peak_cpu": max((c for _, c, _ in rows), default=0.0),
+            "peak_mem": max((m for _, _, m in rows), default=0.0),
+            # How far back the buffer actually reaches, so the UI can say
+            # "last 12 minutes" after a restart instead of implying an hour.
+            "covered_minutes": round((time.time() - rows[0][0]) / 60) if rows else 0,
+        }

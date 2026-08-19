@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CodemanPanel">
+  <style>
+    .a { fill: #39afec; }
+    .n { fill: #545454; }
+    @media (prefers-color-scheme: dark) { .n { fill: #8b949e; } }
+  </style>
+  <rect x="5" y="13" width="14" height="14" rx="3.5" class="a"/>
+  <rect x="5" y="31" width="14" height="5.5" rx="2.75" class="a"/>
+  <rect x="5" y="40" width="14" height="5.5" rx="2.75" class="a"/>
+  <rect x="26" y="9" width="6" height="46" rx="3" class="n"/>
+  <rect x="38" y="9" width="21" height="6" rx="3" class="n"/>
+  <rect x="53" y="9" width="6" height="46" rx="3" class="n"/>
+  <rect x="38" y="49" width="21" height="6" rx="3" class="n"/>
+</svg>

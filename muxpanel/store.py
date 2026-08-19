@@ -12,6 +12,7 @@ sidebar with it.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 import time
@@ -46,7 +47,45 @@ DEFAULT_SETTINGS = {
     "marker_by_cli": {},
     "markers_in_tabs": True,
     "markers_in_sidebar": True,
+    #: Preset palette id from web/themes.js. "" is the built-in dark.
+    "theme": "",
+    #: "dark" | "light" | "system". Themes carry their own base, so this only
+    #: decides which built-in is used when no preset is chosen.
+    "appearance": "dark",
+    #: Independent, because the two are read at different distances: the
+    #: sidebar is scanned, the terminal is read.
+    "font_panel": 13,
+    "font_terminal": 13,
+    #: "panel" keeps muxpanel's prompt box. "terminal" hides it and lets the
+    #: CLI's own input field be the only one — two stacked prompts is
+    #: redundant chrome. Snippets work in both: muxpanel owns the PTY, so an
+    #: expansion is injected into the pane either way.
+    "input_mode": "panel",
+    #: Three independent slots, applied in this order: both, then panel, then
+    #: terminal. Carried over from CodemanPanel, where custom CSS is the escape
+    #: hatch that stops every small preference becoming a feature request.
+    "css_both": "",
+    "css_panel": "",
+    "css_terminal": "",
+    #: Text expanders: [{"trigger": ";rev", "label": "...", "text": "..."}]
+    "snippets": [],
+    #: A tab that finished while you were looking elsewhere should say so.
+    #: Flash is silent and always safe; sound is opt-in because a room with
+    #: twenty agents in it would otherwise be unbearable.
+    "notify_flash": True,
+    "notify_sound": False,
+    #: Seconds of no pane output before a session counts as finished. Short
+    #: enough to feel immediate, long enough that a CLI pausing to think does
+    #: not read as done.
+    "notify_idle_seconds": 4,
 }
+
+#: A snippet body over this is a document, not an expander, and storing one
+#: would bloat every /api/state response the sidebar polls.
+MAX_SNIPPET_CHARS = 8000
+
+#: Same reasoning: custom CSS is a stylesheet, not a payload.
+MAX_CSS_CHARS = 40000
 
 
 @dataclass
@@ -95,6 +134,31 @@ def auto_folder(cwd: str, folders: list[Folder]) -> str | None:
             if cwd.startswith(prefix) and (best is None or len(prefix) > best[0]):
                 best = (len(prefix), folder.id)
     return best[1] if best else None
+
+
+def _clean_snippets(value) -> list[dict]:
+    """Normalise a snippet list from the browser.
+
+    Kept strict because these are stored, replayed into a terminal, and shown
+    in a menu: a malformed one should be dropped here rather than becoming a
+    render error later.
+    """
+    if not isinstance(value, list):
+        return []
+    out = []
+    for raw in value[:200]:
+        if not isinstance(raw, dict):
+            continue
+        trigger = str(raw.get("trigger") or "").strip()
+        text = str(raw.get("text") or "")[:MAX_SNIPPET_CHARS]
+        if not trigger or not text:
+            continue
+        out.append({
+            "trigger": trigger[:40],
+            "label": str(raw.get("label") or "").strip()[:80],
+            "text": text,
+        })
+    return out
 
 
 class Store:
@@ -231,6 +295,20 @@ class Store:
                 elif key == "marker_default":
                     if value in MARKER_MODES:
                         self.settings[key] = value
+                elif key == "snippets":
+                    self.settings[key] = _clean_snippets(value)
+                elif key.startswith("css_"):
+                    self.settings[key] = str(value or "")[:MAX_CSS_CHARS]
+                elif key in ("theme", "appearance", "input_mode"):
+                    self.settings[key] = str(value or "")[:64]
+                elif key == "notify_idle_seconds":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(2, min(int(value), 120))
+                elif key.startswith("font_"):
+                    # Clamped rather than rejected: a bad number here should
+                    # not be able to make the UI unreadable and unfixable.
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(9, min(int(value), 28))
                 else:
                     self.settings[key] = bool(value)
             self._write()

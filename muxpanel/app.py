@@ -23,11 +23,12 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, sysinfo, tmux
+from . import sysinfo, tmux, version_string
 from .auth import Auth, landing_page, login_page
 from .registry import Registry, RegistryError
 from .store import Session, Store, new_id
 from .stream import PtyBridge
+from .tokens import TokenStore
 from .wsproto import OP_TEXT, WebSocket, handshake_response
 
 WEB = Path(__file__).parent / "web"
@@ -40,11 +41,16 @@ PING_SECONDS = 25
 class Panel:
     """Everything the request handlers share. One instance per process."""
 
-    def __init__(self, store: Store, registry: Registry, auth: Auth) -> None:
+    def __init__(self, store: Store, registry: Registry, auth: Auth,
+                 tokens: TokenStore) -> None:
         self.store = store
         self.registry = registry
         self.auth = auth
+        self.tokens = tokens
+        #: Failed logins per client address, for throttling.
+        self.failures: dict[str, list[float]] = {}
         self.clients = 0
+        self.history = sysinfo.History()
         self._last_reap = 0.0
         self._lock = threading.Lock()
 
@@ -106,12 +112,18 @@ class Panel:
                 "attached": bool(pane and pane.attached),
                 "command": pane.command if pane else None,
                 "activity": pane.activity if pane else 0,
+                # Whether the pane produced output just now. The browser turns
+                # a busy->quiet transition into "this one finished", which is
+                # what drives tab flashing and the optional chime. Derived from
+                # tmux's own activity clock, so it works for any CLI without
+                # muxpanel knowing anything about it.
+                "busy": bool(pane and (time.time() - pane.activity) < 2),
             })
         return out
 
     def state(self) -> dict:
         return {
-            "version": __version__,
+            "version": version_string(),
             "folders": [
                 {"id": f.id, "name": f.name, "color": f.color,
                  "collapsed": f.collapsed, "order": f.order}
@@ -189,7 +201,7 @@ class Panel:
 
 class Handler(BaseHTTPRequestHandler):
     panel: Panel = None  # set by serve()
-    server_version = f"muxpanel/{__version__}"
+    server_version = "muxpanel"  # no version: it tells a scanner what to try
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt: str, *args) -> None:
@@ -227,9 +239,58 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     @property
-    def _authed(self) -> bool:
+    def _bearer(self):
+        """The API token presented on this request, if any."""
+        header = self.headers.get("Authorization") or ""
+        if not header.lower().startswith("bearer "):
+            return None
+        return self.panel.tokens.verify(header[7:].strip())
+
+    @property
+    def _cookie_authed(self) -> bool:
         token = self.panel.auth.token_from_cookies(self.headers.get("Cookie"))
         return self.panel.auth.valid(token)
+
+    @property
+    def _authed(self) -> bool:
+        return self._cookie_authed or self._bearer is not None
+
+    def _same_origin(self) -> bool:
+        """Whether a browser-initiated request came from our own page.
+
+        This is the CSRF check. A cookie is attached by the browser to *any*
+        request to this origin, including one triggered by a page the user did
+        not write, so a cookie alone does not prove intent. An Origin header
+        that matches does.
+
+        Token requests skip this: browsers never attach an Authorization
+        header on their own, so a token proves the caller wrote the request.
+        """
+        origin = self.headers.get("Origin")
+        if not origin:
+            # No Origin is sent on same-origin form posts in some browsers, and
+            # by non-browser clients. Fall back to Referer, then allow — the
+            # alternative breaks curl and every agent that is the point of the
+            # API, and those callers use tokens anyway.
+            referer = self.headers.get("Referer")
+            if not referer:
+                return True
+            origin = "/".join(referer.split("/")[:3])
+        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        return origin.split("://")[-1].split(":")[0] == host.split(":")[0]
+
+    def _may_write(self) -> tuple[bool, str]:
+        """(allowed, reason). Writes need auth, scope, and a same-origin check."""
+        token = self._bearer
+        if token is not None:
+            if not token.allows("write"):
+                return False, "this API token is read-only"
+            return True, ""
+        if not self._cookie_authed:
+            return False, "unauthorized"
+        if not self._same_origin():
+            return False, "cross-origin request refused"
+        return True, ""
 
     def _secure(self) -> bool:
         return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
@@ -256,6 +317,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.state())
             if path == "/api/stats":
                 return self._json(sysinfo.snapshot(self.panel.clients))
+            if path == "/api/stats/history":
+                minutes = max(1, min(int(query.get("minutes") or 60), 180))
+                return self._json(self.panel.history.series(minutes))
             if path == "/api/adoptable":
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()
@@ -289,12 +353,19 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())
             attempt = (form.get("password") or [""])[0]
+            who = self.client_address[0] if self.client_address else "?"
+            if self._throttled(who):
+                return self._send(429, login_page("Too many attempts. Wait a minute."),
+                                  "text/html; charset=utf-8")
             if not self.panel.auth.check_password(attempt):
-                # Deliberately slow: this endpoint is reachable by anyone on
-                # the tailnet and guessing should not be free.
+                # Deliberately slow, and counted: this endpoint is reachable by
+                # anyone who can reach the tunnel, and guessing should be both
+                # expensive and self-limiting.
+                self._record_failure(who)
                 time.sleep(1.0)
                 return self._send(401, login_page("Wrong password."),
                                   "text/html; charset=utf-8")
+            self.panel.failures.pop(who, None)
             token = self.panel.auth.issue()
             cookie = self.panel.auth.cookie_header(token, self._secure())
             # 200 with a landing page, not a 3xx. See auth.LANDING for why a
@@ -302,8 +373,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, landing_page(), "text/html; charset=utf-8",
                               {"Set-Cookie": cookie})
 
-        if not self._authed:
-            return self._json({"error": "unauthorized"}, 401)
+        allowed, reason = self._may_write()
+        if not allowed:
+            return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
 
         try:
             body = self._body()
@@ -341,8 +413,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:
         path, _ = self._route()
-        if not self._authed:
-            return self._json({"error": "unauthorized"}, 401)
+        allowed, reason = self._may_write()
+        if not allowed:
+            return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
         body = self._body()
         parts = path.strip("/").split("/")
         try:
@@ -369,8 +442,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         path, _ = self._route()
-        if not self._authed:
-            return self._json({"error": "unauthorized"}, 401)
+        allowed, reason = self._may_write()
+        if not allowed:
+            return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
         parts = path.strip("/").split("/")
         try:
             if len(parts) == 3 and parts[1] == "sessions":
@@ -385,6 +459,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
+
+    #: Wrong passwords tolerated per address before a cooling-off period.
+    MAX_FAILURES = 8
+    FAILURE_WINDOW = 300
+
+    def _throttled(self, who: str) -> bool:
+        cutoff = time.time() - self.FAILURE_WINDOW
+        recent = [t for t in self.panel.failures.get(who, []) if t > cutoff]
+        self.panel.failures[who] = recent
+        return len(recent) >= self.MAX_FAILURES
+
+    def _record_failure(self, who: str) -> None:
+        self.panel.failures.setdefault(who, []).append(time.time())
 
     def _fail(self, exc: Exception) -> None:
         traceback.print_exc()
@@ -501,6 +588,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(host: str, port: int, panel: Panel) -> None:
     Handler.panel = panel
+    panel.history.start()
     tmux.bootstrap()
     # A crash leaves viewer sessions behind. They hold no work, so clearing
     # them at startup is free and keeps `tmux ls` honest.
@@ -509,5 +597,5 @@ def serve(host: str, port: int, panel: Panel) -> None:
         print(f"cleared {stale} stale viewer session(s)", flush=True)
     httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.daemon_threads = True
-    print(f"muxpanel {__version__} on http://{host}:{port}", flush=True)
+    print(f"muxpanel {version_string()} on http://{host}:{port}", flush=True)
     httpd.serve_forever()

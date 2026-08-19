@@ -80,12 +80,14 @@ icon    = "shell.svg"
 # --------------------------------------------------------------- unverified --
 
 [cli.codex]
+icon    = "codex.svg"
 label   = "Codex CLI"
 command = "codex"
 args    = []
 color   = "#10a37f"
 
 [cli.copilot]
+icon    = "copilot.svg"
 label   = "GitHub Copilot CLI"
 command = "copilot"
 args    = []
@@ -104,12 +106,14 @@ args    = []
 color   = "#e8a33d"
 
 [cli.cursor]
+icon    = "cursor.svg"
 label   = "Cursor CLI"
 command = "cursor-agent"
 args    = []
 color   = "#7a7fd6"
 
 [cli.qwen]
+icon    = "qwen.svg"
 label   = "Qwen Code"
 command = "qwen"
 args    = []

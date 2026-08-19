@@ -5,13 +5,15 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
-from . import __version__, tmux
+from . import tmux, version_string
 from .app import Panel, serve
 from .auth import Auth, AuthDisabled
 from .registry import Registry, RegistryError
 from .store import Store
+from .tokens import TokenStore
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path(os.environ.get("MUXPANEL_HOME", "/root/.muxpanel"))
@@ -34,6 +36,40 @@ def read_password(explicit: str | None) -> str:
         return ""
 
 
+def manage_tokens(args) -> int:
+    store = TokenStore(HOME / "tokens.json")
+
+    if args.action == "list":
+        rows = store.listing()
+        if not rows:
+            print("no API tokens. Create one: python3 -m muxpanel token create <name>")
+        for row in rows:
+            used = time.strftime("%Y-%m-%d", time.localtime(row["last_used"])) \
+                if row["last_used"] else "never"
+            print(f"{row['id']}  {row['name']:<24} {','.join(row['scopes']):<11} last used {used}")
+        return 0
+
+    if args.action == "revoke":
+        if not args.target:
+            print("which token? see: python3 -m muxpanel token list", file=sys.stderr)
+            return 1
+        ok = store.revoke(args.target)
+        print("revoked" if ok else f"no token with id {args.target}")
+        return 0 if ok else 1
+
+    if not args.target:
+        print("name it, so `token list` is readable later", file=sys.stderr)
+        return 1
+    token, raw = store.create(args.target, ["read"] if args.read_only else None)
+    print(f"created {token.id} ({','.join(token.scopes)})")
+    print()
+    print(f"  {raw}")
+    print()
+    print("Shown once — only its hash is stored. Put it in the agent's config now.")
+    print("Use it as:  Authorization: Bearer <token>")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="muxpanel", description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
@@ -42,8 +78,21 @@ def main(argv: list[str] | None = None) -> int:
                         help="overrides MUXPANEL_PASSWORD and ~/.muxpanel/password")
     parser.add_argument("--config", default=str(ROOT / "config" / "clis.toml"))
     parser.add_argument("--state", default=str(ROOT / "data" / "state.json"))
-    parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--version", action="version", version=version_string())
+
+    # Token management is a CLI job, not an API one: an endpoint that mints
+    # credentials is an endpoint that escalates any other hole into permanent
+    # access. Creating one requires shell on the box.
+    sub = parser.add_subparsers(dest="command")
+    make = sub.add_parser("token", help="manage API tokens for agents")
+    make.add_argument("action", choices=["create", "list", "revoke"])
+    make.add_argument("target", nargs="?", help="name to create, or id to revoke")
+    make.add_argument("--read-only", action="store_true")
+
     args = parser.parse_args(argv)
+
+    if args.command == "token":
+        return manage_tokens(args)
 
     if not tmux.available():
         print("tmux not found. Install: sudo apt install tmux", file=sys.stderr)
@@ -62,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    panel = Panel(Store(Path(args.state)), registry, auth)
+    panel = Panel(Store(Path(args.state)), registry, auth, TokenStore(HOME / "tokens.json"))
     try:
         serve(args.host, args.port, panel)
     except KeyboardInterrupt:

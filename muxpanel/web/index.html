@@ -92,30 +92,138 @@
 
 <div id="settings" hidden>
   <div class="sheet">
-    <h2>Settings</h2>
+    <header class="sheet-head">
+      <h2>Settings</h2>
+      <button type="button" id="settingsDone" class="hdr-btn" title="Close">&#10005;</button>
+    </header>
 
-    <section>
-      <h3>Where to show CLI markers</h3>
-      <label class="check"><input type="checkbox" id="setTabs"> Tab bar</label>
-      <label class="check"><input type="checkbox" id="setSidebar"> Sidebar</label>
-      <p class="note">
-        The live/attached status dot is separate and always shown — that is
-        status, not branding.
-      </p>
+    <nav class="tabs" id="setTabs">
+      <button data-pane="appearance" class="on">Appearance</button>
+      <button data-pane="markers">CLI markers</button>
+      <button data-pane="snippets">Snippets</button>
+      <button data-pane="notify">Notifications</button>
+      <button data-pane="css">Custom CSS</button>
+      <button data-pane="api">API</button>
+      <button data-pane="about">About</button>
+    </nav>
+
+    <section class="pane" data-pane="appearance">
+      <label class="field">Theme
+        <select id="setTheme"></select>
+      </label>
+      <label class="field">Base appearance
+        <select id="setAppearance">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="system">Follow the system</option>
+        </select>
+      </label>
+      <p class="note">A preset carries its own light or dark base. This only
+         decides which built-in is used when no preset is chosen.</p>
+
+      <h3>Font size</h3>
+      <label class="field row">Sidebar
+        <input type="range" id="setFontPanel" min="9" max="28" step="1">
+        <output id="outFontPanel"></output>
+      </label>
+      <label class="field row">Terminal
+        <input type="range" id="setFontTerminal" min="9" max="28" step="1">
+        <output id="outFontTerminal"></output>
+      </label>
+
+      <h3>Prompt box</h3>
+      <label class="field">Where you type
+        <select id="setInputMode">
+          <option value="panel">muxpanel's prompt box</option>
+          <option value="terminal">The CLI's own input field only</option>
+        </select>
+      </label>
+      <p class="note">Most CLIs draw their own prompt, so two stacked boxes is
+         redundant chrome. Snippets work either way — muxpanel owns the
+         terminal, so an expansion is typed straight into the pane.</p>
     </section>
 
-    <section>
+    <section class="pane" data-pane="markers" hidden>
+      <h3>Where to show them</h3>
+      <label class="check"><input type="checkbox" id="setTabsMarkers"> Tab bar</label>
+      <label class="check"><input type="checkbox" id="setSidebar"> Sidebar</label>
+      <p class="note">The live/attached status dot is separate and always
+         shown — that is status, not branding.</p>
       <h3>Per CLI</h3>
-      <p class="note">
-        <strong>Both</strong> is the icon tinted in the CLI's colour.
-        <strong>Icon</strong> is the same shape in grey.
-        <strong>Colour</strong> is a plain chip. <strong>None</strong> is nothing.
-      </p>
+      <p class="note"><strong>Both</strong> is the icon tinted in the CLI's colour.
+         <strong>Icon</strong> is the same shape in grey.
+         <strong>Colour</strong> is a plain chip. <strong>None</strong> is nothing.</p>
       <div id="cliRows" class="cli-rows"></div>
       <p class="note" id="notInstalledNote"></p>
     </section>
 
-    <div class="actions"><button type="button" id="settingsDone" class="primary">Done</button></div>
+    <section class="pane" data-pane="snippets" hidden>
+      <p class="note">Type a trigger then press <kbd>Tab</kbd> — in muxpanel's
+         prompt box or in the CLI's own input field. Placeholders:
+         <code>{cwd}</code>, <code>{project}</code>, <code>{name}</code>, and
+         <code>{cursor}</code> for where the caret ends up.</p>
+      <div id="snippetRows" class="snippet-rows"></div>
+      <button type="button" id="addSnippet">Add a snippet</button>
+    </section>
+
+    <section class="pane" data-pane="notify" hidden>
+      <label class="check"><input type="checkbox" id="setFlash">
+        Flash a tab when its session finishes</label>
+      <label class="check"><input type="checkbox" id="setSound">
+        Play a short chime as well</label>
+      <label class="field row">Quiet for
+        <input type="range" id="setIdle" min="2" max="60" step="1">
+        <output id="outIdle"></output> seconds before it counts as finished
+      </label>
+      <p class="note">"Finished" means the pane stopped producing output.
+         That works for any CLI without muxpanel knowing anything about it,
+         but a CLI pausing to think looks the same as one that is done — raise
+         the delay if it fires too eagerly.</p>
+      <button type="button" id="testChime">Test the chime</button>
+    </section>
+
+    <section class="pane" data-pane="css" hidden>
+      <p class="note">Applied in order: both, then panel, then terminal. The
+         terminal block is scoped to the terminal area, so you can restyle one
+         without touching the other.</p>
+      <label class="field">Both
+        <textarea id="cssBoth" rows="5" spellcheck="false"
+                  placeholder="/* applies everywhere */"></textarea></label>
+      <label class="field">Panel only
+        <textarea id="cssPanel" rows="5" spellcheck="false"
+                  placeholder="/* sidebar, tabs, input bar */"></textarea></label>
+      <label class="field">Terminal only
+        <textarea id="cssTerminal" rows="5" spellcheck="false"
+                  placeholder="/* scoped to the terminal area */"></textarea></label>
+      <button type="button" id="saveCss" class="primary">Apply</button>
+      <span class="note" id="cssSaved"></span>
+    </section>
+
+    <section class="pane" data-pane="api" hidden>
+      <p class="note">Everything in this panel is an API call, so an agent can
+         drive it. Tokens are minted on the box — an endpoint that creates
+         credentials would turn any other hole into permanent access.</p>
+      <pre class="code">python3 -m muxpanel token create my-agent
+python3 -m muxpanel token create readonly --read-only
+python3 -m muxpanel token list
+python3 -m muxpanel token revoke tk_xxxxxxxx</pre>
+      <p class="note">Then call it with <code>Authorization: Bearer &lt;token&gt;</code>.
+         Full reference in <code>API.md</code>.</p>
+      <div id="tokenRows" class="token-rows"></div>
+    </section>
+
+    <section class="pane" data-pane="about" hidden>
+      <div class="about">
+        <img src="brand/logo.svg" alt="" width="48" height="48">
+        <div>
+          <div class="about-name">muxpanel</div>
+          <div class="note" id="aboutVersion"></div>
+        </div>
+      </div>
+      <p class="note">Folder-organised, CLI-agnostic coding sessions in a
+         browser, persisted in tmux. Stdlib only — no framework, no
+         node_modules, no build step.</p>
+    </section>
   </div>
 </div>
 
