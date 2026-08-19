@@ -1001,6 +1001,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.create_session(body), 201)
             if path == "/api/sessions/adopt":
                 return self._json(self.panel.adopt())
+            if path == "/api/workspace":
+                # A directory that does not exist yet is the commonest reason a
+                # new session fails, and "go and find a shell" is a poor answer
+                # from a tool whose whole job is running shells.
+                target = body.get("cwd") or ""
+                made, why = workspace.make(target)
+                if not made:
+                    return self._json({"error": why}, 400)
+                return self._json(workspace.look(
+                    target,
+                    [x for x in self.panel.store.sessions
+                     if not x.archived and x.mux in self.panel.live()]), 201)
             if path == "/api/folders":
                 folder = self.panel.store.add_folder(body.get("name") or "New folder",
                                                      body.get("color"))

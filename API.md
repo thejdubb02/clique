@@ -217,6 +217,22 @@ repo too large to answer within three seconds.
 Advisory only — nothing is locked, refused or enforced. Pulled, never polled:
 this touches the disk, and it runs when someone has stopped typing a path.
 
+### `POST /api/workspace` → `201` with the same shape
+
+```json
+{"cwd": "/srv/new-project"}
+```
+
+Creates the directory, parents included, and returns what `GET` would now say
+about it. A path that already exists as a directory is a success; a relative
+path, an empty one, or something that exists and is not a directory is a `400`
+with the reason in `error`.
+
+Never implicit — nothing calls this except a person pressing the button that
+names the path. There is no sandbox on where, deliberately: anyone who can
+reach the panel already has a shell as this user, so a restriction here would
+protect nobody while breaking the ordinary case of working outside `$HOME`.
+
 ### `GET /api/sessions/<id>/peek?lines=8`
 
 The last few lines of a pane, so "is that one waiting on me" can be answered

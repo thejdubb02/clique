@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.40.0 — 2026-08-19 15:42 PDT
+
+**Right-click works on sidebar rows again.** The preview popup added in 0.34.0
+sat at a higher layer than the context menu, and hovering a row for half a
+second is exactly what you do on the way to right-clicking it — so the menu
+opened *behind* the preview, every time, on any session you were not already
+looking at. It failed silently, because the clicks still landed on a menu you
+could not see. The preview now sits below the menu and closes when one opens,
+and the test suite asserts the order of the whole overlay stack.
+
+**CLIque can make the directory.** Typing a path that does not exist ended in
+"there is no directory at that path" and an instruction to go and find a shell —
+from a tool whose entire job is running shells. There is a **Create it** button
+on that message now. Parents are created; a relative path, an empty one, or
+something that exists and is not a directory is refused with the reason. Never
+implicit: it happens because the button naming that path was pressed.
+
 ## 0.39.0 — 2026-08-19 15:26 PDT
 
 **Move a session to another folder without dragging it.** Filing a session

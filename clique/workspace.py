@@ -93,6 +93,43 @@ def touched(cwd: Path, since: float) -> int:
     return hits
 
 
+def make(cwd: str) -> tuple[bool, str]:
+    """Create a directory. Returns (worked, why not).
+
+    Creating a directory is filesystem state, which is the one kind of state
+    this product is allowed to write — and the alternative was a dead end: the
+    dialog said "there is no directory at that path" and left you to go and
+    find a shell to fix it in.
+
+    Parents are created, because the path someone types for a new project is
+    usually a new leaf under a tree that exists and refusing that would be
+    pedantry. Nothing is ever created implicitly: this only runs because
+    somebody pressed a button naming the path they were about to make.
+
+    No sandbox, deliberately. Anyone who can reach the panel already has a
+    shell as this user, so a restriction here would protect nobody while
+    breaking the ordinary case of working outside your home directory.
+    """
+    text = (cwd or "").strip()
+    if not text:
+        return False, "no path given"
+    try:
+        path = Path(text).expanduser()
+    except (RuntimeError, ValueError):
+        return False, "that is not a path"
+    if not path.is_absolute():
+        # A relative path would land wherever the server happens to be running,
+        # which is never what the person typing it meant.
+        return False, "give a full path, starting from /"
+    if path.exists():
+        return (True, "") if path.is_dir() else (False, "something else is already there")
+    try:
+        path.mkdir(parents=True)
+    except OSError as err:
+        return False, err.strerror or "could not create it"
+    return True, ""
+
+
 def look(cwd: str, sessions) -> dict:
     """What is going on in this directory, as far as we are allowed to know.
 

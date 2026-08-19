@@ -145,5 +145,26 @@ console.log("directories the panel already knows");
   check("a directory with both is running, not recent", kindOf("/srv/dupe") === "running");
 }
 
+console.log("things that sit on top of other things");
+{
+  // A preview that outranks a menu is a menu nobody can use — and it fails
+  // silently, because the click still lands on the control you cannot see.
+  // The stack is small enough to assert outright.
+  const css = fs.readFileSync(path.join(ROOT, "clique/web/app.css"), "utf8");
+  const layerOf = (selector) => {
+    const at = css.indexOf(selector + " {");
+    if (at < 0) return null;
+    const found = /z-index:\s*(\d+)/.exec(css.slice(at, css.indexOf("}", at)));
+    return found ? Number(found[1]) : null;
+  };
+  const peek = layerOf("#peek");
+  const menu = layerOf("#menu");
+  const palette = layerOf("#palette");
+  check("the preview sits below the context menu", peek !== null && menu !== null && peek < menu,
+        `peek ${peek} vs menu ${menu}`);
+  check("and the palette sits above both", palette > menu && palette > peek,
+        `palette ${palette}`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

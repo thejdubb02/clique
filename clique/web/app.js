@@ -1025,6 +1025,9 @@ let lastMenuEvent = null;
 
 function showMenu(ev, items) {
   ev.preventDefault();
+  // A preview and a menu about the same row are two answers to different
+  // questions, and only one of them was asked for.
+  hidePeek();
   lastMenuEvent = ev;
   const menu = $("#menu");
   menu.innerHTML = "";
@@ -1220,6 +1223,8 @@ function wirePeek() {
     peekTimer = setTimeout(() => peekAt(row.dataset.id, row), PEEK_DELAY_MS);
   });
   tree.addEventListener("mouseleave", hidePeek);
+  // A right-click anywhere is a request for something other than a preview.
+  tree.addEventListener("contextmenu", hidePeek);
   // Anything that moves the sidebar out from under the popover closes it,
   // rather than leaving it pointing at a row that is no longer there.
   tree.addEventListener("scroll", hidePeek, { passive: true });
@@ -2881,6 +2886,30 @@ function checkWorkspace() {
       box.textContent = "There is no directory at that path" +
         (knownDirs().some((d) => d.cwd === cwd)
           ? " any more — it is remembered from an earlier session" : "");
+      /* And an offer to fix it, rather than a dead end.
+       *
+       * Sending someone off to find a shell to run `mkdir` is a poor answer
+       * from a tool whose entire job is running shells. Never automatic: the
+       * directory is created because this button was pressed, naming the path
+       * it is about to make. */
+      const make = document.createElement("button");
+      make.type = "button";
+      make.className = "heads-make";
+      make.textContent = "Create it";
+      make.onclick = async () => {
+        make.disabled = true;
+        try {
+          await api("api/workspace", {
+            method: "POST", body: JSON.stringify({ cwd }),
+          });
+          toast("Created " + cwd);
+        } catch (err) {
+          box.textContent = String(err.message || err);
+          return;
+        }
+        checkWorkspace();
+      };
+      box.append(" ", make);
       box.hidden = false;
       return;
     }

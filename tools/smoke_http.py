@@ -15,6 +15,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import socket
 import ssl
 import struct
@@ -377,6 +378,21 @@ def main() -> int:
               pane_width() == 100, pane_width())
         watcher.close()
     call("/api/sessions/" + made_s["id"], "DELETE")
+
+    print("making a directory that is not there yet")
+    # The dead end this removes: the dialog said "there is no directory at that
+    # path" and left you to go and find a shell, from a tool whose whole job is
+    # running shells.
+    fresh = f"/tmp/clique-mk-{secrets.token_hex(4)}/nested/leaf"
+    status, got = call("/api/workspace", "POST", {"cwd": fresh})
+    check("creates a path, parents and all", status == 201 and got.get("exists"), got)
+    status, _ = call("/api/workspace", "POST", {"cwd": fresh})
+    check("and asking twice is not an error", status == 201, status)
+    for bad, why in ((""," an empty path"), ("some/where", " a relative path"),
+                     ("/etc/hostname", " a file")):
+        status, body = call("/api/workspace", "POST", {"cwd": bad})
+        check("refuses" + why, status == 400 and body.get("error"), (status, body))
+    shutil.rmtree(Path(fresh).parents[1], ignore_errors=True)
 
     print("read-only tokens")
     # The bypass this exists to stop: every write route is scoped, and the

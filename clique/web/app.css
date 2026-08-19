@@ -795,6 +795,14 @@ button.primary:hover { filter: brightness(1.1); }
 /* A path that is not there is not a heads-up, it is a thing that will fail.
    Same shape, so it does not read as a different kind of message, but the
    colour the rest of the panel uses for stopped. */
+.heads-make {
+  margin-left: 4px; padding: 2px 8px; border-radius: 4px; font: inherit;
+  font-size: 11px; cursor: pointer;
+  border: 1px solid var(--err); background: none; color: var(--fg);
+}
+.heads-make:hover { background: var(--err); color: var(--on-accent); }
+.heads-make:disabled { opacity: .5; cursor: default; }
+
 .heads-up.missing {
   background: color-mix(in srgb, var(--err) 14%, var(--panel));
   border-left-color: var(--err);
@@ -809,7 +817,11 @@ button.primary:hover { filter: brightness(1.1); }
    it is positioned against the viewport, which is what keeps it on screen when
    the row is near the bottom of a long sidebar. */
 #peek {
-  position: fixed; z-index: 70; max-width: min(560px, 60vw);
+  /* Below the context menu, not above it. At 70 this sat over #menu, and since
+     hovering a row for half a second is exactly what you do on the way to
+     right-clicking it, the menu opened behind the preview every time — which
+     reads as right-click being broken. */
+  position: fixed; z-index: 46; max-width: min(560px, 60vw);
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
   box-shadow: 0 10px 30px var(--shadow); padding: 8px 10px;
   pointer-events: none;   /* it must never take the pointer off the row */
