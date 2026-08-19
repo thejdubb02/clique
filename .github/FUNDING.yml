@@ -1,0 +1,4 @@
+# Shown as a Sponsor button on the repo page. GitHub has no field for a
+# chain address, so the addresses live in the README and in the app's
+# About pane; this is the one link it will render.
+custom: ['https://buymeacoffee.com/jdubb']

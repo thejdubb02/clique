@@ -908,6 +908,58 @@ function toast(text, bad) {
   toast.timer = setTimeout(() => (el.hidden = true), 4000);
 }
 
+/* ---------------------------------------------------------------- support */
+
+/* An address is money, so it is never truncated and never retyped: shown in
+ * full, wrapping, with one click to copy. A chain address typed wrong does not
+ * bounce — it just loses whatever was sent. */
+const SUPPORT = [
+  { label: "Buy me a coffee", detail: "buymeacoffee.com/jdubb",
+    href: "https://buymeacoffee.com/jdubb" },
+  { label: "BTC", detail: "Bitcoin network",
+    address: "3A3nA8BQFmXdvyUQokHhPd8HAd99wRDYFQ" },
+  { label: "SHIB", detail: "Ethereum network",
+    address: "0x6b5DEd92946692D50642dC3af169727225E32D3b" },
+  { label: "DOGE", detail: "Dogecoin network",
+    address: "DNiJeUJUVaVTDuteLXCtP7JVgvdL2NqoYp" },
+];
+
+function renderSupport() {
+  const host = $("#support");
+  if (!host || host.dataset.built) return;
+  host.dataset.built = "1";
+  for (const item of SUPPORT) {
+    const row = document.createElement("div");
+    row.className = "give";
+    row.innerHTML =
+      `<div class="give-head"><b>${escapeHtml(item.label)}</b>` +
+      `<span class="note">${escapeHtml(item.detail)}</span></div>`;
+    if (item.href) {
+      const a = document.createElement("a");
+      a.href = item.href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = item.href;
+      a.className = "give-value";
+      row.appendChild(a);
+    } else {
+      const code = document.createElement("code");
+      code.className = "give-value";
+      code.textContent = item.address;
+      row.appendChild(code);
+      const copy = document.createElement("button");
+      copy.textContent = "Copy";
+      copy.className = "give-copy";
+      copy.onclick = () => {
+        copyText(item.address);
+        toast(`${item.label} address copied`);
+      };
+      row.appendChild(copy);
+    }
+    host.appendChild(row);
+  }
+}
+
 /* -------------------------------------------------------------- shortcuts */
 
 /* Every binding, in one table.
@@ -1488,6 +1540,7 @@ async function saveSettings(changes) {
 
 function openSettings() {
   const s = state.settings;
+  renderSupport();   // About is one click away, so the list has to be there
 
   const themeSelect = $("#setTheme");
   themeSelect.innerHTML = "";
