@@ -85,8 +85,29 @@ function sessionMarker(s, where) {
   const on = where === "tabs" ? state.settings.markers_in_tabs
                               : state.settings.markers_in_sidebar;
   if (on === false) return "";
-  return markerFor({ color: s.color, icon: s.icon, label: s.cli_label, cli: s.cli },
-                   markerMode(s.cli));
+  const mode = markerMode(s.cli);
+  // When the icon carries status, the CLI's own colour steps aside: shape
+  // already says which CLI it is, so colour is free to say how it is doing.
+  const item = { color: statusOnIcon(s) ? statusColor(s) : s.color,
+                 icon: s.icon, label: s.cli_label, cli: s.cli };
+  return markerFor(item, statusOnIcon(s) && mode === "icon" ? "both" : mode);
+}
+
+/* Whether this session's marker is standing in for the status dot.
+ *
+ * Only when there is actually a marker to carry it. With the marker turned
+ * off — globally or for this CLI — the dot has to come back, because losing
+ * status altogether is a worse trade than showing two small marks. */
+function statusOnIcon(s) {
+  if (!state.settings.status_on_icon) return false;
+  return markerMode(s.cli) !== "none";
+}
+
+function statusDot(s, where) {
+  const on = where === "tabs" ? state.settings.markers_in_tabs
+                              : state.settings.markers_in_sidebar;
+  if (on !== false && statusOnIcon(s)) return "";
+  return `<i class="dot" style="background:${statusColor(s)}"></i>`;
 }
 
 function statusColor(s) {
@@ -264,7 +285,7 @@ function sessionRow(s) {
   row.draggable = true;
   row.dataset.id = s.id;
   row.innerHTML =
-    `<i class="dot" style="background:${statusColor(s)}"></i>` +
+    statusDot(s, "sidebar") +
     sessionMarker(s, "sidebar") +
     `<span class="meta"><span class="name">${escapeHtml(s.name)}</span>` +
     `<span class="path">${escapeHtml(s.cwd)}</span></span>` +
@@ -444,7 +465,7 @@ function renderTabs() {
     tab.title = s.cwd;
     tab.innerHTML =
       `<span class="num">${index + 1}</span>` +
-      `<i class="dot" style="background:${statusColor(s)}"></i>` +
+      statusDot(s, "tabs") +
       sessionMarker(s, "tabs") +
       `<span class="label">${escapeHtml(s.name)}</span>` +
       `<button class="gear" title="Session settings">⚙</button>` +
@@ -858,6 +879,7 @@ function openSettings() {
     $(out).textContent = value + "px";
   }
 
+  $("#setStatusOnIcon").checked = !!s.status_on_icon;
   $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
   $("#setFlash").checked = s.notify_flash !== false;
@@ -991,6 +1013,7 @@ function wire() {
   $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
+  $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
   $("#setFlash").onchange = (ev) => saveSettings({ notify_flash: ev.target.checked });

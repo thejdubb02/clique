@@ -20,6 +20,7 @@ import threading
 import time
 import traceback
 import urllib.parse
+from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -65,9 +66,19 @@ class Panel:
         panes: dict[str, tmux.Pane] = {}
         sockets = {tmux.SOCKET}
         sockets.update(s.socket for s in self.store.sessions if s.socket)
+        watched: set[str] = set()
         for socket_name in sockets:
             for pane in tmux.list_sessions(socket_name):
                 panes[pane.mux] = pane
+            watched |= tmux.attached_via_viewers(socket_name)
+
+        # A browser attaches to a viewer, not to the session itself, so the
+        # session's own client count is always zero. Fold the viewers back in
+        # or "someone is watching this" is never true.
+        for name in watched:
+            pane = panes.get(name)
+            if pane and not pane.attached:
+                panes[name] = replace(pane, attached=True)
 
         # Reap viewers whose browser has gone. This runs on the sidebar poll
         # rather than on a timer because it needs no scheduling and the poll is

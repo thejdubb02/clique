@@ -47,6 +47,11 @@ DEFAULT_SETTINGS = {
     "marker_by_cli": {},
     "markers_in_tabs": True,
     "markers_in_sidebar": True,
+    #: Let the CLI icon carry the status colour and drop the separate dot, so
+    #: shape says which CLI and colour says how it is doing. Falls back to the
+    #: dot wherever there is no icon to carry it — losing status entirely
+    #: would be a worse trade than showing two marks.
+    "status_on_icon": False,
     #: Preset palette id from web/themes.js. "" is the built-in dark.
     "theme": "",
     #: "dark" | "light" | "system". Themes carry their own base, so this only

@@ -160,8 +160,15 @@
       <h3>Where to show them</h3>
       <label class="check"><input type="checkbox" id="setTabsMarkers"> Tab bar</label>
       <label class="check"><input type="checkbox" id="setSidebar"> Sidebar</label>
-      <p class="note">The live/attached status dot is separate and always
-         shown — that is status, not branding.</p>
+
+      <h3>Status dot</h3>
+      <label class="check"><input type="checkbox" id="setStatusOnIcon">
+        Let the CLI icon carry the status colour</label>
+      <p class="note">One mark instead of two: the <em>shape</em> tells you
+         which CLI it is, the <em>colour</em> tells you how it is doing. The
+         separate dot comes back automatically wherever there is no icon to
+         carry it — a CLI set to <strong>None</strong>, or markers turned off
+         here — because losing status entirely would be the worse trade.</p>
       <h3>Per CLI</h3>
       <p class="note"><strong>Both</strong> is the icon tinted in the CLI's colour.
          <strong>Icon</strong> is the same shape in grey.

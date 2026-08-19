@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3 — 2026-08-19
+
+The CLI icon can now carry the status colour, so a session shows one mark
+instead of two: shape says which CLI, colour says how it is doing. Off by
+default; the toggle is in Settings → CLI markers. The separate dot returns
+automatically wherever there is no icon to carry it.
+
+Fixed while testing it: "someone is watching this" was never true. Each browser
+attaches to a grouped viewer session rather than the session itself, so the
+session's own client count was always zero and every session sat permanently on
+the unwatched colour. Viewer attachment is now folded back into the session it
+mirrors, so green and amber mean something again — a regression that had been
+invisible while a dot nobody looked at was carrying it.
+
 ## 0.2.2 — 2026-08-19
 
 Draggable sidebar. Grab the edge, or focus it and use the arrow keys;

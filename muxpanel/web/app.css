@@ -375,7 +375,14 @@ button.primary:hover { filter: brightness(1.1); }
 
 /* A session producing output. The dot breathes rather than spins: a spinner
    at 7px reads as a rendering artefact, a slow pulse reads as alive. */
-.session.busy .dot, .tab.busy .dot { animation: breathe 1.4s ease-in-out infinite; }
+/* The pulse follows whichever mark is doing the talking — the dot normally,
+   the icon or chip when it has taken over status duty. */
+.session.busy .dot, .tab.busy .dot,
+.session.busy .cli-icon, .tab.busy .cli-icon,
+.session.busy .cli-chip, .tab.busy .cli-chip,
+.session.busy .cli-letter, .tab.busy .cli-letter {
+  animation: breathe 1.4s ease-in-out infinite;
+}
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 
 /* Finished while you were looking elsewhere. Stays until the tab is opened,
@@ -391,7 +398,10 @@ button.primary:hover { filter: brightness(1.1); }
 @keyframes nudge { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .session.busy .dot, .tab.busy .dot, .tab.attention::after { animation: none; }
+  .session.busy .dot, .tab.busy .dot, .tab.attention::after,
+  .session.busy .cli-icon, .tab.busy .cli-icon,
+  .session.busy .cli-chip, .tab.busy .cli-chip,
+  .session.busy .cli-letter, .tab.busy .cli-letter { animation: none; }
 }
 
 /* ------------------------------------------------------------ stats history */

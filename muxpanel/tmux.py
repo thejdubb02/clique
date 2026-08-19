@@ -43,6 +43,10 @@ TIMEOUT = 10
 _FIELDS = (
     "session_name", "session_created", "session_attached", "session_windows",
     "session_activity", "pane_pid", "pane_current_path", "pane_current_command",
+    # Which session group this belongs to, if any. Viewers are grouped onto
+    # the session they show, and this is the only way to tell that a browser
+    # watching through a viewer means the underlying session is being watched.
+    "session_group",
 )
 
 
@@ -63,6 +67,7 @@ class Pane:
     pid: int
     cwd: str
     command: str
+    group: str = ""
 
     @property
     def ours(self) -> bool:
@@ -73,7 +78,7 @@ class Pane:
             "mux": self.mux, "socket": self.socket, "created": self.created,
             "attached": self.attached, "windows": self.windows,
             "activity": self.activity, "pid": self.pid, "cwd": self.cwd,
-            "command": self.command,
+            "command": self.command, "group": self.group,
         }
 
 
@@ -241,6 +246,7 @@ def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> lis
             created=int(parts[1] or 0), attached=parts[2] == "1",
             windows=int(parts[3] or 1), activity=int(parts[4] or 0),
             pid=int(parts[5] or 0), cwd=parts[6], command=parts[7],
+            group=parts[8],
         ))
     return panes
 
@@ -340,6 +346,21 @@ def attach_argv(mux: str, socket: str | None = SOCKET) -> list[str]:
     session costs this process nothing at all.
     """
     return _argv(socket, ["attach-session", "-t", _session_target(mux)])
+
+
+def attached_via_viewers(socket: str | None = SOCKET) -> set[str]:
+    """Session groups that have a browser watching through a viewer.
+
+    Needed because a viewer is its own tmux session: attaching to it leaves the
+    session it mirrors reporting zero clients. Without this, "someone is
+    watching this" was never true and every session sat permanently on the
+    unwatched colour.
+    """
+    watching: set[str] = set()
+    for pane in list_sessions(socket, prefix=VIEW_PREFIX):
+        if pane.attached and pane.group:
+            watching.add(pane.group)
+    return watching
 
 
 #: Where Codeman keeps its sessions. Verified on this box: it runs its own
