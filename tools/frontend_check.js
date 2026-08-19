@@ -42,7 +42,7 @@ function region(from, to) {
 
 console.log("what needs you first");
 {
-  const code = region("const NEXT_RANK", "/* The last few lines of a session");
+  const code = region("const NEXT_RANK", "/* Long press, because touch");
 
   let state;
   let activeId = null;
@@ -157,13 +157,11 @@ console.log("things that sit on top of other things");
     const found = /z-index:\s*(\d+)/.exec(css.slice(at, css.indexOf("}", at)));
     return found ? Number(found[1]) : null;
   };
-  const peek = layerOf("#peek");
   const menu = layerOf("#menu");
   const palette = layerOf("#palette");
-  check("the preview sits below the context menu", peek !== null && menu !== null && peek < menu,
-        `peek ${peek} vs menu ${menu}`);
-  check("and the palette sits above both", palette > menu && palette > peek,
-        `palette ${palette}`);
+  const follow = layerOf("#follow");
+  check("the palette sits above the context menu", palette > menu, `${palette} vs ${menu}`);
+  check("and the menu above the pane's own controls", menu > follow, `${menu} vs ${follow}`);
 }
 
 console.log("tinted greys keep their contrast");

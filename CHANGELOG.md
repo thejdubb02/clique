@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.44.0 — 2026-08-19 16:10 PDT
+
+**A session that wants you says what for, in the row.** The ring told you a
+session was blocked and you still had to open the tab to find out what on. The
+row now shows the last line it actually printed, in place of the working
+directory — which is the least urgent thing on screen at the moment something
+is asking you a question. The directory is still there on hover.
+
+This **replaces the hover preview**, and 126 lines of machinery go with it. A
+popup has to be summoned, positioned and layered above everything else, and
+each of those is a way to be wrong: the layering one broke right-click on every
+sidebar row for a while. A line that is simply there when it matters has none
+of those problems. `GET /api/sessions/<id>/peek` stays for scripts.
+
+The line skips a prompt sitting under it — the bottom of a pane is usually a
+cursor waiting, and quoting that back says nothing; the question is the line
+above. Frame is dropped the same way it already was: box rules, separators and
+bare prompt marks are not something a session said.
+
 ## 0.43.0 — 2026-08-19 16:03 PDT
 
 **The tinted greys keep their contrast.** 0.42.0 made a theme able to own the

@@ -938,12 +938,29 @@ function sessionRow(s) {
     (attention.has(s.id) ? " attention" : "");
   row.draggable = true;
   row.dataset.id = s.id;
+  /* A session that wants you says what for, in the row.
+   *
+   * The ring says a session is waiting; on its own that still means opening
+   * the tab to find out what it is waiting *for*. The answer is one line, and
+   * the row already has a line — the working directory, which is the least
+   * urgent thing on screen at the moment something is blocked.
+   *
+   * This replaced a hover preview. A popup has to be summoned, positioned and
+   * layered above everything else, and each of those is a way to be wrong: the
+   * layering one broke right-click on every row for a while. A line that is
+   * simply there when it matters has none of those problems. */
+  const wants = s.signal && s.saying;
   row.innerHTML =
     statusDot(s, "sidebar") +
     sessionMarker(s, "sidebar") +
     `<span class="meta"><span class="name">${escapeHtml(s.name)}</span>` +
-    `<span class="path">${escapeHtml(s.cwd)}</span></span>` +
+    (wants
+      ? `<span class="path saying">${escapeHtml(s.saying)}</span>`
+      : `<span class="path">${escapeHtml(s.cwd)}</span>`) +
+    `</span>` +
     `<span class="age">${ago(s.created)}</span>`;
+  // The directory is still one hover away, rather than gone.
+  row.title = wants ? `${s.cwd}\n${s.saying}` : s.cwd;
 
   /* A draft dragged out of the prompt box and dropped on a session.
    *
@@ -1052,9 +1069,6 @@ let lastMenuEvent = null;
 
 function showMenu(ev, items) {
   ev.preventDefault();
-  // A preview and a menu about the same row are two answers to different
-  // questions, and only one of them was asked for.
-  hidePeek();
   lastMenuEvent = ev;
   const menu = $("#menu");
   menu.innerHTML = "";
@@ -1078,9 +1092,6 @@ function sessionMenu(ev, s) {
   const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
   showMenu(ev, [
     ["Open", () => openSession(s.id)],
-    // Hover does this on a desktop; on touch there is no hover and long-press
-    // is already this menu, so this is how a phone gets the same answer.
-    ...(s.alive ? [["Peek at the last lines", () => peekAt(s.id, null)]] : []),
     ["Rename", () => renameSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
@@ -1156,132 +1167,6 @@ function nextLine(row) {
   const held = row.since >= 60 ? ` for ${ago(row.s.activity)}` : "";
   return `${row.s.name} is ${NEXT_WORDS[row.kind]}${held}` +
          (where ? ` — ${where}` : "");
-}
-
-/* The last few lines of a session you are not looking at.
- *
- * "Is that one waiting on me?" is the question this product exists to answer,
- * and the status ring answers it in the abstract — working, waiting, idle. It
- * does not say *what* it is waiting for, and finding that out means opening
- * the tab, which changes what you are looking at and then changes it back.
- *
- * A pull, never a push. Nothing is captured until a pointer settles on a row
- * and stays there, so a sidebar of twenty sessions costs nothing at all until
- * it is asked. The server caches against the pane's activity clock, so moving
- * back and forth over a quiet sidebar is one capture rather than one a pass.
- */
-const PEEK_DELAY_MS = 450;      // long enough that crossing a row is not a request
-const PEEK_LINES = 6;
-
-let peekTimer = null;
-let peekId = null;
-const peekCache = new Map();    // `${id}:${activity}` -> lines
-
-async function peekAt(id, anchor) {
-  const s = session(id);
-  if (!s || !s.alive) return;
-  peekId = id;
-
-  const key = `${id}:${s.activity || 0}`;
-  let lines = peekCache.get(key);
-  if (!lines) {
-    try {
-      const got = await api(`api/sessions/${encodeURIComponent(id)}/peek?lines=${PEEK_LINES}`);
-      lines = got.lines || [];
-    } catch {
-      return;                   // a session can end mid-hover; say nothing
-    }
-    // Keyed by activity, so an entry can never be stale — but the keys
-    // accumulate, one per burst of output per session, in a panel that stays
-    // open for weeks.
-    peekCache.set(key, lines);
-    if (peekCache.size > 200) peekCache.delete(peekCache.keys().next().value);
-  }
-  if (peekId !== id) return;    // the pointer moved on while we were asking
-  showPeek(s, lines, anchor);
-}
-
-function showPeek(s, lines, anchor) {
-  const box = $("#peek");
-  box.textContent = "";
-
-  const head = document.createElement("div");
-  head.className = "peek-head";
-  head.textContent = s.name;
-  const pre = document.createElement("pre");
-  // textContent, always: this is the output of whatever is running in that
-  // pane, which is the least trusted string in the whole application.
-  pre.textContent = lines.length ? lines.join("\n") : "Nothing on the pane yet.";
-  box.append(head, pre);
-
-  box.hidden = false;
-  /* Beside the row it belongs to, and kept on screen. Measured after it is
-   * shown because an element with `hidden` has no height to measure. */
-  const rect = anchor ? anchor.getBoundingClientRect()
-                      : { top: 80, bottom: 80, right: 260 };
-  const height = box.offsetHeight;
-  const top = Math.max(8, Math.min(rect.top, window.innerHeight - height - 8));
-  box.style.top = top + "px";
-  box.style.left = Math.min(rect.right + 8, window.innerWidth - box.offsetWidth - 8) + "px";
-}
-
-function hidePeek() {
-  clearTimeout(peekTimer);
-  peekTimer = null;
-  peekId = null;
-  const box = $("#peek");
-  if (box) box.hidden = true;
-}
-
-/* Wired once, on the tree, for the same reason the long-press menu is: the
- * sidebar is rebuilt every three seconds and per-row listeners would be churn
- * for nothing.
- *
- * Only where there is a real pointer. On touch, `hover` fires on tap and would
- * make every attempt to open a session flash a tooltip first. */
-function wirePeek() {
-  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-  const tree = $("#tree");
-  tree.addEventListener("mouseover", (ev) => {
-    const row = ev.target.closest(".session:not(.history)");
-    if (!row || !row.dataset.id) return;
-    if (row.dataset.id === peekId) return;
-    clearTimeout(peekTimer);
-    peekTimer = setTimeout(() => peekAt(row.dataset.id, row), PEEK_DELAY_MS);
-  });
-  tree.addEventListener("mouseleave", hidePeek);
-  // A right-click anywhere is a request for something other than a preview.
-  tree.addEventListener("contextmenu", hidePeek);
-  // Anything that moves the sidebar out from under the popover closes it,
-  // rather than leaving it pointing at a row that is no longer there.
-  tree.addEventListener("scroll", hidePeek, { passive: true });
-  addEventListener("keydown", (ev) => { if (ev.key === "Escape") hidePeek(); });
-}
-
-/* Which folder a session is filed under.
- *
- * The working directory is not this, and cannot be changed: a CLI is already
- * running with a cwd and no process can be moved to another one. The folder is
- * a label on the session — where it appears in the sidebar — and that is free
- * to change at any time.
- */
-async function setFolder(s, folder) {
-  await api("api/sessions/" + s.id, {
-    method: "PATCH", body: JSON.stringify({ folder }),
-  });
-  const where = folder
-    ? ((state.folders || []).find((f) => f.id === folder) || {}).name || "a folder"
-    : "Ungrouped";
-  toast(`${s.name} moved to ${where}`);
-  refresh();
-}
-
-function moveToFolder(s) {
-  const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
-  showMenu(lastMenuEvent, folders.map((f) => [
-    f.name + (f.id === s.folder ? "  ·  where it is now" : ""),
-    () => { if (f.id !== s.folder) setFolder(s, f.id); },
-  ]));
 }
 
 /* Long press, because touch has no right-click.
@@ -4490,7 +4375,6 @@ function setSidebar(show) {
 wire();
 wireResizer();
 wireTouchMenus();
-wirePeek();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 refresh().then(async () => {

@@ -104,13 +104,34 @@ def saying(mux: str, activity: int, socket: str | None = tmux.SOCKET) -> str:
     except (tmux.TmuxError, OSError):
         return ""
     rows = content_lines(text)
-    line = rows[-1][:200] if rows else ""
+    line = _worth_quoting(rows)
     with _lock:
         _said[mux] = (activity, line)
         if len(_said) > 512:
             for stale in list(_said)[:256]:
                 _said.pop(stale, None)
     return line
+
+
+#: A line that is a prompt waiting for input rather than something said. Not a
+#: vendor's prompt — a terminal's: a short line ending in one of the characters
+#: that has meant "your turn" since sh.
+_PROMPT = re.compile(r"[#$>❯»›:]\s*$")  # noqa: RUF001 — the lookalikes are the prompts
+
+
+def _worth_quoting(rows: list[str], back: int = 4) -> str:
+    """The last line that says something, skipping the prompt under it.
+
+    The bottom of a pane is usually the cursor sitting on a prompt, and
+    quoting that back tells you nothing you did not know — the question is on
+    the line above it. Only a few lines are skipped: past that, a run of
+    prompt-looking lines is the content.
+    """
+    for line in reversed(rows[-back:] if len(rows) > back else rows):
+        if len(line) < 80 and _PROMPT.search(line):
+            continue
+        return line[:200]
+    return rows[-1][:200] if rows else ""
 
 
 def _patterns(raw: list[str]) -> list[re.Pattern]:

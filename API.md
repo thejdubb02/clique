@@ -58,7 +58,13 @@ The whole panel in one object, and what the browser polls every three seconds.
 Each session carries `own_input` — whether this CLI draws its own input box,
 which is what `input_mode: "auto"` reads — plus `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
 `folder`, `mode` (and `modes`, `mode_label`), `adopted`, `archived`, `draft`,
-`created`, `last_seen`, `order`, plus the live facts: `alive`, `attached`,
+`saying` — the last line a session actually printed, and only for one that is
+waiting or has errored. It is what the sidebar shows in place of the working
+directory when something is asking for you: the ring says a session is blocked,
+this says what on. Empty for every other session, and captured only for the
+handful that are not, cached against the pane's own activity clock.
+
+Each session also carries `created`, `last_seen`, `order`, plus the live facts: `alive`, `attached`,
 `command`, `activity` (tmux's own clock) and `busy`.
 
 `busy` starts from the activity clock — output within the last two seconds —
