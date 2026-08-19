@@ -149,7 +149,7 @@ LOGIN_PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CLIque</title>
-<script>
+<script nonce="__NONCE__">
   // CLIque is mounted under /clique by `tailscale serve`, which strips the
   // prefix before the request arrives — so the server genuinely believes it is
   // at the root and cannot build a correct absolute URL. Only the browser knows
@@ -191,9 +191,9 @@ LOGIN_PAGE = """<!doctype html>
 """
 
 
-def login_page(error: str = "") -> bytes:
+def login_page(error: str = "", nonce: str = "") -> bytes:
     marker = f'<p class="err">{error}</p>' if error else ""
-    return LOGIN_PAGE.replace("__ERROR__", marker).encode()
+    return LOGIN_PAGE.replace("__ERROR__", marker).replace("__NONCE__", nonce).encode()
 
 
 #: Served on a successful login instead of a 3xx.
@@ -210,7 +210,7 @@ LANDING = """<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <title>CLIque</title>
-<script>
+<script nonce="__NONCE__">
   (function () {
     var path = location.pathname;
     if (!path.endsWith("/")) path += "/";
@@ -222,5 +222,5 @@ LANDING = """<!doctype html>
 """
 
 
-def landing_page() -> bytes:
-    return LANDING.encode()
+def landing_page(nonce: str = "") -> bytes:
+    return LANDING.replace("__NONCE__", nonce).encode()

@@ -17,6 +17,7 @@ import contextlib
 import json
 import mimetypes
 import os
+import secrets
 import threading
 import time
 import traceback
@@ -260,7 +261,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------------- helpers
 
     def _send(self, status: int, body: bytes, content_type: str,
-              extra: dict[str, str] | None = None) -> None:
+              extra: dict[str, str] | None = None, nonce: str = "") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -274,9 +275,19 @@ class Handler(BaseHTTPRequestHandler):
         # any future injected <script src> into a blocked request rather than
         # code execution. 'unsafe-inline' for style only, because themes are
         # applied as inline custom properties and custom CSS is a feature.
+        #
+        # Scripts get a per-response nonce rather than 'unsafe-inline'. Three
+        # inline scripts are load-bearing and cannot become files: each one
+        # resolves the mount path, and an external <script src> would need the
+        # very path resolution it is there to perform. A hash list was the
+        # other option and is worse — editing a comment inside one of those
+        # scripts would silently blank the app, which is precisely how this
+        # was found.
+        script_src = f"'self' 'nonce-{nonce}'" if nonce else "'self'"
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            f"default-src 'self'; script-src {script_src}; "
+            "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
         )
@@ -389,7 +400,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed:
             if path.startswith("/api"):
                 return self._json({"error": "unauthorized"}, 401)
-            return self._send(200, login_page(), "text/html; charset=utf-8")
+            nonce = secrets.token_urlsafe(16)
+            return self._send(200, login_page(nonce=nonce),
+                              "text/html; charset=utf-8", nonce=nonce)
 
         try:
             if path == "/api/state":
@@ -421,7 +434,12 @@ class Handler(BaseHTTPRequestHandler):
         # Vendored assets are immutable; our own must not be cached, or a fix
         # ships and the browser keeps the bug.
         cache = "public, max-age=604800" if "/vendor/" in path else "no-store"
-        self._send(200, target.read_bytes(), content_type, {"Cache-Control": cache})
+        body = target.read_bytes()
+        nonce = ""
+        if target.name == "index.html":
+            nonce = secrets.token_urlsafe(16)
+            body = body.replace(b"__NONCE__", nonce.encode())
+        self._send(200, body, content_type, {"Cache-Control": cache}, nonce=nonce)
 
     # ------------------------------------------------------------------ POST
 
@@ -445,22 +463,26 @@ class Handler(BaseHTTPRequestHandler):
                 if throttled:
                     self._record_failure(who)
                     time.sleep(2.0)
-                    return self._send(429, login_page("Too many attempts. Wait a minute."),
-                                      "text/html; charset=utf-8")
+                    nonce = secrets.token_urlsafe(16)
+                    return self._send(429,
+                                      login_page("Too many attempts. Wait a minute.", nonce),
+                                      "text/html; charset=utf-8", nonce=nonce)
                 # Deliberately slow, and counted: this endpoint is reachable by
                 # anyone who can reach the tunnel, and guessing should be both
                 # expensive and self-limiting.
                 self._record_failure(who)
                 time.sleep(1.0)
-                return self._send(401, login_page("Wrong password."),
-                                  "text/html; charset=utf-8")
+                nonce = secrets.token_urlsafe(16)
+                return self._send(401, login_page("Wrong password.", nonce),
+                                  "text/html; charset=utf-8", nonce=nonce)
             self.panel.failures.pop(who, None)
             token = self.panel.auth.issue()
             cookie = self.panel.auth.cookie_header(token, self._secure())
             # 200 with a landing page, not a 3xx. See auth.LANDING for why a
             # Location header cannot be made correct from inside this process.
-            return self._send(200, landing_page(), "text/html; charset=utf-8",
-                              {"Set-Cookie": cookie})
+            nonce = secrets.token_urlsafe(16)
+            return self._send(200, landing_page(nonce), "text/html; charset=utf-8",
+                              {"Set-Cookie": cookie}, nonce=nonce)
 
         allowed, reason = self._may_write()
         if not allowed:

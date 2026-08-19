@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import secrets
 import socket
 import ssl
@@ -291,6 +292,27 @@ def main() -> int:
     req.add_header("Cookie", cookie)
     with urllib.request.urlopen(req, timeout=10) as res:
         check("serves the app", res.status == 200 and b"CLIque" in res.read()[:400])
+    # Every inline <script> must carry a nonce the CSP header actually allows.
+    # This exists because curl does not enforce CSP: the policy shipped with a
+    # bare `script-src 'self'`, every inline script on every page was silently
+    # blocked, and the whole suite stayed green while the app served a white
+    # screen to the first person who tried to log in.
+    # Both pages live at "/" — the cookie is what decides which one is served,
+    # and both carry an inline script that has to survive the policy.
+    for name, signed_in in (("app", True), ("login", False)):
+        req = urllib.request.Request(BASE + "/")
+        if signed_in:
+            req.add_header("Cookie", cookie)
+        with urllib.request.urlopen(req, timeout=10) as res:
+            html = res.read().decode("utf-8", "replace")
+            policy = res.headers.get("Content-Security-Policy", "")
+        allowed = re.findall(r"'nonce-([A-Za-z0-9_-]+)'", policy)
+        inline = re.findall(r"<script(?![^>]*\ssrc=)([^>]*)>", html)
+        ok = all(any(f'nonce="{n}"' in tag for n in allowed) for tag in inline)
+        check(f"{name} page: inline scripts carry an allowed nonce",
+              bool(inline) and bool(allowed) and ok,
+              f"{len(inline)} inline, {len(allowed)} nonce(s)")
+
     status, _ = call("/../etc/passwd")
     # Direct, this is our 404. Through tailscale serve the proxy rejects it
     # before we see it, so assert "not served" rather than a specific code.

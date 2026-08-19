@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.1 — 2026-08-19
+
+**Fixed: signing in landed on a white screen.**
+
+The Content-Security-Policy added in 0.3.0 shipped as a bare
+`script-src 'self'`, which blocks *every* inline script. Three of them are
+load-bearing here — the one that resolves the mount path on the app page, the
+same on the login page, and the redirect on the page you land on after signing
+in. All three were silently blocked. The landing page is a blank document whose
+only content is that script, so a successful login rendered a white screen.
+
+Nobody hit it for two releases because nobody signed in: the existing cookie
+stayed valid across every restart. Renaming the cookie in 0.5.0 forced the
+first real login since the policy shipped, and the bug surfaced immediately.
+
+- Inline scripts now carry a **per-response nonce** that the policy names.
+  Hardening is unchanged — an injected `<script>` still cannot run, because it
+  cannot guess a nonce minted for that one response.
+- Hashes were the alternative and would have been worse: editing a comment
+  inside one of those scripts would blank the app without a word. That is
+  close to how this was found.
+- The smoke test now asserts that every inline script on both pages carries a
+  nonce the header actually allows. It could not catch this before, because
+  curl does not enforce CSP — the suite stayed green while the app served a
+  blank page.
+
 ## 0.5.0 — 2026-08-19 — **now CLIque**
 
 *Your private clique of CLIs.*
