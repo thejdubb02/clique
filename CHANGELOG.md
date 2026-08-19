@@ -16,6 +16,14 @@
 - The day is a heading and the entry is a time under it, and the release you
   are actually running is marked.
 
+- **`GET /healthz`, no login required.** Uptime Kuma, Gatus, Healthchecks and
+  every other self-hosted monitor want one URL that returns 200, and anything
+  that makes them carry a credential first is a thing that ends up unmonitored.
+  Anonymously it returns `{"ok": true}` and nothing else — no version, no
+  session names, no counts. Signed in, or with a token, it adds uptime, how
+  many sessions exist and how many are alive, connected terminals, and whether
+  tmux is reachable at all.
+
 Fetched the first time the tab is opened rather than at load — release notes
 are read twice a year and the panel opens in a quarter of a second. Markdown is
 parsed on the server into structure rather than markup, so the browser builds

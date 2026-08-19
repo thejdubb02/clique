@@ -287,6 +287,15 @@ def main() -> int:
     status, state = call("/api/state")
     check("gone from state", not any(s["id"] == sid for s in state["sessions"]))
 
+    print("health")
+    status, health = call("/healthz", anon=True)
+    check("answers a monitor without a login", status == 200 and health["ok"], status)
+    check("tells an anonymous caller nothing else", list(health) == ["ok"], list(health))
+    status, health = call("/healthz")
+    check("fills in for a signed-in caller",
+          status == 200 and health.get("tmux") and health.get("sessions") is not None,
+          health)
+
     print("changelog")
     status, log = call("/api/changelog")
     newest = log[0] if status == 200 and log else {}

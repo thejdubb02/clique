@@ -75,6 +75,11 @@ def host_allowed(host: str, extra: set[str]) -> bool:
                for e in extra if e.startswith("."))
 
 
+#: When this process came up, for the uptime in /healthz. Process-local by
+#: design: a restart resetting it is exactly what a monitor wants to see.
+_STARTED = time.time()
+
+
 class Panel:
     """Everything the request handlers share. One instance per process."""
 
@@ -140,6 +145,33 @@ class Panel:
         # Housekeeping must never break the session list.
         with contextlib.suppress(tmux.TmuxError):
             tmux.sweep_viewers(sockets, detached_only=True)
+
+    def health(self, detailed: bool = False) -> dict:
+        """A monitor's-eye view of the panel.
+
+        Answers without a login on purpose. Uptime Kuma, Gatus, Healthchecks
+        and every other self-hosted monitor want one URL that returns 200, and
+        anything that makes them carry a credential first is a thing that ends
+        up unmonitored. So an anonymous caller gets liveness and nothing else:
+        no version — the `Server` header withholds that for the same reason —
+        no names, no paths, no counts.
+
+        Sign in, or send a token, and it fills in the numbers worth graphing.
+        """
+        body: dict = {"ok": True}
+        if not detailed:
+            return body
+        panes = self.live()
+        sessions = self.store.sessions
+        body.update({
+            "version": version_string(),
+            "uptime": int(time.time() - _STARTED),
+            "tmux": tmux.available(),
+            "sessions": len(sessions),
+            "alive": sum(1 for x in sessions if x.mux in panes),
+            "attached": self.clients,
+        })
+        return body
 
     def sessions_view(self) -> list[dict]:
         panes = self.live()
@@ -571,6 +603,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/ws":
             return self._websocket(query)
+        # Before the auth gate: see Panel.health for why, and for what an
+        # anonymous caller is and is not told.
+        if path == "/healthz":
+            return self._json(self.panel.health(self._authed))
         if not self._authed:
             if path.startswith("/api"):
                 return self._json({"error": "unauthorized"}, 401)

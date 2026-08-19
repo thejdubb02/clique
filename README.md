@@ -10,7 +10,7 @@ running. Claude Code, Grok CLI or anything else is a block in
 **Live at https://example.invalid/clique** (tailnet only).
 Password is in Vaultwarden as *CLIque (devbox)*.
 
-## What works today (v0.19.0)
+## What works today (v0.20.0)
 
 | | |
 |---|---|
@@ -30,6 +30,8 @@ Password is in Vaultwarden as *CLIque (devbox)*.
 | Stats | CPU, memory, swap, disk, load, connected terminals, with an hour of history |
 | Sessions | Create with CLI + directory + folder, resume a past conversation, archive, kill with confirmation |
 | Adoption | Take over sessions started by another tool — CLI detected from the process tree, names and folders carried across. Safe to run twice; it repairs earlier runs |
+| **Changelog** | Settings → Changelog: every release with the wall-clock time it shipped, read from this repo's `CHANGELOG.md` so the two cannot disagree |
+| **Monitoring** | `GET /healthz` answers without a login — point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else; signed in it adds uptime, session counts and tmux reachability |
 | Security | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md) |
 | Mobile | Installable as a PWA with a full icon set. The layout is not responsive yet |
 
