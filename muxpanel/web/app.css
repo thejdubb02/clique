@@ -22,6 +22,12 @@
 
 * { box-sizing: border-box; }
 
+/* The browser's own [hidden] rule is `display: none` at the lowest possible
+   specificity, so any id selector that sets `display` silently defeats it —
+   which is how the new-session modal ended up covering the whole app from the
+   moment the page loaded. Anything hidden from JS needs this to mean it. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   height: 100vh;
