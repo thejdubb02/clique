@@ -140,6 +140,33 @@ The type is sniffed from the bytes rather than trusted from the name, the cap
 is 10 MB, and containment is checked after symlink resolution — the write can
 only ever land inside that directory.
 
+### `GET /api/sessions/<id>/artifacts`
+
+Images that appeared in the session's working directory **after the session
+started**, newest first, capped at 30:
+
+```json
+[{"name": "shot.png", "rel": "screenshots/shot.png",
+  "path": "/srv/app/screenshots/shot.png", "size": 40122, "mtime": 1787200000.0}]
+```
+
+`rel` is what `GET .../artifact` takes; `path` is what an agent can open. Which
+directories are searched is the `artifact_dirs` setting, nothing is searched
+recursively, and symlinks are skipped. Returns `[]` when `artifacts_show` is
+off.
+
+The `since the session started` filter is what makes this the agent's output
+rather than the project's artwork — a repository cloned *during* the session is
+the case it cannot tell apart.
+
+### `GET /api/sessions/<id>/artifact?rel=<path>`
+
+The image itself. `rel` must be relative, must not climb with `..`, and is
+re-resolved against the working directory with containment checked after
+symlink resolution — a path that leaves it is `404`, never served. The
+`Content-Type` comes from the file's magic bytes, not its extension; anything
+that is not an image CLIque recognises is `415`, and over 10 MB is `413`.
+
 ### `POST /api/sessions/<id>/seen`
 
 Marks it looked-at. Returns the new `last_seen`, which is what the unread dot
@@ -197,6 +224,8 @@ front of you (sidebar width, sidebar shown or hidden).
 | `open_tabs` | list of session ids | The workspace: which sessions have a tab, in order. Deduplicated, order preserved |
 | `active_tab` | session id | Which one was in front |
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
+| `artifacts_show` | bool | List the images a session makes |
+| `artifact_dirs` | list | Where to look, relative to each session's cwd; `.` is the cwd itself. Absolute entries and `..` are dropped, max 12 |
 
 ## Terminals
 

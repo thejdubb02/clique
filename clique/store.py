@@ -20,6 +20,8 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import artifacts
+
 #: Seeded on first run. Empty match lists — fill these with your own trees
 #: in the panel. A match is a directory prefix that auto-files new sessions.
 DEFAULT_FOLDERS = [
@@ -102,6 +104,14 @@ DEFAULT_SETTINGS = {
     #: folders, so there is no folder record to hold their collapsed state.
     #: A real folder's flag already syncs; these were the odd ones out.
     "views_collapsed": ["__archived"],
+    #: An agent that takes a screenshot has made something a terminal cannot
+    #: show you. Off is a real preference — some working directories are full
+    #: of images nobody wants a strip of — so it is a switch, not a rule.
+    "artifacts_show": True,
+    #: Where to look for them, relative to the session's working directory.
+    #: Configurable because there is no universal answer: one person's agent
+    #: writes to screenshots/, another's to whatever the MCP server chose.
+    "artifact_dirs": list(artifacts.DEFAULT_DIRS),
 }
 
 #: A snippet body over this is a document, not an expander, and storing one
@@ -358,6 +368,8 @@ class Store:
                         self.settings[key] = value
                 elif key in ("open_tabs", "views_collapsed"):
                     self.settings[key] = _clean_ids(value)
+                elif key == "artifact_dirs":
+                    self.settings[key] = artifacts.clean_dirs(value)
                 elif key == "active_tab":
                     self.settings[key] = str(value or "")[:64]
                 elif key == "snippets":
