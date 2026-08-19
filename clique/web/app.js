@@ -1353,7 +1353,20 @@ function renderTabs() {
     tab.className = "tab" + (id === activeId ? " active" : "") +
       (s.busy ? " busy" : "") + (unread(s) ? " unread" : "") +
       (attention.has(id) ? " attention" : "");
-    tab.title = s.cwd;
+    /* A mark nobody can name is a mark nobody trusts.
+     *
+     * The tab carries up to three of them — a status ring, an attention glow,
+     * and the unread dot — and the tooltip said only the working directory, so
+     * the honest reaction to any of them is "what is that and should I worry".
+     * Saying it in words costs nothing and is the difference between a signal
+     * and a decoration. */
+    const says = [];
+    if (!s.alive) says.push("stopped");
+    else if (s.signal === "error") says.push("stopped on an error");
+    else if (s.signal === "waiting") says.push("waiting for you");
+    else if (workState(s) === "working") says.push("working");
+    if (unread(s)) says.push("new output since you last looked");
+    tab.title = says.length ? `${s.cwd}\n${says.join(" · ")}` : s.cwd;
     tab.innerHTML =
       `<span class="num">${index + 1}</span>` +
       statusDot(s, "tabs") +
@@ -1943,12 +1956,26 @@ function showDraftMove() {
   if (button) button.hidden = !$("#prompt").value.trim() || state.sessions.length < 2;
 }
 
+/* The box grows with what is in it, up to a share of the window.
+ *
+ * It stopped at 140px, which is about seven lines — small enough that writing
+ * a paragraph meant scrolling inside a box while composing, which is the thing
+ * that makes people give up and go elsewhere. A fraction of the viewport
+ * rather than a fixed number, because the right ceiling on a laptop and on a
+ * phone are not the same number. */
+const PROMPT_MAX_SHARE = 0.4;
+
+function growPrompt(box) {
+  box.style.height = "auto";
+  const ceiling = Math.max(140, Math.round(window.innerHeight * PROMPT_MAX_SHARE));
+  box.style.height = Math.min(box.scrollHeight, ceiling) + "px";
+}
+
 function loadDraft(id) {
   const box = $("#prompt");
   const s = session(id);
   box.value = (s && s.draft) || "";
-  box.style.height = "auto";
-  box.style.height = Math.min(box.scrollHeight, 140) + "px";
+  growPrompt(box);
   draftFor = id;
   showDraftMove();
 }
@@ -2446,6 +2473,21 @@ function paneNote(entry, text) {
   entry.note.textContent = text;   // never innerHTML: this sits over a terminal
 }
 
+//: What Shift+Enter sends. The CSI-u encoding of "Enter with Shift held" —
+//: `ESC [ 13 ; 2 u` — which is what modern CLIs read as a newline and what the
+//: editors people compare this to send. Tested against a live Claude Code
+//: prompt rather than taken from a specification.
+const NEWLINE_SEQ = "\x1b[13;2u";
+
+/* "3 lines" or "42 characters" — enough that the toast confirms *what* was
+ * taken, since a copy that silently took the wrong thing is worse than one
+ * that failed. */
+function plural(text) {
+  const lines = text.split("\n").length;
+  if (lines > 1) return `${lines} lines`;
+  return `${text.length} character${text.length === 1 ? "" : "s"}`;
+}
+
 function wsUrl(id, cols, rows) {
   const url = new URL("ws", document.baseURI);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -2528,13 +2570,68 @@ async function attach(id) {
    * kill to end of line. Ctrl+Shift+P is safe to take outright, since nothing
    * in a terminal claims it. */
   term.attachCustomKeyEventHandler((ev) => {
-    if (ev.type !== "keydown" || !(ev.ctrlKey || ev.metaKey)) return true;
+    if (ev.type !== "keydown") return true;
+
+    /* Shift+Enter is a newline, not a submit.
+     *
+     * A terminal sends carriage return for both, so a CLI cannot tell them
+     * apart and every Shift+Enter submitted the prompt — which is why writing
+     * anything of more than one line meant giving up and using the panel's own
+     * box. The CSI-u encoding is how a terminal says "Enter, with Shift held",
+     * and it is what the editors people compare this to send.
+     *
+     * Verified rather than assumed: typed into a real Claude Code prompt,
+     * `ESC CR` did nothing useful and `CSI 13;2u` put the cursor on a second
+     * line. A CLI that does not understand it ignores it, which is the same
+     * outcome as today. */
+    if (ev.key === "Enter" && ev.shiftKey && !ev.ctrlKey && !ev.altKey) {
+      if (entry.ws && entry.ws.readyState === 1) {
+        entry.ws.send(new TextEncoder().encode(NEWLINE_SEQ));
+      }
+      return false;
+    }
+
+    if (!(ev.ctrlKey || ev.metaKey)) return true;
     const key = ev.key.toLowerCase();
     // Handed to the document handler, which does the work — exactly as
     // Ctrl+Shift+P is. Acting here as well would toggle it twice.
     if (ev.shiftKey && (key === "l" || key === "/")) return false;
     if (ev.shiftKey && key === "p") return false;
     if (!ev.shiftKey && key === "k") return !paletteHotkeyOn();
+
+    /* Ctrl+V is paste. In a browser it could not be anything else.
+     *
+     * xterm treats it as a control character by default — Ctrl+V is 0x16,
+     * readline's quoted-insert — and sending that means calling
+     * preventDefault, which stops the browser from ever firing the paste
+     * event. So Ctrl+V did nothing at all: it was not passed to the CLI in a
+     * useful form and it did not paste either. Ctrl+Shift+V worked, and
+     * nobody presses Ctrl+Shift+V in a browser without being told to.
+     *
+     * Returning false hands the keystroke back to the page, the browser
+     * pastes into xterm's own textarea, and xterm sends it on. Quoted-insert
+     * is the cost, and it is a fair trade for the commonest action there is.
+     */
+    if (!ev.shiftKey && key === "v") return false;
+
+    /* Ctrl+C copies when something is selected, and interrupts when nothing
+     * is.
+     *
+     * In a terminal Ctrl+C has always been SIGINT, and that is still what it
+     * does with no selection — a CLI you cannot stop is worse than one you
+     * cannot copy from. But every terminal people have used for a decade
+     * copies instead when there is a selection, because having deliberately
+     * selected a line, "interrupt" is not what anyone meant. Ctrl+Shift+C
+     * copies unconditionally, and nobody discovers that on their own.
+     */
+    if (!ev.shiftKey && key === "c" && term.hasSelection()) {
+      const picked = term.getSelection();
+      if (picked) {
+        copyText(picked).then(() => toast("Copied " + plural(picked)));
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -3693,8 +3790,7 @@ function wire() {
     if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); run(ev.target.value); }
   };
   $("#prompt").oninput = (ev) => {
-    ev.target.style.height = "auto";
-    ev.target.style.height = Math.min(ev.target.scrollHeight, 140) + "px";
+    growPrompt(ev.target);
     saveDraft();
   };
 

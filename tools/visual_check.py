@@ -22,24 +22,43 @@ It authenticates by minting a session cookie with the server's own signing key
 rather than by typing a password, so it needs no secret and cannot be run
 against a panel that is not this machine's.
 
-**It never touches a session it did not create.** A tmux window has one size,
-so a second browser attaching to a session someone is working in fights them
-for it and the loser gets a screen padded out with dots. The first version of
-this opened whatever was in the sidebar and did exactly that to a live pane.
-It makes its own throwaway session now, and deletes it on the way out.
+**It runs its own panel, not yours.** A tmux window has one size, shared by
+every client attached to it — so a second browser opening the live panel fights
+the first for it and the loser gets a screen padded out with dots. Making a
+throwaway *session* was not enough: loading the panel restores the workspace,
+which attaches every tab that was open, which is every session someone is
+working in.
+
+So this starts a second CLIque on another port with its own state directory and
+its own tmux socket, checks that, and tears the whole thing down. Nothing it
+does can reach a session anybody is using.
 """
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from clique.__main__ import HOME, read_password
 from clique.auth import COOKIE_NAME, Auth
 
-BASE = "http://127.0.0.1:3200"
+#: Its own everything. The port is not 3200 and the home is not ~/.clique on
+#: purpose: this must not be able to touch the panel someone is working in.
+#: Not a secret: this panel exists for a few seconds, on loopback, holding
+#: nothing. It has a password only because the server requires one.
+PASSWORD = "visual-check"  # noqa: S105 — a throwaway panel on loopback, alive for seconds
+
+PORT = 3299
+BASE = f"http://127.0.0.1:{PORT}"
+SANDBOX = Path("/tmp/clique-visual-home")
+SOCKET = "clique-visual"
 SHOTS = Path("/tmp/clique-visual")
 
 passed = failed = 0
@@ -74,9 +93,12 @@ def _token() -> str:
     global _cached_token
     if not _cached_token:
         import subprocess
+        # Minted against the sandbox's own store, not the live panel's — the
+        # token subcommand reads CLIQUE_HOME like everything else.
         made = subprocess.run(
             [sys.executable, "-m", "clique", "token", "create", "visual-check"],
             capture_output=True, text=True,
+            env=dict(os.environ, CLIQUE_HOME=str(SANDBOX)),
             cwd=str(Path(__file__).resolve().parents[1]))
         _cached_token = next(
             line.strip() for line in made.stdout.splitlines()
@@ -96,16 +118,50 @@ def _remove_session(session_id: str) -> None:
 
 
 def main() -> int:
-    from playwright.sync_api import sync_playwright
 
     SHOTS.mkdir(parents=True, exist_ok=True)
-    # The server's own signing key, so a cookie minted here is one it accepts.
-    # No password is typed and none is needed: this can only ever work against
-    # the panel running on this machine, from this machine.
-    auth = Auth(read_password(None), HOME / "secret")
+    panel = _own_panel()
+    try:
+        return _run(panel)
+    finally:
+        panel.terminate()
+        try:
+            panel.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            panel.kill()
+        shutil.rmtree(SANDBOX, ignore_errors=True)
 
-    # Its own session to look at, never anyone else's. Created before the page
-    # loads so it is in the first poll.
+
+def _own_panel() -> subprocess.Popen:
+    """A second CLIque, with its own state, so nothing here can reach a live one.
+
+    An empty state directory is the load-bearing part: the panel restores its
+    workspace on the first poll, and a workspace with no tabs in it cannot
+    attach to a session somebody is working in.
+    """
+    shutil.rmtree(SANDBOX, ignore_errors=True)
+    SANDBOX.mkdir(parents=True)
+    env = dict(os.environ, CLIQUE_HOME=str(SANDBOX))
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "clique", "--host", "127.0.0.1",
+         "--port", str(PORT), "--password", PASSWORD],
+        cwd=str(Path(__file__).resolve().parents[1]), env=env,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(80):
+        try:
+            urllib.request.urlopen(BASE + "/healthz", timeout=2).read()
+            return proc
+        except (urllib.error.URLError, OSError):
+            time.sleep(0.25)
+    proc.kill()
+    raise SystemExit(f"the check's own panel never came up on {PORT}")
+
+
+def _run(panel) -> int:
+    from playwright.sync_api import sync_playwright
+
+    # A cookie the sandbox panel will accept, signed with its own key.
+    auth = Auth(PASSWORD, SANDBOX / "secret")
     mine = _scratch_session()
 
     with sync_playwright() as play:
@@ -180,7 +236,6 @@ def main() -> int:
 
         browser.close()
 
-    _remove_session(mine)
     print(f"\nscreenshots in {SHOTS}")
     print(f"{passed} passed, {failed} failed")
     return 1 if failed else 0

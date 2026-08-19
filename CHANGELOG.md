@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.46.0 — 2026-08-19 16:54 PDT
+
+**Ctrl+V pastes.** It did nothing at all before — xterm treats Ctrl+V as a
+control character, which means calling `preventDefault`, which stops the
+browser from ever firing a paste event. So the keystroke was neither delivered
+to the CLI in a useful form nor pasted. Ctrl+Shift+V worked, and nobody presses
+Ctrl+Shift+V in a browser without being told to. The cost is readline's
+quoted-insert, which is a fair trade for the commonest action there is.
+
+**Ctrl+C copies when text is selected.** With nothing selected it is still
+SIGINT — a CLI you cannot stop is worse than one you cannot copy from — but
+having deliberately selected a line, "interrupt" is not what anyone meant. The
+toast says what was taken: "Copied 3 lines", so a copy that grabbed the wrong
+thing says so rather than being discovered later.
+
+**Shift+Enter is a newline, not a submit.** A terminal sends carriage return
+for both, so a CLI cannot tell them apart and every Shift+Enter submitted the
+prompt — which is why writing more than one line meant giving up. It now sends
+the CSI-u encoding of "Enter with Shift held", which is what the editors people
+compare this to send. Verified rather than assumed: typed into a live Claude
+Code prompt, `ESC CR` did nothing useful and `CSI 13;2u` moved the cursor to a
+second line.
+
+**And the panel's own box grows further** — it stopped at seven lines, so
+composing a paragraph meant scrolling inside the box you were writing in. It
+now grows to two fifths of the window, which is a different number of lines on
+a laptop and on a phone, as it should be.
+
+**A tab says what its marks mean.** A tab can carry a status ring, an attention
+glow and an unread dot, and the tooltip said only the working directory — so
+the honest reaction to any of them was "what is that". Hovering now spells it
+out: *stopped on an error*, *waiting for you*, *new output since you last
+looked*.
+
 ## 0.45.0 — 2026-08-19 16:27 PDT
 
 **A pane squashed by another client takes its size back.** A tmux window has
