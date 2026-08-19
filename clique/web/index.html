@@ -149,6 +149,15 @@
         <output id="outFontTerminal"></output>
       </label>
 
+      <h3>Sidebar</h3>
+      <label class="check"><input type="checkbox" id="setHistorySidebar">
+        List past conversations under each folder</label>
+      <p class="note">Every transcript your CLIs have kept, filed by the
+         directory it belongs to, dimmed under the sessions that are actually
+         running. Click one to resume it. Turn this off and they are still
+         there — <kbd>Ctrl</kbd>+<kbd>K</kbd> then <kbd>~</kbd> searches all of
+         them.</p>
+
       <h3>Keyboard</h3>
       <label class="check"><input type="checkbox" id="setPalette">
         <kbd>Ctrl</kbd>+<kbd>K</kbd> opens the command palette</label>
@@ -282,6 +291,8 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
     </footer>
   </div>
 </div>
+
+<div id="offline" hidden>Lost the panel. Retrying…</div>
 
 <div id="menu" hidden></div>
 

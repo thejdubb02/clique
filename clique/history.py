@@ -22,10 +22,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-#: How much of a transcript to read looking for the first human turn. The
-#: opening records are queue and attachment noise, so it cannot be the first
-#: line — but it is always near the top, and a transcript can be megabytes.
-HEAD_BYTES = 64_000
+#: How much of a transcript to read. A transcript can be thirty megabytes, and
+#: everything worth having is in the first fraction of a percent — but "near
+#: the top" measured in bytes is not the same as measured in lines: an
+#: `ai-title` record has been seen as far in as 86 KB, past a wall of tool
+#: output. This window covers every one on this box with room to spare.
+HEAD_BYTES = 160_000
 
 #: Longest label kept. Past this a prompt is a document, and the sidebar has a
 #: fixed width regardless.
@@ -97,11 +99,20 @@ def _decode_dashed(
 def _first_prompt(path: Path) -> tuple[str, str, str]:
     """(label, cwd, branch) read from the head of a transcript.
 
-    Returns empty strings rather than raising: a transcript being written to,
-    half-flushed, or in a format we have not seen is a conversation we simply
-    label by its directory, never an error that costs the whole listing.
+    The label prefers the CLI's *own* title for the conversation where it
+    wrote one — "Analyze Duchamp room rates emails" beats the first eighty
+    characters someone typed, every time — and falls back to the first human
+    turn where it did not.
+
+    Note what this is not: it does not read the conversation. It reads a field
+    the CLI already computed, or the opening line, and stops. Summarising a
+    transcript ourselves is the trap the roadmap names.
+
+    Returns empty strings rather than raising: a transcript mid-write,
+    half-flushed, or in a shape we have not seen is a conversation labelled by
+    its directory, never an error that costs the whole listing.
     """
-    label = cwd = branch = ""
+    label = title = cwd = branch = ""
     try:
         with path.open("rb") as fh:
             head = fh.read(HEAD_BYTES)
@@ -119,12 +130,16 @@ def _first_prompt(path: Path) -> tuple[str, str, str]:
             continue
         cwd = cwd or str(record.get("cwd") or "")
         branch = branch or str(record.get("gitBranch") or "")
+        if not title and record.get("aiTitle"):
+            title = str(record["aiTitle"])[:MAX_LABEL].strip()
+            if cwd:
+                break   # everything worth having; the rest is transcript
         if label or record.get("type") != "user" or record.get("isSidechain"):
             continue
         text = _text_of(record.get("message"))
         if text:
             label = text
-    return label, cwd, branch
+    return title or label, cwd, branch
 
 
 def _text_of(message) -> str:
@@ -149,7 +164,10 @@ def _text_of(message) -> str:
     # Command envelopes and pasted-file markers are not what anyone typed.
     raw = re.sub(r"<[^>]{1,40}>", " ", raw)
     raw = " ".join(raw.split())
-    if raw.startswith(("Caveat:", "[Request interrupted")):
+    # A conversation opened with a bare slash command tells you nothing. Let
+    # it fall through to the project name rather than filling the sidebar with
+    # rows that all read "/clear".
+    if raw.startswith(("Caveat:", "[Request interrupted")) or re.fullmatch(r"/\w+( \w+)?", raw):
         return ""
     return raw[:MAX_LABEL].strip()
 

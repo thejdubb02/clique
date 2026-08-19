@@ -132,11 +132,28 @@ function statusColor(s) {
 
 /* --------------------------------------------------------------------- state */
 
+/* Consecutive failed polls. A blip mid-poll must not blank the UI, but a
+ * *first* poll that fails leaves an app with no sidebar and no explanation
+ * until the next tick — which reads as broken, because from the outside it is
+ * indistinguishable from broken. */
+let pollFailures = 0;
+
 async function refresh() {
   try {
     state = await api("api/state");
+    pollFailures = 0;
+    $("#offline").hidden = true;
   } catch (err) {
-    return;  // a blip mid-poll should not blank the UI
+    pollFailures++;
+    // Retry the opening fetch quickly instead of waiting out the poll: the
+    // usual cause is a connection dropped while the page was still loading
+    // the rest of itself.
+    if (pollFailures < 4) {
+      setTimeout(refresh, 250 * pollFailures);
+      return;
+    }
+    $("#offline").hidden = false;
+    return;
   }
   // A session killed behind our back keeps its tab until the user closes it,
   // but must not keep a dead socket open.
@@ -147,6 +164,9 @@ async function refresh() {
   renderTabs();
   renderStats();
   $("#version").textContent = "v" + state.version;
+  // First load pulls history in so the sidebar is complete without anyone
+  // having to open the palette to trigger it.
+  if (!resumable) loadResumable().then(renderTree);
 }
 
 function renderStats() {
@@ -268,7 +288,9 @@ function renderTree() {
       `<span class="caret">${group.collapsed ? "▸" : "▾"}</span>` +
       `<i class="dot" style="background:${group.color}"></i>` +
       `<span class="name">${escapeHtml(group.name)}</span>` +
-      `<span class="count">${shown.length}</span>`;
+      `<span class="count">${shown.length}` +
+      (historyCount(group) ? `<i class="from-history">+${historyCount(group)}</i>` : "") +
+      `</span>`;
     head.onclick = () => toggleFolder(group);
     if (!group.pinned && group.id.startsWith("f-")) {
       head.oncontextmenu = (ev) => folderMenu(ev, group);
@@ -278,6 +300,7 @@ function renderTree() {
 
     if (group.collapsed && !query) continue;
     for (const s of shown) tree.appendChild(sessionRow(s));
+    for (const row of historyRows(group, query)) tree.appendChild(row);
   }
 
   const dots = $("#railDots");
@@ -290,6 +313,108 @@ function renderTree() {
     dot.onclick = () => openSession(s.id);
     dots.appendChild(dot);
   }
+}
+
+/* Past conversations belonging to a folder, after folding repeats. Used by the
+ * folder header so a folder with no live sessions does not read as empty when
+ * it holds two hundred conversations. */
+function historyCount(group) {
+  if (state.settings.history_in_sidebar === false) return 0;
+  if (!resumable || group.id === "__running" || group.id === "__archived") return 0;
+  const live = new Set(state.sessions.map((s) => s.cli_session_id).filter(Boolean));
+  const keys = new Set();
+  for (const c of resumable) {
+    if (live.has(c.cli_session_id)) continue;
+    if ((c.folder || "__unfiled") !== group.id) continue;
+    keys.add(`${c.label}\u0000${c.cwd}`);
+  }
+  return keys.size;
+}
+
+/* How many past conversations a folder shows before it asks. Every folder
+ * expanded at once is several hundred rows; this is the count where a folder
+ * still reads as a folder. */
+const HISTORY_SHOWN = 6;
+const historyOpen = new Set();
+
+/* Past conversations belonging to this folder, as dimmed rows under the live
+ * sessions.
+ *
+ * The order is deliberate: what is running comes first and always, because
+ * that is what the sidebar is for. History sits underneath it, visibly
+ * quieter, and is the answer to "where did I leave that" rather than
+ * competing with "what is happening now". */
+function historyRows(group, query) {
+  if (state.settings.history_in_sidebar === false) return [];
+  if (!resumable || group.id === "__running" || group.id === "__archived") return [];
+
+  const live = new Set(state.sessions.map((s) => s.cli_session_id).filter(Boolean));
+  const matching = resumable.filter((c) => {
+    if (live.has(c.cli_session_id)) return false;   // already open as a session
+    const folder = c.folder || "__unfiled";
+    if (folder !== group.id) return false;
+    if (!query) return true;
+    return (c.label + " " + c.cwd).toLowerCase().includes(query);
+  });
+
+  /* Fold repeats together. A scheduled agent produces one transcript per run
+   * under an identical opening line, and six rows reading "You are the
+   * unattended responder…" is six rows of nothing. Keep the newest, count the
+   * rest, and let the count say there is more behind it. */
+  const seen = new Map();
+  for (const c of matching) {
+    const key = `${c.label}\u0000${c.cwd}`;
+    const kept = seen.get(key);
+    if (!kept) seen.set(key, { ...c, repeats: 1 });
+    else {
+      kept.repeats++;
+      if (c.updated > kept.updated) Object.assign(kept, c, { repeats: kept.repeats });
+    }
+  }
+  const mine = [...seen.values()].sort((a, b) => b.updated - a.updated);
+  if (!mine.length) return [];
+
+  const expanded = historyOpen.has(group.id) || Boolean(query);
+  const rows = (expanded ? mine : mine.slice(0, HISTORY_SHOWN)).map(historyRow);
+  if (!expanded && mine.length > HISTORY_SHOWN) {
+    const more = document.createElement("div");
+    more.className = "history-more";
+    more.textContent = `${mine.length - HISTORY_SHOWN} more from history`;
+    more.onclick = () => { historyOpen.add(group.id); renderTree(); };
+    rows.push(more);
+  } else if (expanded && !query && mine.length > HISTORY_SHOWN) {
+    const less = document.createElement("div");
+    less.className = "history-more";
+    less.textContent = "Show less";
+    less.onclick = () => { historyOpen.delete(group.id); renderTree(); };
+    rows.push(less);
+  }
+  return rows;
+}
+
+function historyRow(conv) {
+  const cli = (state.clis || []).find((c) => c.id === conv.cli);
+  const row = document.createElement("div");
+  row.className = "session history";
+  row.title = `${conv.cwd}\nResume this conversation`;
+  const repeats = conv.repeats > 1 ? `<span class="repeats">×${conv.repeats}</span>` : "";
+  row.innerHTML =
+    `<span class="pal-icon">${cli ? markerFor(
+        { color: cli.color, icon: cli.icon, icon_full_color: cli.icon_full_color,
+          label: cli.label, cli: cli.id },
+        markerMode(cli.id) === "none" ? "color" : markerMode(cli.id)) : ""}</span>` +
+    `<span class="meta"><span class="name">${escapeHtml(conv.label)}${repeats}</span>` +
+    `<span class="path">${escapeHtml(conv.project)}</span></span>` +
+    `<span class="age">${ago(conv.updated)}</span>`;
+  row.onclick = async () => {
+    row.classList.add("starting");
+    try {
+      await resumeConversation(conv);
+    } finally {
+      row.classList.remove("starting");
+    }
+  };
+  return row;
 }
 
 function sessionRow(s) {
@@ -525,9 +650,56 @@ function renderTabs() {
     tab.onclick = () => selectTab(id);
     tab.querySelector(".x").onclick = (ev) => { ev.stopPropagation(); closeTab(id); };
     tab.querySelector(".gear").onclick = (ev) => { ev.stopPropagation(); sessionMenu(ev, s); };
+
+    /* Drag to reorder. The order is the browser's, not the server's: which
+     * tab sits where is about this screen, the same rule that keeps sidebar
+     * width local. It rides along with the open-tab list that already
+     * persists, so a reload keeps the arrangement. */
+    tab.draggable = true;
+    tab.ondragstart = (ev) => {
+      ev.dataTransfer.setData("text/clique-tab", id);
+      ev.dataTransfer.effectAllowed = "move";
+      tab.classList.add("dragging");
+    };
+    tab.ondragend = () => {
+      tab.classList.remove("dragging");
+      for (const el of bar.children) el.classList.remove("drop-before", "drop-after");
+    };
+    tab.ondragover = (ev) => {
+      if (!ev.dataTransfer.types.includes("text/clique-tab")) return;
+      ev.preventDefault();
+      // Which half of the tab the pointer is over decides which side it lands.
+      const box = tab.getBoundingClientRect();
+      const after = ev.clientX > box.left + box.width / 2;
+      tab.classList.toggle("drop-before", !after);
+      tab.classList.toggle("drop-after", after);
+    };
+    tab.ondragleave = () => tab.classList.remove("drop-before", "drop-after");
+    tab.ondrop = (ev) => {
+      const moved = ev.dataTransfer.getData("text/clique-tab");
+      if (!moved || moved === id) return;
+      ev.preventDefault();
+      const box = tab.getBoundingClientRect();
+      const after = ev.clientX > box.left + box.width / 2;
+      moveTab(moved, id, after);
+    };
+
     bar.appendChild(tab);
   });
   renderInputBar();
+}
+
+/* Put `moved` next to `target`. Removing first and finding the index second
+ * matters: computing the destination before the removal is off by one whenever
+ * a tab moves rightwards, which is the bug that makes drag-reorder feel like
+ * it ignores you every other drag. */
+function moveTab(moved, target, after) {
+  openTabs = openTabs.filter((id) => id !== moved);
+  const at = openTabs.indexOf(target);
+  if (at < 0) openTabs.push(moved);
+  else openTabs.splice(after ? at + 1 : at, 0, moved);
+  localStorage.setItem("clique.tabs", JSON.stringify(openTabs));
+  renderTabs();
 }
 
 function renderInputBar() {
@@ -984,6 +1156,7 @@ function openSettings() {
   }
 
   $("#setPalette").checked = s.palette_hotkey !== false;
+  $("#setHistorySidebar").checked = s.history_in_sidebar !== false;
   $("#setStatusOnIcon").checked = !!s.status_on_icon;
   $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
@@ -1119,6 +1292,9 @@ function wire() {
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
   $("#setPalette").onchange = (ev) => saveSettings({ palette_hotkey: ev.target.checked });
+  $("#setHistorySidebar").onchange = (ev) => {
+    saveSettings({ history_in_sidebar: ev.target.checked }).then(renderTree);
+  };
   $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });

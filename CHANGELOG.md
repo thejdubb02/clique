@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.9.0 — 2026-08-19
+
+**Your history is in the sidebar, in its folders.** Past conversations now sit
+under the live sessions in each folder — dimmed, because they answer "where did
+I leave that" and must never compete with "what is happening now" — with the
+project and the age, and a click resumes one. 266 conversations, filed by the
+directory they belong to.
+
+- **Repeats are folded.** A scheduled agent writes one transcript per run under
+  an identical opening line; thirty-seven rows reading "You are the unattended
+  responder…" is thirty-seven rows of nothing. The newest is kept and the rest
+  become a ×37 next to it.
+- **Folder headers count both**, live sessions and the history behind them, so
+  a folder holding two hundred conversations and no running session no longer
+  reads as empty.
+- Six per folder, then "N more from history". Everything expands at once only
+  when you search.
+- Titles prefer the CLI's *own* name for a conversation where it wrote one —
+  "Analyze Duchamp room rates emails" beats the first eighty characters
+  somebody typed. Still no summarising: it reads a field that already exists,
+  or the opening line, and stops.
+- Turn the whole thing off in Settings → Appearance → Sidebar. `Ctrl`+`K` then
+  `~` still searches every one of them.
+
+**Tabs reorder by dragging.** A line marks the edge the tab will land against
+rather than reflowing the bar under the pointer, which is harder to aim at.
+The order is the browser's, like sidebar width, and rides along with the
+open-tab list that already survives a reload.
+
+**Fixed: the app could open to an empty sidebar and fill in three seconds
+later.** Python's default listen backlog is five connections, and one page load
+is well past that — document, stylesheet, three scripts, brand mark, favicon,
+manifest, `/api/state`, `/api/resumable`, and a WebSocket upgrade. The overflow
+was dropped. The backlog is 128 now, the opening fetch retries quickly instead
+of waiting out the poll, and a panel that really is unreachable says so rather
+than showing an empty app, which from the outside is indistinguishable from a
+broken one.
+
 ## 0.8.0 — 2026-08-19
 
 **Every past conversation, findable and resumable.** 266 of them on this box,
