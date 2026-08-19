@@ -18,12 +18,15 @@
     document.write('<base href="' + path.replace(/"/g, "") + '">');
   })();
 </script>
+<link rel="icon" href="brand/logo.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="any">
 <link rel="stylesheet" href="vendor/xterm.css">
 <link rel="stylesheet" href="app.css">
 
 <div id="shell">
   <aside id="sidebar">
     <header>
+      <img class="brand-mark" src="brand/logo.svg" alt="" width="15" height="15">
       <span class="brand">muxpanel</span>
       <button id="newFolder" class="hdr-btn" title="New folder">&#43;</button>
       <button id="adopt" class="hdr-btn" title="Adopt sessions from another tool">&#8681;</button>
@@ -44,12 +47,17 @@
     <div id="tabbar">
       <div id="tabs"></div>
       <button id="newTab" class="tab-add" title="New session">&#43;</button>
-      <div id="stats">
+      <div id="stats" title="Click for the last hour">
         <span id="cpu">cpu —</span>
         <span id="mem">mem —</span>
+        <span id="swap" hidden></span>
+        <span id="disk">disk —</span>
+        <span id="load">load —</span>
         <span id="clients" title="Connected terminals"><i class="dot"></i>0</span>
       </div>
     </div>
+
+    <div id="history" hidden></div>
 
     <div id="termwrap">
       <div id="terminal"></div>
@@ -229,6 +237,7 @@ python3 -m muxpanel token revoke tk_xxxxxxxx</pre>
 
 <div id="menu" hidden></div>
 
+<script src="themes.js"></script>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
 <script src="app.js"></script>

@@ -295,3 +295,99 @@ button.primary:hover { filter: brightness(1.1); }
           cursor: pointer; padding: 0; }
 .swatch:hover { border-color: var(--fg); }
 .swatch.on { border-color: var(--fg); }
+
+/* ------------------------------------------------- font size, applied live */
+
+#sidebar, #tabbar, #inputbar { font-size: var(--font-panel, 13px); }
+.brand-mark { flex: 0 0 auto; opacity: .9; }
+
+/* ------------------------------------------------ working / wants-attention */
+
+/* A session producing output. The dot breathes rather than spins: a spinner
+   at 7px reads as a rendering artefact, a slow pulse reads as alive. */
+.session.busy .dot, .tab.busy .dot { animation: breathe 1.4s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* Finished while you were looking elsewhere. Stays until the tab is opened,
+   because a flash you missed is the same as no flash at all. */
+.tab.attention { background: var(--sel); color: var(--fg); }
+.tab.attention .label { font-weight: 600; }
+.tab.attention::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  box-shadow: inset 0 -2px 0 var(--warn); animation: nudge 1.6s ease-in-out infinite;
+}
+.tab { position: relative; }
+.session.attention .name { color: var(--warn); font-weight: 600; }
+@keyframes nudge { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .session.busy .dot, .tab.busy .dot, .tab.attention::after { animation: none; }
+}
+
+/* ------------------------------------------------------------ stats history */
+
+#stats { cursor: pointer; }
+#stats span.warn { color: var(--warn); }
+#history {
+  position: absolute; top: 36px; right: 8px; z-index: 30; width: 348px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 12px; box-shadow: 0 8px 24px #0007;
+}
+.hist-head { display: flex; justify-content: space-between; font-size: 11px;
+             margin-bottom: 6px; }
+.hist-head .dim, #history .dim { color: var(--dim); }
+.spark { width: 100%; height: 54px; display: block; }
+.hist-key { display: flex; align-items: center; gap: 5px; font-size: 11px;
+            color: var(--dim); margin-top: 6px; }
+.hist-key i { width: 8px; height: 2px; display: inline-block; margin-left: 8px; }
+.hist-key i:first-child { margin-left: 0; }
+
+/* --------------------------------------------------------- settings, tabbed */
+
+.sheet-head { display: flex; align-items: center; margin-bottom: 12px; }
+.sheet-head h2 { flex: 1; margin: 0; }
+
+#settings .tabs { display: flex; gap: 2px; flex-wrap: wrap;
+                  border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+#settings .tabs button {
+  background: none; border: 0; color: var(--dim); font: inherit; cursor: pointer;
+  padding: 7px 10px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+#settings .tabs button:hover { color: var(--fg); }
+#settings .tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
+
+#settings .field { display: block; margin-bottom: 12px; font-size: 12px; color: var(--dim); }
+#settings .field.row { display: flex; align-items: center; gap: 10px; }
+#settings .field.row input[type=range] { flex: 1; max-width: 220px; }
+#settings select, #settings textarea, #settings input[type=text] {
+  width: 100%; margin-top: 4px; padding: 6px 8px; font: inherit;
+  background: var(--field); color: var(--fg);
+  border: 1px solid transparent; border-radius: 3px;
+}
+#settings textarea { font-family: ui-monospace, Menlo, Consolas, monospace;
+                     font-size: 12px; resize: vertical; }
+#settings select:focus, #settings textarea:focus { outline: none; border-color: var(--accent); }
+#settings button:not(.hdr-btn):not(.tabs button):not(.danger) {
+  background: var(--field); color: var(--fg); border: 0; border-radius: 3px;
+  padding: 6px 12px; font: inherit; cursor: pointer;
+}
+#settings .code { background: var(--bg); border: 1px solid var(--line);
+                  border-radius: 4px; padding: 10px; font-size: 12px;
+                  overflow-x: auto; color: var(--fg); }
+.about { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.about-name { font-size: 15px; font-weight: 600; }
+
+.snippet-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.snippet-row { display: grid; grid-template-columns: 90px 1fr auto; gap: 6px;
+               align-items: start; padding: 8px; background: var(--bg);
+               border: 1px solid var(--line); border-radius: 4px; }
+.snippet-row input, .snippet-row textarea {
+  width: 100%; padding: 5px 7px; font: inherit; background: var(--field);
+  color: var(--fg); border: 1px solid transparent; border-radius: 3px;
+}
+.snippet-row .trigger { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.snippet-row textarea { grid-column: 1 / -1; font-family: ui-monospace, Menlo, monospace;
+                        font-size: 12px; resize: vertical; }
+.snippet-row .danger { background: none; border: 0; color: var(--err);
+                       cursor: pointer; font: inherit; padding: 5px 6px; }
+.snippet-row .danger:hover { text-decoration: underline; }

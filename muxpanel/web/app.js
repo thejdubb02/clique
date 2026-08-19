@@ -32,6 +32,11 @@ let activeId = null;
 const terms = new Map();      // id -> { term, fit, ws, el, retry }
 let repeat = 1;
 let showArchived = false;
+/* Sessions that were producing output on the previous poll. A busy -> quiet
+ * transition is what "this one finished" means here, which is why it needs a
+ * memory of the last poll rather than just the current state. */
+const wasBusy = new Map();
+const attention = new Set();   // session ids waiting to be looked at
 
 /* ------------------------------------------------------------------- helpers */
 
@@ -100,6 +105,8 @@ async function refresh() {
   // A session killed behind our back keeps its tab until the user closes it,
   // but must not keep a dead socket open.
   openTabs = openTabs.filter((id) => session(id));
+  applySettings();
+  noticeFinished(state.sessions.filter((x) => openTabs.includes(x.id)));
   renderTree();
   renderTabs();
   renderStats();
@@ -108,10 +115,75 @@ async function refresh() {
 
 function renderStats() {
   const st = state.stats || {};
+  const gb = (mb) => Math.round((mb || 0) / 1024 * 10) / 10;
+
   $("#cpu").textContent = "cpu " + (st.cpu ?? 0) + "%";
-  $("#mem").textContent = "mem " + Math.round((st.mem?.used_mb || 0) / 1024 * 10) / 10 +
-                          "/" + Math.round((st.mem?.total_mb || 0) / 1024) + "G";
+  $("#mem").textContent = "mem " + gb(st.mem?.used_mb) + "/" +
+                          Math.round((st.mem?.total_mb || 0) / 1024) + "G";
+
+  // Load against core count, because "1.4" means nothing without knowing the
+  // box. Over 1.0 per core is a queue, and it turns amber.
+  const load = st.load || {};
+  const loadEl = $("#load");
+  loadEl.textContent = "load " + (load.one ?? 0).toFixed(2);
+  loadEl.title = `${load.one} / ${load.five} / ${load.fifteen} over ${load.cores} cores`;
+  loadEl.classList.toggle("warn", (load.ratio || 0) > 1);
+
+  // Disk is the quietest way to lose an afternoon here: everything starts
+  // failing in ways that never mention disk.
+  const disk = st.disk || {};
+  const diskEl = $("#disk");
+  diskEl.textContent = "disk " + (disk.free_gb ?? 0) + "G free";
+  diskEl.classList.toggle("warn", (disk.percent || 0) > 90);
+
+  // Any swap in use means memory pressure already happened, so it only
+  // appears when there is something to say.
+  const swap = st.swap || {};
+  const swapEl = $("#swap");
+  swapEl.hidden = !(swap.used_mb > 0);
+  swapEl.textContent = "swap " + gb(swap.used_mb) + "G";
+  swapEl.classList.toggle("warn", (swap.percent || 0) > 25);
+
   $("#clients").innerHTML = '<i class="dot"></i>' + (st.clients ?? 0);
+}
+
+/* ------------------------------------------------------------ stats history */
+
+function sparkline(samples, key, color, height) {
+  if (samples.length < 2) return "";
+  const width = 320;
+  const step = width / (samples.length - 1);
+  const points = samples.map((s, i) =>
+    `${(i * step).toFixed(1)},${(height - (s[key] / 100) * height).toFixed(1)}`);
+  return `<polyline fill="none" stroke="${color}" stroke-width="1.5" ` +
+         `points="${points.join(" ")}"/>` +
+         `<polygon fill="${color}" opacity="0.13" ` +
+         `points="0,${height} ${points.join(" ")} ${width},${height}"/>`;
+}
+
+async function showHistory() {
+  const box = $("#history");
+  if (!box.hidden) { box.hidden = true; return; }
+  let data;
+  try {
+    data = await api("api/stats/history?minutes=60");
+  } catch (err) {
+    return;
+  }
+  const h = 54;
+  const covered = data.covered_minutes;
+  box.innerHTML =
+    `<div class="hist-head"><span>Last ${covered || 0} min</span>` +
+    `<span class="dim">peak cpu ${data.peak_cpu}% · peak mem ${data.peak_mem}%</span></div>` +
+    `<svg viewBox="0 0 320 ${h}" preserveAspectRatio="none" class="spark">` +
+    sparkline(data.samples, "cpu", "var(--accent)", h) +
+    sparkline(data.samples, "mem", "var(--warn)", h) +
+    `</svg>` +
+    `<div class="hist-key"><i style="background:var(--accent)"></i>cpu` +
+    `<i style="background:var(--warn)"></i>memory</div>` +
+    (data.samples.length < 2
+      ? `<p class="dim">Collecting — the series starts when the panel starts.</p>` : "");
+  box.hidden = false;
 }
 
 /* ------------------------------------------------------------------- sidebar */
@@ -186,7 +258,9 @@ function renderTree() {
 
 function sessionRow(s) {
   const row = document.createElement("div");
-  row.className = "session" + (s.id === activeId ? " active" : "") + (s.alive ? "" : " dead");
+  row.className = "session" + (s.id === activeId ? " active" : "") +
+    (s.alive ? "" : " dead") + (s.busy ? " busy" : "") +
+    (attention.has(s.id) ? " attention" : "");
   row.draggable = true;
   row.dataset.id = s.id;
   row.innerHTML =
@@ -365,7 +439,8 @@ function renderTabs() {
     const s = session(id);
     if (!s) return;
     const tab = document.createElement("div");
-    tab.className = "tab" + (id === activeId ? " active" : "");
+    tab.className = "tab" + (id === activeId ? " active" : "") +
+      (s.busy ? " busy" : "") + (attention.has(id) ? " attention" : "");
     tab.title = s.cwd;
     tab.innerHTML =
       `<span class="num">${index + 1}</span>` +
@@ -398,6 +473,7 @@ function renderInputBar() {
 
 function selectTab(id) {
   activeId = id;
+  attention.delete(id);   // looking at it is the acknowledgement
   for (const [tid, entry] of terms) {
     entry.el.style.display = tid === id ? "block" : "none";
   }
@@ -457,7 +533,7 @@ async function attach(id) {
   term.open(host);
   fit.fit();
 
-  const entry = { term, fit, el: host, ws: null, closing: false };
+  const entry = { term, fit, el: host, ws: null, closing: false, typed: "" };
   terms.set(id, entry);
 
   const connect = () => {
@@ -480,10 +556,34 @@ async function attach(id) {
   };
   connect();
 
-  term.onData((data) => {
+  const send = (text) => {
     if (entry.ws && entry.ws.readyState === 1) {
-      entry.ws.send(new TextEncoder().encode(data));
+      entry.ws.send(new TextEncoder().encode(text));
     }
+  };
+
+  term.onData((data) => {
+    /* Snippets work in the CLI's own input field too, because muxpanel owns
+     * the pseudo-terminal — an expansion is simply typed into the pane. We
+     * track what has been typed since the last Enter so we know how many
+     * characters to erase before sending the replacement. That mirrors the
+     * CLI's own line editor rather than reading it, which is why Escape and
+     * Enter reset the buffer: those are the points where any editor we might
+     * be shadowing has certainly cleared its line. */
+    if (data === "\t" && entry.typed) {
+      const found = snippetFor(entry.typed);
+      if (found) {
+        send("\u007f".repeat(found.trigger.length) + expandText(found.text, true));
+        entry.typed = "";
+        return;   // swallow the Tab; it was the expansion key this time
+      }
+    }
+    if (data === "\r" || data === "\n" || data === "\u001b") entry.typed = "";
+    else if (data === "\u007f") entry.typed = entry.typed.slice(0, -1);
+    else if (data >= " " && data.length === 1) entry.typed += data;
+    else if (data.length > 1) entry.typed = "";   // paste or escape sequence
+
+    send(data);
   });
   term.onResize(({ cols, rows }) => {
     if (entry.ws && entry.ws.readyState === 1) {
@@ -499,6 +599,45 @@ function control(message) {
     return true;
   }
   return false;
+}
+
+/* ----------------------------------------------------------------- snippets */
+
+function snippets() { return state.settings.snippets || []; }
+
+function expandText(text, forTerminal) {
+  const s = session(activeId);
+  const filled = text
+    .replaceAll("{cwd}", s ? s.cwd : "")
+    .replaceAll("{project}", s ? s.project : "")
+    .replaceAll("{name}", s ? s.name : "");
+  // {cursor} can only mean something where we control the caret. Injecting
+  // into a CLI's own input field gives us no such control, so it is dropped
+  // there rather than left in the text as a stray token.
+  return forTerminal ? filled.replaceAll("{cursor}", "") : filled;
+}
+
+function snippetFor(typed) {
+  // Longest trigger first, so ";rev" and ";review" can coexist.
+  return [...snippets()]
+    .sort((a, b) => b.trigger.length - a.trigger.length)
+    .find((sn) => typed.endsWith(sn.trigger));
+}
+
+function expandInBox(box) {
+  const before = box.value.slice(0, box.selectionStart);
+  const found = snippetFor(before);
+  if (!found) return false;
+  const filled = expandText(found.text, false);
+  const caret = filled.indexOf("{cursor}");
+  const body = filled.replace("{cursor}", "");
+  const head = before.slice(0, before.length - found.trigger.length);
+  const tail = box.value.slice(box.selectionStart);
+  box.value = head + body + tail;
+  const at = head.length + (caret >= 0 ? caret : body.length);
+  box.setSelectionRange(at, at);
+  box.dispatchEvent(new Event("input"));
+  return true;
 }
 
 /* --------------------------------------------------------------- input bar */
@@ -590,6 +729,100 @@ function openModal() {
   form.name.focus();
 }
 
+/* --------------------------------------------------------- applying settings */
+
+function styleSlot(name) {
+  let el = document.getElementById("css-" + name);
+  if (!el) {
+    el = document.createElement("style");
+    el.id = "css-" + name;
+    document.head.appendChild(el);
+  }
+  return el;
+}
+
+function currentTheme() {
+  const themes = window.MUXPANEL_THEMES || {};
+  const s = state.settings;
+  if (s.theme && themes[s.theme]) return themes[s.theme];
+  // No preset chosen: the base appearance picks which built-in to use.
+  const wantsLight = s.appearance === "light" ||
+    (s.appearance === "system" && matchMedia("(prefers-color-scheme: light)").matches);
+  return themes[wantsLight ? "light" : ""] || themes[""];
+}
+
+function applySettings() {
+  const s = state.settings;
+  const theme = currentTheme();
+  const root = document.documentElement;
+
+  for (const [name, value] of Object.entries(theme.panel || {})) {
+    root.style.setProperty("--" + name, value);
+  }
+  // colorScheme is what makes native scrollbars, form controls and the
+  // terminal's own selection colour agree with the theme. Without it a light
+  // theme still gets dark scrollbars.
+  root.style.colorScheme = theme.base || "dark";
+  root.style.setProperty("--font-panel", (s.font_panel || 13) + "px");
+
+  for (const entry of terms.values()) {
+    entry.term.options.fontSize = s.font_terminal || 13;
+    entry.term.options.theme = theme.term || {};
+    try { entry.fit.fit(); } catch (err) { /* not visible yet */ }
+  }
+
+  // Order matters and is documented in the settings sheet: both, panel, then
+  // terminal. The terminal block is wrapped so "terminal only" means it.
+  styleSlot("both").textContent = s.css_both || "";
+  styleSlot("panel").textContent = s.css_panel || "";
+  styleSlot("term").textContent = s.css_terminal
+    ? `#termwrap { ${s.css_terminal} }` : "";
+
+  // Most CLIs draw their own prompt; two stacked boxes is redundant chrome.
+  $("#inputbar").hidden = s.input_mode === "terminal";
+}
+
+/* ------------------------------------------------------------ notifications */
+
+function chime() {
+  // Synthesised rather than shipped as a file: two notes need no asset, no
+  // download, and no decision about what format to vendor.
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    for (const [i, freq] of [880, 1174.7].entries()) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + i * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 0.28);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.3);
+    }
+    setTimeout(() => ctx.close(), 900);
+  } catch (err) {
+    /* autoplay policy, or no audio device. Never worth an error. */
+  }
+}
+
+function noticeFinished(sessions) {
+  const s = state.settings;
+  for (const session of sessions) {
+    const before = wasBusy.get(session.id) || false;
+    wasBusy.set(session.id, session.busy);
+    if (!before || session.busy) continue;
+
+    // Finished. Only worth saying so if he was not already watching it.
+    const watching = session.id === activeId && document.hasFocus();
+    if (watching) continue;
+    if (s.notify_flash !== false) attention.add(session.id);
+    if (s.notify_sound) chime();
+  }
+}
+
 /* ----------------------------------------------------------------- settings */
 
 async function saveSettings(changes) {
@@ -603,12 +836,49 @@ async function saveSettings(changes) {
 }
 
 function openSettings() {
-  $("#setTabs").checked = state.settings.markers_in_tabs !== false;
-  $("#setSidebar").checked = state.settings.markers_in_sidebar !== false;
+  const s = state.settings;
 
+  const themeSelect = $("#setTheme");
+  themeSelect.innerHTML = "";
+  for (const [id, theme] of Object.entries(window.MUXPANEL_THEMES || {})) {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = theme.label;
+    option.selected = id === (s.theme || "");
+    themeSelect.appendChild(option);
+  }
+  $("#setAppearance").value = s.appearance || "dark";
+  $("#setInputMode").value = s.input_mode || "panel";
+
+  for (const [slider, out, value] of [
+    ["#setFontPanel", "#outFontPanel", s.font_panel || 13],
+    ["#setFontTerminal", "#outFontTerminal", s.font_terminal || 13],
+  ]) {
+    $(slider).value = value;
+    $(out).textContent = value + "px";
+  }
+
+  $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
+  $("#setSidebar").checked = s.markers_in_sidebar !== false;
+  $("#setFlash").checked = s.notify_flash !== false;
+  $("#setSound").checked = !!s.notify_sound;
+  $("#setIdle").value = s.notify_idle_seconds || 4;
+  $("#outIdle").textContent = s.notify_idle_seconds || 4;
+
+  $("#cssBoth").value = s.css_both || "";
+  $("#cssPanel").value = s.css_panel || "";
+  $("#cssTerminal").value = s.css_terminal || "";
+  $("#aboutVersion").textContent = "version " + (state.version || "");
+
+  renderCliRows();
+  renderSnippetRows();
+  $("#settings").hidden = false;
+}
+
+function renderCliRows() {
   const rows = $("#cliRows");
   rows.innerHTML = "";
-  // Installed first: the ones he actually runs should not be below a list of
+  // Installed first: the ones he actually runs should not sit below a list of
   // ones he does not have.
   const clis = [...state.clis].sort(
     (a, b) => (b.installed - a.installed) || a.label.localeCompare(b.label));
@@ -620,8 +890,7 @@ function openSettings() {
     row.innerHTML =
       `<span class="preview">${markerFor(cli, mode === "none" ? "both" : mode)}</span>` +
       `<span class="label">${escapeHtml(cli.label)}` +
-      (cli.installed ? "" : ' <span class="tag">not installed</span>') +
-      `</span>`;
+      (cli.installed ? "" : ' <span class="tag">not installed</span>') + `</span>`;
 
     const select = document.createElement("select");
     for (const [value, text] of [["both", "Both"], ["icon", "Icon"],
@@ -634,7 +903,7 @@ function openSettings() {
     }
     select.onchange = async () => {
       await saveSettings({ marker_by_cli: { [cli.id]: select.value } });
-      openSettings();  // repaint the preview beside the row
+      renderCliRows();
     };
     row.appendChild(select);
     rows.appendChild(row);
@@ -642,10 +911,62 @@ function openSettings() {
 
   const absent = clis.filter((c) => !c.installed).length;
   $("#notInstalledNote").textContent = absent
-    ? `${absent} catalogued CLIs are not installed on this box, so they are not `
-      + `offered when starting a session. Install one and it appears here by itself.`
+    ? `${absent} catalogued CLIs are not installed here, so they are not offered `
+      + `when starting a session. Install one and it appears by itself.`
     : "";
-  $("#settings").hidden = false;
+}
+
+function renderSnippetRows() {
+  const rows = $("#snippetRows");
+  rows.innerHTML = "";
+  const list = snippets();
+
+  if (!list.length) {
+    rows.innerHTML = '<p class="note">None yet. The point is the six prompts ' +
+                     'you retype every day.</p>';
+  }
+
+  list.forEach((snippet, index) => {
+    const row = document.createElement("div");
+    row.className = "snippet-row";
+
+    const trigger = document.createElement("input");
+    trigger.className = "trigger";
+    trigger.value = snippet.trigger;
+    trigger.placeholder = ";rev";
+
+    const label = document.createElement("input");
+    label.className = "snip-label";
+    label.value = snippet.label || "";
+    label.placeholder = "What it is for";
+
+    const text = document.createElement("textarea");
+    text.rows = 2;
+    text.value = snippet.text;
+    text.placeholder = "The text this expands to";
+
+    const remove = document.createElement("button");
+    remove.className = "danger";
+    remove.textContent = "Delete";
+    remove.onclick = async () => {
+      const next = snippets().filter((_, i) => i !== index);
+      await saveSettings({ snippets: next });
+      renderSnippetRows();
+    };
+
+    const commit = async () => {
+      const next = snippets().map((existing, i) => i === index
+        ? { trigger: trigger.value.trim(), label: label.value.trim(), text: text.value }
+        : existing);
+      // A row with no trigger or no text is dropped by the server, so an empty
+      // one the user abandoned does not persist as a broken snippet.
+      await saveSettings({ snippets: next });
+    };
+    for (const field of [trigger, label, text]) field.onchange = commit;
+
+    row.append(trigger, label, text, remove);
+    rows.appendChild(row);
+  });
 }
 
 /* ------------------------------------------------------------------- wiring */
@@ -655,8 +976,57 @@ function wire() {
   $("#newTab").onclick = openModal;
   $("#settingsBtn").onclick = openSettings;
   $("#settingsDone").onclick = () => ($("#settings").hidden = true);
-  $("#setTabs").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
+
+  // Tabbed panes: siloed so the sheet stays readable as options grow.
+  $("#setTabs").onclick = (ev) => {
+    const button = ev.target.closest("button[data-pane]");
+    if (!button) return;
+    for (const other of $("#setTabs").children) other.classList.remove("on");
+    button.classList.add("on");
+    for (const pane of document.querySelectorAll(".pane")) {
+      pane.hidden = pane.dataset.pane !== button.dataset.pane;
+    }
+  };
+
+  $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });
+  $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
+  $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
+  $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
+  $("#setFlash").onchange = (ev) => saveSettings({ notify_flash: ev.target.checked });
+  $("#setSound").onchange = (ev) => saveSettings({ notify_sound: ev.target.checked });
+  $("#testChime").onclick = chime;
+
+  // Sliders paint live and save on release: saving per pixel would be a
+  // request per frame for a value nobody reads until you stop dragging.
+  for (const [slider, out, key, suffix] of [
+    ["#setFontPanel", "#outFontPanel", "font_panel", "px"],
+    ["#setFontTerminal", "#outFontTerminal", "font_terminal", "px"],
+    ["#setIdle", "#outIdle", "notify_idle_seconds", ""],
+  ]) {
+    $(slider).oninput = (ev) => ($(out).textContent = ev.target.value + suffix);
+    $(slider).onchange = (ev) => saveSettings({ [key]: Number(ev.target.value) });
+  }
+
+  $("#saveCss").onclick = async () => {
+    await saveSettings({
+      css_both: $("#cssBoth").value,
+      css_panel: $("#cssPanel").value,
+      css_terminal: $("#cssTerminal").value,
+    });
+    const note = $("#cssSaved");
+    note.textContent = "Applied.";
+    setTimeout(() => (note.textContent = ""), 2000);
+  };
+
+  $("#addSnippet").onclick = async () => {
+    await saveSettings({
+      snippets: [...snippets(), { trigger: ";new", label: "", text: "Replace me" }],
+    });
+    renderSnippetRows();
+  };
+
+  $("#stats").onclick = showHistory;
   $("#cancel").onclick = () => ($("#modal").hidden = true);
   $("#collapse").onclick = () => setSidebar(false);
   $("#expand").onclick = () => setSidebar(true);
@@ -708,6 +1078,7 @@ function wire() {
   };
 
   $("#prompt").onkeydown = (ev) => {
+    if (ev.key === "Tab" && expandInBox(ev.target)) { ev.preventDefault(); return; }
     if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); run(ev.target.value); }
   };
   $("#prompt").oninput = (ev) => {

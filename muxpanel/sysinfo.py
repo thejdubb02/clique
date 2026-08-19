@@ -6,6 +6,7 @@ on a tool whose whole argument is that it adds nothing to the box.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections import deque
@@ -67,9 +68,80 @@ def memory() -> dict:
     }
 
 
+def swap() -> dict:
+    """Swap in use.
+
+    Worth its own number rather than folding into memory: any swap in use on an
+    interactive box means memory pressure has *already* happened, and an agent
+    that starts swapping feels broken long before it fails. A box can look fine
+    on used-memory and be crawling.
+    """
+    values: dict[str, int] = {}
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                key, _, rest = line.partition(":")
+                if key in ("SwapTotal", "SwapFree"):
+                    values[key] = int(rest.split()[0])
+    except OSError:
+        return {"used_mb": 0, "total_mb": 0, "percent": 0.0}
+    total = values.get("SwapTotal", 0)
+    used = max(total - values.get("SwapFree", 0), 0)
+    return {
+        "used_mb": used // 1024,
+        "total_mb": total // 1024,
+        "percent": round(100.0 * used / total, 1) if total else 0.0,
+    }
+
+
+def disk(path: str = "/") -> dict:
+    """Free space on the filesystem the work lives on.
+
+    The quietest way to lose an afternoon on a VPS: node_modules, model caches,
+    transcripts and docker layers fill the disk, and every tool starts failing
+    in a way that never mentions disk.
+    """
+    try:
+        st = os.statvfs(path)
+    except OSError:
+        return {"free_gb": 0.0, "total_gb": 0.0, "percent": 0.0}
+    total = st.f_blocks * st.f_frsize
+    free = st.f_bavail * st.f_frsize
+    used = total - free
+    return {
+        "free_gb": round(free / 1024**3, 1),
+        "total_gb": round(total / 1024**3, 1),
+        "percent": round(100.0 * used / total, 1) if total else 0.0,
+    }
+
+
+def load() -> dict:
+    """Run-queue length, and how it compares to the number of cores.
+
+    A better "is this box struggling" signal than instantaneous CPU, which
+    swings wildly between samples. Normalised against core count so the number
+    means the same thing on any machine.
+    """
+    try:
+        one, five, fifteen = os.getloadavg()
+    except OSError:
+        return {"one": 0.0, "five": 0.0, "fifteen": 0.0, "cores": 1, "ratio": 0.0}
+    cores = os.cpu_count() or 1
+    return {
+        "one": round(one, 2), "five": round(five, 2), "fifteen": round(fifteen, 2),
+        "cores": cores, "ratio": round(one / cores, 2),
+    }
+
+
 def snapshot(clients: int = 0) -> dict:
-    mem = memory()
-    return {"cpu": cpu_percent(), "mem": mem, "clients": clients}
+    return {
+        "cpu": cpu_percent(),
+        "mem": memory(),
+        "swap": swap(),
+        "disk": disk(),
+        "load": load(),
+        "clients": clients,
+    }
 
 
 class History:
