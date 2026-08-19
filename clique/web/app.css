@@ -105,6 +105,9 @@ body {
 }
 .folder-head:hover { background: var(--row); }
 .folder-head.drop { background: var(--sel); color: var(--fg); }
+/* A session row lit up as a drop target — the same treatment a folder header
+   gets, because it is the same gesture landing somewhere else. */
+.session.drop { background: var(--sel); color: var(--fg); }
 /* The caret is the collapse control, so it is sized to be aimed at rather
    than to match the label's type size — the whole row toggles too, but the
    triangle is what people go for. */
@@ -775,6 +778,15 @@ button.primary:hover { filter: brightness(1.1); }
    where the eye already is. */
 #lock { font-size: 12px; }
 #lock.on { background: var(--accent); color: #fff; border-color: transparent; }
+/* Moving a draft. The control lives with the text it moves, so it is a small
+   quiet thing beside the box rather than another button competing with Run. */
+.draft-move {
+  align-self: center; cursor: grab; color: var(--dim);
+  border: 1px solid var(--line); border-radius: 3px; padding: 4px 5px;
+}
+.draft-move:hover { color: var(--fg); border-color: var(--accent); }
+.draft-move:active { cursor: grabbing; }
+
 /* Icons.
  *
  * One rule, because they are one set: sized in `em` so an icon tracks whatever

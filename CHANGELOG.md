@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.33.0 — 2026-08-19 14:32 PDT
+
+**Move a half-typed thought to the session it belongs in.** You are partway
+through an instruction and realise it is the *other* agent that should get it.
+That has always cost four steps — select, cut, switch, paste — to move text the
+panel was already holding on the server. One step now: the **›** beside the
+prompt box, `Ctrl+K` → "Move this draft to another session", or drag that
+control onto any row in the sidebar.
+
+- It is a move, not a copy. Two sessions holding the same half-written
+  instruction is a way to send it twice.
+- Text already waiting in the target is never overwritten — the arriving draft
+  is added underneath it, with a blank line between two thoughts.
+- The cursor lands at the end of the sentence you were in.
+
+Drafts already survived tab switches, reloads and a closed laptop, because a
+draft lives on the session rather than in the box. This only changes which
+session that is.
+
+**The command palette can be borrowed as a picker.** "Choose a session" is now
+the same list, the same typing and the same arrow keys as jumping to one, with
+the actions taken out and a callback put in — rather than a second list widget
+to search, style and keep working on a phone. Moving a draft is the first thing
+that uses it.
+
 ## 0.32.0 — 2026-08-19 14:23 PDT
 
 **One prompt box, not two.** Claude, Codex, Gemini and most of the rest draw

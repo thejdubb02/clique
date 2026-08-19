@@ -903,6 +903,25 @@ function sessionRow(s) {
     `<span class="path">${escapeHtml(s.cwd)}</span></span>` +
     `<span class="age">${ago(s.created)}</span>`;
 
+  /* A draft dragged out of the prompt box and dropped on a session.
+   *
+   * Deliberately its own MIME type rather than text/plain: the row already
+   * accepts a dropped session id as "file this here", and a dropped paragraph
+   * of prose landing in that handler would try to move a folder to a session
+   * that does not exist. Two meanings, two types, no guessing. */
+  row.addEventListener("dragover", (ev) => {
+    if (!ev.dataTransfer.types.includes(DRAFT_TYPE) || s.id === draftFor) return;
+    ev.preventDefault();
+    row.classList.add("drop");
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drop"));
+  row.addEventListener("drop", (ev) => {
+    if (!ev.dataTransfer.types.includes(DRAFT_TYPE)) return;
+    ev.preventDefault();
+    row.classList.remove("drop");
+    moveDraft(s.id);
+  });
+
   row.onclick = () => openSession(s.id);
   row.ondblclick = (ev) => { ev.stopPropagation(); renameInline(row, s); };
   row.oncontextmenu = (ev) => sessionMenu(ev, s);
@@ -1753,6 +1772,14 @@ function toast(text, bad, action) {
 let draftTimer = null;
 let draftFor = null;          // whose draft is in the box right now
 
+/* The move control appears with the text and goes with it. An always-there
+ * button for something you can only do half the time is a button people learn
+ * to read past. */
+function showDraftMove() {
+  const button = $("#draftMove");
+  if (button) button.hidden = !$("#prompt").value.trim() || state.sessions.length < 2;
+}
+
 function loadDraft(id) {
   const box = $("#prompt");
   const s = session(id);
@@ -1760,10 +1787,12 @@ function loadDraft(id) {
   box.style.height = "auto";
   box.style.height = Math.min(box.scrollHeight, 140) + "px";
   draftFor = id;
+  showDraftMove();
 }
 
 function saveDraft(now) {
   const id = draftFor;
+  showDraftMove();
   if (!id) return;
   const text = $("#prompt").value;
   const s = session(id);
@@ -1775,6 +1804,58 @@ function saveDraft(now) {
   }).catch(() => {});
   if (now) send();
   else draftTimer = setTimeout(send, 600);
+}
+
+/* Move a half-typed thought to the session it actually belongs in.
+ *
+ * The moment this exists for: you are typing an instruction, and partway
+ * through you realise it is the *other* agent that should get it. Today that
+ * costs selecting, cutting, switching, pasting — four steps to move text that
+ * the panel is already storing on the server. It is one step now, and the
+ * draft lands in the target exactly as you left it.
+ *
+ * Deliberately a move, not a copy. Two sessions holding the same half-written
+ * instruction is a way to send it twice, and the whole point was that it
+ * belongs somewhere else.
+ *
+ * A draft already survives tab switches, reloads and a closed laptop, because
+ * it lives on the session rather than in the box. This just changes which
+ * session that is. */
+//: Its own drag type, so a dropped draft is never mistaken for a dropped
+//: session id — the sidebar row accepts both and they mean opposite things.
+const DRAFT_TYPE = "text/clique-draft";
+
+async function moveDraft(toId) {
+  const text = $("#prompt").value;
+  const from = draftFor;
+  const target = session(toId);
+  if (!text.trim() || !target || toId === from) return;
+
+  // Appended, never overwritten: arriving text must not silently destroy a
+  // draft that was already waiting in the target. A blank line between them
+  // so two thoughts do not become one sentence.
+  const already = (target.draft || "").trim();
+  const merged = already ? `${already}\n\n${text.trim()}` : text;
+
+  clearTimeout(draftTimer);          // the debounced save would race this
+  target.draft = merged;
+  await api(`api/sessions/${toId}`, {
+    method: "PATCH", body: JSON.stringify({ draft: merged }),
+  });
+  if (from) {
+    const source = session(from);
+    if (source) source.draft = "";
+    await api(`api/sessions/${from}`, {
+      method: "PATCH", body: JSON.stringify({ draft: "" }),
+    }).catch(() => {});
+  }
+  $("#prompt").value = "";
+  await openSession(toId);
+  loadDraft(toId);
+  $("#prompt").focus();
+  // The cursor goes to the end, which is where you were in the sentence.
+  $("#prompt").setSelectionRange(merged.length, merged.length);
+  toast(`Draft moved to ${target.name}` + (already ? " — added under what was there" : ""));
 }
 
 /* ---------------------------------------------------------------- support */
@@ -3025,6 +3106,18 @@ function wire() {
     }
   };
 
+  $("#draftMove").innerHTML = icon("chevron-right");
+  // The button is also the handle: dragging it onto a row is the gesture
+  // people try first, and clicking it is the one that works on a phone.
+  $("#draftMove").draggable = true;
+  $("#draftMove").ondragstart = (ev) => {
+    ev.dataTransfer.setData(DRAFT_TYPE, $("#prompt").value);
+    ev.dataTransfer.effectAllowed = "move";
+  };
+  $("#draftMove").onclick = () => {
+    if (!$("#prompt").value.trim()) return;
+    pickSession("Move this draft to…", moveDraft);
+  };
   $("#run").onclick = () => run($("#prompt").value);
   $("#runShell").onclick = () => runShell($("#prompt").value);
   $("#repPlus").onclick = () => setRepeat(repeat + 1);
@@ -3181,6 +3274,11 @@ function wire() {
  */
 
 let palItems = [];
+/* Set while the palette is being used to choose a session for something else
+ * rather than to go somewhere. Cleared on close either way, so an abandoned
+ * pick cannot leave the next Ctrl+K acting on a stale intention. */
+let palPick = null;
+const PALETTE_HINT = "Jump to a session, or run a command…";
 let palAt = 0;
 let palReturnTo = null;
 
@@ -3366,6 +3464,12 @@ function paletteCommands() {
   if (promptWanted()) {
     add("Focus the prompt box", "Type a prompt instead of driving the pane",
         () => $("#prompt").focus());
+    if ($("#prompt").value.trim() && state.sessions.length > 1) {
+      add("Move this draft to another session",
+          "The half-typed thought goes with you, and is added under anything "
+          + "already waiting there",
+          () => pickSession("Move this draft to…", moveDraft));
+    }
   }
   if (openTabs.length > 1) {
     add("Close every tab", `${openTabs.length} open · every session keeps running`,
@@ -3455,6 +3559,8 @@ function openPalette(prefill) {
 
 function closePalette() {
   $("#palette").hidden = true;
+  palPick = null;
+  $("#palQ").placeholder = PALETTE_HINT;
   // Give focus back to whatever had it, so opening the palette and changing
   // your mind costs nothing — including the terminal you were typing into.
   if (palReturnTo && document.contains(palReturnTo)) palReturnTo.focus();
@@ -3464,13 +3570,21 @@ function closePalette() {
 
 function renderPalette() {
   const raw = $("#palQ").value;
-  const mode = raw[0] === ">" ? "command"
+  // Picking a session is the one case where commands and past conversations
+  // are noise: there is exactly one kind of answer that means anything.
+  const mode = palPick ? "session"
+             : raw[0] === ">" ? "command"
              : raw[0] === "@" ? "session"
              : raw[0] === "~" ? "resume" : "all";
-  const query = (mode === "all" ? raw : raw.slice(1)).trim().toLowerCase();
+  // The prefix characters are only stripped when the user actually typed one.
+  // In pick mode the list is already narrowed and there is no ">" or "@" in
+  // front of what they typed, so slicing would eat their first keystroke.
+  const query = (mode === "all" || palPick ? raw : raw.slice(1)).trim().toLowerCase();
 
   let pool = [];
   if (mode !== "command") pool = pool.concat(paletteSessions());
+  // Nothing is moved to where it already is.
+  if (palPick) pool = pool.filter((item) => item.id !== activeId);
   if (mode !== "session") pool = pool.concat(paletteCommands());
   /* Hundreds of past conversations would drown the twenty things you actually
    * switch between, so they join the pool only once you have typed something
@@ -3547,7 +3661,27 @@ function runPaletteItem(index) {
   if (!item) return;
   palReturnTo = null;      // the action decides where focus lands, not us
   $("#palette").hidden = true;
+  if (palPick) {
+    const take = palPick;
+    palPick = null;
+    return take(item);
+  }
   item.run();
+}
+
+/* "Now pick a session" — the palette, borrowed.
+ *
+ * A second list widget for choosing a session would be a second thing to
+ * search, sort, style and keep working on a phone. This is the same list, the
+ * same typing, the same arrow keys, with the actions taken out and one
+ * callback put in.
+ *
+ * `hint` is shown as the placeholder so it is obvious this is not the usual
+ * palette; Escape leaves without choosing, as it does everywhere else. */
+function pickSession(hint, onPick) {
+  palPick = (item) => onPick(item.id);
+  openPalette("");
+  $("#palQ").placeholder = hint;
 }
 
 /* ------------------------------------------------------------ sidebar width */
