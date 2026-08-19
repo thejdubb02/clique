@@ -10,9 +10,9 @@
  *
  * Adding one is a block here. Nothing else needs to change.
  */
-window.MUXPANEL_THEMES = {
+window.CLIQUE_THEMES = {
   "": {
-    label: "muxpanel dark", base: "dark",
+    label: "clique dark", base: "dark",
     panel: { bg: "#1e1e1e", panel: "#252526", row: "#2a2d2e", sel: "#04395e",
              field: "#3c3c3c", fg: "#cccccc", dim: "#8b8b8b", line: "#333",
              accent: "#0078d4" },
@@ -21,7 +21,7 @@ window.MUXPANEL_THEMES = {
   },
 
   light: {
-    label: "muxpanel light", base: "light",
+    label: "clique light", base: "light",
     panel: { bg: "#ffffff", panel: "#f3f3f3", row: "#e8e8e8", sel: "#cfe6ff",
              field: "#ffffff", fg: "#24292f", dim: "#6e7781", line: "#d8dee4",
              accent: "#0969da" },

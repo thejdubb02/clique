@@ -1,16 +1,16 @@
 # CLI type registry.
 #
-# Adding a coding CLI to muxpanel is adding a block here. If a new CLI ever
+# Adding a coding CLI to CLIque is adding a block here. If a new CLI ever
 # needs a Python change, this design has failed — say so rather than patching
 # around it.
 #
-# Entries are cheap. muxpanel checks whether each command actually exists on
+# Entries are cheap. CLIque checks whether each command actually exists on
 # this box (PATH first, then the usual install directories) and the new-session
 # picker offers only the ones that are really here. So this file is a catalogue
-# of what muxpanel *knows how to run*, not a claim about what is installed.
+# of what CLIque *knows how to run*, not a claim about what is installed.
 #
 # Placeholders usable in `args` and `resume`:
-#   {id}              muxpanel's session id (full uuid)
+#   {id}              clique's session id (full uuid)
 #   {uuid}            alias for {id}
 #   {name}            the session name the user typed
 #   {cwd}             working directory
@@ -21,11 +21,11 @@
 #   modes       list of autonomy/permission modes. Presence of this key is what
 #               makes the mode pill appear in the UI; omit it and the pill is
 #               hidden. There is no per-CLI branch in the code.
-#   mode_key    the key muxpanel sends into the pane to cycle mode
+#   mode_key    the key CLIque sends into the pane to cycle mode
 #   mode_label  text shown in the pill, {mode} substituted
 #   resume      argv used instead of `args` when reattaching to a known
 #               {cli_session_id}
-#   icon        filename in muxpanel/web/icons/. Drawn as a mask and tinted, so
+#   icon        filename in clique/web/icons/. Drawn as a mask and tinted, so
 #               only the silhouette is used. Leave it out and the UI draws a
 #               letter badge in the CLI's colour, which is a perfectly good
 #               marker — do not add a bad icon just to fill the field.

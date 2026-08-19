@@ -66,9 +66,9 @@ DEFAULT_SETTINGS = {
     #: there can hand it back; the palette stays reachable on Ctrl+Shift+P,
     #: which no terminal claims.
     "palette_hotkey": True,
-    #: "panel" keeps muxpanel's prompt box. "terminal" hides it and lets the
+    #: "panel" keeps clique's prompt box. "terminal" hides it and lets the
     #: CLI's own input field be the only one — two stacked prompts is
-    #: redundant chrome. Snippets work in both: muxpanel owns the PTY, so an
+    #: redundant chrome. Snippets work in both: CLIque owns the PTY, so an
     #: expansion is injected into the pane either way.
     "input_mode": "panel",
     #: Three independent slots, applied in this order: both, then panel, then

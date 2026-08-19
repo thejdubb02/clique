@@ -3,4 +3,4 @@ __pycache__/
 .ruff_cache/
 data/state.json
 data/state.json.bak
-muxpanel/web/custom.css
+clique/web/custom.css

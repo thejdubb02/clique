@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.5.0 — 2026-08-19 — **now CLIque**
+
+*Your private clique of CLIs.*
+
+muxpanel described the mechanism; CLIque describes what it is for. The rename
+goes all the way through — package, module, socket, data directory, cookie,
+environment variables, systemd unit and the tailnet path — rather than
+stopping at the visible strings, because a half-rename is worse than either
+name.
+
+**Nothing running was lost, and that was the constraint the migration was
+built around.**
+
+- Sessions record the tmux socket they were born on, so the ones started
+  before the rename keep running on the old server and keep working. Moving a
+  session between tmux servers is not possible; not needing to is the design.
+- Any stray pre-rename session that is *not* in the panel's own state can be
+  taken over with **Adopt** — the old socket is now scanned as a foreign one,
+  which is exactly what it has become.
+- The browser's own state — sidebar width, collapsed state, open tabs — is
+  carried across once on first load. Reopening to a default sidebar and no
+  tabs is the moment a rename feels like a breakage.
+- **Live at https://example.invalid/clique.** The old `/mux` path
+  still resolves, so an existing bookmark will not 404.
+- The password moved with everything else, to `/root/.clique/password`.
+  Vaultwarden holds the only other copy.
+
 ## 0.4.1 — 2026-08-19
 
 The palette's "most recently used" order now lives on the server with the rest
@@ -80,7 +107,7 @@ written down in [SECURITY.md](SECURITY.md).
   validates `Origin` before completing.
 - **DNS rebinding is closed.** A `Host` allowlist runs before auth and before
   any handler. Loopback, IP literals, `.ts.net`, common tunnel providers, plus
-  anything in `MUXPANEL_ALLOWED_HOSTS`.
+  anything in `CLIQUE_ALLOWED_HOSTS`.
 - **Login throttling no longer locks out the legitimate user.** Behind a tunnel
   every request arrives from the same loopback address, so a per-IP lockout hit
   the only real user along with the attacker. A correct password now always
@@ -89,7 +116,7 @@ written down in [SECURITY.md](SECURITY.md).
   a strict policy was free.
 - **The password is stored as an scrypt hash.** The server only verifies, so
   keeping the plaintext bought nothing. Set it with
-  `python3 -m muxpanel password`. Vaultwarden now holds the only copy.
+  `python3 -m clique password`. Vaultwarden now holds the only copy.
 - **API tokens hot-reload.** Minting an agent no longer needs a restart, and
   more importantly, revoking one takes effect immediately — a revocation that
   waits for a restart is not a revocation.

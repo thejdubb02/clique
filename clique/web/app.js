@@ -1,4 +1,4 @@
-/* muxpanel front end.
+/* CLIque front end.
  *
  * No framework and no build step, matching the backend's argument: this thing
  * runs beside CLI sessions that each want half a gigabyte, so it earns its
@@ -645,7 +645,7 @@ async function attach(id) {
   };
 
   term.onData((data) => {
-    /* Snippets work in the CLI's own input field too, because muxpanel owns
+    /* Snippets work in the CLI's own input field too, because CLIque owns
      * the pseudo-terminal — an expansion is simply typed into the pane. We
      * track what has been typed since the last Enter so we know how many
      * characters to erase before sending the replacement. That mirrors the
@@ -824,7 +824,7 @@ function styleSlot(name) {
 }
 
 function currentTheme() {
-  const themes = window.MUXPANEL_THEMES || {};
+  const themes = window.CLIQUE_THEMES || {};
   const s = state.settings;
   if (s.theme && themes[s.theme]) return themes[s.theme];
   // No preset chosen: the base appearance picks which built-in to use.
@@ -922,7 +922,7 @@ function openSettings() {
 
   const themeSelect = $("#setTheme");
   themeSelect.innerHTML = "";
-  for (const [id, theme] of Object.entries(window.MUXPANEL_THEMES || {})) {
+  for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
     const option = document.createElement("option");
     option.value = id;
     option.textContent = theme.label;
@@ -1345,7 +1345,7 @@ function paletteCommands() {
 
   add("New session", "Start a CLI in a directory", openModal);
   add("New folder", "Group sessions in the sidebar", newFolder);
-  add("Adopt sessions", "Take over tmux sessions muxpanel did not start", adoptSessions);
+  add("Adopt sessions", "Take over tmux sessions CLIque did not start", adoptSessions);
   add("Settings", "Themes, markers, snippets, notifications", openSettings);
   add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
   add("System history", "cpu and memory over the last hour", showHistory);
@@ -1368,7 +1368,7 @@ function paletteCommands() {
         closeAllTabs);
   }
 
-  for (const [id, theme] of Object.entries(window.MUXPANEL_THEMES || {})) {
+  for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
     add("Theme: " + theme.label,
         (state.settings.theme || "") === id ? "in use" : theme.base,
         () => saveSettings({ theme: id }));
@@ -1544,7 +1544,7 @@ const SIDEBAR_MAX = 560;
  * desktop is wrong on a laptop and absurd on a phone, and this is the one
  * preference that is genuinely about the screen rather than about him. */
 function storedSidebarWidth() {
-  const saved = Number(localStorage.getItem("muxpanel.sidebarWidth"));
+  const saved = Number(localStorage.getItem("clique.sidebarWidth"));
   if (!saved || Number.isNaN(saved)) return SIDEBAR_DEFAULT;
   return Math.min(Math.max(saved, SIDEBAR_MIN), SIDEBAR_MAX);
 }
@@ -1552,7 +1552,7 @@ function storedSidebarWidth() {
 function setSidebarWidth(px, persist) {
   const width = Math.min(Math.max(Math.round(px), SIDEBAR_MIN), SIDEBAR_MAX);
   document.documentElement.style.setProperty("--sidebar-w", width + "px");
-  if (persist) localStorage.setItem("muxpanel.sidebarWidth", String(width));
+  if (persist) localStorage.setItem("clique.sidebarWidth", String(width));
   return width;
 }
 
@@ -1623,21 +1623,39 @@ function setSidebar(show) {
   $("#sidebar").hidden = !show;
   $("#resizer").hidden = !show;
   $("#rail").hidden = show;
-  localStorage.setItem("muxpanel.sidebar", show ? "1" : "0");
+  localStorage.setItem("clique.sidebar", show ? "1" : "0");
   // Re-apply the stored width on the way back in, so collapsing and expanding
   // returns the sidebar you had rather than the default one.
   if (show) setSidebarWidth(storedSidebarWidth(), false);
   setTimeout(refitAll, 0);
 }
 
+/* Carry the browser's own state across the rename, once.
+ *
+ * Three keys, and losing them is not fatal — but reopening the panel to a
+ * default sidebar and no tabs is exactly the moment a rename feels like
+ * something broke rather than something was renamed. */
+(function migrateLocalKeys() {
+  if (localStorage.getItem("clique.migrated")) return;
+  for (const key of ["sidebarWidth", "sidebar", "tabs"]) {
+    const old = localStorage.getItem("muxpanel." + key);
+    if (old !== null && localStorage.getItem("clique." + key) === null) {
+      localStorage.setItem("clique." + key, old);
+    }
+    localStorage.removeItem("muxpanel." + key);
+  }
+  localStorage.removeItem("muxpanel.mru");   // superseded by the server's last_seen
+  localStorage.setItem("clique.migrated", "1");
+})();
+
 wire();
 wireResizer();
 setSidebarWidth(storedSidebarWidth(), false);
-setSidebar(localStorage.getItem("muxpanel.sidebar") !== "0");
+setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 refresh().then(() => {
   // Re-open whatever was open last, so a reload is not a fresh start.
-  const saved = JSON.parse(localStorage.getItem("muxpanel.tabs") || "[]");
+  const saved = JSON.parse(localStorage.getItem("clique.tabs") || "[]");
   for (const id of saved) if (session(id)) openSession(id);
 });
 setInterval(refresh, 3000);
-setInterval(() => localStorage.setItem("muxpanel.tabs", JSON.stringify(openTabs)), 2000);
+setInterval(() => localStorage.setItem("clique.tabs", JSON.stringify(openTabs)), 2000);

@@ -2,12 +2,12 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>muxpanel</title>
+<title>CLIque</title>
 <script>
   // Resolve every asset, API call and WebSocket against wherever this page is
-  // mounted. muxpanel is served under /mux by `tailscale serve`, which strips
-  // the prefix before it reaches us — so the SERVER never sees /mux and only
-  // the browser knows. Without this, a relative "app.css" at /mux resolves to
+  // mounted. CLIque is served under /clique by `tailscale serve`, which strips
+  // the prefix before it reaches us — so the SERVER never sees /clique and only
+  // the browser knows. Without this, a relative "app.css" at /clique resolves to
   // "/app.css", which is Codeman's origin, and the page loads bare.
   //
   // document.write is deliberate: <base> must exist before the parser reaches
@@ -27,7 +27,7 @@
   <aside id="sidebar">
     <header>
       <img class="brand-mark" src="brand/logo.svg" alt="" width="15" height="15">
-      <span class="brand">muxpanel</span>
+      <span class="brand">CLIque</span>
       <button id="newFolder" class="hdr-btn" title="New folder">&#43;</button>
       <button id="adopt" class="hdr-btn" title="Adopt sessions from another tool">&#8681;</button>
       <button id="settingsBtn" class="hdr-btn" title="Settings">&#9881;</button>
@@ -157,12 +157,12 @@
       <h3>Prompt box</h3>
       <label class="field">Where you type
         <select id="setInputMode">
-          <option value="panel">muxpanel's prompt box</option>
+          <option value="panel">clique's prompt box</option>
           <option value="terminal">The CLI's own input field only</option>
         </select>
       </label>
       <p class="note">Most CLIs draw their own prompt, so two stacked boxes is
-         redundant chrome. Snippets work either way — muxpanel owns the
+         redundant chrome. Snippets work either way — CLIque owns the
          terminal, so an expansion is typed straight into the pane.</p>
     </section>
 
@@ -188,7 +188,7 @@
     </section>
 
     <section class="pane" data-pane="snippets" hidden>
-      <p class="note">Type a trigger then press <kbd>Tab</kbd> — in muxpanel's
+      <p class="note">Type a trigger then press <kbd>Tab</kbd> — in clique's
          prompt box or in the CLI's own input field. Placeholders:
          <code>{cwd}</code>, <code>{project}</code>, <code>{name}</code>, and
          <code>{cursor}</code> for where the caret ends up.</p>
@@ -206,7 +206,7 @@
         <output id="outIdle"></output> seconds before it counts as finished
       </label>
       <p class="note">"Finished" means the pane stopped producing output.
-         That works for any CLI without muxpanel knowing anything about it,
+         That works for any CLI without CLIque knowing anything about it,
          but a CLI pausing to think looks the same as one that is done — raise
          the delay if it fires too eagerly.</p>
       <button type="button" id="testChime">Test the chime</button>
@@ -233,10 +233,10 @@
       <p class="note">Everything in this panel is an API call, so an agent can
          drive it. Tokens are minted on the box — an endpoint that creates
          credentials would turn any other hole into permanent access.</p>
-      <pre class="code">python3 -m muxpanel token create my-agent
-python3 -m muxpanel token create readonly --read-only
-python3 -m muxpanel token list
-python3 -m muxpanel token revoke tk_xxxxxxxx</pre>
+      <pre class="code">python3 -m clique token create my-agent
+python3 -m clique token create readonly --read-only
+python3 -m clique token list
+python3 -m clique token revoke tk_xxxxxxxx</pre>
       <p class="note">Then call it with <code>Authorization: Bearer &lt;token&gt;</code>.
          Full reference in <code>API.md</code>.</p>
       <div id="tokenRows" class="token-rows"></div>
@@ -246,7 +246,8 @@ python3 -m muxpanel token revoke tk_xxxxxxxx</pre>
       <div class="about">
         <img src="brand/logo.svg" alt="" width="48" height="48">
         <div>
-          <div class="about-name">muxpanel</div>
+          <div class="about-name">CLIque</div>
+          <div class="note">Your private clique of CLIs.</div>
           <div class="note" id="aboutVersion"></div>
         </div>
       </div>

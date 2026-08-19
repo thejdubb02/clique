@@ -1,6 +1,6 @@
 # Security model
 
-muxpanel serves a **terminal running as root** over a browser. That is not a
+CLIque serves a **terminal running as root** over a browser. That is not a
 side effect; it is the product. So the security model is not about hardening a
 web app — it is about controlling exactly who reaches that terminal, and
 assuming that anyone who does has the box.
@@ -27,7 +27,7 @@ to open their page, and the browser then treats requests to their domain as
 same-origin with *their* script — bypassing every same-origin protection at
 once. The only fix is to refuse on the `Host` header before a handler runs,
 which is what `host_allowed()` does. Allowed: loopback, IP literals, `.ts.net`,
-the usual tunnel providers, and anything named in `MUXPANEL_ALLOWED_HOSTS`.
+the usual tunnel providers, and anything named in `CLIQUE_ALLOWED_HOSTS`.
 
 **2. Cross-Site WebSocket Hijacking.** A WebSocket handshake is not subject to
 CORS, and `SameSite=Lax` does not cover it — so a hostile page can open a
@@ -52,17 +52,17 @@ per-IP lockout would lock out the only legitimate user along with the attacker
 
 ## Credentials
 
-- **Login password** — `/root/.muxpanel/password`, mode 0600, an scrypt hash.
+- **Login password** — `/root/.clique/password`, mode 0600, an scrypt hash.
   The server only ever verifies, so keeping the plaintext buys nothing and
   costs everything if the file is read. Set it with
-  `python3 -m muxpanel password`. **Vaultwarden holds the only copy of the
+  `python3 -m clique password`. **Vaultwarden holds the only copy of the
   plaintext.**
-- **Cookie signing secret** — `/root/.muxpanel/secret`, 0600, 32 random bytes,
+- **Cookie signing secret** — `/root/.clique/secret`, 0600, 32 random bytes,
   persisted so a restart does not log everyone out. Deleting it invalidates
   every session, which is the "log out everywhere" lever.
-- **API tokens** — `/root/.muxpanel/tokens.json`, 0600, SHA-256 hashes only.
+- **API tokens** — `/root/.clique/tokens.json`, 0600, SHA-256 hashes only.
   A leaked file is a list of names and dates, not working keys. Minted with
-  `python3 -m muxpanel token create`, never through the API: an endpoint that
+  `python3 -m clique token create`, never through the API: an endpoint that
   mints credentials turns any other hole into permanent access.
 
 ## Where we are stronger than the tool we replaced

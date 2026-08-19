@@ -27,7 +27,7 @@ import secrets
 import time
 from pathlib import Path
 
-COOKIE_NAME = "muxpanel"
+COOKIE_NAME = "clique"
 DEFAULT_TTL = 30 * 24 * 3600  # a month; personal tool, reached over a tailnet
 
 
@@ -99,8 +99,8 @@ class Auth:
     def __init__(self, password: str, secret_path: Path, ttl: int = DEFAULT_TTL) -> None:
         if not password:
             raise AuthDisabled(
-                "muxpanel serves a terminal running as root and will not start "
-                "without a password. Set MUXPANEL_PASSWORD or pass --password."
+                "clique serves a terminal running as root and will not start "
+                "without a password. Set CLIQUE_PASSWORD or pass --password."
             )
         self.password = password
         self.ttl = ttl
@@ -148,14 +148,14 @@ LOGIN_PAGE = """<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>muxpanel</title>
+<title>CLIque</title>
 <script>
-  // muxpanel is mounted under /mux by `tailscale serve`, which strips the
+  // CLIque is mounted under /clique by `tailscale serve`, which strips the
   // prefix before the request arrives — so the server genuinely believes it is
   // at the root and cannot build a correct absolute URL. Only the browser knows
   // where this page lives, which is why the form target is resolved here.
   //
-  // Without it, signing in from ".../mux" (no trailing slash) posted to "/" and
+  // Without it, signing in from ".../clique" (no trailing slash) posted to "/" and
   // the redirect landed on Codeman, which is exactly what it looked like: the
   // panel "opening Codeman".
   (function () {
@@ -180,7 +180,7 @@ LOGIN_PAGE = """<!doctype html>
   .err { color:#f85149; font-size:13px; margin:0 0 12px; }
 </style>
 <form method="post" action="./">
-  <h1>muxpanel</h1>
+  <h1>CLIque</h1>
   <p>Sign in to reach your sessions.</p>
   __ERROR__
   <input type="password" name="password" placeholder="Password"
@@ -199,8 +199,8 @@ def login_page(error: str = "") -> bytes:
 #: Served on a successful login instead of a 3xx.
 #:
 #: A Location header is resolved by the browser against the request URL, and
-#: the server cannot help it: `tailscale serve` strips the /mux prefix, so this
-#: process genuinely believes it is mounted at the root. From ".../mux" a
+#: the server cannot help it: `tailscale serve` strips the /clique prefix, so this
+#: process genuinely believes it is mounted at the root. From ".../clique" a
 #: relative "./" resolves to "/" — the site root, which is Codeman. That is not
 #: a redirect we can fix from here with any value.
 #:
@@ -209,7 +209,7 @@ def login_page(error: str = "") -> bytes:
 LANDING = """<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>muxpanel</title>
+<title>CLIque</title>
 <script>
   (function () {
     var path = location.pathname;

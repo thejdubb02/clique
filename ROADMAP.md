@@ -1,4 +1,4 @@
-# muxpanel — roadmap
+# CLIque — roadmap
 
 Updated 2026-08-19. Three LLMs were asked independently for a feature list
 (`docs/feature-research-prompt.md`). What matters is not any one answer but

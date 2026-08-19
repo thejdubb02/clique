@@ -13,5 +13,5 @@
 useDefault = true
 
 [allowlist]
-description = "Vendored third-party bundles (see muxpanel/web/vendor/README.md)"
-paths = ['''muxpanel/web/vendor/.*''']
+description = "Vendored third-party bundles (see clique/web/vendor/README.md)"
+paths = ['''clique/web/vendor/.*''']

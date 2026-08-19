@@ -1,6 +1,6 @@
 """Pseudo-terminal bridge: one PTY running `tmux attach`, piped to one browser.
 
-This is the module that decides muxpanel's resource cost. A PTY exists only
+This is the module that decides clique's resource cost. A PTY exists only
 while a browser is actually watching a session, and dies when that browser
 goes away. An idle session — the common case, with twenty tabs open and one in
 focus — costs this process nothing but a dict entry. Cost scales with viewers,

@@ -1,4 +1,4 @@
-"""Entry point: ``python3 -m muxpanel --host ... --port ...``."""
+"""Entry point: ``python3 -m clique --host ... --port ...``."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .store import Store
 from .tokens import TokenStore
 
 ROOT = Path(__file__).resolve().parents[1]
-HOME = Path(os.environ.get("MUXPANEL_HOME", "/root/.muxpanel"))
+HOME = Path(os.environ.get("CLIQUE_HOME", "/root/.clique"))
 
 
 def read_password(explicit: str | None) -> str:
@@ -29,8 +29,8 @@ def read_password(explicit: str | None) -> str:
     """
     if explicit:
         return explicit
-    if os.environ.get("MUXPANEL_PASSWORD"):
-        return os.environ["MUXPANEL_PASSWORD"]
+    if os.environ.get("CLIQUE_PASSWORD"):
+        return os.environ["CLIQUE_PASSWORD"]
     try:
         return (HOME / "password").read_text().strip()
     except OSError:
@@ -49,7 +49,7 @@ def set_password(args) -> int:
     with os.fdopen(fd, "w") as fh:
         fh.write(hash_password(plain) + "\n")
     print(f"password updated in {target} (scrypt hash, not the password)")
-    print("restart to apply:  systemctl --user restart muxpanel")
+    print("restart to apply:  systemctl --user restart clique")
     return 0
 
 
@@ -59,7 +59,7 @@ def manage_tokens(args) -> int:
     if args.action == "list":
         rows = store.listing()
         if not rows:
-            print("no API tokens. Create one: python3 -m muxpanel token create <name>")
+            print("no API tokens. Create one: python3 -m clique token create <name>")
         for row in rows:
             used = time.strftime("%Y-%m-%d", time.localtime(row["last_used"])) \
                 if row["last_used"] else "never"
@@ -68,7 +68,7 @@ def manage_tokens(args) -> int:
 
     if args.action == "revoke":
         if not args.target:
-            print("which token? see: python3 -m muxpanel token list", file=sys.stderr)
+            print("which token? see: python3 -m clique token list", file=sys.stderr)
             return 1
         ok = store.revoke(args.target)
         print("revoked" if ok else f"no token with id {args.target}")
@@ -88,11 +88,11 @@ def manage_tokens(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="muxpanel", description=__doc__)
+    parser = argparse.ArgumentParser(prog="clique", description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=3200)
     parser.add_argument("--password", default=None,
-                        help="overrides MUXPANEL_PASSWORD and ~/.muxpanel/password")
+                        help="overrides CLIQUE_PASSWORD and ~/.clique/password")
     parser.add_argument("--config", default=str(ROOT / "config" / "clis.toml"))
     parser.add_argument("--state", default=str(ROOT / "data" / "state.json"))
     parser.add_argument("--version", action="version", version=version_string())

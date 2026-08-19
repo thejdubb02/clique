@@ -1,6 +1,6 @@
 """End-to-end check of the server: auth, API, and a real terminal over WebSocket.
 
-Talks to a running muxpanel over HTTP rather than importing it, because the
+Talks to a running CLIque over HTTP rather than importing it, because the
 things that break here — cookies, the WebSocket handshake, frame masking, a PTY
 that never gets its first byte — only exist across a socket.
 
@@ -27,15 +27,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import contextlib
 
-from muxpanel.wsproto import OP_BINARY, OP_TEXT
+from clique.wsproto import OP_BINARY, OP_TEXT
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3200").rstrip("/")
 
 #: The password on disk is an scrypt hash and cannot be reversed, which is the
 #: point. So the suite authenticates with a throwaway API token it mints and
 #: revokes around the run — which also exercises the path an agent uses.
-#: Set MUXPANEL_TEST_PASSWORD to additionally cover the login form.
-PASSWORD = os.environ.get("MUXPANEL_TEST_PASSWORD", "")
+#: Set CLIQUE_TEST_PASSWORD to additionally cover the login form.
+PASSWORD = os.environ.get("CLIQUE_TEST_PASSWORD", "")
 
 passed = failed = 0
 cookie = ""
@@ -197,7 +197,7 @@ def mint_token() -> None:
     """A throwaway token for the run, revoked in teardown."""
     global bearer, token_id
     result = subprocess.run(
-        [sys.executable, "-m", "muxpanel", "token", "create", "smoke-test"],
+        [sys.executable, "-m", "clique", "token", "create", "smoke-test"],
         capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]),
     )
     for line in result.stdout.splitlines():
@@ -210,7 +210,7 @@ def mint_token() -> None:
 def revoke_token() -> None:
     if token_id:
         subprocess.run(
-            [sys.executable, "-m", "muxpanel", "token", "revoke", token_id],
+            [sys.executable, "-m", "clique", "token", "revoke", token_id],
             capture_output=True, text=True,
             cwd=str(Path(__file__).resolve().parents[1]),
         )
@@ -228,9 +228,9 @@ def main() -> int:
 
     if PASSWORD:
         login()
-        check("login sets a cookie", cookie.startswith("muxpanel="), cookie[:20])
+        check("login sets a cookie", cookie.startswith("clique="), cookie[:20])
     else:
-        print("  --   login form not covered (set MUXPANEL_TEST_PASSWORD)")
+        print("  --   login form not covered (set CLIQUE_TEST_PASSWORD)")
 
     print("api")
     status, state = call("/api/state")
@@ -261,10 +261,10 @@ def main() -> int:
     client = Client(url, cookie, bearer)
     check("websocket handshake", "101" in client.status, client.status)
     client.drain(1.5)  # scrollback + initial paint
-    client.send(b"echo hello-from-muxpanel\n")
+    client.send(b"echo hello-from-clique\n")
     out = client.drain(2.5)
     check("keystrokes reach the pane and output comes back",
-          b"hello-from-muxpanel" in out, out[-160:])
+          b"hello-from-clique" in out, out[-160:])
 
     client.send(json.dumps({"type": "run", "text": "echo via-control"}).encode(), OP_TEXT)
     out = client.drain(2.5)
@@ -290,7 +290,7 @@ def main() -> int:
     req = urllib.request.Request(BASE + "/app.js")
     req.add_header("Cookie", cookie)
     with urllib.request.urlopen(req, timeout=10) as res:
-        check("serves the app", res.status == 200 and b"muxpanel" in res.read()[:400])
+        check("serves the app", res.status == 200 and b"CLIque" in res.read()[:400])
     status, _ = call("/../etc/passwd")
     # Direct, this is our 404. Through tailscale serve the proxy rejects it
     # before we see it, so assert "not served" rather than a specific code.

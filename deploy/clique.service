@@ -1,18 +1,18 @@
 [Unit]
-Description=muxpanel — folder-organised CLI sessions in a browser, persisted in tmux
+Description=CLIque — Your private clique of CLIs.
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/root/platform/muxpanel
-# The password is read from /root/.muxpanel/password (0600) at startup rather
+WorkingDirectory=/root/platform/clique
+# The password is read from /root/.clique/password (0600) at startup rather
 # than passed here. Units end up in git, and an environment variable would be
 # visible to anyone who can run `ps`.
 # systemd hands a user unit a minimal PATH, which does not include the places
 # npm and pipx put CLIs. Without this, grok exists on the box but the panel
 # reports it as not installed — which is exactly how it looked the first time.
 Environment=PATH=/root/.local/bin:/root/.grok/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/usr/bin/python3 -m muxpanel --host 127.0.0.1 --port 3200
+ExecStart=/usr/bin/python3 -m clique --host 127.0.0.1 --port 3200
 Restart=on-failure
 RestartSec=5
 # Sessions live in tmux, not in this process, so a restart costs a reconnect

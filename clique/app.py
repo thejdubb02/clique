@@ -48,7 +48,7 @@ PING_SECONDS = 25
 #: server has to reject the request on the Host header before any handler runs.
 #:
 #: Loopback literals, the tailnet, and the usual tunnel providers. Anything
-#: else has to be named in MUXPANEL_ALLOWED_HOSTS.
+#: else has to be named in CLIQUE_ALLOWED_HOSTS.
 ALLOWED_HOST_SUFFIXES = (".ts.net", ".trycloudflare.com", ".cfargotunnel.com",
                          ".ngrok.io", ".ngrok-free.app", ".ngrok.app")
 ALLOWED_HOST_EXACT = {"localhost", "127.0.0.1", "::1", "[::1]"}
@@ -84,7 +84,7 @@ class Panel:
         self.failures: dict[str, list[float]] = {}
         self.clients = 0
         self.allowed_hosts = {h.strip().lower() for h in
-                              os.environ.get("MUXPANEL_ALLOWED_HOSTS", "").split(",")
+                              os.environ.get("CLIQUE_ALLOWED_HOSTS", "").split(",")
                               if h.strip()}
         self.history = sysinfo.History()
         self._last_reap = 0.0
@@ -165,7 +165,7 @@ class Panel:
                 # a busy->quiet transition into "this one finished", which is
                 # what drives tab flashing and the optional chime. Derived from
                 # tmux's own activity clock, so it works for any CLI without
-                # muxpanel knowing anything about it.
+                # CLIque knowing anything about it.
                 "busy": bool(pane and (time.time() - pane.activity) < 2),
             })
         return out
@@ -206,8 +206,8 @@ class Panel:
         mux = tmux.mux_name(session_id)
         tmux.bootstrap()
         tmux.create(mux, cwd, argv, env={
-            "MUXPANEL": "1",
-            "MUXPANEL_SESSION": session_id,
+            "CLIQUE": "1",
+            "CLIQUE_SESSION": session_id,
         })
         session = self.store.add_session(Session(
             id=session_id, name=name, cli=cli_id, cwd=cwd, mux=mux,
@@ -217,7 +217,7 @@ class Panel:
         return {"id": session.id}
 
     def adopt(self) -> dict:
-        """Take over sessions started by the tool muxpanel replaces.
+        """Take over sessions started by the tool CLIque replaces.
 
         Adopted sessions stay on their original socket — tmux cannot move a
         session between servers, and killing one to recreate it would destroy
@@ -250,7 +250,7 @@ class Panel:
 
 class Handler(BaseHTTPRequestHandler):
     panel: Panel = None  # set by serve()
-    server_version = "muxpanel"  # no version: it tells a scanner what to try
+    server_version = "clique"  # no version: it tells a scanner what to try
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt: str, *args) -> None:
@@ -707,5 +707,5 @@ def serve(host: str, port: int, panel: Panel) -> None:
         print(f"cleared {stale} stale viewer session(s)", flush=True)
     httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.daemon_threads = True
-    print(f"muxpanel {version_string()} on http://{host}:{port}", flush=True)
+    print(f"clique {version_string()} on http://{host}:{port}", flush=True)
     httpd.serve_forever()

@@ -1,19 +1,19 @@
 [project]
-name = "muxpanel"
+name = "clique"
 version = "0.1.0"
-description = "Folder-organised, CLI-agnostic terminal sessions in a browser, persisted in tmux"
+description = "Your private clique of CLIs. Folder-organised, CLI-agnostic terminal sessions in a browser, persisted in tmux"
 requires-python = ">=3.11"
 dependencies = []          # deliberate: stdlib only, so it still starts in two years
 
 [project.scripts]
-muxpanel = "muxpanel.__main__:main"
+clique = "clique.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["muxpanel*"]
+include = ["clique*"]
 
 [tool.ruff]
 line-length = 100

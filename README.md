@@ -1,4 +1,6 @@
-# muxpanel
+# CLIque
+
+**Your private clique of CLIs.**
 
 Folder-organised, CLI-agnostic coding sessions in a browser, persisted in tmux.
 
@@ -7,8 +9,8 @@ the session engine is ours and it makes no assumption about which CLI is
 running. Claude Code, Grok CLI or anything else is a block in
 [`config/clis.toml`](config/clis.toml), not a code change.
 
-**Live at https://example.invalid/mux** (tailnet only).
-Password is in Vaultwarden as *muxpanel (devbox)*.
+**Live at https://example.invalid/clique** (tailnet only).
+Password is in Vaultwarden as *CLIque (devbox)*.
 
 ## What works today (v0.1.0)
 
@@ -52,7 +54,7 @@ codebase; if adding one ever needs a code change, the design has failed.
 
 ## Design notes that are easy to get wrong
 
-- **Own tmux server** (`tmux -L muxpanel`). Isolates us from Codeman's sessions
+- **Own tmux server** (`tmux -L clique`). Isolates us from Codeman's sessions
   and lets us set server-wide options without touching anyone else's work.
 - **A PTY exists only while a browser is attached.** An idle session costs this
   process nothing; cost scales with open tabs, not with session count.
@@ -69,7 +71,7 @@ codebase; if adding one ever needs a code change, the design has failed.
 ```bash
 python3 tools/smoke.py                 # engine, against a real tmux server
 python3 tools/smoke_http.py            # server, over real HTTP + WebSocket
-python3 tools/smoke_http.py https://example.invalid/mux
+python3 tools/smoke_http.py https://example.invalid/clique
 ruff check .
 ```
 

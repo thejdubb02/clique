@@ -31,6 +31,6 @@ checkerboard and JPEG artefacts.
 ## Reused here
 
 These files came from `/root/platform/CodemanPanel/docs/brand/`, unchanged.
-Same author, same estate, and muxpanel is the tool that replaces the pair —
+Same author, same estate, and CLIque is the tool that replaces the pair —
 carrying the mark over is continuity, not appropriation. `make_assets.py` in
 the original repo regenerates them all from the SVG if the mark ever changes.

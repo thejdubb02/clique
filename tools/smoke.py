@@ -14,10 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from muxpanel import tmux
-from muxpanel.registry import Registry, RegistryError
+from clique import tmux
+from clique.registry import Registry, RegistryError
 
-SOCKET = "muxpanel-smoke"
+SOCKET = "clique-smoke"
 ROOT = Path(__file__).resolve().parents[1]
 
 passed = failed = 0
@@ -56,7 +56,7 @@ def main() -> int:
           not any(c.installed for c in types.values() if c.command == "definitely-not-here"),
           "")
 
-    from muxpanel.registry import parse as parse_registry
+    from clique.registry import parse as parse_registry
     absent = parse_registry({"cli": {"nope": {"command": "definitely-not-here-9x"}}})["nope"]
     check("resolve() returns None for a binary that is not here",
           absent.resolve() is None and not absent.installed)
@@ -70,7 +70,7 @@ def main() -> int:
     check("name is short and ours", mux == "sm-1234abcd", mux)
 
     tmux.create(mux, "/tmp", ["bash", "--norc", "-i"], socket=SOCKET,
-                env={"MUXPANEL": "1", "MUXPANEL_SESSION": sid})
+                env={"CLIQUE": "1", "CLIQUE_SESSION": sid})
     check("session exists", tmux.exists(mux, SOCKET))
 
     panes = tmux.list_sessions(SOCKET)
@@ -81,7 +81,7 @@ def main() -> int:
     hist = tmux._run(["display-message", "-p", "-t", mux, "#{history_limit}"], SOCKET).strip()
     check("history-limit applied to pane", hist == "9000", hist)
 
-    env = tmux._run(["show-environment", "-t", mux, "MUXPANEL_SESSION"], SOCKET).strip()
+    env = tmux._run(["show-environment", "-t", mux, "CLIQUE_SESSION"], SOCKET).strip()
     check("session id in pane env", env.endswith(sid), env)
 
     # The literal-send path is the one that breaks first: a prompt full of

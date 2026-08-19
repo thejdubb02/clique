@@ -2,10 +2,10 @@
 
 Design decisions worth knowing before changing anything here:
 
-**We run our own tmux server** (``tmux -L muxpanel``) rather than sharing the
+**We run our own tmux server** (``tmux -L clique``) rather than sharing the
 default one. That buys three things: ``list-sessions`` returns only our
 sessions, server-wide options like ``history-limit`` can be set without
-touching anyone else's sessions, and a muxpanel bug cannot reach Codeman's
+touching anyone else's sessions, and a CLIque bug cannot reach Codeman's
 work while both are installed. Sessions adopted from another tool stay on
 whatever socket they were born on, so every call takes a ``socket``.
 
@@ -26,7 +26,7 @@ import uuid
 from dataclasses import dataclass
 
 #: Our own tmux server. Codeman and anything hand-rolled use the default one.
-SOCKET = "muxpanel"
+SOCKET = "clique"
 
 #: Session names we created. Codeman uses ``codeman-``.
 PREFIX = "sm-"
@@ -56,7 +56,7 @@ class TmuxError(Exception):
 
 @dataclass(frozen=True)
 class Pane:
-    """One tmux session as the rest of muxpanel sees it."""
+    """One tmux session as the rest of CLIque sees it."""
 
     mux: str
     socket: str | None
@@ -284,12 +284,12 @@ def create(
 def kill(mux: str, socket: str | None = SOCKET, *, force: bool = False) -> None:
     """Kill a session. Refuses anything not ours unless forced.
 
-    The guard is not paperwork: this box runs sessions muxpanel did not create,
+    The guard is not paperwork: this box runs sessions CLIque did not create,
     and a wrong target here destroys someone's in-flight work.
     """
     if not mux.startswith(PREFIX) and not force:
         raise TmuxError(
-            f"refusing to kill {mux!r}: not a muxpanel session "
+            f"refusing to kill {mux!r}: not a CLIque session "
             f"(expected {PREFIX}*); pass force=True if this was adopted"
         )
     if exists(mux, socket):
@@ -365,14 +365,20 @@ def attached_via_viewers(socket: str | None = SOCKET) -> set[str]:
 
 #: Where Codeman keeps its sessions. Verified on this box: it runs its own
 #: servers too, so the default socket is not where its work lives.
-FOREIGN_SOCKETS = ("codeman", "codeman-grok")
+#: Sockets that belong to another tool, scanned so its sessions can be taken
+#: over rather than abandoned. "muxpanel" is this tool's own former name —
+#: sessions started before the rename live on that socket and are still
+#: running, so they are adoptable rather than lost.
+FOREIGN_SOCKETS = ("codeman", "codeman-grok", "muxpanel")
 
 
 def adoptable(
     sockets: tuple[str, ...] = FOREIGN_SOCKETS,
-    prefixes: tuple[str, ...] = ("codeman-",),
+    # Our own PREFIX is here too, because on a *foreign* socket it is not ours
+    # — it is the pre-rename tool's, and those sessions are still running.
+    prefixes: tuple[str, ...] = ("codeman-", PREFIX),
 ) -> list[Pane]:
-    """Sessions on another tool's socket that muxpanel could take over.
+    """Sessions on another tool's socket that CLIque could take over.
 
     Used once, at migration: Codeman's sessions are ordinary tmux sessions, so
     switching tools should not cost anyone their running work. Adopted sessions
