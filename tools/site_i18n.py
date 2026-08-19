@@ -702,7 +702,7 @@ TMPL = """\
   <footer>
     <p class="langs">{langs}</p>
     <p><a href="https://github.com/thejdubb02/clique">github.com/thejdubb02/clique</a> · MIT · <a href="https://github.com/thejdubb02">Justin Willhite</a></p>
-    <p>{coffee}</p>
+    <p><a href="mailto:support@useclique.dev">support@useclique.dev</a> · {coffee}</p>
   </footer>
 </div>
 
