@@ -387,6 +387,7 @@ footer a { color: var(--ink); }
 }
 
 @media (max-width: 520px) {
-  .app aside { display: none; }
-  .term { font-size: 12px; }
+  .app aside { width: 132px; flex-basis: 132px; }
+  .meta small { display: none; }
+  .term { font-size: 12px; padding: 10px 12px; }
 }
