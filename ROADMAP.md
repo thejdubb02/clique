@@ -63,29 +63,81 @@ independent font sizes · snippets in both input paths · CPU/memory/swap/disk/l
 with an hour of history · password login, API tokens, CSRF, throttling, CSP
 with per-response nonces · published on the tailnet under systemd.
 
+**Explicit attention states `[4/5]` — 0.26.0.** Three tiers that degrade into
+each other: tmux's clock, regexes declared per CLI in `clis.toml`, and a
+`POST .../attention` a session fires from a hook the user already has. Nothing
+in it knows which vendor is talking — the vendor-specific part lives in *their*
+config, where they can fix it the day a prompt changes.
+
+**One outbound webhook — 0.27.0.** The half that makes the above matter: a URL,
+POSTed when a session wants you, errors, finishes or dies. ntfy, Gotify,
+Discord, Mattermost, Home Assistant and Uptime Kuma push all speak it, so one
+field reaches a phone with no app of ours and no per-service settings.
+
+**Seeing what an agent made — 0.23.0**, status as a ring around an untouched
+logo — **0.24.0**, the pane telling you which CLI you are in — **0.25.0**, and
+clickable URLs — **0.27.1**.
+
 ---
 
-## Next three, in order
+## Next, in order
 
-### 1. Explicit attention states — waiting, error `[4/5]`
-Beyond busy/quiet: **working / waiting / needs attention / error / quiet**.
-"Which of my eighteen agents needs me?" is the question this product exists to
-answer. Partly built — the busy pulse and finished-flash landed in 0.2.0. What
-is missing is *waiting-on-input* and *error*, which need output-pattern
-matching. Must degrade cleanly when a CLI is silent or non-standard.
-*Both · a day*
+Re-ranked 2026-08-19 after a verified pass over the field. The ordering rule is
+**impact on adoption × fit with the two rules ÷ cost** — which is why an
+afternoon of packaging now outranks a week of features.
 
-### 2. Hover preview of the last few lines `[3/5]`
-On sidebar rows and on tabs. Glance without switching. Named the highest-value
-awareness win after the badge, and it costs hours.
+### 1. One command to install it — `uvx clique` `[new]`
+Publish to PyPI. `pyproject.toml` exists and there are no dependencies, so the
+work is packaging, not code. It outranks every feature here: it sits at the top
+of the funnel, and it is the one install story nothing else in this category
+can match — the alternatives need Docker, a Rust toolchain, .NET, or apt and a
+venv. "No dependencies" is a claim in a README; `uvx clique` is a demonstration
+of it. Right now the first code block is five steps starting with `git clone`,
+which reads as a hobby project no matter what the code is.
+*An afternoon · no runtime cost at all*
+
+### 2. Make the phone claim true `[4/5]`
+The layout at 390px, and an on-screen row for `Esc`, `Tab`, `Ctrl`, arrows and
+`Ctrl-C`. This moved up because 0.27.0 made it load-bearing: the panel can now
+push a notification to a phone, and if the phone is not somewhere you can act,
+the notification is a taunt. The README currently admits the gap directly under
+the headline promise.
+*Front end · a week, and the least fun week here*
+
+### 3. Repo, branch and dirty state on the row `[1/5]`
+`git -C <cwd>` three times, cached per directory with a short TTL. Rated low by
+the original lists and it should not have been: the leader of this category is
+rooted in one repo and its users are openly asking for exactly this, while
+CLIque's folder tree has been multi-repo since day one and says so nowhere.
+Half implementation, half finally showing an advantage that already exists.
 *Both · hours*
 
-### 3. Searchable prompt history `[4/5]`
+### 4. Hover preview of the last few lines `[3/5]`
+On sidebar rows and tabs, and on long-press for touch. Glance without
+switching. Now worth more than it was: it turns an attention ring from a colour
+into an answer — *waiting, on a permission prompt about `rm`*. Shares its pane
+capture with the attention patterns, so it costs nothing extra.
+*Both · hours*
+
+### 5. Searchable prompt history `[4/5]`
 Every prompt sent, per session and globally, fuzzy-searchable, one click to
-reuse or edit. The distinction one list drew is worth keeping: **snippets are
-for deliberate reuse; history is for accidental reuse.** They do not replace
-each other, and snippets already shipped.
+reuse or edit. **Snippets are for deliberate reuse; history is for accidental
+reuse** — they do not replace each other, and snippets already shipped.
 *Both · a day*
+
+### 6. Optional worktree launch, with the setup hook `[new]`
+Not because worktrees drive adoption here — they drive adoption at a tool that
+already has a year of polish on them. Because *"does it do worktrees?"* is the
+first question every visitor from that world asks, and "no" ends the
+conversation before they see the browser, the phone, or the 24 MB.
+
+The rule goes in `CLAUDE.md` before any code: **CLIque may create a worktree
+and may forget one. It must never merge one.** And it does not ship without the
+setup hook — a fresh worktree has no `.env`, no `node_modules`, no venv, so the
+agent's first act is a failing test run and the user concludes CLIque broke
+their repo. That hook is the top open feature request on the category leader,
+and it is the only reason to build this rather than skip it.
+*Both · a week, most of it in cleanup and failure states*
 
 ---
 
