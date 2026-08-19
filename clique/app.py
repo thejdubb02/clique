@@ -228,7 +228,12 @@ class Panel:
         session = self.store.add_session(Session(
             id=session_id, name=name, cli=cli_id, cwd=cwd, mux=mux,
             socket=tmux.SOCKET, mode=mode or cli.default_mode,
-            folder=body.get("folder") or auto_folder(cwd, self.store.folders),
+            # Deliberately not auto-filed. A session you started yourself
+            # lands in Ungrouped, at the top, where you will see it — filing
+            # it is a decision made afterwards, if at all. Auto-filing by
+            # directory stays where it earns its keep: adoption, where there
+            # is nobody to ask.
+            folder=body.get("folder") or None,
             cli_session_id=prior,
         ))
         return {"id": session.id}
