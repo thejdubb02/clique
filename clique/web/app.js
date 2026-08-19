@@ -818,6 +818,84 @@ function cycleMode(s, sent) {
   }).catch(() => {});
 }
 
+/* ------------------------------------------------------------ image paste */
+
+/* Sharing a screenshot with an agent.
+ *
+ * A terminal cannot carry an image — the only thing that can cross into a pane
+ * is text. So the bytes go to the server, land in the session's own working
+ * directory, and what actually reaches the CLI is a path it can open. Every
+ * coding CLI already knows how to read a file, so this needs to know nothing
+ * about any of them.
+ *
+ * Text paste is deliberately untouched: this only steps in when the clipboard
+ * actually holds an image, and passes everything else through to xterm.
+ */
+async function pasteImages(items) {
+  const s = session(activeId);
+  if (!s) return false;
+
+  const files = [...items]
+    .filter((i) => i.kind === "file" && i.type.startsWith("image/"))
+    .map((i) => i.getAsFile())
+    .filter(Boolean);
+  if (!files.length) return false;
+
+  for (const file of files) {
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      // Chunked so a large screenshot cannot blow the argument limit on
+      // String.fromCharCode, which is what a naive spread does at ~100k.
+      let binary = "";
+      for (let i = 0; i < buf.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      }
+      const saved = await api(`api/sessions/${s.id}/paste`, {
+        method: "POST", body: JSON.stringify({ data: btoa(binary) }),
+      });
+      const where = deliverPath(saved.path);
+      toast(`Saved ${saved.relative} — the path is in ${where}`);
+    } catch (err) {
+      toast("Could not save that image: " + err.message, true);
+    }
+  }
+  return true;
+}
+
+/* Put the path where the person is already typing, and say where that was.
+ *
+ * The pane gets it unless they were typing in the prompt box — but only if the
+ * pane's socket is actually up. `control` returning false means the text went
+ * nowhere, so the box is the fallback rather than the alternative: a path that
+ * silently vanishes is worse than one in the wrong place.
+ *
+ * Either way it lands without stealing focus or sending anything on their
+ * behalf — the CLI does not see it until they press enter. */
+function deliverPath(path) {
+  const box = $("#prompt");
+  if (document.activeElement !== box
+      && control({ type: "run", text: path + " ", enter: false })) {
+    return "the terminal";
+  }
+  const head = box.value.slice(0, box.selectionStart);
+  const tail = box.value.slice(box.selectionEnd);
+  const spacer = head && !head.endsWith(" ") ? " " : "";
+  box.value = head + spacer + path + " " + tail;
+  const at = (head + spacer + path + " ").length;
+  box.setSelectionRange(at, at);
+  box.dispatchEvent(new Event("input"));
+  return "the prompt box";
+}
+
+function toast(text, bad) {
+  const el = $("#toast");
+  el.textContent = text;
+  el.classList.toggle("bad", Boolean(bad));
+  el.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (el.hidden = true), 4000);
+}
+
 function selectTab(id) {
   activeId = id;
   attention.delete(id);   // looking at it is the acknowledgement
@@ -1514,6 +1592,19 @@ function wire() {
   $("#palette").onclick = (ev) => {
     if (ev.target === $("#palette")) closePalette();   // the backdrop, not the box
   };
+
+  // Capture phase: xterm handles paste on its own textarea, so this has to see
+  // the event first. It only claims the event when there is an image in it.
+  document.addEventListener("paste", (ev) => {
+    const items = ev.clipboardData && ev.clipboardData.items;
+    if (!items || !items.length) return;
+    const hasImage = [...items].some(
+      (i) => i.kind === "file" && i.type.startsWith("image/"));
+    if (!hasImage) return;          // plain text: not ours, let it through
+    ev.preventDefault();
+    ev.stopPropagation();
+    pasteImages(items);
+  }, true);
 
   document.onclick = (ev) => {
     if (!$("#menu").contains(ev.target)) $("#menu").hidden = true;

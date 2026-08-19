@@ -286,6 +286,16 @@ button.primary:hover { filter: brightness(1.1); }
 .tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
 .tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 
+/* Confirmation that a paste landed, and where. Without it the only feedback is
+   a path appearing, which is easy to miss and impossible to interpret if it
+   did not. */
+#toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+         z-index: 70; padding: 7px 14px; border-radius: 999px; max-width: 70vw;
+         background: var(--panel); color: var(--fg); font-size: 12px;
+         border: 1px solid var(--line); box-shadow: 0 6px 20px var(--shadow);
+         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#toast.bad { background: var(--err); color: #fff; border-color: transparent; }
+
 /* An app with no sidebar and no explanation is indistinguishable from a broken
    one. Say so instead. */
 #offline { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
