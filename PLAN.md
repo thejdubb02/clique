@@ -1,6 +1,8 @@
 # Session Manager — implementation plan (pre-code review)
 
-Status: **awaiting go-ahead.** No code written yet.
+Status: **built and shipped as v0.1.0 on 2026-08-19.** Kept as the record of what
+was decided before implementation, and why. See README.md and CHANGELOG.md for
+what exists now.
 Reviewed against `/root/platform/CodemanPanel` and `/root/.codeman/app` (Codeman v1.18.4) on 2026-08-18.
 
 ---
