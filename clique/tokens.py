@@ -29,6 +29,7 @@ import hmac
 import json
 import os
 import secrets
+import threading
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -59,6 +60,12 @@ class TokenStore:
         self.path = Path(path)
         self.tokens: list[Token] = []
         self._mtime = -1.0
+        # The state store has had one from the start; this one did not, and it
+        # is written from more threads: a mint from the CLI, a revoke from the
+        # panel, and a last_used stamp from whichever request happens to be
+        # first past the hour. Two of those at once is a lost token or a
+        # truncated file, and the file is the list of who may connect.
+        self._lock = threading.RLock()
         self._load()
 
     def _reload_if_changed(self) -> None:
@@ -103,6 +110,10 @@ class TokenStore:
 
     def create(self, name: str, scopes: list[str] | None = None) -> tuple[Token, str]:
         """Mint a token. The plaintext is returned once and never stored."""
+        with self._lock:
+            return self._create(name, scopes)
+
+    def _create(self, name: str, scopes: list[str] | None) -> tuple[Token, str]:
         raw = PREFIX + secrets.token_urlsafe(32)
         token = Token(
             id="tk_" + secrets.token_hex(4),
@@ -116,17 +127,22 @@ class TokenStore:
         return token, raw
 
     def revoke(self, token_id: str) -> bool:
-        found = next((t for t in self.tokens if t.id == token_id), None)
-        if not found:
-            return False
-        self.tokens.remove(found)
-        self._write()
-        return True
+        with self._lock:
+            found = next((t for t in self.tokens if t.id == token_id), None)
+            if not found:
+                return False
+            self.tokens.remove(found)
+            self._write()
+            return True
 
     def verify(self, raw: str | None) -> Token | None:
         """Match a presented token. Constant-time, and it records the use."""
         if not raw or not raw.startswith(PREFIX):
             return None
+        with self._lock:
+            return self._verify(raw)
+
+    def _verify(self, raw: str) -> Token | None:
         self._reload_if_changed()
         presented = _digest(raw)
         for token in self.tokens:

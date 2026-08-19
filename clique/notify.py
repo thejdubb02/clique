@@ -81,9 +81,26 @@ def allowed(url: str) -> bool:
             address = ipaddress.ip_address(info[4][0])
         except ValueError:
             return False
+        # ::ffff:169.254.169.254 is the metadata address wearing a v6 hat, and
+        # it is not "in" the v4 network — the comparison returns False and the
+        # check waves it through. Unwrap before testing.
+        mapped = getattr(address, "ipv4_mapped", None)
+        if mapped is not None:
+            address = mapped
         if any(address in net for net in _FORBIDDEN):
             return False
     return True
+
+
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """Turns any redirect into an error instead of a second, unvetted request."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(_NoRedirects)
 
 
 def sign(body: bytes, secret: str) -> str:
@@ -100,6 +117,11 @@ def post(url: str, secret: str, payload: dict) -> None:
         return
 
     def send() -> None:
+        # Redirects are not followed. `allowed()` vetted the address that was
+        # typed in; urllib would happily follow a 302 from that host to
+        # 169.254.169.254 and the check would have decided nothing. A webhook
+        # receiver has no legitimate reason to redirect — it is being handed a
+        # notification, not asked for a page.
         body = json.dumps(payload).encode()
         # Checked by allowed() above: scheme is http(s) and the host does not
         # resolve into a forbidden range.
@@ -110,7 +132,7 @@ def post(url: str, secret: str, payload: dict) -> None:
             request.add_header("X-CLIque-Signature", sign(body, secret))
         try:
             # allowed() has vetted the scheme and resolved the host already.
-            with urllib.request.urlopen(request, timeout=TIMEOUT):  # noqa: S310
+            with _opener().open(request, timeout=TIMEOUT):
                 pass
         except (urllib.error.URLError, TimeoutError, OSError, ValueError):
             pass

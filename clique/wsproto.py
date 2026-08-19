@@ -195,6 +195,14 @@ class WebSocket:
             if masked:
                 payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
 
+            # RFC 6455 §5.5: a control frame carries at most 125 bytes and is
+            # never fragmented. Without this a caller with no write permission
+            # — which may open a socket in order to watch — could send 8 MB
+            # pings all day and have each one buffered and echoed back.
+            if opcode >= OP_CLOSE and (length > 125 or not fin):
+                self.close(1002)
+                return None
+
             if opcode == OP_CLOSE:
                 self.close()
                 return None

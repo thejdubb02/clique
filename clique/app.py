@@ -269,7 +269,11 @@ class Panel:
             ],
             "sessions": self.sessions_view(),
             "clis": [c.as_dict() for c in self.registry.types().values()],
-            "settings": self.store.settings,
+            # The secret never goes back out. /api/state needs only `_authed`,
+            # so a read-only token was receiving it — and with it the ability
+            # to forge a signature the receiver trusts. Whether one is set is
+            # all the UI ever needed to know.
+            "settings": redacted(self.store.settings),
             "stats": sysinfo.snapshot(self.clients),
         }
 
@@ -277,7 +281,10 @@ class Panel:
 
     def create_session(self, body: dict) -> dict:
         cli_id = body.get("cli") or "shell"
-        cwd = body.get("cwd") or "/root"
+        # The home of whoever started the server, not a path left over from the
+        # machine this was written on. A self-hoster who omits cwd should get
+        # somewhere that exists and is theirs.
+        cwd = body.get("cwd") or str(Path.home())
         name = (body.get("name") or "").strip() or Path(cwd).name or cli_id
         mode = body.get("mode")
         # Resuming a past conversation is the same code path as starting a new
@@ -504,6 +511,23 @@ def image_extension(data: bytes) -> str:
 PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest")
 
 
+#: Settings that are credentials, not preferences. They go to the browser as a
+#: boolean so the UI can say "configured" without ever holding the value.
+SECRET_SETTINGS = ("webhook_secret",)
+
+
+def redacted(settings: dict) -> dict:
+    out = dict(settings)
+    for key in SECRET_SETTINGS:
+        out[f"{key}_set"] = bool(out.get(key))
+        out[key] = ""
+    return out
+
+
+#: A password form is a few hundred bytes. This is the only body an
+#: unauthenticated caller gets to send, so it is capped hard and separately.
+MAX_LOGIN_BYTES = 8 * 1024
+
 #: A terminal is at most this big. Unbounded values arrive from a query string
 #: and from control frames — both are the client talking — and both end up in
 #: an ioctl and in `tmux resize-window`.
@@ -522,7 +546,17 @@ def _terminal_size(cols, rows) -> tuple[int, int]:
 
 
 def _is_public_asset(path: str) -> bool:
-    return path.startswith(PUBLIC_ASSETS[0]) or path in PUBLIC_ASSETS[1:]
+    """Whether this may be served before login.
+
+    Only what the login page itself draws. This was a `startswith("/brand/")`,
+    and `urlparse` does not collapse `..` — so `/brand/../app.js` passed the
+    test and `_static` happily resolved it back to the application shell,
+    which is the one thing the check exists to keep behind the password.
+
+    Resolve first, then ask whether the answer is still inside the directory.
+    """
+    target = (WEB / path.lstrip("/")).resolve()
+    return artifacts.inside(target, (WEB / "brand").resolve())
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -577,7 +611,12 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(obj).encode(), "application/json")
 
     def _body(self) -> dict:
-        length = int(self.headers.get("Content-Length") or 0)
+        # A Content-Length that is not a number is a malformed request, not a
+        # 500. `int("abc")` here used to take the whole response down.
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return {}
         if not length:
             return {}
         # Bounded, because a pasted image arrives through here and an unbounded
@@ -630,11 +669,22 @@ class Handler(BaseHTTPRequestHandler):
         if origin == "null":
             return False        # an opaque origin is a sandboxed frame, not our page
         host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
-        same = origin.split("://")[-1].split(":")[0] == host.split(":")[0]
-        # Either it matches the host we were reached on, or it is a host we
-        # would have answered to anyway. The second case covers a tunnel that
-        # rewrites Host but not Origin.
-        return same or host_allowed(origin, self.panel.allowed_hosts)
+        origin_host = origin.split("://")[-1].split(":")[0]
+        if origin_host == host.split(":")[0]:
+            return True
+        # It used to fall back to host_allowed() here, and that was wrong.
+        #
+        # host_allowed is the *DNS-rebinding* allowlist for the Host header: it
+        # accepts any ts.net, any trycloudflare.com, any ngrok domain, and any
+        # bare IPv4, because those are the names a tunnel legitimately gives
+        # this server. As an *Origin* test it says the opposite of what is
+        # wanted — it means a page served from anyone's free ngrok subdomain
+        # counts as our own page, which is precisely the cross-site case the
+        # check exists to stop.
+        #
+        # A name the operator configured is different: they chose it, so it is
+        # theirs. Nothing else matches.
+        return origin_host in self.panel.allowed_hosts
 
     def _may_write(self) -> tuple[bool, str]:
         """(allowed, reason). Writes need auth, scope, and a same-origin check."""
@@ -739,7 +789,12 @@ class Handler(BaseHTTPRequestHandler):
         # Vendored assets are immutable; our own must not be cached, or a fix
         # ships and the browser keeps the bug.
         cache = "public, max-age=604800" if "/vendor/" in path else "no-store"
-        body = target.read_bytes()
+        try:
+            body = target.read_bytes()
+        except OSError:
+            # Deleted or made unreadable between is_file() and here. A missing
+            # asset is a 404; it is not worth a stack trace and a 500.
+            return self._send(404, b"not found", "text/plain")
         nonce = ""
         if target.name == "index.html":
             nonce = secrets.token_urlsafe(16)
@@ -754,8 +809,17 @@ class Handler(BaseHTTPRequestHandler):
         path, _ = self._route()
 
         if path == "/":
-            length = int(self.headers.get("Content-Length") or 0)
-            form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            # Bounded, and bounded *before* the read. This is the one body an
+            # unauthenticated caller can send, so an unbounded Content-Length
+            # here is a thread and an allocation anyone can claim.
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > MAX_LOGIN_BYTES:
+                self.close_connection = True
+                return self._send(413, b"too large", "text/plain")
+            form = urllib.parse.parse_qs(self.rfile.read(length).decode(errors="replace"))
             attempt = (form.get("password") or [""])[0]
             who = self.client_address[0] if self.client_address else "?"
             throttled = self._throttled(who)

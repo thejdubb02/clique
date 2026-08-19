@@ -133,8 +133,13 @@ class PtyBridge:
     def write(self, data: bytes) -> None:
         if self.fd is None:
             return
+        # Loop: os.write returns how much it accepted, which for a PTY under
+        # pressure is not always everything. A single call silently truncated
+        # a large paste and the missing bytes were never sent.
         try:
-            os.write(self.fd, data)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(self.fd, view):]
         except OSError:
             self.close()
 

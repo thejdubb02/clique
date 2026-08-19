@@ -280,7 +280,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `clock_24h` | bool | 24-hour clock. Not derived from the locale — people read one format at work and another at home |
 | `clock_zone` | IANA zone | Clock on the empty pane, e.g. `Europe/Lisbon`. Validated against the system zone database; a name that is not real is dropped rather than stored, because `Intl` throws on one. Blank means the browser's own |
 | `webhook_url` | url | Where to POST session events. `http`/`https` only; anything else is stored as `""` |
-| `webhook_secret` | string | Signs each request as `X-CLIque-Signature` |
+| `webhook_secret` | string | Signs each request as `X-CLIque-Signature`. **Write-only** — `/api/state` returns it as `""` plus a `webhook_secret_set` boolean, so a read-only token cannot lift it and forge a signature. Send `""` to remove one |
 | `panel_url` | url | This panel's public address, included so a notification can link back |
 | `artifacts_show` | bool | List the images a session makes |
 | `artifact_dirs` | list | Where to look, relative to each session's cwd; `.` is the cwd itself. Absolute entries and `..` are dropped, max 12 |

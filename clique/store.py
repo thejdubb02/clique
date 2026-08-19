@@ -312,6 +312,16 @@ class Store:
         self.settings = {**DEFAULT_SETTINGS, **(raw.get("settings") or {})}
         if not raw:
             self._write()
+        else:
+            # Tighten a file written by a version that created it 0644. Doing
+            # it here rather than only on the next write means an install that
+            # is merely running, and not changing anything, still gets fixed.
+            with contextlib.suppress(OSError):
+                if self.path.exists() and (self.path.stat().st_mode & 0o077):
+                    os.chmod(self.path, 0o600)
+                backup = self.path.with_suffix(".json.bak")
+                if backup.exists() and (backup.stat().st_mode & 0o077):
+                    os.chmod(backup, 0o600)
 
     def _write(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -330,13 +340,22 @@ class Store:
         # length. Every session, folder and setting, gone — and the panel
         # would come up empty rather than obviously broken, which is worse.
         # The directory is synced too, or the rename itself can be lost.
-        with open(tmp, "w") as handle:
+        # 0600 from creation, not whatever the umask happens to be. This file
+        # holds the webhook secret and every unsent draft; the password hash,
+        # the signing secret and the token store are all 0600 and this one was
+        # 0644 purely because `open(..., "w")` does not take a mode.
+        with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+                  "w") as handle:
             handle.write(json.dumps(payload, indent=2))
             handle.flush()
             os.fsync(handle.fileno())
         if self.path.exists():
             self.path.replace(self.path.with_suffix(".json.bak"))
         tmp.replace(self.path)
+        # An existing file keeps its old mode through a rename, so tighten any
+        # state.json written by a version that did not know better.
+        with contextlib.suppress(OSError):
+            os.chmod(self.path, 0o600)
         with contextlib.suppress(OSError):
             directory = os.open(self.path.parent, os.O_RDONLY)
             try:

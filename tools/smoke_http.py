@@ -280,6 +280,48 @@ def main() -> int:
     client.close()
     time.sleep(0.8)
 
+    print("hardening: what must not be reachable")
+    # Each of these was a real finding. They are asserted here so that fixing
+    # them once is the same as fixing them for good.
+    status, state = call("/api/state")
+    check("the webhook secret never comes back",
+          state.get("settings", {}).get("webhook_secret", "") == "",
+          "settings carried a secret")
+    check("but the UI can still tell one is set",
+          "webhook_secret_set" in state.get("settings", {}),
+          sorted(state.get("settings", {}))[:6])
+
+    # /brand/ is served before login; urlparse does not collapse "..", so a
+    # startswith() test let the whole application shell out unauthenticated.
+    # Falling through to the login page is the right answer; what must never
+    # come back is the application itself. So the assertion is about *what*
+    # was served, not about the status code — a 200 carrying the password form
+    # is correct, and a 200 carrying app.js is the bug.
+    for probe, forbidden, label in (
+            (f"{BASE}/brand/../app.js", b"CLIque front end", "the app script"),
+            (f"{BASE}/brand/../index.html", b'id="tabbar"', "the app page")):
+        request = urllib.request.Request(probe)   # deliberately no credentials
+        try:
+            with urllib.request.urlopen(request, timeout=10) as res:
+                served = res.read()
+            check(f"anonymous cannot climb out of /brand/ to {label}",
+                  forbidden not in served, served[:80])
+        except urllib.error.HTTPError as err:
+            check(f"anonymous cannot climb out of /brand/ to {label}",
+                  err.code in (401, 403, 404), err.code)
+
+    status, _ = call("/", "POST", None)
+    oversize = urllib.request.Request(BASE + "/", data=b"x" * 200,
+                                      method="POST")
+    oversize.add_header("Content-Length", "999999999")
+    try:
+        urllib.request.urlopen(oversize, timeout=10)
+        check("login refuses an absurd Content-Length", False, "it was accepted")
+    except urllib.error.HTTPError as err:
+        check("login refuses an absurd Content-Length", err.code == 413, err.code)
+    except (urllib.error.URLError, OSError) as err:
+        check("login refuses an absurd Content-Length", True, str(err)[:40])
+
     print("read-only tokens")
     # The bypass this exists to stop: every write route is scoped, and the
     # WebSocket was not — so a token issued read-only could open a terminal

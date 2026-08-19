@@ -325,7 +325,13 @@ def exists(mux: str, socket: str | None = SOCKET) -> bool:
     if not available():
         return False
     argv = _argv(socket, ["has-session", "-t", _session_target(mux)])
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT)
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT)
+    except (subprocess.TimeoutExpired, OSError):
+        # A wedged tmux is not an answer of "yes". Every other call goes
+        # through _run, which handles this; this one called subprocess
+        # directly and let the exception out into a request handler.
+        return False
     return proc.returncode == 0
 
 

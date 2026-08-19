@@ -2473,9 +2473,20 @@ function openSettings() {
   $("#setClock24").value = s.clock_24h === false ? "12" : "24";
   for (const [id, key] of [["#setClockZone", "clock_zone"],
                            ["#setHookUrl", "webhook_url"],
-                           ["#setHookSecret", "webhook_secret"],
                            ["#setPanelUrl", "panel_url"]]) {
     if (document.activeElement !== $(id)) $(id).value = s[key] || "";
+  }
+  /* The secret is never sent to the browser — only whether one exists.
+   *
+   * It used to come down with the rest of the settings, which meant any
+   * read-only API token received it and could forge a signature the receiver
+   * trusts. Now the field starts empty and says so, and an empty field on
+   * blur means "leave it alone" rather than "erase it". Without that last
+   * part, opening the settings pane would quietly clear the secret. */
+  const secretBox = $("#setHookSecret");
+  if (document.activeElement !== secretBox) {
+    secretBox.value = "";
+    secretBox.placeholder = s.webhook_secret_set ? "set — leave blank to keep" : "";
   }
   $("#setCliTint").checked = s.cli_tint !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
@@ -2683,7 +2694,12 @@ function wire() {
     }
   }
   $("#setHookUrl").onblur = (ev) => saveSettings({ webhook_url: ev.target.value });
-  $("#setHookSecret").onblur = (ev) => saveSettings({ webhook_secret: ev.target.value });
+  $("#setHookSecret").onblur = (ev) => {
+    const typed = ev.target.value;
+    // Blank means "unchanged", so there has to be another way to remove one.
+    if (!typed) return;
+    saveSettings({ webhook_secret: typed === "-" ? "" : typed });
+  };
   $("#setPanelUrl").onblur = (ev) => saveSettings({ panel_url: ev.target.value });
   $("#testHook").onclick = async () => {
     try {
