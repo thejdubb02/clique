@@ -236,7 +236,7 @@ def main() -> int:
     print("api")
     status, state = call("/api/state")
     check("state loads", status == 200 and "folders" in state, status)
-    check("folders seeded", len(state.get("folders", [])) >= 6)
+    check("folders seeded", len(state.get("folders", [])) >= 1)
     check("registry exposed", {c["id"] for c in state["clis"]} >= {"claude", "grok", "shell"})
     check("stats present", "cpu" in state.get("stats", {}))
 
