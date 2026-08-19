@@ -17,7 +17,7 @@ from .store import Store
 from .tokens import TokenStore
 
 ROOT = Path(__file__).resolve().parents[1]
-HOME = Path(os.environ.get("CLIQUE_HOME", "/root/.clique"))
+HOME = Path(os.environ.get("CLIQUE_HOME", str(Path.home() / ".clique")))
 
 
 def read_password(explicit: str | None) -> str:
