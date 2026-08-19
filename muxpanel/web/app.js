@@ -1107,20 +1107,109 @@ function wire() {
     }
   };
 
-  addEventListener("resize", () => {
-    const entry = terms.get(activeId);
-    if (entry) entry.fit.fit();
-  });
+  addEventListener("resize", refitAll);
+}
+
+/* ------------------------------------------------------------ sidebar width */
+
+const SIDEBAR_DEFAULT = 252;
+const SIDEBAR_MIN = 170;      // below this the project path under a name is unreadable
+const SIDEBAR_MAX = 560;
+
+/* Width lives in localStorage, not in server settings, unlike everything else
+ * in the settings sheet. That is deliberate: a 420px sidebar that suits a
+ * desktop is wrong on a laptop and absurd on a phone, and this is the one
+ * preference that is genuinely about the screen rather than about him. */
+function storedSidebarWidth() {
+  const saved = Number(localStorage.getItem("muxpanel.sidebarWidth"));
+  if (!saved || Number.isNaN(saved)) return SIDEBAR_DEFAULT;
+  return Math.min(Math.max(saved, SIDEBAR_MIN), SIDEBAR_MAX);
+}
+
+function setSidebarWidth(px, persist) {
+  const width = Math.min(Math.max(Math.round(px), SIDEBAR_MIN), SIDEBAR_MAX);
+  document.documentElement.style.setProperty("--sidebar-w", width + "px");
+  if (persist) localStorage.setItem("muxpanel.sidebarWidth", String(width));
+  return width;
+}
+
+function wireResizer() {
+  const handle = $("#resizer");
+  let frame = 0;
+
+  handle.onpointerdown = (ev) => {
+    ev.preventDefault();
+    handle.setPointerCapture(ev.pointerId);
+    handle.classList.add("dragging");
+    document.body.classList.add("resizing");
+
+    const move = (e) => {
+      // The sidebar starts at the viewport edge, so its width is simply the
+      // pointer's x. No offset bookkeeping, and it stays correct if the drag
+      // starts a few pixels off the true edge.
+      setSidebarWidth(e.clientX, false);
+      // Reflowing a terminal costs real work, so do it once per frame rather
+      // than once per pointer event — the two are not the same rate.
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          const entry = terms.get(activeId);
+          if (entry) { try { entry.fit.fit(); } catch (err) { /* hidden */ } }
+        });
+      }
+    };
+
+    const up = (e) => {
+      handle.releasePointerCapture(ev.pointerId);
+      handle.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+      handle.onpointermove = null;
+      handle.onpointerup = null;
+      setSidebarWidth(e.clientX, true);
+      refitAll();
+    };
+
+    handle.onpointermove = move;
+    handle.onpointerup = up;
+  };
+
+  // Double-click the handle to go back to the default, the same way a window
+  // manager treats a double-clicked edge.
+  handle.ondblclick = () => { setSidebarWidth(SIDEBAR_DEFAULT, true); refitAll(); };
+
+  // Keyboard, because a drag handle that only takes a mouse is not a control.
+  handle.onkeydown = (ev) => {
+    const step = ev.shiftKey ? 32 : 8;
+    const current = parseInt(getComputedStyle(document.documentElement)
+      .getPropertyValue("--sidebar-w"), 10) || SIDEBAR_DEFAULT;
+    if (ev.key === "ArrowLeft") setSidebarWidth(current - step, true);
+    else if (ev.key === "ArrowRight") setSidebarWidth(current + step, true);
+    else return;
+    ev.preventDefault();
+    refitAll();
+  };
+}
+
+function refitAll() {
+  // Only the visible terminal can be measured; the rest refit when selected.
+  const entry = terms.get(activeId);
+  if (entry) { try { entry.fit.fit(); } catch (err) { /* not visible */ } }
 }
 
 function setSidebar(show) {
   $("#sidebar").hidden = !show;
+  $("#resizer").hidden = !show;
   $("#rail").hidden = show;
   localStorage.setItem("muxpanel.sidebar", show ? "1" : "0");
-  setTimeout(() => { const e = terms.get(activeId); if (e) e.fit.fit(); }, 0);
+  // Re-apply the stored width on the way back in, so collapsing and expanding
+  // returns the sidebar you had rather than the default one.
+  if (show) setSidebarWidth(storedSidebarWidth(), false);
+  setTimeout(refitAll, 0);
 }
 
 wire();
+wireResizer();
+setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("muxpanel.sidebar") !== "0");
 refresh().then(() => {
   // Re-open whatever was open last, so a reload is not a fresh start.

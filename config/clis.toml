@@ -100,6 +100,7 @@ args    = []
 color   = "#4fb477"
 
 [cli.opencode]
+icon    = "opencode.svg"
 label   = "OpenCode"
 command = "opencode"
 args    = []
@@ -120,6 +121,7 @@ args    = []
 color   = "#a259ff"
 
 [cli.goose]
+icon    = "goose.svg"
 label   = "Goose"
 command = "goose"
 args    = ["session"]
@@ -144,12 +146,14 @@ args    = []
 color   = "#3aa3a0"
 
 [cli.droid]
+icon    = "droid.svg"
 label   = "Factory Droid"
 command = "droid"
 args    = []
 color   = "#8b949e"
 
 [cli.cline]
+icon    = "cline.png"
 label   = "Cline"
 command = "cline"
 args    = []

@@ -124,6 +124,24 @@ body {
 
 /* Collapsed rail: a dot per live session, so hiding the list never costs
    awareness of what is running. */
+/* Zero-width flex item with a wider hit area, so dragging the edge does not
+   cost the sidebar any pixels and the handle is still comfortable to grab.
+   Seven pixels is the width people can reliably hit without it looking like a
+   divider. */
+#resizer { flex: 0 0 0; position: relative; z-index: 5; }
+#resizer::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -3px; width: 7px;
+  cursor: col-resize;
+}
+#resizer:hover::after, #resizer.dragging::after,
+#resizer:focus-visible::after { background: var(--accent); opacity: .55; }
+#resizer:focus { outline: none; }
+
+/* While dragging, nothing else should react to the pointer — a terminal that
+   starts selecting text mid-drag makes the whole gesture feel broken. */
+body.resizing, body.resizing * { user-select: none !important; }
+body.resizing #termwrap { pointer-events: none; }
+
 #rail { width: 34px; flex: 0 0 34px; background: var(--panel);
         border-right: 1px solid var(--line); padding-top: 8px; text-align: center; }
 #railDots { display: flex; flex-direction: column; gap: 8px; align-items: center;

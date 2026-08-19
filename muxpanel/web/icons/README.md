@@ -5,34 +5,51 @@ used and the colour comes from the panel. That is what lets the same file
 appear tinted in a CLI's colour or in neutral grey depending on the setting —
 and it means gradients or multiple colours here would be flattened away.
 
+A PNG works as well as an SVG, provided it carries an alpha channel: a mask
+reads alpha, not pixels.
+
 ## Where these came from
 
-The vendor marks are from [simple-icons](https://simpleicons.org) (CC0-1.0),
-copied in at build time rather than fetched at runtime: no CDN dependency, and
+Copied in at build time rather than fetched at runtime: no CDN dependency, and
 upgrading is a deliberate act with a diff.
 
-| File | simple-icons slug | Used by |
+| File | Source | Used by |
 |---|---|---|
-| `claude.svg` | `claude` | Claude Code |
-| `gemini.svg` | `googlegemini` | Gemini CLI |
-| `grok.svg` | `x` | Grok CLI (xAI) |
-| `codex.svg` | `openai` | Codex CLI |
-| `copilot.svg` | `githubcopilot` | GitHub Copilot CLI |
-| `cursor.svg` | `cursor` | Cursor CLI |
-| `qwen.svg` | `alibabacloud` | Qwen Code |
-| `shell.svg` | `gnubash` | Shell |
-| `ollama.svg` | `ollama` | (spare) |
-| `default.svg` | — | drawn here |
+| `claude.svg` | simple-icons `claude` | Claude Code |
+| `gemini.svg` | simple-icons `googlegemini` | Gemini CLI |
+| `grok.svg` | simple-icons `x` | Grok CLI (xAI) |
+| `codex.svg` | simple-icons `openai` | Codex CLI |
+| `copilot.svg` | simple-icons `githubcopilot` | GitHub Copilot CLI |
+| `cursor.svg` | simple-icons `cursor` | Cursor CLI |
+| `qwen.svg` | simple-icons `alibabacloud` | Qwen Code |
+| `shell.svg` | simple-icons `gnubash` | Shell |
+| `opencode.svg` | opencode.ai favicon | OpenCode |
+| `goose.svg` | block/goose desktop icon | Goose |
+| `droid.svg` | factory.ai favicon | Factory Droid |
+| `cline.png` | cline/cline repo icon (RGBA) | Cline |
+| `ollama.svg` | simple-icons `ollama` | (spare) |
+| `default.svg` | drawn here | fallback |
 
-Trademarks belong to their owners; these identify the tool being run, which is
-nominative use, and no endorsement is implied.
+simple-icons is CC0-1.0. The rest are the projects\' own marks, used to
+identify the tool being run — nominative use, no endorsement implied.
 
-## CLIs with no mark
+## Two that were deliberately not taken
 
-Aider, OpenCode, Goose, Crush, Amazon Q, Plandex, Droid and Cline have no
-simple-icons entry. They deliberately get **no** `icon` key, and the panel
-draws a letter badge in the CLI's colour instead — which looks intentional and
-means adding a CLI never waits on artwork.
+- **Aider** publishes a wordmark (200x60), not a mark. Squashed into a 13px
+  square it is illegible, and cropping someone\'s logo to invent a glyph they
+  did not draw is worse than not having one.
+- **Crush, Plandex and Amazon Q** have no icon at a stable URL that reduces to
+  a clean silhouette.
 
-Adding one: drop `<name>.svg` here and set `icon = "<name>.svg"` in
-`config/clis.toml`.
+All four draw a **letter badge** in the CLI\'s colour instead. That is a real
+design choice, not a gap: it is uniform, it is legible at 13px, and it means
+adding a CLI never waits on artwork.
+
+## Adding one
+
+Drop `<name>.svg` (or an RGBA `.png`) here and set `icon = "<name>.svg"` in
+`config/clis.toml`. Leave `icon` out to get the letter badge.
+
+**Check it as a silhouette before committing it.** Logos with a full-canvas
+background rectangle flatten to a solid square — `droid.svg` needed its
+background stripped for exactly this reason.

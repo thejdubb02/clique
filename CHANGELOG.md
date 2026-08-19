@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.2 — 2026-08-19
+
+Draggable sidebar. Grab the edge, or focus it and use the arrow keys;
+double-click resets. The width is remembered per browser and comes back when
+the sidebar is collapsed and reopened.
+
+Stored in localStorage rather than server settings, unlike everything else in
+the settings sheet: a 420px sidebar that suits a desktop is wrong on a laptop
+and absurd on a phone. This is the one preference that is about the screen
+rather than about the person.
+
+Real vendor marks for eight more CLIs — OpenCode, Goose, Factory Droid, Cline,
+plus Codex, Copilot, Cursor and Qwen from simple-icons. Twelve of sixteen now
+have a real icon. Aider publishes a wordmark rather than a mark and three
+others have no icon at a stable URL, so those four keep the letter badge,
+which is documented as a choice rather than left looking like a gap.
+
 ## 0.2.1 — 2026-08-19
 
 The settings dialog is now furniture: fixed 560×640, same position, every tab.
