@@ -56,6 +56,7 @@
     <div id="tabbar">
       <div id="tabs"></div>
       <button id="newTab" class="tab-add" title="New session">&#43;</button>
+      <button id="lock" class="tab-add" title="Following output — scroll up, or press Ctrl+Shift+L, to pause">&#8675;</button>
       <div id="stats" title="Click for the last hour">
         <span id="cpu">cpu —</span>
         <span id="mem">mem —</span>
@@ -70,6 +71,7 @@
 
     <div id="termwrap">
       <div id="terminal"></div>
+      <div id="follow" hidden></div>
       <div id="empty">
         <p>No session open.</p>
         <p class="dim">Pick one on the left, or press <kbd>Ctrl</kbd>+<kbd>K</kbd>.</p>

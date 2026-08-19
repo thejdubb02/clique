@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.13.0 — 2026-08-19
+
+**The view no longer moves while you are reading it.** On a busy session, a
+line arriving mid-sentence dragged the pane to the bottom — and you cannot
+read, or copy, what will not hold still. Two of the five feature lists ranked
+this first outright.
+
+- **Scroll up and the viewport detaches.** No toggle to find first: the thing
+  you already do in order to read is the thing that stops the yanking.
+  Returning to the bottom re-attaches.
+- A **badge over the pane** says it is paused and how many lines have arrived
+  since — a detached pane and a dead one otherwise look identical. Click it to
+  catch up.
+- A lock button in the tab bar, `Ctrl`/`Cmd`+`Shift`+`L`, and a palette entry,
+  for pausing deliberately rather than by scrolling.
+- Per session, so pausing one pane to read it leaves the other eleven running
+  and following.
+
+**The stream is never paused, only the view.** Output keeps arriving and tmux
+keeps the scrollback; the viewport is put back after each write instead.
+Freezing the stream would have put the pane out of step with tmux, which holds
+the real scrollback and does not care what a browser is looking at.
+
 ## 0.12.0 — 2026-08-19
 
 **You can paste a screenshot into a session.** A terminal cannot carry an
