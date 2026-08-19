@@ -31,6 +31,20 @@ Docs, each with one job — read the one that matches the question:
    The same applies to any other tool we borrow ideas from, including the
    VS Code Claude Code extension.
 
+## Where state lives
+
+**Anything a person chose, chose once, or half-typed goes on the server.**
+Settings, snippets, themes, folders, names, modes, drafts — they sync, they
+survive a reload and a closed laptop, and they follow him to another device.
+Losing one is a bug, and `localStorage` is not storage for them.
+
+The only things that stay in the browser are the ones that are genuinely about
+*this screen in front of me*: sidebar width, sidebar shown or hidden. A phone
+should not inherit a 400px sidebar from a desktop.
+
+When in doubt it goes on the server. The test is not "is it small" — it is
+"would he be annoyed to set this twice".
+
 ## Two consequences worth stating
 
 - **Adding a CLI is config, never code.** A block in `config/clis.toml` and a
