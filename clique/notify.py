@@ -23,10 +23,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
+import socket
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 #: A notification is worth one attempt. A retry queue means durable state,
@@ -41,6 +44,48 @@ TIMEOUT = 5
 INTERVAL = 10
 
 
+#: Never a legitimate webhook target, and the classic way a "POST to a URL"
+#: feature becomes a credential leak: every major cloud serves instance
+#: credentials from a link-local address to anything that asks.
+#:
+#: Private and loopback addresses are deliberately *not* blocked. A self-hoster
+#: pointing this at ntfy on 127.0.0.1 or Gotify on their LAN is the normal
+#: case, and refusing it would break the feature to protect an admin from
+#: their own machine. What is blocked is the range with no honest use.
+_FORBIDDEN = (
+    ipaddress.ip_network("169.254.0.0/16"),   # cloud metadata, incl. 169.254.169.254
+    ipaddress.ip_network("fe80::/10"),        # the v6 equivalent
+)
+
+
+def allowed(url: str) -> bool:
+    """Whether this URL is one we are willing to POST to.
+
+    Checked here as well as when the setting is saved. Validation at the edge
+    is right, but a value can also arrive from a state file written by an older
+    version, or by hand, and the place that opens the socket is the last place
+    that can still say no.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, None)
+    except (socket.gaierror, UnicodeError, ValueError):
+        return False        # cannot resolve it, so cannot vouch for it
+    for info in infos:
+        try:
+            address = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if any(address in net for net in _FORBIDDEN):
+            return False
+    return True
+
+
 def sign(body: bytes, secret: str) -> str:
     """`sha256=<hex>` over the exact bytes sent, so a receiver can check it."""
     return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -51,15 +96,21 @@ def post(url: str, secret: str, payload: dict) -> None:
 
     Nothing upstream should slow down or fail because someone's ntfy is down.
     """
+    if not allowed(url):
+        return
+
     def send() -> None:
         body = json.dumps(payload).encode()
-        request = urllib.request.Request(url, data=body, method="POST")
+        # Checked by allowed() above: scheme is http(s) and the host does not
+        # resolve into a forbidden range.
+        request = urllib.request.Request(url, data=body, method="POST")  # noqa: S310
         request.add_header("Content-Type", "application/json")
         request.add_header("User-Agent", "clique")
         if secret:
             request.add_header("X-CLIque-Signature", sign(body, secret))
         try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT):
+            # allowed() has vetted the scheme and resolved the host already.
+            with urllib.request.urlopen(request, timeout=TIMEOUT):  # noqa: S310
                 pass
         except (urllib.error.URLError, TimeoutError, OSError, ValueError):
             pass
@@ -109,9 +160,12 @@ class Watcher:
                 return
             try:
                 self.tick()
-            except Exception:  # noqa: BLE001
-                # A watcher that can kill itself on one bad poll is worse than
-                # one that misses a notification.
+            except (OSError, ValueError, KeyError, RuntimeError):
+                # Narrow on purpose. A watcher that dies on one bad poll is
+                # worse than one that misses a notification, but swallowing
+                # *everything* also swallows the bug that would have told us
+                # why — so this catches what a poll can plausibly raise and
+                # lets anything else surface.
                 continue
 
     # ---------------------------------------------------------------- edges

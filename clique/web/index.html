@@ -287,6 +287,12 @@
       <button type="button" id="testChime">Test the chime</button>
 
       <h3>Clock</h3>
+      <label class="field">Format
+        <select id="setClock24">
+          <option value="24">24-hour — 17:05</option>
+          <option value="12">12-hour — 5:05 PM</option>
+        </select>
+      </label>
       <label class="field">Time zone <span class="dim">optional</span>
         <input type="text" id="setClockZone" placeholder="Europe/Lisbon"
                autocomplete="off" spellcheck="false" list="zoneList">
@@ -398,6 +404,15 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
       <h3>Something missing, something broken</h3>
       <p class="note">Both go to the same place, and the version and browser
          are filled in for you — a bug report without them is a guess.</p>
+      <h3>If it is useful</h3>
+      <p class="note">A star is the whole marketing budget. It is how anyone
+         else finds this — the lists that catalogue tools like it sort by
+         exactly that number.</p>
+      <a class="star-btn" href="https://github.com/thejdubb02/clique"
+         target="_blank" rel="noopener noreferrer">
+        <span class="star-glyph">★</span> Star it on GitHub
+      </a>
+
       <div class="about-links">
         <a id="linkFeature" href="#" target="_blank" rel="noopener noreferrer">Request a feature</a>
         <a id="linkBug" href="#" target="_blank" rel="noopener noreferrer">Report a bug</a>

@@ -68,7 +68,7 @@ class Conversation:
 
 
 def _decode_dashed(
-    name: str, roots: tuple[str, ...] = ("/root", "/home", "/tmp", "/opt", "/srv")
+    name: str, roots: tuple[str, ...] = ("/root", "/home", "/tmp", "/opt", "/srv")  # noqa: S108 — a list of path prefixes to decode against, not a temp file
 ) -> str:
     """Turn `-home-you-projects-app` back into `/home/you/projects/app`.
 

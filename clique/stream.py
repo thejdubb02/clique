@@ -56,7 +56,7 @@ class PtyBridge:
             # a threaded interpreter and anything else is undefined behaviour.
             try:
                 os.environ["TERM"] = "xterm-256color"
-                os.execvp(self.argv[0], self.argv)
+                os.execvp(self.argv[0], self.argv)  # noqa: S606 — no shell is the point: argv goes to execv, never to sh
             except Exception:  # noqa: BLE001 - child must never return
                 os._exit(127)
 
@@ -71,7 +71,11 @@ class PtyBridge:
     # ------------------------------------------------------------------ pump
 
     def _pump(self) -> None:
-        assert self.fd is not None
+        # A real check, not an assert: asserts are stripped under `python -O`,
+        # and the failure that replaces this one is an OSError raised inside a
+        # daemon thread with nobody to catch it.
+        if self.fd is None:
+            return
         while not self._stopping.is_set():
             try:
                 data = os.read(self.fd, READ_SIZE)

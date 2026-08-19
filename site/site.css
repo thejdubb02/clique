@@ -96,6 +96,22 @@ nav {
   text-decoration: none;
 }
 .btn-gh svg { display: block; flex: 0 0 16px; }
+.btn-star {
+  background: transparent;
+  color: #f0f6fc;
+  border: 1px solid #8b93a0;
+}
+.btn-star:hover {
+  background: #f0f6fc;
+  color: #1f2328;
+  border-color: #f0f6fc;
+}
+.gh-row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
 
 .hero {
   text-align: center;

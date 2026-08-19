@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.29.0 — 2026-08-19 13:04 PDT
+
+**Fixed: pasting text did nothing if the clipboard also held an image.**
+
+Copying from a browser, a spreadsheet, or most document editors puts a
+rendered image on the clipboard *alongside* the text. The screenshot handler
+claimed the paste whenever an image was present, so those pastes quietly
+became a file on disk and the text never arrived — which from where you are
+standing is simply "paste is broken". Text now wins whenever both are there. A
+real screenshot carries no text, so the feature that was actually wanted loses
+nothing.
+
+**Security lint is on permanently.** `ruff` now runs flake8-bandit over the
+whole tree as part of the build. Everything it flagged is either fixed or
+annotated at the line with the reason it is not a finding — running `tmux` from
+`PATH` is the product, and the SHA-1 in the WebSocket handshake is mandated by
+RFC 6455.
+
+Two real fixes came out of it:
+
+- **The webhook could be pointed at cloud metadata.** "POST to a URL someone
+  typed" is the exact shape that leaks instance credentials on a cloud box.
+  Link-local addresses are now refused, checked after resolving the host, and
+  re-checked at the moment of sending rather than only when the setting is
+  saved. Loopback and private ranges are deliberately still allowed: ntfy on
+  `127.0.0.1` or Gotify on the LAN is the normal case, and breaking it to
+  protect an admin from their own machine would be the wrong trade.
+- **An `assert` was doing real work** in the PTY reader thread. Asserts vanish
+  under `python -O`, and what replaced it was an `OSError` raised in a daemon
+  thread with nobody to catch it.
+
+**Stopped committing build artefacts.** `pip wheel .` leaves a `build/`
+directory in the working tree, and sixty generated files had been swept into
+the repo — a stale duplicate of every module sitting beside the real one.
+
+**A clock you can read.** 12-hour or 24-hour, in Settings → Notifications. Not
+taken from the locale, because plenty of people read one format at work and the
+other at home.
+
+**And a star button** on the About pane. A star is the whole marketing budget —
+the lists that catalogue tools like this one sort by exactly that number.
+
 ## 0.28.3 — 2026-08-19 12:56 PDT
 
 **The version in the corner tells you when there is something new**, and takes

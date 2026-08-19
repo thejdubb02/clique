@@ -148,6 +148,23 @@ def main() -> int:
     check("a dead session stays quiet", edges(gone, gone) == [])
     check("going back to work says nothing", edges(waiting, busy) == [])
 
+    print("webhook targets")
+    # The feature is "POST to a URL someone typed", which is the exact shape
+    # that turns into a credential leak on a cloud box. These assertions are
+    # the boundary: what a self-hoster legitimately points this at, and what
+    # has no honest use at all.
+    allow = notify.allowed
+    check("a public endpoint is fine", allow("https://ntfy.sh/my-topic"))
+    check("so is ntfy on this very box", allow("http://127.0.0.1:8080/hook"))
+    check("and something on the LAN", allow("http://192.168.1.10:2586/message"))
+    check("cloud metadata is refused", not allow("http://169.254.169.254/latest/meta-data/"))
+    check("link-local v6 too", not allow("http://[fe80::1]/x"))
+    check("file: is not a webhook", not allow("file:///etc/passwd"))
+    check("nor is gopher:", not allow("gopher://example.com/1"))
+    check("a name that does not resolve is refused",
+          not allow("http://clique-no-such-host.invalid/x"))
+    check("and so is nonsense", not allow("not a url at all"))
+
     print("teardown")
     tmux.kill(mux, SOCKET)
     check("kills our own session", not tmux.exists(mux, SOCKET))

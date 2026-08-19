@@ -119,6 +119,10 @@ DEFAULT_SETTINGS = {
     #: person's palette is another person's invisible-on-their-theme.
     #: {"claude": "#d97757"}. An empty entry means "use the shipped one".
     "cli_colors": {},
+    #: 24 or 12. Not derived from the locale: plenty of people read one format
+    #: at work and the other at home, and the machine's guess is wrong for
+    #: exactly the people who care enough to notice.
+    "clock_24h": True,
     #: The newest release whose notes have actually been looked at. Seeded to
     #: whatever is running the first time a panel loads, so a fresh install
     #: does not open wearing a badge about its own arrival.
@@ -437,6 +441,8 @@ class Store:
                     # http(s) only. A file: or a gopher: here would be someone
                     # using the notifier to make the server fetch something.
                     self.settings[key] = value if value.startswith(("http://", "https://")) else ""
+                elif key == "clock_24h":
+                    self.settings[key] = bool(value)
                 elif key == "changelog_seen":
                     self.settings[key] = str(value or "")[:32]
                 elif key == "clock_zone":

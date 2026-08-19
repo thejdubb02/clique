@@ -970,3 +970,16 @@ main { --cli: transparent; }
   width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
   flex: 0 0 6px;
 }
+
+/* The star button. Loud enough to be found once, quiet enough not to nag on
+   every visit to a settings pane. */
+.star-btn {
+  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+  margin: 6px 0 4px; padding: 7px 14px;
+  background: var(--field); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--fg); font-size: 12px; text-decoration: none;
+  transition: border-color .12s ease, color .12s ease;
+}
+.star-btn:hover { border-color: var(--warn); color: var(--warn); }
+.star-glyph { color: var(--warn); font-size: 14px; line-height: 1; }
+@media (prefers-reduced-motion: reduce) { .star-btn { transition: none; } }

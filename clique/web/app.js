@@ -1235,7 +1235,12 @@ function renderTip() {
  * taking the pane down with it. */
 function renderClock() {
   const zone = state.settings.clock_zone || undefined;
-  const opts = { hour: "2-digit", minute: "2-digit", hour12: false };
+  const h24 = state.settings.clock_24h !== false;
+  // hourCycle rather than hour12 alone: "h23" is what stops 24-hour clocks
+  // rendering midnight as 24:00 in some locales.
+  const opts = h24
+    ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
+    : { hour: "numeric", minute: "2-digit", hour12: true };
   const dateOpts = { weekday: "long", day: "numeric", month: "long" };
   let time, date;
   try {
@@ -2429,6 +2434,7 @@ function openSettings() {
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
   // Not repainted while focused — a poll landing mid-edit would move the
   // cursor in a field someone is pasting a URL into.
+  $("#setClock24").value = s.clock_24h === false ? "12" : "24";
   for (const [id, key] of [["#setClockZone", "clock_zone"],
                            ["#setHookUrl", "webhook_url"],
                            ["#setHookSecret", "webhook_secret"],
@@ -2626,6 +2632,9 @@ function wire() {
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
   // On blur, not per keystroke: half a URL is not a setting, and the server
   // would store every prefix on the way to the real one.
+  $("#setClock24").onchange = (ev) => {
+    saveSettings({ clock_24h: ev.target.value === "24" });
+  };
   $("#setClockZone").onblur = (ev) => saveSettings({ clock_zone: ev.target.value });
   // The browser already carries the zone database; offering it is one line and
   // saves anyone guessing whether it is Europe/Kyiv or Europe/Kiev.
@@ -2786,11 +2795,24 @@ function wire() {
   // Capture phase: xterm handles paste on its own textarea, so this has to see
   // the event first. It only claims the event when there is an image in it.
   document.addEventListener("paste", (ev) => {
-    const items = ev.clipboardData && ev.clipboardData.items;
+    const data = ev.clipboardData;
+    const items = data && data.items;
     if (!items || !items.length) return;
     const hasImage = [...items].some(
       (i) => i.kind === "file" && i.type.startsWith("image/"));
     if (!hasImage) return;          // plain text: not ours, let it through
+
+    /* Text wins whenever both are on the clipboard.
+     *
+     * Copying from a browser, a spreadsheet, or most document editors puts a
+     * rendered image on the clipboard *alongside* the text. Claiming the
+     * event whenever an image is present meant those pastes silently became a
+     * screenshot on disk and the text never arrived — which looks exactly
+     * like paste being broken, because from where the person is standing it
+     * is. A real screenshot carries no text, so this costs that case nothing.
+     */
+    if ((data.getData("text/plain") || "").trim()) return;
+
     ev.preventDefault();
     ev.stopPropagation();
     pasteImages(items);

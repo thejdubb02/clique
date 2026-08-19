@@ -35,7 +35,7 @@ class WebSocketError(Exception):
 
 
 def accept_key(client_key: str) -> str:
-    digest = hashlib.sha1((client_key + GUID).encode()).digest()
+    digest = hashlib.sha1((client_key + GUID).encode()).digest()  # noqa: S324 — RFC 6455 mandates SHA-1 here; it is a handshake tag, not a secret
     return base64.b64encode(digest).decode()
 
 
