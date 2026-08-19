@@ -313,7 +313,11 @@ function renderTree() {
   // you have to scroll to.
   const groups = [];
   const live = state.sessions.filter((s) => !s.archived);
-  const running = live.filter((s) => s.alive && openTabs.includes(s.id));
+  /* Running is for sessions with no tab open. A pane you are looking at is
+   * already a tab across the top, and a second row for it says nothing; what
+   * needs a home is the session still working with nothing on screen, which
+   * is exactly the one you forget you started. */
+  const running = live.filter((s) => s.alive && !openTabs.includes(s.id));
   if (running.length) {
     groups.push({ id: "__running", name: "Running", color: "#2d7d46", pinned: true,
                   collapsed: viewsCollapsed.has("__running"), sessions: running });
@@ -899,13 +903,23 @@ function deliverPath(path) {
   return "the prompt box";
 }
 
-function toast(text, bad) {
+function toast(text, bad, action) {
   const el = $("#toast");
-  el.textContent = text;
+  el.textContent = "";
+  el.append(text);
+  /* One action, optional. A message that reports something reversible should
+   * carry the reversal, rather than describing where to go and do it. */
+  if (action) {
+    const button = document.createElement("button");
+    button.className = "toast-do";
+    button.textContent = action.label;
+    button.onclick = () => { el.hidden = true; action.run(); };
+    el.append(button);
+  }
   el.classList.toggle("bad", Boolean(bad));
   el.hidden = false;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (el.hidden = true), 4000);
+  toast.timer = setTimeout(() => (el.hidden = true), action ? 7000 : 4000);
 }
 
 /* ----------------------------------------------------------------- drafts */
@@ -1164,6 +1178,7 @@ async function openSession(id) {
 }
 
 function closeTab(id, silent) {
+  const closed = session(id);
   const entry = terms.get(id);
   if (entry) {
     entry.closing = true;
@@ -1174,7 +1189,18 @@ function closeTab(id, silent) {
   }
   openTabs = openTabs.filter((t) => t !== id);
   if (activeId === id) activeId = openTabs[openTabs.length - 1] || null;
-  if (!silent) { renderTabs(); renderTree(); selectTab(activeId); }
+  if (!silent) {
+    renderTabs(); renderTree(); selectTab(activeId);
+    /* Closing a tab has always kept the session, and nothing ever said so —
+     * which made the ✕ read as destructive and had people killing sessions
+     * they only meant to put down. Saying it, and offering the other choice
+     * in the same breath, is the whole fix. The kill path keeps its
+     * confirmation. */
+    if (closed && closed.alive) {
+      toast(`Closed the tab — ${closed.name} is still running`, false,
+            { label: "Kill it instead", run: () => killSession(closed) });
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ terminal */

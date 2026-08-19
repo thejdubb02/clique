@@ -12,20 +12,12 @@ here ships it moves to the CHANGELOG and drops off this page.
 
 ---
 
-## Today — the two you will feel
+## Today — the one left
 
 These are all hours, not days, and all of them fire many times an hour once
 there are a dozen sessions open.
 
-### 1. Close-and-keep vs close-and-kill, and a home for what is running
-Closing a tab already keeps the session alive, and the sidebar already lists
-everything — but neither says so. Make the choice explicit on close, and give
-sessions that are running with no tab their own visible area.
-
-*Mostly presentation over state that already exists. The kill path must keep
-its confirmation.*
-
-### 2. Unread marker and a since-last-viewed separator
+### 1. Unread marker and a since-last-viewed separator
 A line in the scrollback where you stopped reading, and a mark on sessions
 that produced output while you were elsewhere. Flashing says *something
 happened*; this says *what you have not seen*.

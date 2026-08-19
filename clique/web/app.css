@@ -699,3 +699,8 @@ a.give-value { color: var(--accent); }
 .give-icon { width: 20px; height: 20px; flex: 0 0 auto; }
 .give-head { align-items: center; }
 .give-value { padding-left: 28px; }
+
+/* The toast's one action. Inside the message, because a reversal that lives
+   somewhere else is not a reversal anyone reaches in time. */
+.toast-do { margin-left: 10px; font-size: 11px; padding: 2px 9px;
+            border-radius: 999px; }

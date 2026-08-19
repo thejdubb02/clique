@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.18.0 — 2026-08-19
+
+**Closing a tab has always kept the session running. Nothing ever said so.**
+The ✕ read as destructive, so people killed sessions they only meant to put
+down.
+
+- Closing now says what it did — *"Closed the tab — <name> is still running"* —
+  and offers **Kill it instead** in the same breath, for the times that was
+  what you meant. Killing still asks first.
+- **Running is now the sessions with no tab open.** A pane you are looking at
+  is already a tab across the top; a second row for it says nothing. What
+  needed a home is the session still working with nothing on screen — the one
+  you forget you started. It sits at the top of the sidebar.
+
 ## 0.17.0 — 2026-08-19
 
 **A half-typed prompt survives everything now.** Switch tabs, reload the page,
