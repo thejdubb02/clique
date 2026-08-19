@@ -10,7 +10,7 @@ running. Claude Code, Grok CLI or anything else is a block in
 **Live at https://example.invalid/clique** (tailnet only).
 Password is in Vaultwarden as *CLIque (devbox)*.
 
-## What works today (v0.13.0)
+## What works today (v0.14.0)
 
 | | |
 |---|---|
@@ -21,6 +21,7 @@ Password is in Vaultwarden as *CLIque (devbox)*.
 | Terminal | Live output, full scrollback on reattach, resize, auto-reconnect, themed to match the panel |
 | **Paste an image** | `Ctrl`/`Cmd`+`V` with a screenshot on the clipboard saves it into the session's own directory and puts the path where you were typing. Nothing is sent until you press enter; text paste is untouched |
 | **Scroll lock** | Scroll up and the view detaches from the stream, so output cannot drag it away mid-read. A badge says how far behind you are; the bottom, the lock button or `Ctrl`/`Cmd`+`Shift`+`L` re-attaches |
+| **Shortcuts** | Every binding in one reference — `?` in the tab bar, `Ctrl`/`Cmd`+`Shift`+`/`, or the palette |
 | Markers | One mark per session: the CLI's own logo, carrying the status colour, pulsing while it works |
 | Themes | Nine presets including **Trinity**, light/dark/system, custom CSS in three slots, independent font sizes |
 | Input bar | Mode pill, prompt box, Run / Shell split, repeat stepper, snippets in both input paths |

@@ -896,6 +896,55 @@ function toast(text, bad) {
   toast.timer = setTimeout(() => (el.hidden = true), 4000);
 }
 
+/* -------------------------------------------------------------- shortcuts */
+
+/* Every binding, in one table.
+ *
+ * A key that only exists in a `title` attribute is a key nobody finds. This is
+ * the reference the ? button and Ctrl+Shift+/ open, and it is the only place
+ * the list is written down — so adding a binding without adding it here is a
+ * visible omission rather than a silent one.
+ *
+ * Modifier is written Ctrl/Cmd because both work: the app takes whichever the
+ * platform sends.
+ */
+const SHORTCUTS = [
+  ["Getting around", [
+    ["Ctrl/Cmd + K", "The command palette — every session, most recently used first"],
+    ["Ctrl/Cmd + Shift + P", "The palette, opened straight into commands"],
+    ["Alt + 1…9", "Jump to a tab by its number"],
+    ["Ctrl/Cmd + B", "Show or hide the sidebar"],
+    ["Ctrl/Cmd + Shift + /", "This list"],
+  ]],
+  ["Inside the palette", [
+    ["@", "Sessions"],
+    ["&gt;", "Commands"],
+    ["~", "Past conversations, resumable in one click"],
+  ]],
+  ["Reading a pane", [
+    ["Scroll up", "Detaches the view, so arriving output cannot drag it away"],
+    ["Ctrl/Cmd + Shift + L", "Scroll lock on or off, without scrolling"],
+    ["Click the paused badge", "Catch up and start following again"],
+  ]],
+  ["Working in a session", [
+    ["Ctrl/Cmd + V", "With an image on the clipboard: saves it into the session’s folder and drops the path where you are typing"],
+    ["Tab", "Expand a snippet — in the pane or the prompt box"],
+    ["Shift + Tab", "Cycle the autonomy mode. The key is whatever that CLI declares, so it differs between them"],
+    ["Enter", "Send what is in the prompt box"],
+    ["Esc", "Close the palette, a menu, or this"],
+  ]],
+];
+
+function showKeys() {
+  const body = $("#keysBody");
+  body.innerHTML = SHORTCUTS.map(([group, rows]) =>
+    `<h3>${escapeHtml(group)}</h3>` + rows.map(([key, what]) =>
+      `<div class="row"><span class="keycell">` +
+      key.split(" + ").map((k) => `<kbd>${k}</kbd>`).join(" + ") +
+      `</span><span class="what">${what}</span></div>`).join("")).join("");
+  $("#keys").hidden = false;
+}
+
 /* ------------------------------------------------------------ scroll lock */
 
 /* Detaching the viewport from the stream.
@@ -1056,7 +1105,7 @@ async function attach(id) {
     const key = ev.key.toLowerCase();
     // Handed to the document handler, which does the work — exactly as
     // Ctrl+Shift+P is. Acting here as well would toggle it twice.
-    if (ev.shiftKey && key === "l") return false;
+    if (ev.shiftKey && (key === "l" || key === "/")) return false;
     if (ev.shiftKey && key === "p") return false;
     if (!ev.shiftKey && key === "k") return !paletteHotkeyOn();
     return true;
@@ -1692,6 +1741,11 @@ function wire() {
   };
 
   $("#lock").onclick = toggleFollow;
+  $("#keysBtn").onclick = showKeys;
+  $("#keysClose").onclick = () => ($("#keys").hidden = true);
+  $("#keys").onclick = (ev) => {
+    if (ev.target === $("#keys")) $("#keys").hidden = true;   // the backdrop
+  };
   $("#follow").onclick = () => setFollow(activeId, true);
 
   // Capture phase: xterm handles paste on its own textarea, so this has to see
@@ -1725,6 +1779,11 @@ function wire() {
       openPalette("");
       return;
     }
+    if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && key === "/") {
+      ev.preventDefault();
+      $("#keys").hidden ? showKeys() : ($("#keys").hidden = true);
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && key === "l") {
       ev.preventDefault();
       toggleFollow();
@@ -1746,6 +1805,7 @@ function wire() {
       $("#modal").hidden = true;
       $("#menu").hidden = true;
       $("#settings").hidden = true;
+      $("#keys").hidden = true;
     }
   };
 
@@ -1932,6 +1992,7 @@ function paletteCommands() {
   add("Adopt sessions", "Take over tmux sessions CLIque did not start", adoptSessions);
   add("Settings", "Themes, markers, snippets, notifications", openSettings);
   add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
+  add("Keyboard shortcuts", "Every binding, in one list", showKeys);
   add("System history", "cpu and memory over the last hour", showHistory);
   add("Resume a past conversation", "Every transcript your CLIs have kept",
       () => openPalette("~"));

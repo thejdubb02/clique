@@ -57,6 +57,7 @@
       <div id="tabs"></div>
       <button id="newTab" class="tab-add" title="New session">&#43;</button>
       <button id="lock" class="tab-add" title="Following output — scroll up, or press Ctrl+Shift+L, to pause">&#8675;</button>
+      <button id="keysBtn" class="tab-add" title="Keyboard shortcuts (Ctrl+Shift+/)">?</button>
       <div id="stats" title="Click for the last hour">
         <span id="cpu">cpu —</span>
         <span id="mem">mem —</span>
@@ -107,6 +108,14 @@
       <button type="submit" class="primary">Start</button>
     </div>
   </form>
+</div>
+
+<div id="keys" hidden>
+  <div class="sheet">
+    <h2>Keyboard shortcuts</h2>
+    <div id="keysBody"></div>
+    <button id="keysClose">Close</button>
+  </div>
 </div>
 
 <div id="settings" hidden>
