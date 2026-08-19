@@ -236,6 +236,78 @@ ligatures. None of it came from a complaint anyone actually had here.
 
 ---
 
+## Steering many agents, not making agents smarter
+
+Raised 2026-08-19. Seven proposals aimed at owning the gap between "I have one
+CLI open" and "I am running twelve". Assessed against the two rules, and
+against what already exists.
+
+### Worth building
+
+**Fleet health and soft budgets.** A live strip showing the aggregate CPU and
+memory of *CLIque's own sessions* against the box's headroom, and an optional
+warning before starting the one that tips it over. The README already says the
+real ceiling is about a dozen on a 16 GB box — that is tribal knowledge sitting
+in a paragraph, and it belongs in the interface. Pure process state; the stats
+plumbing and the hour of history are already here, so this is aggregation and a
+threshold, not new machinery. **The strongest of the seven.**
+
+**The attention queue.** Three tiers of detection and a webhook shipped in
+0.26/0.27, and the deep link from a notification landed in 0.28.2. What is
+missing is the list: one *needs you* view, ordered, reachable from the palette,
+with a snooze that clears the badge without killing anything. The parts are all
+built; this is the surface that makes them a control panel rather than a set of
+marks.
+
+**Handoff packs.** One action that writes a dated folder containing the
+scrollback, the artifacts from the session's directory, and a git status
+snapshot. Filesystem in, filesystem out. Nobody in the category treats this as
+a product feature, and both audiences want it for opposite reasons — moving
+work between machines, and remembering what happened yesterday.
+
+**The first sixty seconds.** A skippable first run that creates one folder,
+launches two different CLIs side by side, and demonstrates the thing everyone
+gets wrong: closing a tab does not kill the agent. Every competitor assumes
+tmux and worktrees are already understood. Cheap, and it is the moment adoption
+is won or lost.
+
+### Already on the roadmap, sharpened
+
+**"Explore this idea with three agents"** is the session-templates item wearing
+better clothes — and the clothes are the point. A template that spins N
+sessions across *different* CLIs on one question, in a dated folder, is a much
+better pitch than "saved session configuration". Fold the framing in; do not
+add a second feature.
+
+### Where I would not go
+
+**Read-only shared links and presence.** This is the one to refuse. The stated
+security model is that anyone who reaches the panel has a shell as the user who
+started it, and that honesty is load-bearing. A read-only link does not narrow
+that as much as it sounds: a pane shows whatever the agent printed, which
+routinely includes file contents, environment values and the occasional
+credential echoed by a build. A time-limited URL is still a URL that can be
+forwarded. Adding it implies a boundary the product does not have, and the
+first person to learn that will learn it the expensive way. If real multi-human
+work is ever wanted it is a deliberate project with its own threat model, not a
+token flag.
+
+**A folder-level context file that gets injected into first prompts.** Writing
+a `NOTES.md` is something anyone can already do, and an agent can already read
+it. The part that gives me pause is CLIque *injecting* it — that is the panel
+having an opinion about how you talk to your agent, which is one step from the
+prompt-engineering business. The useful 80% is a starter prompt on a template,
+which the item above already covers.
+
+### Restated refusals, for the record
+
+Kanban and task claiming (occupied territory, and durable job state means a
+database). Self-healing and replay loops (needs more agent knowledge than the
+rules allow). Diff review and editor surfaces (driver, not IDE). Automatic
+worktree *merging* — create and forget, never merge.
+
+---
+
 ## Elsewhere
 
 Operational and product work that is tracked but does not belong in the
