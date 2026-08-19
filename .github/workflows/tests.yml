@@ -27,6 +27,8 @@ jobs:
         run: python3 tools/smoke.py
       - name: api surface
         run: python3 tools/api_drift.py
+      - name: site copy
+        run: python3 tools/site_i18n.py --check
       - name: server
         env:
           CLIQUE_HOME: ${{ runner.temp }}/clique-home

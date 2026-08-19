@@ -156,8 +156,9 @@ def render(slug: str, values: dict) -> str:
         octo=OCTO,
         clone=CLONE,
         clis=values["cli_strip"],
+        python=values["python"],
         python_badge=values["python_badge"],
-        cfg_example=values["cfg_example"],
+        cfg_example=values["cfg_example"].replace("{", "{{").replace("}", "}}"),
         css_v=CSS_V,
         langs=langs_html(t["html_lang"]),
         **t,
@@ -519,28 +520,28 @@ TMPL = """\
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<link rel="canonical" href="https://useclique.dev/{slug}/">
+<link rel="canonical" href="{canonical}">
 {hreflang}
 <meta property="og:locale" content="{locale}">
 <meta name="theme-color" content="#0E1116">
-<link rel="icon" href="../brand/mark.svg" type="image/svg+xml">
-<link rel="icon" href="../brand/favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+<link rel="icon" href="{prefix}brand/mark.svg" type="image/svg+xml">
+<link rel="icon" href="{prefix}brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="{prefix}brand/apple-touch-icon.png">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{ogdesc}">
 <meta property="og:image" content="https://useclique.dev/brand/social-preview.png?v=2">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
 <meta name="twitter:image" content="https://useclique.dev/brand/social-preview.png?v=2">
-<meta property="og:url" content="https://useclique.dev/{slug}/">
+<meta property="og:url" content="{canonical}">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="../site.css?v=11">
+<link rel="stylesheet" href="{prefix}site.css?v={css_v}">
 
 <div class="page">
   <header>
-    <a class="word" href="/{slug}/">
-      <img src="../brand/mark.svg" width="20" height="20" alt="">
+    <a class="word" href="{word_href}">
+      <img src="{prefix}brand/mark.svg" width="20" height="20" alt="">
       CLIque
     </a>
     <nav>
@@ -574,7 +575,7 @@ TMPL = """\
     <p class="then">{then}</p>
     <p class="badges">
       <a href="https://github.com/thejdubb02/clique/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
-      <a href="https://github.com/thejdubb02/clique#quick-start"><img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square" alt="Python 3.11+"></a>
+      <a href="https://github.com/thejdubb02/clique#quick-start"><img src="https://img.shields.io/badge/python-{python_badge}-3776AB?style=flat-square" alt="Python {python}"></a>
       <img src="https://img.shields.io/badge/tmux-required-22c55e?style=flat-square" alt="tmux">
       <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
       <a href="https://github.com/thejdubb02/clique/graphs/contributors"><img src="https://img.shields.io/github/contributors/thejdubb02/clique?style=flat-square" alt="Contributors"></a>
@@ -586,27 +587,27 @@ TMPL = """\
     <div class="app">
       <aside>
         <div class="ah">
-          <img src="../brand/mark.svg" width="13" height="13" alt="">
+          <img src="{prefix}brand/mark.svg" width="13" height="13" alt="">
           <span>CLIque</span>
         </div>
         <div class="search">{search}</div>
         <div class="tree">
           <div class="fold">{fold_work}</div>
           <div class="sess on">
-            <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(../icons/claude.svg);mask-image:url(../icons/claude.svg)"></i></span>
+            <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url({prefix}icons/claude.svg);mask-image:url({prefix}icons/claude.svg)"></i></span>
             <span class="meta"><b>{s1}</b><small>~/proj/api</small></span>
           </div>
           <div class="sess">
-            <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(../icons/grok.svg);mask-image:url(../icons/grok.svg)"></i></span>
+            <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url({prefix}icons/grok.svg);mask-image:url({prefix}icons/grok.svg)"></i></span>
             <span class="meta"><b>{s2}</b><small>~/proj/site</small></span>
           </div>
           <div class="sess">
-            <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(../icons/gemini.svg);mask-image:url(../icons/gemini.svg)"></i></span>
+            <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url({prefix}icons/gemini.svg);mask-image:url({prefix}icons/gemini.svg)"></i></span>
             <span class="meta"><b>{s3}</b><small>~/proj/db</small></span>
           </div>
           <div class="fold">{fold_home}</div>
           <div class="sess">
-            <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(../icons/codex.svg);mask-image:url(../icons/codex.svg)"></i></span>
+            <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url({prefix}icons/codex.svg);mask-image:url({prefix}icons/codex.svg)"></i></span>
             <span class="meta"><b>{s4}</b><small>~/notes</small></span>
           </div>
         </div>
@@ -653,11 +654,7 @@ TMPL = """\
 
   <section class="cfg">
     <h2>{cfg_h}</h2>
-<pre><code>[cli.grok]
-label   = "Grok CLI"
-command = "grok"
-args    = []
-color   = "#E8E8E8"</code></pre>
+<pre><code>{cfg_example}</code></pre>
     <p class="then">{cfg_then}</p>
   </section>
 
@@ -729,23 +726,52 @@ color   = "#E8E8E8"</code></pre>
 """
 
 
-def main() -> None:
-    for slug, t in PAGES.items():
-        out = ROOT / slug / "index.html"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        html = TMPL.format(
-            slug=slug,
-            hreflang=HREFLANG,
-            star=STAR,
-            octo=OCTO,
-            clone=CLONE,
-            clis=CLIS,
-            langs=langs_html(t["html_lang"] if t["html_lang"] != "pt-BR" else "pt-BR"),
-            **t,
-        )
-        out.write_text(html)
-        print(f"wrote {out.relative_to(ROOT.parent)} ({out.stat().st_size} bytes)")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check", action="store_true",
+        help="fail if committed pages or translations are behind the repo",
+    )
+    args = parser.parse_args(argv)
+
+    values = facts()
+    problems = translation_problems()
+    rendered = {slug: render(slug, values) for slug in PAGES}
+
+    if not args.check:
+        if problems and LOCK.exists():
+            print("site copy is behind — not writing:\n")
+            print("\n".join(f"  {p}" for p in problems))
+            print("\nUpdate the translations in tools/site_i18n.py, then run this again.")
+            return 1
+        for slug, html in rendered.items():
+            out = page_path(slug)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(html)
+            print(f"wrote {out.relative_to(REPO)} ({out.stat().st_size} bytes)")
+        LOCK.write_text(json.dumps(current_lock(), indent=2, sort_keys=True) + "\n")
+        print(f"wrote {LOCK.relative_to(REPO)}")
+        return 0
+
+    for slug, html in rendered.items():
+        out = page_path(slug)
+        if not out.is_file():
+            problems.append(f"missing {out.relative_to(REPO)}")
+            continue
+        if out.read_text() != html:
+            problems.append(f"stale {out.relative_to(REPO)} — run python3 tools/site_i18n.py")
+
+    if problems:
+        print(f"site copy is behind the repo — {len(problems)}:\n")
+        print("\n".join(f"  {p}" for p in problems))
+        print("\nFacts (CLI names, Python floor, the grok example) come from"
+              "\nclis.toml and pyproject.toml. Copy lives in tools/site_i18n.py."
+              "\nRegenerate with:  python3 tools/site_i18n.py")
+        return 1
+    print(f"site copy matches ({len(PAGES)} languages, "
+          f"{len(FEATURED)} featured CLIs, Python {values['python']})")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
