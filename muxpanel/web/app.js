@@ -538,7 +538,7 @@ function renderInputBar() {
 function selectTab(id) {
   activeId = id;
   attention.delete(id);   // looking at it is the acknowledgement
-  touchMru(id);
+  markSeen(id);
   for (const [tid, entry] of terms) {
     entry.el.style.display = tid === id ? "block" : "none";
   }
@@ -1236,31 +1236,23 @@ function wire() {
  * nothing searches everything, ">" narrows to commands, "@" to sessions.
  */
 
-const MRU_KEY = "muxpanel.mru";
-
-/* Most-recently-used session order, per browser.
- *
- * Stored beside the open-tabs list in localStorage rather than in server
- * settings, for the same reason the sidebar width is: it describes how this
- * screen has been used, not a preference about the tool. */
-let mru = readMru();
 let palItems = [];
 let palAt = 0;
 let palReturnTo = null;
 
-function readMru() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(MRU_KEY) || "[]");
-    return Array.isArray(saved) ? saved.filter((id) => typeof id === "string") : [];
-  } catch (err) {
-    return [];   // a corrupt entry is not worth a broken palette
-  }
-}
-
-function touchMru(id) {
-  if (!id) return;
-  mru = [id, ...mru.filter((other) => other !== id)].slice(0, 200);
-  localStorage.setItem(MRU_KEY, JSON.stringify(mru));
+/* "The one I was just in" is a fact about the work, not about this screen, so
+ * it is kept on the server with the rest of the settings and is the same
+ * answer on the desktop and on the phone. The sidebar width is the
+ * counter-example — that one is genuinely about the screen and stays local.
+ *
+ * Stamped locally first so the palette reorders on the click rather than on
+ * the next poll, and told to the server in the background: nothing here is
+ * worth blocking a tab switch on, or worth an error if the write is lost. */
+function markSeen(id) {
+  const found = session(id);
+  if (!found) return;
+  found.last_seen = Date.now() / 1000;
+  api(`api/sessions/${id}/seen`, { method: "POST", body: "{}" }).catch(() => {});
 }
 
 function paletteHotkeyOn() {
@@ -1327,12 +1319,11 @@ function sessionTag(s) {
 }
 
 function paletteSessions() {
-  const seen = new Map(mru.map((id, index) => [id, index]));
-  // Never used in this browser sorts after everything that has been, and
-  // archived sessions sort after that again.
-  const rank = (s) => (seen.has(s.id) ? seen.get(s.id) : 1000) + (s.archived ? 5000 : 0);
+  // Most recently looked at first; never-opened sorts below everything that
+  // has been, and archived below that again.
   return [...state.sessions]
-    .sort((a, b) => rank(a) - rank(b))
+    .sort((a, b) => (a.archived ? 1 : 0) - (b.archived ? 1 : 0) ||
+                    (b.last_seen || 0) - (a.last_seen || 0))
     .map((s) => ({
       kind: "session",
       id: s.id,

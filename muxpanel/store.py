@@ -120,6 +120,11 @@ class Session:
     mode: str | None = None
     cli_session_id: str | None = None
     created: float = 0.0
+    #: When this session was last looked at, in any browser. Lives here rather
+    #: than in localStorage because "the one I was just in" is a fact about the
+    #: work, not about the screen — it should be the same answer on the desktop
+    #: and on the phone. Sidebar width is the counter-example and stays local.
+    last_seen: float = 0.0
     adopted: bool = False
     order: int = 0
     #: Out of the way, not gone. Archiving never touches the tmux session, so
@@ -269,6 +274,16 @@ class Store:
                 if value is None and key != "folder":
                     continue
                 setattr(found, key, value)
+            self._write()
+            return found
+
+    def touch_session(self, session_id: str) -> Session | None:
+        """Record that this session was just looked at."""
+        with self._lock:
+            found = self.session(session_id)
+            if not found:
+                return None
+            found.last_seen = time.time()
             self._write()
             return found
 

@@ -156,6 +156,7 @@ class Panel:
                 "adopted": session.adopted,
                 "archived": session.archived,
                 "created": session.created,
+                "last_seen": session.last_seen,
                 "alive": pane is not None,
                 "attached": bool(pane and pane.attached),
                 "command": pane.command if pane else None,
@@ -480,6 +481,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if path.startswith("/api/sessions/") and path.endswith("/send"):
                 return self._send_input(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/seen"):
+                found = self.panel.store.touch_session(path.split("/")[3])
+                if not found:
+                    return self._json({"error": "no such session"}, 404)
+                return self._json({"ok": True, "last_seen": found.last_seen})
             return self._json({"error": "not found"}, 404)
         except (ValueError, RegistryError, tmux.TmuxError) as exc:
             return self._json({"error": str(exc)}, 400)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.1 — 2026-08-19
+
+The palette's "most recently used" order now lives on the server with the rest
+of the settings, so it is the same order on the desktop, on another machine,
+and on a phone. It was per-browser for one release, which meant a new device
+started with the ordering of a stranger.
+
+The rule this follows, and it is worth writing down: **anything about the work
+syncs, anything about the screen stays local.** Which session you were last in
+is about the work. Sidebar width is about the screen — a 420px sidebar that
+suits a desktop is wrong on a laptop and absurd on a phone — so that one stays
+in the browser where it belongs.
+
 ## 0.4.0 — 2026-08-19
 
 **A command palette.** `Ctrl`+`K` opens one box that reaches every action and
