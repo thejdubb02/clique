@@ -41,6 +41,15 @@ becoming a collection of buttons** as features accumulate.
 from a registry-declared location, labelled by its first prompt, searchable
 with `~` in the palette, and opened by resuming it in the right folder.
 
+**Scroll lock / follow mode `[3/5]` — 0.13.0.** Two lists ranked it #1
+outright. Scrolling up detaches the viewport; the bottom re-attaches; a badge
+carries how far behind the pane has fallen. The stream is never frozen, only
+the view.
+
+**Paste a screenshot into a session — 0.12.0.** The image lands in the
+session's own directory and the path lands where you were typing. No CLI knows
+anything about it; every one of them can already read a file.
+
 Also done: session engine on its own tmux server · CLI registry with
 auto-detection · folder tree with drag-drop, rename, search, archive, colours ·
 numbered tabs · live terminal with scrollback across reattach · per-CLI icons
@@ -52,24 +61,16 @@ with per-response nonces · published on the tailnet under systemd.
 
 ---
 
-## Next five, in order
+## Next four, in order
 
-### 1. Scroll lock / follow mode `[3/5]`
-Detach the viewport from the stream so a new token cannot yank you to the
-bottom mid-read. **Two lists ranked this #1 outright**, and the argument is
-unanswerable: *if you cannot pause the output you physically cannot read or
-copy from it.* It is the prerequisite for every review feature below it, and
-it is hours of work.
-*Developer · hours*
-
-### 2. Per-session prompt drafts `[4/5]`
+### 1. Per-session prompt drafts `[4/5]`
 Half-typed instructions survive a tab switch, a reload, and a closed laptop.
 Pure loss-prevention, fires dozens of times a day, and one list called it "the
 single cheapest high-frequency win". Under the sync rule established in 0.4.1
 this belongs **on the server**, not in localStorage: a draft is about the work.
 *Both · hours*
 
-### 3. Explicit attention states — waiting, error `[4/5]`
+### 2. Explicit attention states — waiting, error `[4/5]`
 Beyond busy/quiet: **working / waiting / needs attention / error / quiet**.
 "Which of my eighteen agents needs me?" is the question this product exists to
 answer. Partly built — the busy pulse and finished-flash landed in 0.2.0. What
@@ -77,12 +78,12 @@ is missing is *waiting-on-input* and *error*, which need output-pattern
 matching. Must degrade cleanly when a CLI is silent or non-standard.
 *Both · a day*
 
-### 4. Hover preview of the last few lines `[3/5]`
+### 3. Hover preview of the last few lines `[3/5]`
 On sidebar rows and on tabs. Glance without switching. Named the highest-value
 awareness win after the badge, and it costs hours.
 *Both · hours*
 
-### 5. Searchable prompt history `[4/5]`
+### 4. Searchable prompt history `[4/5]`
 Every prompt sent, per session and globally, fuzzy-searchable, one click to
 reuse or edit. The distinction one list drew is worth keeping: **snippets are
 for deliberate reuse; history is for accidental reuse.** They do not replace

@@ -12,22 +12,12 @@ here ships it moves to the CHANGELOG and drops off this page.
 
 ---
 
-## Today — the four you will feel
+## Today — the three you will feel
 
 These are all hours, not days, and all of them fire many times an hour once
 there are a dozen sessions open.
 
-### 1. Scroll lock / follow mode
-Detach the viewport from the stream so a new token cannot yank you to the
-bottom mid-read. **Two of the five lists ranked this first outright**, and the
-argument is unanswerable: if you cannot pause the output you physically cannot
-read or copy from it. Every review feature below depends on it.
-
-*A toggle in the tab bar and a keyboard binding. Following resumes on jump-to-
-bottom, and a paused pane must say it is paused — a stopped stream that looks
-like a dead one is worse than no lock at all.*
-
-### 2. Per-session prompt drafts
+### 1. Per-session prompt drafts
 A half-typed instruction survives a tab switch, a reload and a closed laptop.
 Pure loss-prevention, and the cheapest high-frequency win on the list.
 
@@ -35,7 +25,7 @@ Pure loss-prevention, and the cheapest high-frequency win on the list.
 the work and follows you between devices; only things about the screen stay
 local. Debounced, so it is not a write per keystroke.*
 
-### 3. Close-and-keep vs close-and-kill, and a home for what is running
+### 2. Close-and-keep vs close-and-kill, and a home for what is running
 Closing a tab already keeps the session alive, and the sidebar already lists
 everything — but neither says so. Make the choice explicit on close, and give
 sessions that are running with no tab their own visible area.
@@ -43,7 +33,7 @@ sessions that are running with no tab their own visible area.
 *Mostly presentation over state that already exists. The kill path must keep
 its confirmation.*
 
-### 4. Unread marker and a since-last-viewed separator
+### 3. Unread marker and a since-last-viewed separator
 A line in the scrollback where you stopped reading, and a mark on sessions
 that produced output while you were elsewhere. Flashing says *something
 happened*; this says *what you have not seen*.

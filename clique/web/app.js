@@ -896,9 +896,92 @@ function toast(text, bad) {
   toast.timer = setTimeout(() => (el.hidden = true), 4000);
 }
 
+/* ------------------------------------------------------------ scroll lock */
+
+/* Detaching the viewport from the stream.
+ *
+ * On a busy session, output arriving while you read drags the view to the
+ * bottom mid-sentence, and you cannot read what you cannot hold still — nor
+ * copy it. So the viewport can be detached: the pane keeps receiving, tmux
+ * keeps the scrollback, and only the view stops moving.
+ *
+ * The stream is never paused. Freezing it would put the pane out of step with
+ * tmux, which holds the real scrollback and does not care what a browser
+ * happens to be looking at.
+ *
+ * Scrolling up *is* the detach gesture, which is why this needs no
+ * explaining: the thing people already do in order to read is the thing that
+ * stops the yanking. Returning to the bottom re-attaches.
+ */
+function following(id) {
+  const entry = terms.get(id);
+  return !entry || entry.follow !== false;
+}
+
+function setFollow(id, on) {
+  const entry = terms.get(id);
+  if (!entry || (entry.follow !== false) === on) return;
+  entry.follow = on;
+  const buf = entry.term.buffer.active;
+  if (on) {
+    entry.behind = 0;
+    entry.pinning = true;
+    entry.term.scrollToBottom();
+    entry.pinning = false;
+  } else {
+    entry.pinned = buf.viewportY;
+    entry.baseline = buf.baseY;
+    entry.behind = 0;
+  }
+  if (id === activeId) renderFollow();
+}
+
+function toggleFollow() {
+  if (activeId) setFollow(activeId, !following(activeId));
+}
+
+/* Everything written while detached lands in the buffer as usual; the only
+ * correction is putting the viewport back afterwards. That has to happen in
+ * the write callback, because it is the first moment the new lines exist. */
+function writeOut(entry, id, data) {
+  if (entry.follow !== false) return entry.term.write(data);
+  entry.term.write(data, () => {
+    const buf = entry.term.buffer.active;
+    entry.behind = Math.max(0, buf.baseY - entry.baseline);
+    if (buf.viewportY !== entry.pinned) {
+      entry.pinning = true;
+      entry.term.scrollToLine(entry.pinned);
+      entry.pinning = false;
+    }
+    if (id === activeId) renderFollow();
+  });
+}
+
+/* A paused pane and a dead one look identical, so the badge has to carry both
+ * facts: that the view is detached, and how far behind it has fallen. */
+function renderFollow() {
+  const entry = terms.get(activeId);
+  const paused = Boolean(entry && entry.follow === false);
+  const badge = $("#follow");
+  badge.hidden = !paused;
+  if (paused) {
+    const n = entry.behind || 0;
+    badge.textContent = n
+      ? `Paused — ${n} new line${n === 1 ? "" : "s"} below. Click to catch up`
+      : "Paused — click to follow again";
+  }
+  const lock = $("#lock");
+  lock.textContent = paused ? "\u23f8" : "\u21e3";
+  lock.classList.toggle("on", paused);
+  lock.title = paused
+    ? "Paused — the view is not following output (Ctrl+Shift+L)"
+    : "Following output — scroll up, or press Ctrl+Shift+L, to pause";
+}
+
 function selectTab(id) {
   activeId = id;
   attention.delete(id);   // looking at it is the acknowledgement
+  renderFollow();         // the badge belongs to the pane you switched to
   markSeen(id);
   for (const [tid, entry] of terms) {
     entry.el.style.display = tid === id ? "block" : "none";
@@ -971,13 +1054,28 @@ async function attach(id) {
   term.attachCustomKeyEventHandler((ev) => {
     if (ev.type !== "keydown" || !(ev.ctrlKey || ev.metaKey)) return true;
     const key = ev.key.toLowerCase();
+    // Handed to the document handler, which does the work — exactly as
+    // Ctrl+Shift+P is. Acting here as well would toggle it twice.
+    if (ev.shiftKey && key === "l") return false;
     if (ev.shiftKey && key === "p") return false;
     if (!ev.shiftKey && key === "k") return !paletteHotkeyOn();
     return true;
   });
 
-  const entry = { term, fit, el: host, ws: null, closing: false, typed: "" };
+  const entry = { term, fit, el: host, ws: null, closing: false, typed: "",
+                  follow: true, behind: 0, pinned: 0, baseline: 0 };
   terms.set(id, entry);
+
+  /* Scrolling up detaches the viewport; arriving back at the bottom
+   * re-attaches it. Our own corrections set `pinning`, so they are never
+   * mistaken for a gesture. */
+  term.onScroll(() => {
+    if (entry.pinning) return;
+    const buf = term.buffer.active;
+    if (buf.viewportY >= buf.baseY) { setFollow(id, true); return; }
+    if (entry.follow !== false) { setFollow(id, false); return; }
+    entry.pinned = buf.viewportY;      // still reading, just moved
+  });
 
   const connect = () => {
     const ws = new WebSocket(wsUrl(id, term.cols, term.rows));
@@ -985,8 +1083,8 @@ async function attach(id) {
     entry.ws = ws;
 
     ws.onmessage = (ev) => {
-      if (typeof ev.data === "string") term.write(ev.data);
-      else term.write(new Uint8Array(ev.data));
+      writeOut(entry, id,
+        typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data));
     };
     ws.onclose = () => {
       if (entry.closing) return;
@@ -1593,6 +1691,9 @@ function wire() {
     if (ev.target === $("#palette")) closePalette();   // the backdrop, not the box
   };
 
+  $("#lock").onclick = toggleFollow;
+  $("#follow").onclick = () => setFollow(activeId, true);
+
   // Capture phase: xterm handles paste on its own textarea, so this has to see
   // the event first. It only claims the event when there is an image in it.
   document.addEventListener("paste", (ev) => {
@@ -1622,6 +1723,11 @@ function wire() {
     if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && key === "k" && paletteHotkeyOn()) {
       ev.preventDefault();
       openPalette("");
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && key === "l") {
+      ev.preventDefault();
+      toggleFollow();
       return;
     }
     if ((ev.ctrlKey || ev.metaKey) && ev.key === "b") {
@@ -1837,6 +1943,9 @@ function paletteCommands() {
         () => setArchived(current, !current.archived));
     add("Copy working directory", current.cwd, () => copyText(current.cwd));
     add("Focus the terminal", current.name, focusTerminal);
+    add(following(current.id) ? "Scroll lock — stop following output"
+                              : "Follow output again",
+        "Ctrl+Shift+L · scrolling up does it too", toggleFollow);
     add("Close tab", "The session keeps running in tmux", () => closeTab(current.id));
   }
   if (state.settings.input_mode !== "terminal") {

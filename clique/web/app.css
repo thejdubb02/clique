@@ -646,3 +646,16 @@ button.primary:hover { filter: brightness(1.1); }
 
 /* The last element in a pane should not sit flush against the scroll edge. */
 #settings .pane > *:last-child { margin-bottom: 0; }
+
+/* Scroll lock. The badge sits over the terminal rather than up in the chrome:
+   a detached pane looks exactly like a dead one, and the correction has to be
+   where the eye already is. */
+#lock { font-size: 12px; }
+#lock.on { background: var(--accent); color: #fff; border-color: transparent; }
+#follow { position: absolute; right: 16px; bottom: 14px; z-index: 40;
+          padding: 5px 12px; border-radius: 999px; cursor: pointer;
+          background: var(--panel); color: var(--fg); font-size: 11px;
+          border: 1px solid var(--accent); box-shadow: 0 4px 14px var(--shadow);
+          max-width: 60%; overflow: hidden; text-overflow: ellipsis;
+          white-space: nowrap; }
+#follow:hover { background: var(--accent); color: #fff; border-color: transparent; }
