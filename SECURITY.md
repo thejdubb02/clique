@@ -13,7 +13,7 @@ written down rather than discovered.
 | Layer | What it does |
 |---|---|
 | **Bind address** | `127.0.0.1:3200`. Nothing reaches the process except through the tunnel. |
-| **Tailscale** | Terminates TLS and enforces tailnet identity. Not reachable from the open internet. |
+| **Tunnel** | Tailscale Serve, Caddy, or nginx terminates TLS. CLIque itself never binds the public internet. |
 | **Host allowlist** | Rejects any `Host` we do not answer to, **before auth or any handler**. |
 | **Password** | Mandatory. Stored as an scrypt hash; the process cannot recover the plaintext. |
 | **Session cookie** | HMAC-signed, `HttpOnly`, `SameSite=Lax`, `Secure` behind HTTPS, 30-day TTL. |

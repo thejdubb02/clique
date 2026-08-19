@@ -1,0 +1,26 @@
+name: Feature
+description: Something CLIque should do
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What do you want
+      description: The job it should do, not the control you'd click.
+    validations:
+      required: true
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Does it fit the product
+      options:
+        - label: This works from the filesystem, tmux, and process state (or git). It does not need to know which AI vendor is talking.
+          required: true
+        - label: This is a driver feature, not an IDE feature. CLIque would jump you to a tool that already does this well, not reimplement that tool.
+          required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this, not a CLI or another tool
+      description: Optional. Useful when it is close to the line.

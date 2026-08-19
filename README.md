@@ -11,7 +11,8 @@
   <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square" alt="Python 3.11+"></a>
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.21.0-A855F7?style=flat-square" alt="0.21.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.21.1-A855F7?style=flat-square" alt="0.21.1"></a>
+  <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
 </p>
 
 ---
@@ -21,6 +22,12 @@ CLIque is a **driver, not an IDE**. It does not parse a vendor's protocol, imper
 If you run more than two coding agents at once, you already know the problem: terminals everywhere, no idea which one is waiting on you, a conversation you cannot get back to. CLIque is the panel for that.
 
 **24 MB resident.** No framework, no `node_modules`, no build step. `tmux`, a PTY, and the Python standard library.
+
+## Who it is for
+
+You already run more than one coding agent — Claude Code, Grok, Gemini, Codex, or the next one — and you have lost track of which terminal is waiting on you. CLIque is the panel in front of them. It is not an IDE, not a chat client, and not a replacement for the CLIs themselves.
+
+If you are happy with a tmux session per project, you do not need this. If you want the tool to *be* the agent, look elsewhere.
 
 ## What it does
 
@@ -115,6 +122,10 @@ ruff check .
 
 They will not catch a UI that renders wrong. Open the page for that.
 
+## Contributing
+
+Patches welcome, with a short filter: [CONTRIBUTING.md](CONTRIBUTING.md). Feature ideas that need to know which vendor is talking get refused — that is the product, not a freeze.
+
 ## Support the project
 
 CLIque is free and staying that way. If it saved you an afternoon:
@@ -130,3 +141,5 @@ CLIque is free and staying that way. If it saved you an afternoon:
 ## License
 
 [MIT](LICENSE). Built by [Justin Willhite](https://github.com/thejdubb02).
+
+A hole that reaches a terminal is a [private advisory](https://github.com/thejdubb02/clique/security/advisories/new), not a public issue. See [SECURITY.md](SECURITY.md).

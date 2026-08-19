@@ -1,0 +1,30 @@
+name: Bug
+description: Something is broken
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings → About, or the number in the sidebar. Include the short commit if you see one.
+      placeholder: 0.21.1 (abc1234)
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Python, tmux, OS
+      placeholder: "Python 3.12, tmux 3.4, Linux"
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Short steps. If it needs a particular CLI, say which one.

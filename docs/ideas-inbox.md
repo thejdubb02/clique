@@ -65,7 +65,6 @@ and a permanent queue of "please add mine". Two generic things cover all of it:
 2. **One outbound webhook** on session events — died, finished, wants input.
    Uptime Kuma's push monitors, ntfy, Gotify, Discord and Mattermost are all
    "POST some JSON to this URL", so one field serves every one of them.
-   Tracked in Nextcloud.
 
 Refused for now: a Prometheus `/metrics` endpoint. It is a third format for
 the same numbers `/healthz` already returns, and nobody has asked.
@@ -75,5 +74,4 @@ the same numbers `/healthz` already returns, and nobody has asked.
 ## Elsewhere
 
 Operational and product work that is tracked but does not belong in the
-ranked roadmap lives in the **CLIque** list in Nextcloud Tasks — monitoring,
-the vault entry, public-repo assets, the marketing site.
+ranked roadmap: monitoring, public-repo assets, the marketing site.
