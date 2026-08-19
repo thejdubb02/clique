@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.17.0 — 2026-08-19
+
+**A half-typed prompt survives everything now.** Switch tabs, reload the page,
+close the laptop and open it somewhere else — the words are still in the box.
+
+- Drafts are **per session**, so twelve panes can each hold an unsent thought.
+- They live **on the server**, not in `localStorage`: an unsent instruction is
+  about the work, so it follows you between devices. Sidebar width is the
+  counter-example and stays in the browser.
+- Written on a debounce rather than per keystroke, and committed immediately
+  when you switch tabs or the page is hidden — the laptop-lid case, which is
+  exactly when someone expects their words to still be there.
+- Sending clears the draft, because it is no longer unsent.
+
 ## 0.16.1 — 2026-08-19
 
 Marks beside each support option — a coin glyph in each project's colours, and
