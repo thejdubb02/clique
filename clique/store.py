@@ -94,6 +94,18 @@ DEFAULT_SETTINGS = {
     #: enough to feel immediate, long enough that a CLI pausing to think does
     #: not read as done.
     "notify_idle_seconds": 4,
+    #: The workspace: which sessions have a tab, in what order, and which one
+    #: you were looking at. On the server with everything else a person chose,
+    #: because losing it is the expensive kind of loss — twelve panes reopened
+    #: by hand is a morning, and a laptop closing should not cost that. It is
+    #: restored when a panel loads and not re-applied on the poll, so a second
+    #: device does not yank the tabs out from under the first.
+    "open_tabs": [],
+    "active_tab": "",
+    #: Running / Ungrouped / Archived are views over the sessions rather than
+    #: folders, so there is no folder record to hold their collapsed state.
+    #: A real folder's flag already syncs; these were the odd ones out.
+    "views_collapsed": ["__archived"],
 }
 
 #: A snippet body over this is a document, not an expander, and storing one
@@ -160,6 +172,23 @@ def auto_folder(cwd: str, folders: list[Folder]) -> str | None:
             if cwd.startswith(prefix) and (best is None or len(prefix) > best[0]):
                 best = (len(prefix), folder.id)
     return best[1] if best else None
+
+
+def _clean_ids(value, limit: int = 200) -> list[str]:
+    """A list of ids from the browser, deduplicated and bounded.
+
+    Order is meaningful — this is what holds tab order — so it is preserved
+    rather than sorted, and the cap is here because these end up in every
+    `/api/state` response.
+    """
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for raw in value[:limit]:
+        text = str(raw or "")[:64]
+        if text and text not in out:
+            out.append(text)
+    return out
 
 
 def _clean_snippets(value) -> list[dict]:
@@ -331,6 +360,10 @@ class Store:
                 elif key == "marker_default":
                     if value in MARKER_MODES:
                         self.settings[key] = value
+                elif key in ("open_tabs", "views_collapsed"):
+                    self.settings[key] = _clean_ids(value)
+                elif key == "active_tab":
+                    self.settings[key] = str(value or "")[:64]
                 elif key == "snippets":
                     self.settings[key] = _clean_snippets(value)
                 elif key.startswith("css_"):

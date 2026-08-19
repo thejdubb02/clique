@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.21.0 — 2026-08-19 10:43 PDT
+
+**Your tabs are yours, not your browser's.**
+
+Which sessions had a tab, their order, and which groups were collapsed lived in
+`localStorage` — the one place a person's choices were still stranded on one
+machine. Close the laptop and open the panel on the phone and it was a blank
+workspace; clear the browser and twelve panes were a morning to reopen.
+
+- **The workspace is on the server now**: open tabs and their order, the tab
+  that was in front, and the collapsed state of Running, Ungrouped and
+  Archived. Reload, or sign in somewhere else, and the panes are where you left
+  them.
+- **Lifted, not reset.** Whatever the browser was holding on the day this
+  changed is read once, moved up, and removed locally. Nobody loses the tabs
+  they had open.
+- Restored on the first poll and never re-applied after, so two panels open at
+  once do not drag each other's tabs around mid-read. Last one to touch a tab
+  wins the stored copy — the right answer for one person on two devices.
+
+Sidebar width and sidebar shown/hidden stay in the browser, and stay the
+counter-example: those are about the screen in front of you, and a phone should
+not inherit a 400px sidebar from a desktop.
+
 ## 0.20.0 — 2026-08-19 10:30 PDT
 
 **The changelog is in the app now, and it finally says what time it was.**
