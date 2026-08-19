@@ -659,3 +659,24 @@ button.primary:hover { filter: brightness(1.1); }
           max-width: 60%; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; }
 #follow:hover { background: var(--accent); color: #fff; border-color: transparent; }
+
+/* The shortcut reference. One list, built from the same table the bindings are
+   described by, so a binding cannot ship without appearing here. */
+#keys { position: fixed; inset: 0; background: var(--scrim); display: grid;
+        place-items: center; z-index: 80; }
+#keys .sheet { width: min(560px, 94vw); max-height: 84vh; overflow: auto;
+               background: var(--panel); border: 1px solid var(--line);
+               border-radius: 10px; padding: 18px 20px;
+               box-shadow: 0 10px 40px var(--shadow); }
+#keys h2 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+#keys h3 { margin: 16px 0 8px; font-size: 11px; font-weight: 600;
+           text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+#keys h3:first-of-type { margin-top: 0; }
+#keys .row { display: flex; gap: 12px; align-items: baseline;
+             padding: 4px 0; font-size: 12px; }
+#keys .row .what { color: var(--dim); flex: 1; }
+#keys kbd { font: inherit; font-size: 11px; background: var(--bg);
+            border: 1px solid var(--line); border-bottom-width: 2px;
+            border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+#keys .keycell { min-width: 168px; }
+#keysClose { margin-top: 18px; }

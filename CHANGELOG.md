@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.14.0 — 2026-08-19
+
+**Every binding, in one list.** Shortcuts existed only in `title` attributes,
+which meant they existed only for whoever already knew they were there.
+
+- `?` in the tab bar, `Ctrl`/`Cmd`+`Shift`+`/`, or **Keyboard shortcuts** in
+  the palette.
+- Grouped by what you are doing: getting around, inside the palette, reading a
+  pane, working in a session.
+- Written from one table in the source, so a binding that ships without a line
+  here is a visible omission rather than a silent one.
+- It says where a key is not ours to promise: the autonomy-mode key is
+  whatever that CLI declares in the registry, so it differs between them.
+
 ## 0.13.0 — 2026-08-19
 
 **The view no longer moves while you are reading it.** On a busy session, a
