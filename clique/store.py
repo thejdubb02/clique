@@ -18,6 +18,7 @@ import re
 import threading
 import time
 import uuid
+import zoneinfo
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -118,6 +119,10 @@ DEFAULT_SETTINGS = {
     #: person's palette is another person's invisible-on-their-theme.
     #: {"claude": "#d97757"}. An empty entry means "use the shipped one".
     "cli_colors": {},
+    #: An IANA zone for the clock on the empty pane — "Europe/Lisbon". Empty
+    #: means the browser's own, which is right for most people and wrong for
+    #: anyone whose box lives in a different country from they do.
+    "clock_zone": "",
     #: One URL, POSTed a small JSON body when a session starts waiting, errors,
     #: finishes or dies. One field rather than a list of services, because
     #: ntfy, Gotify, Discord, Mattermost, Home Assistant and Uptime Kuma push
@@ -428,6 +433,19 @@ class Store:
                     # http(s) only. A file: or a gopher: here would be someone
                     # using the notifier to make the server fetch something.
                     self.settings[key] = value if value.startswith(("http://", "https://")) else ""
+                elif key == "clock_zone":
+                    # Validated against the system's own zone database rather
+                    # than a length check: a name that is not a real zone would
+                    # throw in the browser and take the whole pane with it.
+                    name = str(value or "").strip()[:64]
+                    if not name:
+                        self.settings[key] = ""
+                    else:
+                        try:
+                            zoneinfo.ZoneInfo(name)
+                            self.settings[key] = name
+                        except (zoneinfo.ZoneInfoNotFoundError, ValueError, OSError):
+                            pass
                 elif key in ("webhook_secret", "panel_url"):
                     self.settings[key] = str(value or "").strip()[:2048]
                 elif key in ("theme", "appearance", "input_mode"):

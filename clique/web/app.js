@@ -1129,8 +1129,65 @@ async function pasteImages(items) {
 const EMPTY_SESSIONS = 6;
 const EMPTY_RESUMABLE = 5;
 
+/* One line of advice, stable for the day.
+ *
+ * Keyed to the date rather than picked at random: a tip that changes every
+ * time the pane repaints is a slot machine, and nobody finishes reading one.
+ * Same tip all day means you either read it or you do not, which is the
+ * correct amount of insistence for a thing nobody asked for. */
+const TIPS = [
+  "Closing a tab does not kill the session — tmux and the CLI carry on without you.",
+  "Ctrl/Cmd + K jumps between sessions. Type > for commands, @ for sessions, ~ for past conversations.",
+  "Paste a screenshot with Ctrl/Cmd + V — it lands in the session's own folder and the path goes where you were typing.",
+  "Scroll up and the view detaches from the stream. The badge says how far behind you are.",
+  "Alt + 1 to 9 switches tabs. The pane owns every other key, on purpose.",
+  "A ring turning means working. A steady pulse means it is waiting for you.",
+  "Adding a CLI is four lines in clis.toml and a reload. No restart, no code.",
+  "Drag sessions between folders, or double-click a folder to rename it.",
+  "Snippets are for deliberate reuse. Set them up in Settings → Snippets.",
+  "Set a webhook in Settings → Notifications and your phone finds out when a session needs you.",
+  "Ctrl/Cmd + B collapses the sidebar to a rail, markers and all.",
+  "An image an agent writes into the session's directory shows up in the tab bar.",
+];
+
+function renderTip() {
+  const now = new Date();
+  const day = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+  $("#emptyTip").textContent = TIPS[day % TIPS.length];
+}
+
+/* The clock, in whichever zone was asked for.
+ *
+ * Intl does the whole job, so this needs no data and no network — the zone
+ * database is already in the browser. An unset zone means the browser's own,
+ * and a zone the browser rejects falls back to that rather than throwing and
+ * taking the pane down with it. */
+function renderClock() {
+  const zone = state.settings.clock_zone || undefined;
+  const opts = { hour: "2-digit", minute: "2-digit", hour12: false };
+  const dateOpts = { weekday: "long", day: "numeric", month: "long" };
+  let time, date;
+  try {
+    time = new Intl.DateTimeFormat([], { ...opts, timeZone: zone }).format();
+    date = new Intl.DateTimeFormat([], { ...dateOpts, timeZone: zone }).format();
+  } catch {
+    time = new Intl.DateTimeFormat([], opts).format();
+    date = new Intl.DateTimeFormat([], dateOpts).format();
+  }
+  $("#emptyClock").innerHTML = "";
+  const big = document.createElement("div");
+  big.className = "clock-time";
+  big.textContent = time;
+  const small = document.createElement("div");
+  small.className = "clock-date";
+  small.textContent = date + (state.settings.clock_zone ? " · " + state.settings.clock_zone : "");
+  $("#emptyClock").append(big, small);
+}
+
 function renderEmpty() {
   if (activeId) return;                 // nothing to draw behind a live pane
+  renderClock();
+  renderTip();
   const sessions = state.sessions || [];
   const alive = sessions.filter((x) => x.alive);
   const wants = alive.filter((x) => workState(x) === "waiting" || workState(x) === "error");
@@ -2301,7 +2358,8 @@ function openSettings() {
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
   // Not repainted while focused — a poll landing mid-edit would move the
   // cursor in a field someone is pasting a URL into.
-  for (const [id, key] of [["#setHookUrl", "webhook_url"],
+  for (const [id, key] of [["#setClockZone", "clock_zone"],
+                           ["#setHookUrl", "webhook_url"],
                            ["#setHookSecret", "webhook_secret"],
                            ["#setPanelUrl", "panel_url"]]) {
     if (document.activeElement !== $(id)) $(id).value = s[key] || "";
@@ -2497,6 +2555,17 @@ function wire() {
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
   // On blur, not per keystroke: half a URL is not a setting, and the server
   // would store every prefix on the way to the real one.
+  $("#setClockZone").onblur = (ev) => saveSettings({ clock_zone: ev.target.value });
+  // The browser already carries the zone database; offering it is one line and
+  // saves anyone guessing whether it is Europe/Kyiv or Europe/Kiev.
+  if (typeof Intl.supportedValuesOf === "function") {
+    const list = $("#zoneList");
+    for (const zone of Intl.supportedValuesOf("timeZone")) {
+      const option = document.createElement("option");
+      option.value = zone;
+      list.append(option);
+    }
+  }
   $("#setHookUrl").onblur = (ev) => saveSettings({ webhook_url: ev.target.value });
   $("#setHookSecret").onblur = (ev) => saveSettings({ webhook_secret: ev.target.value });
   $("#setPanelUrl").onblur = (ev) => saveSettings({ panel_url: ev.target.value });
@@ -3222,6 +3291,26 @@ refresh().then(async () => {
   // Chosen last: every openSession above selects its own tab as it finishes,
   // in whatever order the sockets came up.
   if (want.active && openTabs.includes(want.active)) selectTab(want.active);
+
+  /* Arriving from a notification.
+   *
+   * The webhook has been putting `?session=<id>` in every payload since
+   * 0.27.0 and nothing was reading it, so tapping the notification landed you
+   * on whatever tab you left open — which is the one thing a notification is
+   * supposed to save you from. Handled after the workspace restores, so the
+   * link wins over what was open last, and the parameter is stripped
+   * afterwards so a reload does not keep yanking you back.
+   */
+  const asked = new URLSearchParams(location.search).get("session");
+  if (asked && session(asked)) {
+    await openSession(asked);
+    selectTab(asked);
+  }
+  if (asked) {
+    const clean = new URL(location.href);
+    clean.searchParams.delete("session");
+    history.replaceState(null, "", clean);
+  }
   // Now that the tabs exist, commit: this is what persists a lifted copy, and
   // what prunes tabs whose sessions are gone.
   saveWorkspace(true);
@@ -3230,5 +3319,8 @@ setInterval(refresh, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and
 // nobody is waiting on a screenshot to the second.
 setInterval(pollArtifacts, ART_POLL_MS);
+// The clock, only while the pane it lives on is actually showing. A minute is
+// the resolution it displays, so a minute is what it costs.
+setInterval(() => { if (!activeId && !document.hidden) renderClock(); }, 20000);
 // Coming back to the tab should not mean waiting out the interval.
 addEventListener("visibilitychange", () => { if (!document.hidden) pollArtifacts(); });

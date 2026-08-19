@@ -276,6 +276,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
 | `cli_tint` | bool | Colour the pane edge, active tab and prompt box with the active CLI's colour |
 | `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
+| `clock_zone` | IANA zone | Clock on the empty pane, e.g. `Europe/Lisbon`. Validated against the system zone database; a name that is not real is dropped rather than stored, because `Intl` throws on one. Blank means the browser's own |
 | `webhook_url` | url | Where to POST session events. `http`/`https` only; anything else is stored as `""` |
 | `webhook_secret` | string | Signs each request as `X-CLIque-Signature` |
 | `panel_url` | url | This panel's public address, included so a notification can link back |

@@ -426,6 +426,18 @@ def main() -> int:
 
     call(f"/api/sessions/{att_id}", "DELETE")
 
+    print("clock zone")
+    status, saved = call("/api/settings", "PATCH", {"clock_zone": "Europe/Lisbon"})
+    check("stores a real zone", saved.get("clock_zone") == "Europe/Lisbon",
+          saved.get("clock_zone"))
+    # A name the browser would reject has to die here: Intl throws on a bad
+    # zone, and that would take the pane down rather than degrade.
+    status, saved = call("/api/settings", "PATCH", {"clock_zone": "Mars/Olympus"})
+    check("refuses a zone that does not exist", saved.get("clock_zone") == "Europe/Lisbon",
+          saved.get("clock_zone"))
+    status, saved = call("/api/settings", "PATCH", {"clock_zone": ""})
+    check("blank means the browser's own", saved.get("clock_zone") == "", saved.get("clock_zone"))
+
     print("per-CLI colours")
     status, saved = call("/api/settings", "PATCH",
                          {"cli_colors": {"claude": "#ABCDEF", "grok": "javascript:x",

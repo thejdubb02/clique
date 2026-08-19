@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.28.2 — 2026-08-19 12:45 PDT
+
+**A clock, a tip, and the notification link actually works.**
+
+The empty pane gained the time — in the browser's own zone, or one you name in
+Settings → Notifications. `Intl` already carries the whole zone database, so
+this needs no data and reaches nothing; a name that is not a real zone is
+refused when you save it rather than throwing in the page. And one line of
+advice, keyed to the date so it is the same all day: a tip that changes on
+every repaint is a slot machine, and nobody finishes reading one.
+
+**The fix that mattered.** Every webhook payload since 0.27.0 has carried a
+`?session=<id>` link back to the exact session — and the panel was ignoring the
+parameter entirely, so tapping a notification dropped you on whatever tab you
+had left open. Which is the one thing a notification exists to save you from.
+It now opens and selects that session after the workspace restores, then
+strips the parameter so a reload does not keep dragging you back.
+
 ## 0.28.1 — 2026-08-19 12:41 PDT
 
 **The empty pane does something now.**

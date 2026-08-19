@@ -76,7 +76,10 @@
       <div id="follow" hidden></div>
       <div id="empty">
         <div class="empty-inner">
-          <p id="emptyNow" class="empty-now"></p>
+          <div class="empty-head">
+            <div id="emptyClock" class="empty-clock"></div>
+            <p id="emptyNow" class="empty-now"></p>
+          </div>
           <div id="emptyBack" class="empty-block" hidden>
             <h3>Pick up where you left off</h3>
             <div class="empty-list"></div>
@@ -85,6 +88,7 @@
             <h3>Resume a conversation</h3>
             <div class="empty-list"></div>
           </div>
+          <p id="emptyTip" class="empty-tip"></p>
           <p class="dim empty-hint">Press <kbd>Ctrl</kbd>+<kbd>K</kbd> to jump
              anywhere, or <kbd>+</kbd> above for something new.</p>
         </div>
@@ -282,7 +286,16 @@
          the delay if it fires too eagerly.</p>
       <button type="button" id="testChime">Test the chime</button>
 
-      <h3>Reach me when the panel is shut</h3>
+      <h3>Clock</h3>
+      <label class="field">Time zone <span class="dim">optional</span>
+        <input type="text" id="setClockZone" placeholder="Europe/Lisbon"
+               autocomplete="off" spellcheck="false" list="zoneList">
+        <datalist id="zoneList"></datalist>
+      </label>
+      <p class="note">Shown on the empty pane. Blank uses this browser’s own
+         zone, which is right unless your box lives somewhere you do not.</p>
+
+            <h3>Reach me when the panel is shut</h3>
       <label class="field">Webhook URL
         <input type="url" id="setHookUrl" placeholder="https://ntfy.sh/your-topic"
                autocomplete="off" spellcheck="false">
