@@ -322,8 +322,8 @@ def maskable_png(size: int) -> Image.Image:
 
 
 def social_png(width=1280, height=640) -> Image.Image:
-    """GitHub's social preview. Read at thumbnail size in a feed, so it is the
-    mark, the name and one line — nothing that needs zooming into."""
+    """GitHub's social preview. Canvas is a fixed 1280×640; the lockup is
+    packed and centred so a thumbnail is not mostly empty ink."""
     canvas = Image.new("RGB", (width, height), _rgb(INK))
     pen = ImageDraw.Draw(canvas)
 
@@ -335,30 +335,55 @@ def social_png(width=1280, height=640) -> Image.Image:
     strip = np.repeat((a + (b - a) * bar).astype(np.uint8), 6, axis=0)
     canvas.paste(Image.fromarray(strip), (0, height - 6))
 
-    icon = icon_png(232)
-    canvas.paste(icon, (110, (height - 232) // 2), icon)
-
     def font(path, size):
         try:
             return ImageFont.truetype(path, size)
         except OSError:
             return ImageFont.load_default()
 
-    lato = "/usr/share/fonts/truetype/lato/Lato-Black.ttf"
-    lato_r = "/usr/share/fonts/truetype/lato/Lato-Regular.ttf"
-    mono = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+    lato = font("/usr/share/fonts/truetype/lato/Lato-Black.ttf", 120)
+    lato_r = font("/usr/share/fonts/truetype/lato/Lato-Regular.ttf", 40)
+    mono = font("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 20)
 
-    x = 110 + 232 + 74
-    pen.text((x, 232), "CLIque", font=font(lato, 108), fill=(255, 255, 255))
-    pen.text(
-        (x + 4, 366), "Your private clique of CLIs", font=font(lato_r, 40), fill=(150, 158, 173)
-    )
-    pen.text(
-        (x + 4, 432),
+    title, tag, sub = (
+        "CLIque",
+        "Your private clique of CLIs",
         "folder-organised CLI sessions in a browser, kept alive in tmux",
-        font=font(mono, 21),
-        fill=(105, 114, 130),
     )
+
+    def size_of(text, fnt):
+        box = pen.textbbox((0, 0), text, font=fnt)
+        return box[2] - box[0], box[3] - box[1]
+
+    tw, th = size_of(title, lato)
+    gw, gh = size_of(tag, lato_r)
+    sw, sh = size_of(sub, mono)
+    gap_title, gap_tag = 10, 16
+    text_w = max(tw, gw, sw)
+    text_h = th + gap_title + gh + gap_tag + sh
+
+    icon_size = 300
+    icon = icon_png(icon_size)
+    gap = 48
+    group_w = icon_size + gap + text_w
+    group_h = max(icon_size, text_h)
+    ox = (width - group_w) // 2
+    oy = (height - 6 - group_h) // 2
+
+    canvas.paste(icon, (ox, oy + (group_h - icon_size) // 2), icon)
+    tx = ox + icon_size + gap
+    ty = oy + (group_h - text_h) // 2
+    # textbbox y-origin includes the font's top bearing; draw from ty as the
+    # visual top by offsetting with the bbox's y0.
+    def draw(text, fnt, fill, x, y):
+        y0 = pen.textbbox((0, 0), text, font=fnt)[1]
+        pen.text((x, y - y0), text, font=fnt, fill=fill)
+        return pen.textbbox((0, 0), text, font=fnt)[3] - y0
+
+    y = ty
+    y += draw(title, lato, (255, 255, 255), tx, y) + gap_title
+    y += draw(tag, lato_r, (150, 158, 173), tx, y) + gap_tag
+    draw(sub, mono, (105, 114, 130), tx, y)
     return canvas
 
 
