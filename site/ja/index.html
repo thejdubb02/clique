@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLIque — マシン上のすべての CLI にフォルダを</title>
+<meta name="description" content="ブラウザのコーディングセッションを tmux で生かし続ける。セルフホストは永久無料。自分で立てたくない人向けの有料プランを準備中。">
+<link rel="canonical" href="https://useclique.dev/ja/">
+<link rel="alternate" hreflang="en" href="https://useclique.dev/">
+<link rel="alternate" hreflang="zh-Hans" href="https://useclique.dev/zh/">
+<link rel="alternate" hreflang="ja" href="https://useclique.dev/ja/">
+<link rel="alternate" hreflang="ko" href="https://useclique.dev/ko/">
+<link rel="alternate" hreflang="pt-BR" href="https://useclique.dev/pt-br/">
+<link rel="alternate" hreflang="de" href="https://useclique.dev/de/">
+<link rel="alternate" hreflang="x-default" href="https://useclique.dev/">
+<meta property="og:locale" content="ja_JP">
+<meta name="theme-color" content="#0E1116">
+<link rel="icon" href="../brand/mark.svg" type="image/svg+xml">
+<link rel="icon" href="../brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+<meta property="og:title" content="CLIque — マシン上のすべての CLI にフォルダを">
+<meta property="og:description" content="すべての CLI を一つのパネルに。セルフホストは永久無料。">
+<meta property="og:image" content="https://useclique.dev/brand/social-preview.png?v=2">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:image" content="https://useclique.dev/brand/social-preview.png?v=2">
+<meta property="og:url" content="https://useclique.dev/ja/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="../site.css?v=11">
+
+<div class="page">
+  <header>
+    <a class="word" href="/ja/">
+      <img src="../brand/mark.svg" width="20" height="20" alt="">
+      CLIque
+    </a>
+    <nav>
+      <a class="mit" href="https://github.com/thejdubb02/clique/blob/main/LICENSE">MIT</a>
+      <a class="btn-gh btn-star" href="https://github.com/thejdubb02/clique" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25"/></svg> Star on GitHub
+      </a>
+      <a class="btn-gh" href="https://github.com/thejdubb02/clique" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg> View on GitHub
+      </a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <p class="kicker">セルフホスト · MIT · 24 MB · テレメトリなし</p>
+    <h1>マシン上のすべての CLI に<em>フォルダ</em>を。</h1>
+    <p class="lede">ブラウザで動くコーディングセッション。裏では tmux が生かし続けます。Claude、Grok、Gemini、Codex、または設定4行で足した CLI。セルフホストは永久に無料。自分で立てたくない人向けの有料プランを準備中です。</p>
+    <p class="clis">Claude Code · Grok · Gemini · Codex · OpenCode · Cursor · Cline · Shell</p>
+    <p class="tag">ひとつのパネル · あなたのマシン</p>
+
+    <div class="run">
+      <div class="run-head">
+        <span class="host">clique @ 127.0.0.1:3200</span>
+        <button type="button" class="copybtn" hidden data-idle="コピー" data-done="コピーしました" data-copy="git clone https://github.com/thejdubb02/clique.git
+cd clique
+python3 -m clique password
+python3 -m clique">コピー</button>
+      </div>
+<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
+<span class="ps">$</span> cd clique
+<span class="ps">$</span> python3 -m clique password
+<span class="ps">$</span> python3 -m clique</code></pre>
+    </div>
+    <p class="then">Python 3.11+ と tmux。それだけ。あとは <code>http://127.0.0.1:3200</code> を開きます。</p>
+    <p class="badges">
+      <a href="https://github.com/thejdubb02/clique/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
+      <a href="https://github.com/thejdubb02/clique#quick-start"><img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square" alt="Python 3.11+"></a>
+      <img src="https://img.shields.io/badge/tmux-required-22c55e?style=flat-square" alt="tmux">
+      <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
+      <a href="https://github.com/thejdubb02/clique/graphs/contributors"><img src="https://img.shields.io/github/contributors/thejdubb02/clique?style=flat-square" alt="Contributors"></a>
+      <a href="https://github.com/thejdubb02/clique/commits/main"><img src="https://img.shields.io/github/commit-activity/t/thejdubb02/clique?style=flat-square" alt="Commits"></a>
+    </p>
+  </section>
+
+  <figure class="shot" aria-label="CLIque：左はフォルダ分けした CLI セッション、右はターミナル。ロゴのリングは作業中・待ち・アイドル。">
+    <div class="app">
+      <aside>
+        <div class="ah">
+          <img src="../brand/mark.svg" width="13" height="13" alt="">
+          <span>CLIque</span>
+        </div>
+        <div class="search">セッションを検索…</div>
+        <div class="tree">
+          <div class="fold">仕事</div>
+          <div class="sess on">
+            <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(../icons/claude.svg);mask-image:url(../icons/claude.svg)"></i></span>
+            <span class="meta"><b>認証まわり</b><small>~/proj/api</small></span>
+          </div>
+          <div class="sess">
+            <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(../icons/grok.svg);mask-image:url(../icons/grok.svg)"></i></span>
+            <span class="meta"><b>ランディング</b><small>~/proj/site</small></span>
+          </div>
+          <div class="sess">
+            <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(../icons/gemini.svg);mask-image:url(../icons/gemini.svg)"></i></span>
+            <span class="meta"><b>マイグレーション</b><small>~/proj/db</small></span>
+          </div>
+          <div class="fold">個人</div>
+          <div class="sess">
+            <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(../icons/codex.svg);mask-image:url(../icons/codex.svg)"></i></span>
+            <span class="meta"><b>週次メモ</b><small>~/notes</small></span>
+          </div>
+        </div>
+      </aside>
+      <div class="pane">
+        <div class="tabs">
+          <div class="tab active" style="--cli:#D97757">認証まわり</div>
+          <div class="tab">ランディング</div>
+          <div class="plus">+</div>
+          <div class="stats">cpu 12% · mem 24 MB</div>
+        </div>
+        <div class="term">
+          <div class="tline dim">claude · ~/proj/api · あなた待ち</div>
+          <div class="tline">ここで一旦止めます。セッション保存は問題なさそう。</div>
+          <div class="tline">ミドルウェアはまだ期限切れ cookie を通します。</div>
+          <div class="tline"></div>
+          <div class="tline"><span class="file">app/auth.py</span> を直しますか。それとも先に一緒に見ますか。</div>
+          <div class="caret">▍</div>
+        </div>
+        <div class="bar">
+          <span class="field">プロンプトか、シェルコマンドを…</span>
+          <span class="runbtn">実行</span>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <section class="tracks">
+    <div>
+      <b>セルフホスト</b>
+      永久無料。MIT。クローンして、自分のマシンで動かす。ループバックにだけバインドします。
+    </div>
+    <div>
+      <b>セルフホストしたくない</b>
+      有料プランを準備中。セッションはあなたのマシンに残ります。こちらでシェルをホストすることはありません。
+    </div>
+  </section>
+
+  <section class="facts">
+    <div><b>常駐 24 MB。</b> フレームワークなし、<code>node_modules</code> なし、ビルドなし。</div>
+    <div><b>わざとループバック。</b> パネルに届く人は、あなたの端末を持っています。</div>
+    <div><b>リングが状態。</b> 回転＝作業中。点滅＝あなた待ち。なし＝アイドル。</div>
+  </section>
+
+  <section class="cfg">
+    <h2>CLI の追加は設定であり、コードではない。</h2>
+<pre><code>[cli.grok]
+label   = "Grok CLI"
+command = "grok"
+args    = []
+color   = "#E8E8E8"</code></pre>
+    <p class="then">ページを再読み込み。追加にコード変更が要るなら、設計は失敗しています。</p>
+  </section>
+
+  <section class="faq">
+    <h2>よくある質問</h2>
+    <details>
+      <summary>インターネットに出す必要はありますか？</summary>
+      <p>いいえ。デフォルトはループバックだけです。別のマシンから使うならトンネルを。公開ネットに直接出さないでください。パネルに届く人は、あなたの端末を持っています。</p>
+    </details>
+    <details>
+      <summary>料金は？</summary>
+      <p>セルフホストは永久無料、MIT。有料プランは、自分で立てたくない人向けです。パネルはあなたのマシンで動きます。</p>
+    </details>
+    <details>
+      <summary>必要なものは？</summary>
+      <p>Python 3.11+ と tmux。それだけ。Node も Docker もアカウントも不要です。</p>
+    </details>
+    <details>
+      <summary>コーディング CLI を足すには？</summary>
+      <p>設定に4行。ページを再読み込み。コード変更が要るなら、設計は失敗しています。</p>
+    </details>
+  </section>
+
+  <section class="get">
+    <h2>あなたのマシン。あなたの CLI。ひとつのパネル。</h2>
+    <div class="run">
+      <div class="run-head">
+        <span class="host">clique @ 127.0.0.1:3200</span>
+        <button type="button" class="copybtn" hidden data-idle="コピー" data-done="コピーしました" data-copy="git clone https://github.com/thejdubb02/clique.git
+cd clique
+python3 -m clique password
+python3 -m clique">コピー</button>
+      </div>
+<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
+<span class="ps">$</span> cd clique
+<span class="ps">$</span> python3 -m clique password
+<span class="ps">$</span> python3 -m clique</code></pre>
+    </div>
+    <p class="then gh-row">
+      <a class="btn-gh btn-star" href="https://github.com/thejdubb02/clique" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25"/></svg> Star on GitHub
+      </a>
+      <a class="btn-gh" href="https://github.com/thejdubb02/clique" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg> View on GitHub
+      </a>
+    </p>
+  </section>
+
+  <footer>
+    <p class="langs"><a href="/" lang="en">English</a> · <a href="/zh/" lang="zh-Hans">简体中文</a> · <a href="/ja/" class="on" lang="ja">日本語</a> · <a href="/ko/" lang="ko">한국어</a> · <a href="/pt-br/" lang="pt-BR">Português</a> · <a href="/de/" lang="de">Deutsch</a></p>
+    <p><a href="https://github.com/thejdubb02/clique">github.com/thejdubb02/clique</a> · MIT · <a href="https://github.com/thejdubb02">Justin Willhite</a></p>
+    <p>午後をひとつ節約できたら、<a href="https://buymeacoffee.com/jdubb">コーヒーをおごってください</a>。</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  document.querySelectorAll(".copybtn").forEach(function (btn) {
+    if (!navigator.clipboard) return;
+    btn.hidden = false;
+    btn.addEventListener("click", function () {
+      navigator.clipboard.writeText(btn.getAttribute("data-copy") || "").then(function () {
+        var done = btn.getAttribute("data-done") || "Copied";
+        var idle = btn.getAttribute("data-idle") || "Copy";
+        btn.textContent = done;
+        setTimeout(function () { btn.textContent = idle; }, 1400);
+      });
+    });
+  });
+})();
+</script>

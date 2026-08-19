@@ -163,6 +163,7 @@ h2 {
   margin: 1rem 0 0;
 }
 .badges img { height: 20px; display: block; }
+.langs { line-height: 1.9; }
 .langs a { color: var(--dim); }
 .langs a:hover, .langs a.on { color: var(--fg); text-decoration: none; }
 .langs a.on { font-weight: 650; }
@@ -465,7 +466,7 @@ footer p { margin: 0 0 .35rem; }
   .caret { animation: none; }
 }
 
-:lang(zh-Hans) h1 { max-width: 12em; letter-spacing: 0; }
+:lang(zh-Hans) h1, :lang(ja) h1, :lang(ko) h1 { max-width: 12em; letter-spacing: 0; }
 
 @media (max-width: 960px) {
   .shot { height: 360px; }
