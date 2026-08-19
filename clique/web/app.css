@@ -952,3 +952,21 @@ main { --cli: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .dot.stat[data-level="critical"] { animation: none; }
 }
+
+/* Stat labels: quieter than their numbers, and spaced so a row of short
+   uppercase words does not read as one long one. */
+#stats .k { font-weight: 600; color: var(--dim); letter-spacing: .05em;
+            font-size: .92em; }
+
+/* The version in the corner, and the dot that says the notes are worth a look.
+   Styled as text, not a button: it is a link to a document, and dressing it
+   as a control would make it the loudest thing in an otherwise quiet footer. */
+.version-link {
+  background: none; border: 0; padding: 0; font: inherit; color: inherit;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+}
+.version-link:hover { color: var(--fg); text-decoration: underline; }
+.version-new {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  flex: 0 0 6px;
+}

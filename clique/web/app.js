@@ -346,7 +346,7 @@ async function refresh() {
   renderTree();
   renderTabs();
   renderStats();
-  $("#version").textContent = "v" + state.version;
+  renderVersion();
   // First load pulls history in so the sidebar is complete without anyone
   // having to open the palette to trigger it.
   if (!resumable) loadResumable().then(renderTree);
@@ -386,18 +386,89 @@ function statDot(percent) {
   return `<i class="dot stat" data-level="${level}" aria-hidden="true"></i>`;
 }
 
+/* The label in front of a reading.
+ *
+ * Upper case because CPU, MEM, SWAP and DISK are acronyms and lower case was
+ * simply wrong on them; LOAD joins in so the row does not read as three
+ * shouted words and one whispered one. The *values* keep their own case —
+ * "138.1G free" is a sentence, not a label. */
+function key(word) {
+  return `<b class="k">${word}</b> `;
+}
+
+/* The version, and whether there is something new behind it.
+ *
+ * A changelog nobody opens is a file, not a feature. This is the smallest
+ * honest nudge: the version in the corner grows a dot when the running
+ * release is not the one whose notes were last read, and clicking it goes
+ * straight to them.
+ *
+ * Seeded rather than assumed: the first panel to load stamps whatever is
+ * running, so a fresh install does not arrive already claiming to have news.
+ * The dot then only ever means "you upgraded since you last looked". */
+function baseVersion(text) {
+  return String(text || "").split("+")[0];   // drop the +build suffix
+}
+
+function renderVersion() {
+  const el = $("#version");
+  const running = baseVersion(state.version);
+  const seen = state.settings.changelog_seen;
+
+  if (running && !seen) {
+    // First load ever. Stamp it quietly; nothing to announce.
+    saveWorkspaceSetting({ changelog_seen: running });
+    el.textContent = "v" + state.version;
+    return;
+  }
+
+  el.textContent = "";
+  const label = document.createElement("button");
+  label.type = "button";
+  label.className = "version-link";
+  label.textContent = "v" + state.version;
+  const fresh = Boolean(running && seen && running !== seen);
+  label.title = fresh ? `Updated to ${running} — see what changed`
+                      : "What changed in this release";
+  if (fresh) {
+    const dot = document.createElement("i");
+    dot.className = "version-new";
+    label.prepend(dot);
+  }
+  label.onclick = () => showChangelog(running);
+  el.append(label);
+}
+
+function showChangelog(running) {
+  openSettings();
+  const button = document.querySelector('#setTabs button[data-pane="changelog"]');
+  if (button) button.click();
+  if (running) saveWorkspaceSetting({ changelog_seen: running });
+}
+
+/* A settings write that must not repaint the world.
+ *
+ * saveSettings() re-applies everything, which is right for a preference
+ * someone just changed and wrong for a bookkeeping value the user never
+ * touched — repainting mid-click would fight whatever they are doing. */
+function saveWorkspaceSetting(patch) {
+  Object.assign(state.settings, patch);
+  return api("api/settings", { method: "PATCH", body: JSON.stringify(patch) })
+    .catch(() => {});
+}
+
 function renderStats() {
   const st = state.stats || {};
   const gb = (mb) => Math.round((mb || 0) / 1024 * 10) / 10;
 
   const cpu = st.cpu ?? 0;
   const cpuEl = $("#cpu");
-  cpuEl.innerHTML = statDot(cpu) + "cpu " + cpu + "%";
+  cpuEl.innerHTML = statDot(cpu) + key("CPU") + cpu + "%";
   cpuEl.title = `cpu ${cpu}%`;
 
   const mem = st.mem || {};
   const memEl = $("#mem");
-  memEl.innerHTML = statDot(mem.percent) + "mem " + gb(mem.used_mb) + "/" +
+  memEl.innerHTML = statDot(mem.percent) + key("MEM") + gb(mem.used_mb) + "/" +
                     Math.round((mem.total_mb || 0) / 1024) + "G";
   memEl.title = `memory ${mem.percent ?? 0}% used`;
 
@@ -405,14 +476,14 @@ function renderStats() {
   // box. One per core is a full queue, so that is where the dot reaches red.
   const load = st.load || {};
   const loadEl = $("#load");
-  loadEl.innerHTML = statDot((load.ratio || 0) * 100) + "load " + (load.one ?? 0).toFixed(2);
+  loadEl.innerHTML = statDot((load.ratio || 0) * 100) + key("LOAD") + (load.one ?? 0).toFixed(2);
   loadEl.title = `${load.one} / ${load.five} / ${load.fifteen} over ${load.cores} cores`;
 
   // Disk is the quietest way to lose an afternoon here: everything starts
   // failing in ways that never mention disk.
   const disk = st.disk || {};
   const diskEl = $("#disk");
-  diskEl.innerHTML = statDot(disk.percent) + "disk " + (disk.free_gb ?? 0) + "G free";
+  diskEl.innerHTML = statDot(disk.percent) + key("DISK") + (disk.free_gb ?? 0) + "G free";
   diskEl.title = `disk ${disk.percent ?? 0}% used`;
 
   // Any swap in use means memory pressure already happened, so it only
@@ -421,7 +492,7 @@ function renderStats() {
   const swap = st.swap || {};
   const swapEl = $("#swap");
   swapEl.hidden = !(swap.used_mb > 0);
-  swapEl.innerHTML = statDot(Math.max(swap.percent || 0, 70)) + "swap " + gb(swap.used_mb) + "G";
+  swapEl.innerHTML = statDot(Math.max(swap.percent || 0, 70)) + key("SWAP") + gb(swap.used_mb) + "G";
   swapEl.title = `swap ${swap.percent ?? 0}% used — memory pressure has already happened`;
 
   $("#clients").innerHTML = '<i class="dot" style="background:var(--ok)"></i>' + (st.clients ?? 0);

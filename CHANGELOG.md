@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.28.3 — 2026-08-19 12:56 PDT
+
+**The version in the corner tells you when there is something new**, and takes
+you to it. A changelog nobody opens is a file, not a feature — so the running
+version grows a small dot when it is not the release whose notes were last
+read, and clicking goes straight to them. Seeded on first load, so a fresh
+install does not arrive already claiming to have news.
+
+**`CPU`, `MEM`, `SWAP`, `DISK`, `LOAD`** — the stat labels were lower case, and
+four of the five are acronyms, so it read as wrong before it read as anything.
+The values keep their own case: "138.1G free" is a sentence, not a label.
+
+**Fixed: the test suite pointed at a file that no longer exists.**
+`tools/smoke.py` named `config/clis.toml` by hand, and when the catalogue moved
+into the package in 0.28.0 it kept passing locally against a stale copy left on
+disk while CI — which has no stale copy — failed. It now asks the same function
+the app asks, so there is one answer and it cannot rot again. That is the
+better lesson: a path written down twice is a path that will disagree with
+itself.
+
 ## 0.28.2 — 2026-08-19 12:45 PDT
 
 **A clock, a tip, and the notification link actually works.**

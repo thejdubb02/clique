@@ -15,7 +15,7 @@
 <meta property="og:url" content="https://useclique.dev/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="site.css?v=7">
+<link rel="stylesheet" href="site.css?v=8">
 
 <div class="page">
   <header>
@@ -33,75 +33,77 @@
   </header>
 
   <section class="hero">
-    <div class="copy">
-      <h1>A folder for every CLI on the box.</h1>
-      <p class="lede">Coding sessions in a browser, kept alive in tmux. Claude, Grok, Gemini, Codex, or anything you add in four lines. Self-host is free forever. A paid option is coming if you’d rather not run the setup.</p>
+    <p class="kicker">self-hosted · MIT · 24 MB · no telemetry</p>
+    <h1>A <em>folder</em> for every CLI on the box.</h1>
+    <p class="lede">Coding sessions in a browser, kept alive in tmux. Claude, Grok, Gemini, Codex, or anything you add in four lines. Self-host is free forever. A paid option is coming if you’d rather not run the setup.</p>
 
-      <div class="run">
-        <div class="run-head">
-          <span>On your machine</span>
-          <button type="button" class="copybtn" hidden>Copy</button>
-        </div>
-<pre id="install"><code>git clone https://github.com/thejdubb02/clique.git
+    <div class="run">
+      <div class="run-head">
+        <span class="host">clique @ 127.0.0.1:3200</span>
+        <button type="button" class="copybtn" hidden data-copy="git clone https://github.com/thejdubb02/clique.git
 cd clique
 python3 -m clique password
-python3 -m clique</code></pre>
-        <p class="then">Then <code>http://127.0.0.1:3200</code>. Python 3.11+ and tmux. Nothing else.</p>
+python3 -m clique">Copy</button>
       </div>
+<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
+<span class="ps">$</span> cd clique
+<span class="ps">$</span> python3 -m clique password
+<span class="ps">$</span> python3 -m clique</code></pre>
     </div>
+    <p class="then">Python 3.11+ and tmux. Nothing else. Then open <code>http://127.0.0.1:3200</code>.</p>
+  </section>
 
-    <figure class="shot" aria-label="CLIque: folders of CLI sessions on the left, a terminal on the right. A ring around each logo shows working, waiting, or idle.">
-      <div class="app">
-        <aside>
-          <div class="ah">
-            <img src="brand/mark.svg" width="13" height="13" alt="">
-            <span>CLIque</span>
+  <figure class="shot" aria-label="CLIque: folders of CLI sessions on the left, a terminal on the right. A ring around each logo shows working, waiting, or idle.">
+    <div class="app">
+      <aside>
+        <div class="ah">
+          <img src="brand/mark.svg" width="13" height="13" alt="">
+          <span>CLIque</span>
+        </div>
+        <div class="search">Search sessions…</div>
+        <div class="tree">
+          <div class="fold">Work</div>
+          <div class="sess on">
+            <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(icons/claude.svg);mask-image:url(icons/claude.svg)"></i></span>
+            <span class="meta"><b>auth rewrite</b><small>~/proj/api</small></span>
           </div>
-          <div class="search">Search sessions…</div>
-          <div class="tree">
-            <div class="fold">Work</div>
-            <div class="sess on">
-              <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(icons/claude.svg);mask-image:url(icons/claude.svg)"></i></span>
-              <span class="meta"><b>auth rewrite</b><small>~/proj/api</small></span>
-            </div>
-            <div class="sess">
-              <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(icons/grok.svg);mask-image:url(icons/grok.svg)"></i></span>
-              <span class="meta"><b>landing page</b><small>~/proj/site</small></span>
-            </div>
-            <div class="sess">
-              <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(icons/gemini.svg);mask-image:url(icons/gemini.svg)"></i></span>
-              <span class="meta"><b>migrations</b><small>~/proj/db</small></span>
-            </div>
-            <div class="fold">Home</div>
-            <div class="sess">
-              <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(icons/codex.svg);mask-image:url(icons/codex.svg)"></i></span>
-              <span class="meta"><b>weekly notes</b><small>~/notes</small></span>
-            </div>
+          <div class="sess">
+            <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(icons/grok.svg);mask-image:url(icons/grok.svg)"></i></span>
+            <span class="meta"><b>landing page</b><small>~/proj/site</small></span>
           </div>
-        </aside>
-        <div class="pane">
-          <div class="tabs">
-            <div class="tab active" style="--cli:#D97757">auth rewrite</div>
-            <div class="tab">landing page</div>
-            <div class="plus">+</div>
-            <div class="stats">cpu 12% · mem 24 MB</div>
+          <div class="sess">
+            <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(icons/gemini.svg);mask-image:url(icons/gemini.svg)"></i></span>
+            <span class="meta"><b>migrations</b><small>~/proj/db</small></span>
           </div>
-          <div class="term">
-            <div class="tline dim">claude · ~/proj/api · waiting on you</div>
-            <div class="tline">I’ll stop here. The session store looks right;</div>
-            <div class="tline">the middleware still lets a stale cookie through.</div>
-            <div class="tline"></div>
-            <div class="tline">Want me to patch <span class="file">app/auth.py</span>, or talk it through first?</div>
-            <div class="caret">▍</div>
-          </div>
-          <div class="bar">
-            <span class="field">Type a prompt, or a shell command…</span>
-            <span class="runbtn">Run</span>
+          <div class="fold">Home</div>
+          <div class="sess">
+            <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(icons/codex.svg);mask-image:url(icons/codex.svg)"></i></span>
+            <span class="meta"><b>weekly notes</b><small>~/notes</small></span>
           </div>
         </div>
+      </aside>
+      <div class="pane">
+        <div class="tabs">
+          <div class="tab active" style="--cli:#D97757">auth rewrite</div>
+          <div class="tab">landing page</div>
+          <div class="plus">+</div>
+          <div class="stats">cpu 12% · mem 24 MB</div>
+        </div>
+        <div class="term">
+          <div class="tline dim">claude · ~/proj/api · waiting on you</div>
+          <div class="tline">I’ll stop here. The session store looks right;</div>
+          <div class="tline">the middleware still lets a stale cookie through.</div>
+          <div class="tline"></div>
+          <div class="tline">Want me to patch <span class="file">app/auth.py</span>, or talk it through first?</div>
+          <div class="caret">▍</div>
+        </div>
+        <div class="bar">
+          <span class="field">Type a prompt, or a shell command…</span>
+          <span class="runbtn">Run</span>
+        </div>
       </div>
-    </figure>
-  </section>
+    </div>
+  </figure>
 
   <section class="tracks">
     <div>
@@ -130,6 +132,47 @@ color   = "#E8E8E8"</code></pre>
     <p class="then">Reload the page. If adding one ever needs a code change, the design has failed.</p>
   </section>
 
+  <section class="faq">
+    <h2>Questions</h2>
+    <details>
+      <summary>Do I have to put it on the internet?</summary>
+      <p>No. It binds loopback. Put a tunnel in front if you want it from another machine. Don’t hang it on the public internet — anyone who reaches the panel has a terminal as you.</p>
+    </details>
+    <details>
+      <summary>What does it cost?</summary>
+      <p>Self-host is free forever, MIT. A paid option is coming for people who don’t want to run the setup. The panel still runs on a machine you control.</p>
+    </details>
+    <details>
+      <summary>What do I need?</summary>
+      <p>Python 3.11+ and tmux. Nothing else. No Node, no Docker, no account.</p>
+    </details>
+    <details>
+      <summary>How do I add another coding CLI?</summary>
+      <p>Four lines in config. Reload the page. If it ever needs a code change, the design has failed.</p>
+    </details>
+  </section>
+
+  <section class="get">
+    <h2>Your box. Your CLIs. One panel.</h2>
+    <div class="run">
+      <div class="run-head">
+        <span class="host">clique @ 127.0.0.1:3200</span>
+        <button type="button" class="copybtn" hidden data-copy="git clone https://github.com/thejdubb02/clique.git
+cd clique
+python3 -m clique password
+python3 -m clique">Copy</button>
+      </div>
+<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
+<span class="ps">$</span> cd clique
+<span class="ps">$</span> python3 -m clique password
+<span class="ps">$</span> python3 -m clique</code></pre>
+    </div>
+    <p class="then"><a class="btn-gh" href="https://github.com/thejdubb02/clique" rel="noopener">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>
+      View on GitHub
+    </a></p>
+  </section>
+
   <footer>
     <p><a href="https://github.com/thejdubb02/clique">github.com/thejdubb02/clique</a> · MIT · <a href="https://github.com/thejdubb02">Justin Willhite</a></p>
     <p><a href="https://buymeacoffee.com/jdubb">Buy me a coffee</a> if it saved you an afternoon.</p>
@@ -138,14 +181,14 @@ color   = "#E8E8E8"</code></pre>
 
 <script>
 (function () {
-  var btn = document.querySelector(".copybtn");
-  var pre = document.getElementById("install");
-  if (!btn || !pre || !navigator.clipboard) return;
-  btn.hidden = false;
-  btn.addEventListener("click", function () {
-    navigator.clipboard.writeText(pre.innerText.trim()).then(function () {
-      btn.textContent = "Copied";
-      setTimeout(function () { btn.textContent = "Copy"; }, 1400);
+  document.querySelectorAll(".copybtn").forEach(function (btn) {
+    if (!navigator.clipboard) return;
+    btn.hidden = false;
+    btn.addEventListener("click", function () {
+      navigator.clipboard.writeText(btn.getAttribute("data-copy") || "").then(function () {
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = "Copy"; }, 1400);
+      });
     });
   });
 })();

@@ -119,6 +119,10 @@ DEFAULT_SETTINGS = {
     #: person's palette is another person's invisible-on-their-theme.
     #: {"claude": "#d97757"}. An empty entry means "use the shipped one".
     "cli_colors": {},
+    #: The newest release whose notes have actually been looked at. Seeded to
+    #: whatever is running the first time a panel loads, so a fresh install
+    #: does not open wearing a badge about its own arrival.
+    "changelog_seen": "",
     #: An IANA zone for the clock on the empty pane — "Europe/Lisbon". Empty
     #: means the browser's own, which is right for most people and wrong for
     #: anyone whose box lives in a different country from they do.
@@ -433,6 +437,8 @@ class Store:
                     # http(s) only. A file: or a gopher: here would be someone
                     # using the notifier to make the server fetch something.
                     self.settings[key] = value if value.startswith(("http://", "https://")) else ""
+                elif key == "changelog_seen":
+                    self.settings[key] = str(value or "")[:32]
                 elif key == "clock_zone":
                     # Validated against the system's own zone database rather
                     # than a length check: a name that is not a real zone would
