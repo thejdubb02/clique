@@ -220,14 +220,17 @@
       <label class="check"><input type="checkbox" id="setTabsMarkers"> Tab bar</label>
       <label class="check"><input type="checkbox" id="setSidebar"> Sidebar</label>
 
-      <h3>Status dot</h3>
+      <h3>Status</h3>
       <label class="check"><input type="checkbox" id="setStatusOnIcon">
-        Let the CLI icon carry the status colour</label>
-      <p class="note">One mark instead of two: the <em>shape</em> tells you
-         which CLI it is, the <em>colour</em> tells you how it is doing. The
-         separate dot comes back automatically wherever there is no icon to
-         carry it — a CLI set to <strong>None</strong>, or markers turned off
-         here — because losing status entirely would be the worse trade.</p>
+        Show status as a ring around the CLI icon</label>
+      <p class="note">The logo keeps its own colours and never changes — the
+         ring around it does the talking. An arc going round means
+         <em>working</em>, a steady pulsing ring means <em>finished and waiting
+         for you</em>, and a session that is simply idle draws nothing at all.
+         A stopped one goes grey.</p>
+      <p class="note">The separate dot comes back automatically wherever there
+         is no icon to carry it — a CLI set to <strong>None</strong>, or markers
+         turned off here — and says the same four things.</p>
       <h3>Per CLI</h3>
       <p class="note"><strong>Both</strong> is the icon tinted in the CLI's colour.
          <strong>Icon</strong> is the same shape in grey.

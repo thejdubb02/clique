@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.24.0 — 2026-08-19 11:21 PDT
+
+**The logo stays the logo. The ring around it says how the session is doing.**
+
+Status used to be painted onto the CLI's own mark: Claude's icon rendered in
+whatever colour the session happened to be, and a busy one faded in and out.
+That spent the one thing on a row you could identify without reading — and it
+was reporting whether a browser was attached, which is not what anyone wants to
+know.
+
+Four states now, and only three of them draw anything:
+
+- **working** — an arc turning around the icon
+- **waiting** — finished and not looked at yet: a steady ring, pulsing
+- **idle** — alive and quiet, and it draws *nothing*. Most sessions are fine
+  most of the time, and twenty marks all saying "fine" is twenty things to look
+  past on the way to the one that is not.
+- **stopped** — the mark goes grey and the ring goes away
+
+Only rotation and opacity animate, so the whole thing is composited and costs
+nothing; `prefers-reduced-motion` keeps every state distinguishable and stops
+the movement. Each ring carries its own label for a screen reader and a
+tooltip, because a signal only sighted people receive is half a signal.
+
+"Working" is held for a few seconds after the last output. The server reports
+output in the last two seconds and the panel asks every three, so a CLI writing
+in bursts used to flicker — and an indicator that blinks twice a second is
+worse than none.
+
 ## 0.23.0 — 2026-08-19 11:17 PDT
 
 **An agent takes a screenshot; now you can look at it.**

@@ -78,6 +78,48 @@ function ago(epoch) {
  * is alive and watched; the marker says which CLI it is. Folding them together
  * would mean turning icons off also cost you the ability to see what is
  * running, which is not a trade anyone asked for. */
+/* What a session is *doing*, which is not the same as whether it is attached.
+ *
+ * Four states, and only three of them draw anything:
+ *
+ *   working  — output is arriving
+ *   waiting  — it stopped and has not been looked at: the one that wants you
+ *   idle     — alive and quiet and read. Draws nothing, because most sessions
+ *              are in this state most of the time and a sidebar of twenty
+ *              indicators saying "fine" is a sidebar of noise.
+ *   stopped  — the process is gone
+ *
+ * `busy` from the server is "output within the last two seconds", polled every
+ * three, so a CLI that writes in bursts flickers between busy and not. A
+ * spinner that blinks on and off twice a second is worse than no spinner, so
+ * the working state is held briefly after the last burst — long enough to
+ * bridge the gaps in ordinary output, short enough that a finished session
+ * still settles within a poll or two. */
+const BUSY_HOLD_MS = 6000;
+const busyUntil = new Map();   // id -> when its indicator may stop spinning
+
+function noteBusy(sessions) {
+  const now = Date.now();
+  for (const s of sessions) {
+    if (s.busy) busyUntil.set(s.id, now + BUSY_HOLD_MS);
+  }
+  // A session that has gone away should not keep a timer alive with it.
+  for (const id of [...busyUntil.keys()]) {
+    if (!sessions.some((s) => s.id === id)) busyUntil.delete(id);
+  }
+}
+
+function workState(s) {
+  if (!s) return "idle";
+  if (!s.alive) return "stopped";
+  if (s.busy || (busyUntil.get(s.id) || 0) > Date.now()) return "working";
+  if (attention.has(s.id)) return "waiting";
+  // Unread deliberately does *not* appear here. It already has a mark of its
+  // own beside the name, and one fact drawn twice is how a row stops being
+  // readable at a glance.
+  return "idle";
+}
+
 function markerFor(item, mode) {
   if (mode === "none") return "";
   if (mode === "color") return `<i class="cli-chip" style="background:${item.color}"></i>`;
@@ -118,21 +160,21 @@ function sessionMarker(s, where) {
                               : state.settings.markers_in_sidebar;
   if (on === false) return "";
   const mode = markerMode(s.cli);
-  // When the icon carries status, the CLI's own colour steps aside: shape
-  // already says which CLI it is, so colour is free to say how it is doing.
-  const carries = statusOnIcon(s);
-  const item = { color: carries ? statusColor(s) : s.color,
-                 icon: s.icon, icon_full_color: s.icon_full_color,
+  const item = { color: s.color, icon: s.icon, icon_full_color: s.icon_full_color,
                  label: s.cli_label, cli: s.cli };
-  const drawn = markerFor(item, carries && mode === "icon" ? "both" : mode);
+  const drawn = markerFor(item, mode);
+  if (!drawn) return "";
 
-  // A multi-colour logo keeps its own colours and wears the status as a ring.
-  // Tinting it would flatten it to a solid square; adding a dot beside it
-  // would be two marks for one session.
-  if (carries && s.icon_full_color && mode !== "color" && drawn) {
-    return `<span class="cli-ring" style="--ring:${statusColor(s)}">${drawn}</span>`;
-  }
-  return drawn;
+  /* A logo is a logo. It used to be recoloured to say how the session was
+   * doing, which meant Claude's mark was not Claude's colour and the one
+   * thing on the row you could identify at a glance stopped being reliable.
+   * Shape *and* colour say which CLI it is; the ring around it says how it is
+   * doing, and motion in that ring says it is working. Two facts, two places,
+   * neither one borrowing the other's channel. */
+  if (!statusOnIcon(s)) return drawn;
+  const work = workState(s);
+  return `<span class="cli-status" data-work="${work}" role="img"` +
+         ` aria-label="${WORK_WORDS[work]}" title="${WORK_WORDS[work]}">${drawn}</span>`;
 }
 
 /* Whether this session's marker is standing in for the status dot.
@@ -152,13 +194,21 @@ function statusDot(s, where) {
   const on = where === "tabs" ? state.settings.markers_in_tabs
                               : state.settings.markers_in_sidebar;
   if (on !== false && statusOnIcon(s)) return "";
-  return `<i class="dot" style="background:${statusColor(s)}"></i>`;
+  // Same five states as the ring: with no marker to carry them, the dot is
+  // what is left, and it should not be saying something different.
+  const work = workState(s);
+  return `<i class="dot" data-work="${work}" role="img"` +
+         ` aria-label="${WORK_WORDS[work]}" title="${WORK_WORDS[work]}"></i>`;
 }
 
-function statusColor(s) {
-  if (!s.alive) return "var(--dead)";
-  return s.attached ? "var(--ok)" : "var(--warn)";
-}
+/* Said out loud, for a tooltip and for a screen reader. A ring that only means
+ * something to people who can see it is half a signal. */
+const WORK_WORDS = {
+  working: "working",
+  waiting: "finished, waiting for you",
+  idle: "idle",
+  stopped: "stopped",
+};
 
 /* --------------------------------------------------------------------- state */
 
@@ -255,6 +305,7 @@ async function refresh() {
   openTabs = openTabs.filter((id) => session(id));
   if (!workspaceRestored) restoreWorkspace();   // before the first render
   applySettings();
+  noteBusy(state.sessions);   // before anything renders a work state
   noticeFinished(state.sessions.filter((x) => openTabs.includes(x.id)));
   renderTree();
   renderTabs();
@@ -457,8 +508,8 @@ function renderTree() {
   for (const s of state.sessions.filter((x) => x.alive)) {
     const dot = document.createElement("i");
     dot.className = "dot";
-    dot.style.background = statusColor(s);
-    dot.title = s.name;
+    dot.dataset.work = workState(s);
+    dot.title = s.name + " — " + WORK_WORDS[dot.dataset.work];
     dot.onclick = () => openSession(s.id);
     dots.appendChild(dot);
   }
