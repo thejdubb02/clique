@@ -1108,6 +1108,78 @@ async function pasteImages(items) {
   return true;
 }
 
+/* Clickable URLs in the pane.
+ *
+ * Written here rather than vendoring xterm's web-links addon: the API this
+ * needs is already exposed, the whole thing is forty lines, and one more
+ * vendored file is one more version to keep in step with the core for a
+ * feature this size.
+ *
+ * Only http and https. A terminal prints whatever a program sends it, so the
+ * text on screen is not trustworthy input — `javascript:` and `file:` are the
+ * two that would matter and neither is matched or opened. */
+const LINK_RE = /\bhttps?:\/\/[^\s"'`<>]+/g;
+
+/* Trailing punctuation almost always belongs to the sentence, not the URL:
+ * "see https://example.com/docs." and "(https://example.com)". Brackets are
+ * only trimmed when unbalanced, so a Wikipedia URL ending in ")" survives. */
+function trimUrl(text) {
+  let out = text;
+  while (out.length > 1) {
+    const last = out[out.length - 1];
+    if (".,;:!?'\"".includes(last)) { out = out.slice(0, -1); continue; }
+    if (last === ")" && (out.match(/\(/g) || []).length < (out.match(/\)/g) || []).length) {
+      out = out.slice(0, -1); continue;
+    }
+    if (last === "]" && (out.match(/\[/g) || []).length < (out.match(/]/g) || []).length) {
+      out = out.slice(0, -1); continue;
+    }
+    break;
+  }
+  return out;
+}
+
+function openLink(url, newWindow) {
+  // Re-checked at the point of opening, not only at the point of matching.
+  if (!/^https?:\/\//i.test(url)) return;
+  // Naming a size is what makes a browser give you a window rather than a
+  // tab; without it "_blank" is a tab either way.
+  const how = newWindow
+    ? "noopener,noreferrer,popup=yes,width=1200,height=860"
+    : "noopener,noreferrer";
+  window.open(url, "_blank", how);
+}
+
+function wireLinks(term) {
+  if (!term.registerLinkProvider) return;   // older core: links simply stay text
+  term.registerLinkProvider({
+    provideLinks(lineNumber, callback) {
+      const line = term.buffer.active.getLine(lineNumber - 1);
+      if (!line) return callback(undefined);
+      const text = line.translateToString(true);
+      const links = [];
+      LINK_RE.lastIndex = 0;
+      let match;
+      while ((match = LINK_RE.exec(text)) !== null) {
+        const url = trimUrl(match[0]);
+        if (!url) continue;
+        links.push({
+          // xterm columns are 1-based and the end is inclusive.
+          range: { start: { x: match.index + 1, y: lineNumber },
+                   end: { x: match.index + url.length, y: lineNumber } },
+          text: url,
+          decorations: { underline: true, pointerCursor: true },
+          activate(event, uri) {
+            // A plain click opens a tab; Ctrl (Cmd on a Mac) opens a window.
+            openLink(uri, event.ctrlKey || event.metaKey);
+          },
+        });
+      }
+      callback(links.length ? links : undefined);
+    },
+  });
+}
+
 /* Artifacts — the other direction of paste.
  *
  * Ctrl+V already gets an image *to* an agent: the browser holds the bytes, the
@@ -1721,6 +1793,7 @@ async function attach(id) {
   term.loadAddon(fit);
   term.open(host);
   fit.fit();
+  wireLinks(term);
 
   /* The pane owns the keyboard — deliberately, and that is why tabs are
    * Alt+1..9 rather than plain digits. The palette is the single exception,

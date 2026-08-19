@@ -12,7 +12,7 @@
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/thejdubb02/clique/actions/workflows/tests.yml"><img src="https://github.com/thejdubb02/clique/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.27.0-A855F7?style=flat-square" alt="0.27.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.27.1-A855F7?style=flat-square" alt="0.27.1"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
   <a href="https://buymeacoffee.com/jdubb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
   <a href="#support-the-dev"><img src="https://img.shields.io/badge/Donate-BTC%20%7C%20SHIB%20%7C%20DOGE-5FA8F5?style=flat-square" alt="Donate"></a>
@@ -41,6 +41,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **Folders** | A tree. Drag-drop, double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). |
 | **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Closing a tab is not killing the session — tmux and the CLI keep running. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. |
+| **Links** | URLs in the pane are clickable — a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. |
 | **Scroll lock** | Scroll up and the view detaches from the stream. A badge says how far behind you are; the bottom, the lock, or `Ctrl`/`Cmd`+`Shift`+`L` catches you up. |
 | **Paste a screenshot** | `Ctrl`/`Cmd`+`V` saves the image into the session's own directory and drops the path where you were typing. Nothing is sent until you press enter. |
 | **See what it made** | An agent writes a screenshot into the session's directory and a count appears in the tab bar. Grid, full size, and the path back into your prompt in one click. |

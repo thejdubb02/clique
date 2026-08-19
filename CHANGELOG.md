@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.27.1 — 2026-08-19 12:29 PDT
+
+**URLs in the pane are clickable.** A click opens a new tab; `Ctrl`/`Cmd` and a
+click opens a new window.
+
+Written rather than vendored: xterm already exposes the API this needs, the
+whole thing is forty lines, and one more vendored file is one more version to
+keep in step with the core for a feature this size.
+
+`http` and `https` only, checked when matching and again when opening. A
+terminal prints whatever a program sends it, so what is on screen is not
+trustworthy input — `javascript:` and `file:` are the two that would matter,
+and neither is matched or opened. Trailing punctuation is trimmed because it
+belongs to the sentence, but brackets only when unbalanced, so a Wikipedia URL
+ending in `)` still works.
+
 ## 0.27.0 — 2026-08-19 12:26 PDT
 
 **It can reach you with the panel shut.**
