@@ -310,9 +310,9 @@ h2 {
   border-radius: 4px;
 }
 
-.facts {
+.tracks {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
   margin: 2.4rem 0 0;
   padding: 1.4rem 0 0;
@@ -320,7 +320,18 @@ h2 {
   color: var(--dim);
   font-size: .95rem;
 }
-.facts b { color: var(--fg); font-weight: 650; display: block; margin-bottom: .25rem; }
+.tracks b, .facts b { color: var(--fg); font-weight: 650; display: block; margin-bottom: .25rem; }
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1.6rem 0 0;
+  padding: 1.4rem 0 0;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font-size: .95rem;
+}
 
 .cfg {
   margin-top: 2rem;
@@ -354,7 +365,7 @@ footer p { margin: 0 0 .35rem; }
   .hero { grid-template-columns: 1fr; gap: 1.4rem; }
   .shot { height: 360px; order: -1; }
   .copy { order: 1; }
-  .facts { grid-template-columns: 1fr; gap: .9rem; }
+  .tracks, .facts { grid-template-columns: 1fr; gap: .9rem; }
 }
 
 @media (max-width: 640px) {
