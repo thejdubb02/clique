@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import __version__, sysinfo, tmux
-from .auth import Auth, login_page
+from .auth import Auth, landing_page, login_page
 from .registry import Registry, RegistryError
 from .store import Session, Store, new_id
 from .stream import PtyBridge
@@ -277,9 +277,10 @@ class Handler(BaseHTTPRequestHandler):
                                   "text/html; charset=utf-8")
             token = self.panel.auth.issue()
             cookie = self.panel.auth.cookie_header(token, self._secure())
-            return self._send(303, b"", "text/plain",
-                              {"Location": self.headers.get("Referer") or "./",
-                               "Set-Cookie": cookie})
+            # 200 with a landing page, not a 3xx. See auth.LANDING for why a
+            # Location header cannot be made correct from inside this process.
+            return self._send(200, landing_page(), "text/html; charset=utf-8",
+                              {"Set-Cookie": cookie})
 
         if not self._authed:
             return self._json({"error": "unauthorized"}, 401)

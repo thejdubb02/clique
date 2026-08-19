@@ -106,6 +106,21 @@ LOGIN_PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>muxpanel</title>
+<script>
+  // muxpanel is mounted under /mux by `tailscale serve`, which strips the
+  // prefix before the request arrives — so the server genuinely believes it is
+  // at the root and cannot build a correct absolute URL. Only the browser knows
+  // where this page lives, which is why the form target is resolved here.
+  //
+  // Without it, signing in from ".../mux" (no trailing slash) posted to "/" and
+  // the redirect landed on Codeman, which is exactly what it looked like: the
+  // panel "opening Codeman".
+  (function () {
+    var path = location.pathname;
+    if (!path.endsWith("/")) path += "/";
+    document.write('<base href="' + path.replace(/"/g, "") + '">');
+  })();
+</script>
 <style>
   :root { color-scheme: dark; }
   body { margin:0; min-height:100vh; display:grid; place-items:center;
@@ -121,7 +136,7 @@ LOGIN_PAGE = """<!doctype html>
   button { padding:9px; background:#0078d4; color:#fff; border:0; cursor:pointer; }
   .err { color:#f85149; font-size:13px; margin:0 0 12px; }
 </style>
-<form method="post">
+<form method="post" action="./">
   <h1>muxpanel</h1>
   <p>Sign in to reach your sessions.</p>
   __ERROR__
@@ -136,3 +151,33 @@ LOGIN_PAGE = """<!doctype html>
 def login_page(error: str = "") -> bytes:
     marker = f'<p class="err">{error}</p>' if error else ""
     return LOGIN_PAGE.replace("__ERROR__", marker).encode()
+
+
+#: Served on a successful login instead of a 3xx.
+#:
+#: A Location header is resolved by the browser against the request URL, and
+#: the server cannot help it: `tailscale serve` strips the /mux prefix, so this
+#: process genuinely believes it is mounted at the root. From ".../mux" a
+#: relative "./" resolves to "/" — the site root, which is Codeman. That is not
+#: a redirect we can fix from here with any value.
+#:
+#: So the landing is done in the browser, which is the only party that knows
+#: the real path, and it normalises the trailing slash on the way.
+LANDING = """<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>muxpanel</title>
+<script>
+  (function () {
+    var path = location.pathname;
+    if (!path.endsWith("/")) path += "/";
+    location.replace(path);
+  })();
+</script>
+<noscript>Signed in. <a href="./">Continue</a></noscript>
+</html>
+"""
+
+
+def landing_page() -> bytes:
+    return LANDING.encode()
