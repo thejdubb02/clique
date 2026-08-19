@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.1 — 2026-08-19
+
+Marks beside each support option — a coin glyph in each project's colours, and
+a cup for Buy Me a Coffee. Drawn inline rather than fetched: no build step, no
+CDN, and nothing to 404 on a box with no route to the internet. They are our
+own glyphs rather than the projects' official logos, which keeps someone else's
+trademarked artwork out of a repo that is about to go public.
+
 ## 0.16.0 — 2026-08-19
 
 **A tip jar, in About and on the repo page.** CLIque is free and staying that

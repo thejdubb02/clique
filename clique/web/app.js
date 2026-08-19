@@ -913,15 +913,24 @@ function toast(text, bad) {
 /* An address is money, so it is never truncated and never retyped: shown in
  * full, wrapping, with one click to copy. A chain address typed wrong does not
  * bounce — it just loses whatever was sent. */
+/* The marks are drawn here rather than fetched: no build step, no CDN, and
+ * nothing to 404 on a box with no way out to the internet. They are our own
+ * glyphs in each project's colours, not the projects' official logos — which
+ * keeps someone else's trademarked artwork out of a repo that is going
+ * public. */
 const SUPPORT = [
   { label: "Buy me a coffee", detail: "buymeacoffee.com/jdubb",
-    href: "https://buymeacoffee.com/jdubb" },
+    href: "https://buymeacoffee.com/jdubb",
+    icon: '<svg viewBox="0 0 32 32" class="give-icon" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#FFDD00"/><path d="M8.8 11.6h13.1l-1.2 10a3.4 3.4 0 0 1-3.4 3h-4a3.4 3.4 0 0 1-3.4-3z" fill="#0d0d0d"/><path d="M22.2 13.6h1.3a2.9 2.9 0 0 1 0 5.8h-.8" fill="none" stroke="#0d0d0d" stroke-width="1.7" stroke-linecap="round"/><g stroke="#0d0d0d" stroke-width="1.5" stroke-linecap="round"><path d="M13 6.4c-.9 1 -.9 2 0 3"/><path d="M17.4 6.4c-.9 1 -.9 2 0 3"/></g></svg>' },
   { label: "BTC", detail: "Bitcoin network",
-    address: "3A3nA8BQFmXdvyUQokHhPd8HAd99wRDYFQ" },
+    address: "3A3nA8BQFmXdvyUQokHhPd8HAd99wRDYFQ",
+    icon: '<svg viewBox="0 0 32 32" class="give-icon" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#F7931A"/><g fill="#fff"><rect x="12.1" y="5.2" width="1.9" height="4.2" rx=".8"/><rect x="16.1" y="5.2" width="1.9" height="4.2" rx=".8"/><rect x="12.1" y="22.6" width="1.9" height="4.2" rx=".8"/><rect x="16.1" y="22.6" width="1.9" height="4.2" rx=".8"/><text x="15.6" y="23" text-anchor="middle" font-size="16.5" font-weight="700" font-family="ui-sans-serif, Helvetica, Arial, sans-serif">B</text></g></svg>' },
   { label: "SHIB", detail: "Ethereum network",
-    address: "0x6b5DEd92946692D50642dC3af169727225E32D3b" },
+    address: "0x6b5DEd92946692D50642dC3af169727225E32D3b",
+    icon: '<svg viewBox="0 0 32 32" class="give-icon" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#F00500"/><text x="16" y="22.6" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="ui-sans-serif, Helvetica, Arial, sans-serif">S</text></svg>' },
   { label: "DOGE", detail: "Dogecoin network",
-    address: "DNiJeUJUVaVTDuteLXCtP7JVgvdL2NqoYp" },
+    address: "DNiJeUJUVaVTDuteLXCtP7JVgvdL2NqoYp",
+    icon: '<svg viewBox="0 0 32 32" class="give-icon" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#C2A633"/><text x="16" y="23" text-anchor="middle" fill="#fff" font-size="17" font-weight="700" font-family="ui-sans-serif, Helvetica, Arial, sans-serif">&#208;</text></svg>' },
 ];
 
 function renderSupport() {
@@ -932,7 +941,8 @@ function renderSupport() {
     const row = document.createElement("div");
     row.className = "give";
     row.innerHTML =
-      `<div class="give-head"><b>${escapeHtml(item.label)}</b>` +
+      `<div class="give-head">${item.icon || ""}` +
+      `<b>${escapeHtml(item.label)}</b>` +
       `<span class="note">${escapeHtml(item.detail)}</span></div>`;
     if (item.href) {
       const a = document.createElement("a");
