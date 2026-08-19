@@ -263,11 +263,33 @@ button.primary:hover { filter: brightness(1.1); }
 
 #settings { position: fixed; inset: 0; background: #000a; display: grid;
             place-items: center; z-index: 45; }
+/* Fixed box, scrolling inside.
+ *
+ * The dialog used to size itself to whichever tab was open, so every tab
+ * switch resized and re-centred it — the content jumped under the cursor and
+ * the tab strip moved out from under the pointer that had just clicked it. A
+ * settings dialog should be furniture: same place, same size, always.
+ *
+ * So: the sheet is a fixed-height flex column, the header and tab strip are
+ * fixed rows, and only the pane area scrolls. */
 #settings .sheet {
-  width: min(520px, 94vw); max-height: 86vh; overflow-y: auto;
+  width: min(560px, 94vw);
+  height: min(640px, 86vh);
+  display: flex;
+  flex-direction: column;
   background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 18px;
 }
+#settings .panes {
+  flex: 1;
+  min-height: 0;              /* without this a flex child refuses to shrink */
+  overflow-y: auto;
+  /* Reserve the scrollbar's width whether or not it is showing, so a short
+     tab and a long one lay out identically instead of shifting 15px. */
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+#settings .pane { padding-bottom: 4px; }
 #settings h2 { margin: 0 0 16px; font-size: 14px; font-weight: 600; }
 #settings h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .07em;
                text-transform: uppercase; color: var(--dim); font-weight: 600; }
@@ -276,17 +298,47 @@ button.primary:hover { filter: brightness(1.1); }
 #settings .check { display: inline-flex; align-items: center; gap: 6px;
                    margin-right: 16px; cursor: pointer; }
 
-.cli-rows { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
-.cli-row { display: flex; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 3px; }
+/* A grid, not a flex row, so every row is the same height and the three
+   columns line up down the list. As a flex row the label column got squeezed
+   by the select and names wrapped onto two lines — which made rows different
+   heights and the whole list look accidental. */
+.cli-rows { display: flex; flex-direction: column; gap: 1px; margin-top: 10px; }
+.cli-row {
+  display: grid;
+  grid-template-columns: 16px 1fr 104px;
+  align-items: center;
+  gap: 10px;
+  height: 32px;               /* fixed: a "not installed" tag must not add height */
+  padding: 0 6px;
+  border-radius: 3px;
+}
 .cli-row:hover { background: var(--row); }
-.cli-row .preview { width: 14px; display: grid; place-items: center; }
-.cli-row .label { flex: 1; }
+.cli-row .preview { display: grid; place-items: center; }
+.cli-row .label {
+  display: flex; align-items: baseline; gap: 6px;
+  min-width: 0;               /* lets the ellipsis actually engage in a grid */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .cli-row.absent .label { color: var(--dim); }
-.cli-row .tag { font-size: 10px; color: var(--dim); border: 1px solid var(--line);
-                border-radius: 3px; padding: 0 4px; margin-left: 4px; }
-.cli-row select { background: var(--field); color: var(--fg); border: 1px solid transparent;
-                  border-radius: 3px; padding: 3px 6px; font: inherit; }
+.cli-row .tag {
+  flex: 0 0 auto; font-size: 10px; color: var(--dim);
+  border: 1px solid var(--line); border-radius: 3px; padding: 0 4px;
+  line-height: 15px;
+}
+.cli-row select {
+  width: 100%; background: var(--field); color: var(--fg);
+  border: 1px solid transparent; border-radius: 3px; padding: 3px 6px; font: inherit;
+}
 .cli-row select:focus { outline: none; border-color: var(--accent); }
+
+/* Section rhythm: headings need air above them, none below. */
+#settings h3 { margin-top: 22px; }
+#settings .pane > h3:first-child { margin-top: 0; }
+#settings .check { margin-bottom: 6px; }
+
+/* Snippet rows get the same treatment — a fixed first column so the trigger
+   inputs align down the list instead of each row setting its own width. */
+.snippet-row { grid-template-columns: 110px 1fr auto; }
 
 /* -------------------------------------------------------- folder colour picker */
 
@@ -344,11 +396,16 @@ button.primary:hover { filter: brightness(1.1); }
 
 /* --------------------------------------------------------- settings, tabbed */
 
-.sheet-head { display: flex; align-items: center; margin-bottom: 12px; }
+.sheet-head { display: flex; align-items: center; margin-bottom: 12px; flex: 0 0 auto; }
 .sheet-head h2 { flex: 1; margin: 0; }
 
-#settings .tabs { display: flex; gap: 2px; flex-wrap: wrap;
+/* One row, always. Wrapping would change the header's height per tab, which
+   is the same jump this layout exists to remove. */
+#settings .tabs { display: flex; gap: 2px; flex: 0 0 auto; flex-wrap: nowrap;
+                  overflow-x: auto; scrollbar-width: none;
                   border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+#settings .tabs::-webkit-scrollbar { display: none; }
+#settings .tabs button { flex: 0 0 auto; white-space: nowrap; }
 #settings .tabs button {
   background: none; border: 0; color: var(--dim); font: inherit; cursor: pointer;
   padding: 7px 10px; border-bottom: 2px solid transparent; margin-bottom: -1px;
@@ -391,3 +448,17 @@ button.primary:hover { filter: brightness(1.1); }
 .snippet-row .danger { background: none; border: 0; color: var(--err);
                        cursor: pointer; font: inherit; padding: 5px 6px; }
 .snippet-row .danger:hover { text-decoration: underline; }
+
+
+/* Scrollbars inside the sheet, made to match rather than announce themselves. */
+#settings .panes::-webkit-scrollbar { width: 10px; }
+#settings .panes::-webkit-scrollbar-track { background: transparent; }
+#settings .panes::-webkit-scrollbar-thumb {
+  background: var(--line); border-radius: 5px;
+  border: 3px solid var(--panel);   /* inset, so the thumb reads as a hairline */
+}
+#settings .panes::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+#settings .panes { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+/* The last element in a pane should not sit flush against the scroll edge. */
+#settings .pane > *:last-child { margin-bottom: 0; }
