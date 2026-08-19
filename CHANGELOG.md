@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.10.0 — 2026-08-19
+
+**The stats bar is a gauge now.** Every reading carries a dot that moves along
+a green-to-red ramp as the box works, so a glance says how hard it is
+breathing without reading five numbers.
+
+- Continuous, not three fixed steps. The ramp bends at green→amber over the
+  first 70%, because that is where most of the interesting range lives — a box
+  at 40% and a box at 65% should not be the same shade of "fine".
+- Deliberately **not** a theme token. Green-to-red is not decoration, it is
+  the one colour convention that means the same thing to everyone, and a theme
+  recolouring it would be repainting the gauge rather than the panel.
+- Load is graded against core count, disk against how full it is, and swap
+  starts at amber the moment any is in use — "a little swap" is not a healthy
+  reading, it means memory pressure already happened.
+- The old amber text is gone. The dot says the same thing more precisely, and
+  two marks for one fact is the pattern 0.9.1 removed from sessions.
+
+**Folders are easier to work with.**
+
+- The collapse triangle is half again as wide and sized to be aimed at, rather
+  than sized to match the label's type.
+- **A pencil appears on hover** to rename, recolour or delete a folder.
+  Right-click always did this and nothing ever said so; the pencil is the same
+  menu with a way to find it. It holds its space whether or not it is showing,
+  so the counts do not jump sideways as the pointer moves down the tree.
+- Only real folders get it. Running, Ungrouped and Archived are views over the
+  sessions, not things with a name and a colour.
+
 ## 0.9.2 — 2026-08-19
 
 **Changing the theme now repaints the open terminal immediately.** It was

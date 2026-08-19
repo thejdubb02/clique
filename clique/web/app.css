@@ -97,9 +97,30 @@ body {
 }
 .folder-head:hover { background: var(--row); }
 .folder-head.drop { background: var(--sel); color: var(--fg); }
-.folder-head .caret { width: 9px; font-size: 9px; opacity: .8; }
+/* The caret is the collapse control, so it is sized to be aimed at rather
+   than to match the label's type size — the whole row toggles too, but the
+   triangle is what people go for. */
+.folder-head .caret {
+  width: 14px; flex: 0 0 14px; font-size: 13px; line-height: 1;
+  text-align: center; opacity: .85;
+}
 .folder-head .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-head .count { font-size: 10px; opacity: .75; }
+
+/* Editing a folder was right-click only, which is not a thing anyone finds.
+   The pencil appears on hover and opens the same menu. It holds its space
+   whether or not it is showing, so the count does not jump sideways as the
+   pointer moves down the tree. */
+.folder-head .folder-edit {
+  flex: 0 0 auto; background: none; border: 0; padding: 0 2px; cursor: pointer;
+  color: var(--dim); font: inherit; font-size: 11px; line-height: 1;
+  opacity: 0; visibility: hidden; transition: opacity .12s ease;
+}
+.folder-head:hover .folder-edit { opacity: .75; visibility: visible; }
+.folder-head .folder-edit:hover { opacity: 1; color: var(--fg); }
+.folder-head .folder-edit:focus-visible {
+  opacity: 1; visibility: visible; outline: 1px solid var(--accent); border-radius: 3px;
+}
 
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; display: inline-block; }
 
@@ -186,7 +207,11 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 
 #stats { margin-left: auto; display: flex; align-items: center; gap: 12px;
          padding: 0 12px; font-size: 11px; color: var(--dim); }
-#stats .dot { background: var(--ok); margin-right: 4px; }
+/* Each stat carries its own dot, coloured by that stat's own pressure and set
+   inline from renderStats. No default background here: an unset dot would show
+   a stale colour for the moment before the first poll lands. */
+#stats .dot { margin-right: 4px; vertical-align: baseline;
+              transition: background .6s linear; }
 
 /* ----------------------------------------------------------------- terminal */
 
@@ -529,7 +554,6 @@ button.primary:hover { filter: brightness(1.1); }
 /* ------------------------------------------------------------ stats history */
 
 #stats { cursor: pointer; }
-#stats span.warn { color: var(--warn); }
 #history {
   position: absolute; top: 36px; right: 8px; z-index: 30; width: 348px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
