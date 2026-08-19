@@ -120,6 +120,33 @@ function workState(s) {
   return "idle";
 }
 
+/* The colour for a CLI: whatever the person chose, or what clis.toml ships.
+ *
+ * One function so there is one answer. The shipped palette is a starting
+ * point, not a decision — a colour that reads well on the built-in dark theme
+ * can vanish on someone's Solarized, and that is not a reason to make them
+ * live with it. */
+/* Which CLI you are typing into, said in colour.
+ *
+ * Nine panes of black text look identical, and the moment it matters is the
+ * moment after you switch — a Claude prompt typed into a shell is a mistake
+ * you only notice once it has run. So the edge of the pane and the top of the
+ * active tab take the CLI's colour, and switching repaints them.
+ *
+ * One custom property, set in one place. Everything that wants to follow the
+ * active CLI reads `--cli`, which is why turning the whole thing off is one
+ * assignment rather than a hunt through the stylesheet. */
+function applyCliTint() {
+  const s = session(activeId);
+  const off = state.settings.cli_tint === false || !s;
+  document.querySelector("main").style.setProperty(
+    "--cli", off ? "transparent" : cliColor(s.cli, s.color));
+}
+
+function cliColor(cliId, shipped) {
+  return (state.settings.cli_colors || {})[cliId] || shipped || "var(--dim)";
+}
+
 function markerFor(item, mode) {
   if (mode === "none") return "";
   if (mode === "color") return `<i class="cli-chip" style="background:${item.color}"></i>`;
@@ -160,7 +187,8 @@ function sessionMarker(s, where) {
                               : state.settings.markers_in_sidebar;
   if (on === false) return "";
   const mode = markerMode(s.cli);
-  const item = { color: s.color, icon: s.icon, icon_full_color: s.icon_full_color,
+  const item = { color: cliColor(s.cli, s.color), icon: s.icon,
+                 icon_full_color: s.icon_full_color,
                  label: s.cli_label, cli: s.cli };
   const drawn = markerFor(item, mode);
   if (!drawn) return "";
@@ -600,7 +628,7 @@ function historyRow(conv) {
   const repeats = conv.repeats > 1 ? `<span class="repeats">×${conv.repeats}</span>` : "";
   row.innerHTML =
     `<span class="pal-icon">${cli ? markerFor(
-        { color: cli.color, icon: cli.icon, icon_full_color: cli.icon_full_color,
+        { color: cliColor(cli.id, cli.color), icon: cli.icon, icon_full_color: cli.icon_full_color,
           label: cli.label, cli: cli.id },
         markerMode(cli.id) === "none" ? "color" : markerMode(cli.id)) : ""}</span>` +
     `<span class="meta"><span class="name">${escapeHtml(conv.label)}${repeats}</span>` +
@@ -1594,6 +1622,7 @@ function selectTab(id) {
   // the count never briefly belongs to the tab you just left.
   setArtifacts([]);
   pollArtifacts();
+  applyCliTint();
   renderFollow();         // the badge belongs to the pane you switched to
   loadDraft(id);
   showDeparture(id);
@@ -1966,6 +1995,9 @@ function derived(theme) {
 
 function applySettings() {
   const s = state.settings;
+  // Repainted from here as well as from selectTab, so toggling the setting or
+  // changing a colour takes effect without switching tabs to see it.
+  applyCliTint();
   const theme = currentTheme();
   const root = document.documentElement;
 
@@ -2085,6 +2117,7 @@ function openSettings() {
   $("#setStatusOnIcon").checked = !!s.status_on_icon;
   $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
+  $("#setCliTint").checked = s.cli_tint !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
   // into, and a poll landing mid-edit would move their cursor.
@@ -2131,7 +2164,8 @@ function renderCliRows() {
     const row = document.createElement("div");
     row.className = "cli-row" + (cli.installed ? "" : " absent");
     row.innerHTML =
-      `<span class="preview">${markerFor(cli, mode === "none" ? "both" : mode)}</span>` +
+      `<span class="preview">${markerFor({ ...cli, color: cliColor(cli.id, cli.color) },
+                                          mode === "none" ? "both" : mode)}</span>` +
       `<span class="label">${escapeHtml(cli.label)}` +
       (cli.installed ? "" : ' <span class="tag">not installed</span>') + `</span>`;
 
@@ -2149,6 +2183,36 @@ function renderCliRows() {
       renderCliRows();
     };
     row.appendChild(select);
+
+    /* The colour, editable. A palette that reads well on the built-in dark
+     * theme can vanish on someone's Solarized, and that is not a reason to
+     * make them live with it. Cleared, it goes back to what clis.toml ships —
+     * which is why the reset is beside it rather than hidden in a menu. */
+    const swatch = document.createElement("input");
+    swatch.type = "color";
+    swatch.className = "cli-swatch";
+    swatch.value = cliColor(cli.id, cli.color);
+    swatch.title = "Colour for " + cli.label;
+    // On change, not input: a colour picker fires continuously while dragging,
+    // and each one of those would be a write to the server.
+    swatch.onchange = async () => {
+      await saveSettings({ cli_colors: { [cli.id]: swatch.value } });
+      renderCliRows();
+    };
+    row.appendChild(swatch);
+
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "cli-reset";
+    reset.textContent = "↺";
+    reset.title = "Back to the shipped colour";
+    reset.hidden = !(state.settings.cli_colors || {})[cli.id];
+    reset.onclick = async () => {
+      await saveSettings({ cli_colors: { [cli.id]: null } });
+      renderCliRows();
+    };
+    row.appendChild(reset);
+
     rows.appendChild(row);
   }
 
@@ -2242,6 +2306,7 @@ function wire() {
   $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
+  $("#setCliTint").onchange = (ev) => saveSettings({ cli_tint: ev.target.checked });
   $("#setArtShow").onchange = (ev) => {
     saveSettings({ artifacts_show: ev.target.checked });
     pollArtifacts();
@@ -2505,7 +2570,7 @@ function resumeItems() {
       title: entry.label || entry.project,
       detail: entry.project + " · " + ago(entry.updated),
       match: `${entry.label} ${entry.project} ${entry.cwd} ${cli ? cli.label : entry.cli}`,
-      icon: cli ? markerFor({ color: cli.color, icon: cli.icon,
+      icon: cli ? markerFor({ color: cliColor(cli.id, cli.color), icon: cli.icon,
                               icon_full_color: cli.icon_full_color,
                               label: cli.label, cli: cli.id },
                              markerMode(cli.id) === "none" ? "color" : markerMode(cli.id)) : "",
@@ -2582,7 +2647,7 @@ function paletteMarker(s) {
   // exists to stop you scanning.
   const mode = markerMode(s.cli);
   return markerFor(
-    { color: s.color, icon: s.icon, icon_full_color: s.icon_full_color,
+    { color: cliColor(s.cli, s.color), icon: s.icon, icon_full_color: s.icon_full_color,
       label: s.cli_label, cli: s.cli },
     mode === "none" ? "color" : mode);
 }

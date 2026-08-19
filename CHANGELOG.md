@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.25.0 — 2026-08-19 11:53 PDT
+
+**Which CLI am I in?**
+
+Nine panes of black text look identical, and the moment it matters is the
+moment after you switch — a Claude prompt typed into a shell is a mistake you
+only notice once it has run.
+
+The top edge of the pane, the top of the active tab, and the prompt box while
+you are typing in it all take the active CLI's colour, and switching tabs
+repaints them. One custom property set in one place, so turning it off in
+Settings → CLI markers is one assignment rather than a hunt through a
+stylesheet.
+
+The colours are yours to change now, per CLI, with a reset back to whatever
+`clis.toml` ships. A palette that reads well on the built-in dark theme can
+vanish on somebody's Solarized, and that was never a reason to make anyone
+live with it. They save on the server with everything else, so a colour
+chosen at the desk is already there on the phone.
+
 ## 0.24.0 — 2026-08-19 11:21 PDT
 
 **The logo stays the logo. The ring around it says how the session is doing.**

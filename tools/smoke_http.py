@@ -329,6 +329,23 @@ def main() -> int:
     check("markdown came back as structure, not markup",
           bool(newest.get("blocks")) and "spans" in newest["blocks"][0])
 
+    print("per-CLI colours")
+    status, saved = call("/api/settings", "PATCH",
+                         {"cli_colors": {"claude": "#ABCDEF", "grok": "javascript:x",
+                                         "shell": "#f0f"}})
+    colours = saved.get("cli_colors", {})
+    check("stores a colour, lower-cased", colours.get("claude") == "#abcdef", colours)
+    check("takes the short form too", colours.get("shell") == "#f0f", colours)
+    # This value is written into a style attribute, so anything that is not a
+    # colour has to die here rather than downstream.
+    check("drops anything that is not a colour", "grok" not in colours, colours)
+    status, saved = call("/api/settings", "PATCH", {"cli_colors": {"claude": None}})
+    check("null restores the shipped colour",
+          "claude" not in saved.get("cli_colors", {}), saved.get("cli_colors"))
+    check("and leaves the others alone",
+          saved.get("cli_colors", {}).get("shell") == "#f0f", saved.get("cli_colors"))
+    call("/api/settings", "PATCH", {"cli_colors": {"shell": None}})
+
     print("artifacts")
     # A real directory with a real PNG in it: the whole feature is a filesystem
     # read, so mocking the filesystem would test nothing that can break.

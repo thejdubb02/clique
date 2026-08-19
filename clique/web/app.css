@@ -193,7 +193,10 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
   border-right: 1px solid var(--line); color: var(--dim); white-space: nowrap;
 }
 .tab:hover { background: var(--row); }
-.tab.active { background: var(--bg); color: var(--fg); box-shadow: inset 0 1px 0 var(--accent); }
+/* The active tab's top edge is the CLI's colour, falling back to the theme
+   accent when the tint is off or nothing is open. */
+.tab.active { background: var(--bg); color: var(--fg);
+              box-shadow: inset 0 2px 0 var(--cli, var(--accent)); }
 .tab .num { font-size: 10px; opacity: .6; }
 .tab .label { overflow: hidden; text-overflow: ellipsis; }
 .tab .x, .tab .gear { opacity: 0; padding: 0 2px; border: 0; background: none;
@@ -512,7 +515,7 @@ button.primary:hover { filter: brightness(1.1); }
 .cli-rows { display: flex; flex-direction: column; gap: 1px; margin-top: 10px; }
 .cli-row {
   display: grid;
-  grid-template-columns: 16px 1fr 104px;
+  grid-template-columns: 16px 1fr 104px 26px 20px;
   align-items: center;
   gap: 10px;
   height: 32px;               /* fixed: a "not installed" tag must not add height */
@@ -835,3 +838,37 @@ a.give-value { color: var(--accent); }
 .about-links { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; }
 .about-links a { color: var(--accent); font-size: 12px; text-decoration: none; }
 .about-links a:hover { text-decoration: underline; }
+
+/* -------------------------------------------------- which CLI am I in again */
+
+/* One property, set on <main> when the tab changes; everything that follows
+   the active CLI reads it. Transparent is the off switch, which is why there
+   is no second rule for the disabled case. */
+main { --cli: transparent; }
+/* A line along the top of the pane. Two pixels is enough to catch the eye on
+   a switch and little enough to disappear while you read. */
+#termwrap { border-top: 2px solid var(--cli); }
+/* And on the box you type into, where getting the CLI wrong actually costs
+   something. Only while focused: a permanent coloured border would be one
+   more thing on screen all the time. */
+#inputbar:focus-within { box-shadow: inset 2px 0 0 var(--cli); }
+
+/* The colour picker and its reset. The reset only exists once a colour has
+   actually been overridden, so a row nobody has touched stays two controls
+   wide instead of three. */
+.cli-swatch {
+  width: 24px; height: 20px; padding: 0; cursor: pointer;
+  background: none; border: 1px solid var(--line); border-radius: 4px;
+}
+.cli-swatch::-webkit-color-swatch { border: 0; border-radius: 2px; }
+.cli-swatch::-moz-color-swatch { border: 0; border-radius: 2px; }
+.cli-reset {
+  background: none; border: 0; color: var(--dim); cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 2px;
+}
+.cli-reset:hover { color: var(--fg); }
+.cli-reset[hidden] { display: none; }
+
+@media (pointer: coarse) {
+  .cli-swatch { width: 30px; height: 26px; }
+}

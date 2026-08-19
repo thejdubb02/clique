@@ -224,6 +224,8 @@ front of you (sidebar width, sidebar shown or hidden).
 | `open_tabs` | list of session ids | The workspace: which sessions have a tab, in order. Deduplicated, order preserved |
 | `active_tab` | session id | Which one was in front |
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
+| `cli_tint` | bool | Colour the pane edge, active tab and prompt box with the active CLI's colour |
+| `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
 | `artifacts_show` | bool | List the images a session makes |
 | `artifact_dirs` | list | Where to look, relative to each session's cwd; `.` is the cwd itself. Absolute entries and `..` are dropped, max 12 |
 

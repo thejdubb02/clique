@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 import time
 import uuid
@@ -21,6 +22,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import artifacts
+
+#: A colour is three or six hex digits and nothing else. This value is written
+#: into a style attribute, so anything looser than a full match is an opening.
+_HEX = re.compile(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
 
 #: Seeded on first run. Empty match lists — fill these with your own trees
 #: in the panel. A match is a directory prefix that auto-files new sessions.
@@ -104,6 +109,15 @@ DEFAULT_SETTINGS = {
     #: folders, so there is no folder record to hold their collapsed state.
     #: A real folder's flag already syncs; these were the odd ones out.
     "views_collapsed": ["__archived"],
+    #: Which CLI you are typing into, said in colour. Switching tabs is the
+    #: moment it matters: nine panes of black text look identical, and sending
+    #: a Claude prompt to a shell is a mistake that costs a paragraph of
+    #: apology. An edge on the pane and the active tab, in the CLI's colour.
+    "cli_tint": True,
+    #: Per-CLI overrides of the colour shipped in clis.toml, because one
+    #: person's palette is another person's invisible-on-their-theme.
+    #: {"claude": "#d97757"}. An empty entry means "use the shipped one".
+    "cli_colors": {},
     #: An agent that takes a screenshot has made something a terminal cannot
     #: show you. Off is a real preference — some working directories are full
     #: of images nobody wants a strip of — so it is a switch, not a rule.
@@ -355,7 +369,17 @@ class Store:
             for key, value in changes.items():
                 if key not in DEFAULT_SETTINGS:
                     continue  # ignore unknown keys rather than storing junk
-                if key == "marker_by_cli" and isinstance(value, dict):
+                if key == "cli_colors" and isinstance(value, dict):
+                    # Merged one level deep for the same reason marker_by_cli
+                    # is: the UI sends only the CLI that changed.
+                    merged = dict(self.settings.get("cli_colors") or {})
+                    for cli_id, colour in value.items():
+                        if colour is None or not str(colour).strip():
+                            merged.pop(cli_id, None)      # back to the shipped one
+                        elif _HEX.fullmatch(str(colour).strip()):
+                            merged[str(cli_id)[:64]] = str(colour).strip().lower()
+                    self.settings["cli_colors"] = merged
+                elif key == "marker_by_cli" and isinstance(value, dict):
                     merged = dict(self.settings.get("marker_by_cli") or {})
                     for cli_id, mode in value.items():
                         if mode in MARKER_MODES:
