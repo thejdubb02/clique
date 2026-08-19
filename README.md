@@ -10,7 +10,7 @@ running. Claude Code, Grok CLI or anything else is a block in
 **Live at https://example.invalid/clique** (tailnet only).
 Password is in Vaultwarden as *CLIque (devbox)*.
 
-## What works today (v0.17.0)
+## What works today (v0.18.0)
 
 | | |
 |---|---|
