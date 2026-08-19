@@ -479,12 +479,21 @@ async function newFolder() {
 }
 
 async function adoptSessions() {
+  /* Adopt is safe to run more than once, and worth running again: as well as
+   * taking over anything new, it repairs sessions adopted before CLIque could
+   * detect which CLI they were running. So it is offered even when there is
+   * nothing new to take over. */
   const found = await api("api/adoptable");
-  if (!found.length) return alert("Nothing to adopt — no other sessions found.");
-  if (!confirm(`Adopt ${found.length} session(s) started by another tool?`)) return;
+  const question = found.length
+    ? `Adopt ${found.length} session(s) started by another tool?`
+    : "Nothing new to adopt. Re-check the ones already adopted for their CLI, name and folder?";
+  if (!confirm(question)) return;
   const result = await api("api/sessions/adopt", { method: "POST", body: "{}" });
   await refresh();
-  alert("Adopted: " + (result.adopted.join(", ") || "none"));
+  const lines = [];
+  if (result.adopted && result.adopted.length) lines.push("Adopted: " + result.adopted.join(", "));
+  if (result.updated && result.updated.length) lines.push("Updated: " + result.updated.join(", "));
+  alert(lines.join("\n") || "Nothing changed.");
 }
 
 async function killSession(s) {
@@ -833,12 +842,46 @@ function currentTheme() {
   return themes[wantsLight ? "light" : ""] || themes[""];
 }
 
+/* Relative luminance, the WCAG definition. Used only to decide whether text
+ * sitting on a theme's accent should be white or near-black. */
+function luminance(hex) {
+  const value = hex.replace("#", "");
+  const full = value.length === 3 ? [...value].map((c) => c + c).join("") : value;
+  const channels = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+/* The tokens a theme should not have to spell out.
+ *
+ * A theme is meant to be one block in themes.js and nothing else — that rule is
+ * what has kept adding one cheap. So the things that follow mechanically from
+ * a theme are computed here rather than being three more keys every theme has
+ * to remember to set, and get wrong.
+ *
+ * White text on a pale accent is unreadable, and a black scrim over a light
+ * theme looks like a bug rather than a modal. Both were hardcoded until now,
+ * which is why the light themes had a black wash over them. */
+function derived(theme) {
+  const panel = theme.panel || {};
+  const light = (theme.base || "dark") === "light";
+  const accent = panel.accent || "#0078d4";
+  return {
+    "on-accent": luminance(accent) > 0.45 ? "#101317" : "#ffffff",
+    "scrim": light ? "#2b313bb0" : "#000000aa",
+    "shadow": light ? "#2b313b33" : "#00000088",
+  };
+}
+
 function applySettings() {
   const s = state.settings;
   const theme = currentTheme();
   const root = document.documentElement;
 
   for (const [name, value] of Object.entries(theme.panel || {})) {
+    root.style.setProperty("--" + name, value);
+  }
+  for (const [name, value] of Object.entries(derived(theme))) {
     root.style.setProperty("--" + name, value);
   }
   // colorScheme is what makes native scrollbars, form controls and the

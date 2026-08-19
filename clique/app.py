@@ -26,11 +26,11 @@ from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import sysinfo, tmux, version_string
+from . import migrate, sysinfo, tmux, version_string
 from .auth import Auth, landing_page, login_page
 from .registry import Registry, RegistryError
 from .registry import icon_is_full_colour as registry_icon_is_colour
-from .store import Session, Store, new_id
+from .store import Session, Store, auto_folder, new_id
 from .stream import PtyBridge
 from .tokens import TokenStore
 from .wsproto import OP_TEXT, WebSocket, handshake_response
@@ -217,26 +217,96 @@ class Panel:
         ))
         return {"id": session.id}
 
+    def detect_cli(self, pane) -> str:
+        """Which registered CLI is running in this pane.
+
+        The pane's own `pane_current_command` is checked *last*, not first.
+        A CLI launched from a wrapper or a login shell is a child of that
+        shell, so the pane reports `bash` — and `bash` is a registered command
+        (it is what `shell` runs), so trusting the pane first filed five live
+        Claude Code sessions as plain shells.
+
+        Nothing here knows anything about any particular CLI. It asks the
+        registry which commands it recognises and looks for those.
+        """
+        by_command = {cli.command: cli_id
+                      for cli_id, cli in self.registry.types().items()
+                      if cli_id != "shell"}
+        for comm, _args in tmux.descendants(pane.pid):
+            if comm in by_command:
+                return by_command[comm]
+        if pane.command in by_command:
+            return by_command[pane.command]
+        return "shell"
+
     def adopt(self) -> dict:
         """Take over sessions started by the tool CLIque replaces.
 
         Adopted sessions stay on their original socket — tmux cannot move a
         session between servers, and killing one to recreate it would destroy
         the work this exists to preserve.
+
+        An adopted session arrives fully furnished: the CLI it is actually
+        running, the name its owner gave it, and the folder its directory
+        belongs in. Adoption that lands thirty sessions in Ungrouped under
+        their directory basenames is not a migration, it is a second job.
         """
-        known = {s.mux for s in self.store.sessions}
-        added = []
+        known = {s.mux: s for s in self.store.sessions}
+        names = migrate.codeman_names()
+        cwds = migrate.codeman_cwds()
+        added, updated = [], []
         for pane in tmux.adoptable():
-            if pane.mux in known:
+            cwd = pane.cwd or cwds.get(pane.mux, "")
+            existing = known.get(pane.mux)
+            if existing:
+                if self._reconcile(existing, pane, cwd, names):
+                    updated.append(existing.name)
                 continue
-            guess = pane.command if pane.command in self.registry.types() else "shell"
             session = self.store.add_session(Session(
-                id=new_id(), name=Path(pane.cwd).name or pane.mux, cli=guess,
-                cwd=pane.cwd, mux=pane.mux, socket=pane.socket,
+                id=new_id(),
+                name=names.get(pane.mux) or Path(cwd).name or pane.mux,
+                cli=self.detect_cli(pane),
+                cwd=cwd, mux=pane.mux, socket=pane.socket,
+                folder=auto_folder(cwd, self.store.folders),
                 created=float(pane.created), adopted=True,
             ))
             added.append(session.name)
-        return {"adopted": added}
+        return {"adopted": added, "updated": updated}
+
+    def _reconcile(self, session: Session, pane, cwd: str, names: dict) -> bool:
+        """Bring an already-adopted session up to what we can now detect.
+
+        Adoption is not a one-shot: the first run of it filed five live Claude
+        Code sessions as plain shells, under their directory basenames, in no
+        folder — and once a session is known, adopting again used to skip it
+        forever. Running Adopt a second time now repairs that rather than
+        reporting nothing to do.
+
+        The rule for names is the careful part: only a name that is still the
+        one *we* derived gets replaced. Anything the user typed is theirs, and
+        a migration that renames someone's session is worse than one that
+        leaves a bad name alone.
+        """
+        changes = {}
+
+        detected = self.detect_cli(pane)
+        if session.cli == "shell" and detected != "shell":
+            changes["cli"] = detected
+
+        better = names.get(pane.mux)
+        auto = {Path(cwd).name, pane.mux, ""}
+        if better and session.name in auto and better != session.name:
+            changes["name"] = better
+
+        if not session.folder:
+            folder = auto_folder(cwd, self.store.folders)
+            if folder:
+                changes["folder"] = folder
+
+        if not changes:
+            return False
+        self.store.update_session(session.id, **changes)
+        return True
 
     def delete_session(self, session_id: str) -> dict:
         session = self.store.session(session_id)
@@ -247,6 +317,26 @@ class Panel:
         tmux.kill(session.mux, session.socket, force=session.adopted)
         self.store.remove_session(session_id)
         return {"deleted": session_id}
+
+
+
+#: Paths served without a session. Brand images, the favicon and the web app
+#: manifest, and nothing else.
+#:
+#: The sign-in page asks for a password and then tries to draw the logo above
+#: the field — and the logo was behind the password. Same for the favicon a
+#: browser fetches for the login tab, and for the manifest an installed PWA
+#: re-reads on launch. None of the three carries information: they are the same
+#: files anyone sees on the README.
+#:
+#: Deliberately a prefix allowlist and not "any file", because everything else
+#: under web/ — the app shell, its JavaScript, its stylesheet — describes the
+#: panel to someone who has not signed in.
+PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest")
+
+
+def _is_public_asset(path: str) -> bool:
+    return path.startswith(PUBLIC_ASSETS[0]) or path in PUBLIC_ASSETS[1:]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -400,6 +490,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed:
             if path.startswith("/api"):
                 return self._json({"error": "unauthorized"}, 401)
+            if _is_public_asset(path):
+                return self._static(path)
             nonce = secrets.token_urlsafe(16)
             return self._send(200, login_page(nonce=nonce),
                               "text/html; charset=utf-8", nonce=nonce)
@@ -656,10 +748,9 @@ class Handler(BaseHTTPRequestHandler):
             except tmux.TmuxError:
                 pass  # a session that died between the check and here
 
-            # Attach to a private view of the session rather than the session
-            # itself, so this browser's window size is its own. Without it, a
-            # phone attaching would shrink the same session on a desktop — and
-            # for an adopted session, under the tool still running it.
+            # Attach through a private view rather than the session itself, so
+            # this browser detaching does not detach anyone else and two
+            # browsers can sit on different windows.
             viewer = tmux.create_viewer(session.mux, session.socket)
             bridge = PtyBridge(
                 tmux.attach_argv(viewer, session.socket),
@@ -668,6 +759,11 @@ class Handler(BaseHTTPRequestHandler):
                 cols=cols, rows=rows,
             )
             bridge.start()
+            # The window is shared with every other client on it, and its size
+            # is one number. Claim it for the browser that just opened rather
+            # than inheriting whatever the last tool left — otherwise an
+            # adopted session opens as a small pane in a sea of tmux dot-fill.
+            tmux.resize_window(session.mux, cols, rows, session.socket)
 
             stop = threading.Event()
             threading.Thread(target=self._keepalive, args=(ws, stop),
@@ -703,7 +799,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         kind = message.get("type")
         if kind == "resize":
-            bridge.resize(int(message.get("cols", 120)), int(message.get("rows", 32)))
+            cols = int(message.get("cols", 120))
+            rows = int(message.get("rows", 32))
+            bridge.resize(cols, rows)
+            # The PTY resize only tells tmux how big *this client* is. The
+            # window is shared with anything else attached, so it also has to
+            # be told, or the browser gets a small pane padded out with dots.
+            tmux.resize_window(session.mux, cols, rows, session.socket)
         elif kind == "key":
             tmux.send_key(session.mux, str(message["key"]), session.socket)
         elif kind == "run":

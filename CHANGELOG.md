@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.7.0 — 2026-08-19
+
+Four things found by actually looking at the running app rather than at the
+tests, which all passed throughout.
+
+**Adoption now produces sessions you can use.** It filed five live Claude Code
+sessions as plain shells, named after their directories, in no folder.
+
+- The CLI is detected from the pane's **process tree**, not from
+  `pane_current_command`. A CLI started from a wrapper or a login shell is a
+  child of that shell, so the pane honestly reports `bash` — and `bash` is a
+  registered command, so trusting the pane first was wrong every time.
+- Names come from the tool being replaced, where it recorded them. A sidebar
+  of "mark", "agent-infra", "testcase" is not a migration.
+- Sessions land in the folder their directory belongs to.
+- **Adopt is now safe and useful to run twice.** It repairs sessions adopted
+  before detection improved, instead of skipping anything already known. A
+  name you typed yourself is never overwritten — only one CLIque derived.
+
+**The terminal no longer opens as a small pane in a sea of dots.** A tmux
+window has exactly one size, shared by every client on it, and `window-size
+latest` follows the most recently *active* client — which a browser that has
+just resized is not. With another tool still attached to an adopted session,
+that left most of the viewport filled with tmux's dot padding. The browser now
+sets the window size explicitly, on attach and on every resize. The comment
+claiming grouped sessions get independent sizes was wrong and has gone.
+
+**Themes now reach the terminal properly.** Every theme set a background and
+the eight base ANSI colours; none of them set the eight *brights*, which CLIs
+lean on constantly — so a themed panel wrapped output drawn in xterm's default
+palette. All eight themes now carry the full sixteen, and the built-in dark
+carries VS Code's Dark+ palette it was always meant to match.
+
+**One theme now covers every surface.** White text on the accent, black modal
+scrims and black shadows were hardcoded, so light themes got a black wash and
+a pale accent got unreadable text. They are tokens now — and derived from the
+theme in code rather than added as three more keys every theme must remember,
+so adding a theme is still one block. The sign-in page follows the browser's
+light/dark preference: which theme is chosen is not an answer to hand someone
+who has not signed in.
+
+**A new theme: Trinity.** Green phosphor on black. Red stays red and yellow
+stays yellow — a terminal where an error cannot be told apart from a diff is a
+costume, not a theme — and everything not carrying meaning leans green.
+
+**Also:** brand images, the favicon and the web app manifest are served before
+sign-in. The login page asked for a password and then tried to draw a logo
+that was behind that password.
+
 ## 0.6.0 — 2026-08-19
 
 **A real identity.** The brand assets until now were CodemanPanel's, borrowed

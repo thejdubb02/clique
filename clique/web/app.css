@@ -16,6 +16,12 @@
   --warn: #c7915b;
   --dead: #6e6e6e;
   --err: #f85149;
+  /* Derived in applySettings() from the theme, not hand-set per theme — a new
+     theme stays one block in themes.js and nothing else. These are the
+     defaults for the moment before the first settings fetch lands. */
+  --on-accent: #ffffff;
+  --scrim: #000000aa;
+  --shadow: #00000088;
   --sidebar-w: 252px;
   font-synthesis: none;
 }
@@ -225,13 +231,13 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
 .runsplit button { border: 0; padding: 7px 14px; font: inherit; cursor: pointer;
                    background: var(--field); color: var(--fg); }
 .runsplit button:first-child { border-radius: 4px 0 0 4px; }
-.runsplit button:last-child { border-radius: 0 4px 4px 0; border-left: 1px solid #2b2b2b; }
-button.primary { background: var(--accent); color: #fff; }
+.runsplit button:last-child { border-radius: 0 4px 4px 0; border-left: 1px solid var(--line); }
+button.primary { background: var(--accent); color: var(--on-accent); }
 button.primary:hover { filter: brightness(1.1); }
 
 /* -------------------------------------------------------------------- modal */
 
-#modal { position: fixed; inset: 0; background: #000a; display: grid;
+#modal { position: fixed; inset: 0; background: var(--scrim); display: grid;
          place-items: center; z-index: 40; }
 #modal form { width: min(420px, 92vw); background: var(--panel);
               border: 1px solid var(--line); border-radius: 6px; padding: 18px; }
@@ -252,14 +258,14 @@ button.primary:hover { filter: brightness(1.1); }
 
 /* Sits above everything, including the settings sheet: the palette is how you
    leave wherever you are, so it cannot be the thing that is covered up. */
-#palette { position: fixed; inset: 0; background: #0009; z-index: 60;
+#palette { position: fixed; inset: 0; background: var(--scrim); z-index: 60;
            display: grid; justify-items: center; align-content: start;
            padding: 11vh 16px 16px; }
 
 .pal-box { width: min(620px, 100%); max-height: 70vh; display: flex;
            flex-direction: column; background: var(--panel);
            border: 1px solid var(--line); border-radius: 8px;
-           box-shadow: 0 18px 48px #000b; overflow: hidden; }
+           box-shadow: 0 18px 48px var(--shadow); overflow: hidden; }
 
 .pal-field { display: flex; align-items: center; gap: 8px; padding: 0 14px;
              border-bottom: 1px solid var(--line); flex: 0 0 auto; }
@@ -288,12 +294,12 @@ button.primary:hover { filter: brightness(1.1); }
 /* Only the matched characters are marked, and only in the title: underlining
    half a directory path reads as damage rather than as a match. */
 .pal-title b { color: var(--accent); font-weight: 600; }
-.pal-row.on .pal-title b { color: #fff; text-decoration: underline; }
+.pal-row.on .pal-title b { color: var(--on-accent); text-decoration: underline; }
 /* Paths are shortened from the left in JS rather than with `direction: rtl`,
    which drags the leading slash to the wrong end of the string. */
 .pal-detail { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
               text-overflow: ellipsis; font-size: 11.5px; color: var(--dim); }
-.pal-row.on .pal-detail { color: #dbe7f3; }
+.pal-row.on .pal-detail { color: var(--on-accent); opacity: .78; }
 
 .pal-tag { flex: 0 0 auto; font-size: 10px; letter-spacing: .05em;
            text-transform: uppercase; color: var(--dim);
@@ -313,13 +319,13 @@ button.primary:hover { filter: brightness(1.1); }
 
 #menu { position: fixed; z-index: 50; background: var(--panel);
         border: 1px solid var(--line); border-radius: 4px; padding: 4px 0;
-        min-width: 150px; box-shadow: 0 6px 20px #0008; }
+        min-width: 150px; box-shadow: 0 6px 20px var(--shadow); }
 #menu button { display: block; width: 100%; text-align: left; background: none;
                border: 0; color: var(--fg); font: inherit; padding: 6px 14px;
                cursor: pointer; }
-#menu button:hover { background: var(--accent); color: #fff; }
+#menu button:hover { background: var(--accent); color: var(--on-accent); }
 #menu button.danger { color: var(--err); }
-#menu button.danger:hover { background: var(--err); color: #fff; }
+#menu button.danger:hover { background: var(--err); color: var(--on-accent); }
 
 /* --------------------------------------------------------------- CLI markers */
 
@@ -346,7 +352,7 @@ button.primary:hover { filter: brightness(1.1); }
 
 /* ------------------------------------------------------------------ settings */
 
-#settings { position: fixed; inset: 0; background: #000a; display: grid;
+#settings { position: fixed; inset: 0; background: var(--scrim); display: grid;
             place-items: center; z-index: 45; }
 /* Fixed box, scrolling inside.
  *
@@ -479,7 +485,7 @@ button.primary:hover { filter: brightness(1.1); }
 #history {
   position: absolute; top: 36px; right: 8px; z-index: 30; width: 348px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
-  padding: 10px 12px; box-shadow: 0 8px 24px #0007;
+  padding: 10px 12px; box-shadow: 0 8px 24px var(--shadow);
 }
 .hist-head { display: flex; justify-content: space-between; font-size: 11px;
              margin-bottom: 6px; }

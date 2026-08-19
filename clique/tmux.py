@@ -19,6 +19,7 @@ explicitly forced, because the same box is running work we did not create.
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import subprocess
 import time
@@ -202,17 +203,39 @@ def sweep_viewers(
 
 
 def create_viewer(target: str, socket: str | None = SOCKET) -> str:
-    """A grouped session sharing ``target``'s windows, sized independently.
+    """A grouped session sharing ``target``'s windows.
 
-    Plain ``attach-session`` makes every client share one size, so tmux shrinks
-    the pane to the smallest one watching. That matters most for a session
-    adopted from another tool: attaching from a browser would resize it under
-    the tool that is still running it. A grouped session gets its own size and
-    leaves the original alone.
+    Grouping gives this client its own *current window* — so two browsers can
+    look at different windows of the same session — and it keeps a browser
+    detaching from detaching everyone.
+
+    It does **not** give it an independent size, and an earlier version of this
+    docstring claimed it did. A window is shared by every session in the group,
+    so tmux has exactly one size for it, decided by `window-size`. Two clients
+    of different sizes means one of them sees the pane padded out with dots.
+    That is why `resize_window` exists and why the browser calls it on every
+    resize: whoever is actually being looked at should win.
     """
     name = f"{VIEW_PREFIX}{uuid.uuid4().hex[:6]}"
     _run(["new-session", "-d", "-t", _session_target(target), "-s", name], socket)
     return name
+
+
+def resize_window(mux: str, cols: int, rows: int, socket: str | None = SOCKET) -> None:
+    """Set the shared window's size, so the browser is not shown a padded pane.
+
+    `window-size latest` sizes a window to the most recently *active* client,
+    and a browser that has resized but not yet typed is not active. With
+    another tool still attached to an adopted session, that leaves the browser
+    rendering tmux's dot-fill over most of the viewport.
+
+    So the size is set explicitly rather than inferred. This does resize the
+    other client's view — which is the correct trade for a tool whose whole
+    job is to be the thing you are looking at.
+    """
+    with contextlib.suppress(TmuxError, OSError):
+        _run(["resize-window", "-t", _session_target(mux),
+              "-x", str(max(cols, 2)), "-y", str(max(rows, 2))], socket)
 
 
 def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> list[Pane]:
@@ -249,6 +272,42 @@ def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> lis
             group=parts[8],
         ))
     return panes
+
+
+def descendants(pid: int, depth: int = 4) -> list[tuple[str, str]]:
+    """Every process under `pid`, as (command name, full argv).
+
+    A pane's `pane_current_command` is whatever is in the foreground of its
+    shell, and a CLI started from a wrapper script or a login shell is a child
+    of that shell rather than the shell itself. Codeman's sessions all report
+    `bash` for exactly this reason, and adopting them by their pane command
+    filed five Claude Code sessions as plain shells.
+
+    Process state, which rule 1 allows. Nothing here knows what any particular
+    CLI is — it returns what is running and lets the registry decide.
+    """
+    found: list[tuple[str, str]] = []
+    frontier = [pid]
+    for _ in range(depth):
+        if not frontier:
+            break
+        try:
+            out = subprocess.run(
+                ["ps", "-o", "pid=,comm=,args=", "--ppid", ",".join(map(str, frontier))],
+                capture_output=True, text=True, timeout=TIMEOUT,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return found
+        frontier = []
+        for line in out.splitlines():
+            parts = line.strip().split(None, 2)
+            if len(parts) < 2:
+                continue
+            child_pid, comm = parts[0], parts[1]
+            found.append((comm, parts[2] if len(parts) > 2 else comm))
+            with contextlib.suppress(ValueError):
+                frontier.append(int(child_pid))
+    return found
 
 
 def exists(mux: str, socket: str | None = SOCKET) -> bool:

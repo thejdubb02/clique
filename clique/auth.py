@@ -165,21 +165,41 @@ LOGIN_PAGE = """<!doctype html>
   })();
 </script>
 <style>
-  :root { color-scheme: dark; }
+  /* The panel's theme is a server setting, but this page is served before
+     anyone has proved who they are — and which theme is chosen is still an
+     answer we should not hand to an unauthenticated caller. So the sign-in
+     page follows the browser's own light/dark preference instead. It is the
+     one surface a theme deliberately does not reach. */
+  :root {
+    color-scheme: dark;
+    --bg:#0E1116; --fg:#c9d1d9; --dim:#8b949e; --field:#1b2029;
+    --line:#232a35; --accent:#A855F7; --accent2:#22D3EE; --err:#f85149;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg:#ffffff; --fg:#24292f; --dim:#6e7781; --field:#f6f8fa;
+      --line:#d8dee4; --accent:#8B3DF0; --accent2:#0aa5c2; --err:#cf222e;
+    }
+  }
   body { margin:0; min-height:100vh; display:grid; place-items:center;
-         background:#1e1e1e; color:#ccc;
+         background:var(--bg); color:var(--fg);
          font:14px/1.6 -apple-system,"Segoe UI",system-ui,sans-serif; }
   form { width:min(320px,88vw); }
-  h1 { font-size:15px; font-weight:600; margin:0 0 4px; letter-spacing:.02em; }
-  p  { margin:0 0 18px; color:#8b8b8b; font-size:13px; }
-  input,button { width:100%; font:inherit; border-radius:3px; }
-  input { padding:9px 10px; background:#3c3c3c; color:#ccc;
-          border:1px solid transparent; margin-bottom:10px; }
-  input:focus { outline:none; border-color:#0078d4; }
-  button { padding:9px; background:#0078d4; color:#fff; border:0; cursor:pointer; }
-  .err { color:#f85149; font-size:13px; margin:0 0 12px; }
+  .mark { width:34px; height:34px; display:block; margin:0 0 14px; }
+  h1 { font-size:16px; font-weight:700; margin:0 0 2px; letter-spacing:-.01em; }
+  p  { margin:0 0 18px; color:var(--dim); font-size:13px; }
+  input,button { width:100%; font:inherit; border-radius:4px; }
+  input { padding:9px 10px; background:var(--field); color:var(--fg);
+          border:1px solid var(--line); margin-bottom:10px; }
+  input:focus { outline:none; border-color:var(--accent); }
+  button { padding:10px; border:0; cursor:pointer; font-weight:600; color:#fff;
+           background:linear-gradient(100deg,var(--accent),var(--accent2)); }
+  button:hover { filter:brightness(1.08); }
+  .err { color:var(--err); font-size:13px; margin:0 0 12px; }
 </style>
 <form method="post" action="./">
+  <img class="mark" src="brand/mark.svg" alt="" width="34" height="34">
   <h1>CLIque</h1>
   <p>Sign in to reach your sessions.</p>
   __ERROR__
@@ -210,6 +230,13 @@ LANDING = """<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <title>CLIque</title>
+<style>
+  /* Blank for the length of one redirect. Left to itself that is a flash of
+     white between two dark pages. */
+  :root { color-scheme: dark light; }
+  body { margin:0; min-height:100vh; background:#0E1116; }
+  @media (prefers-color-scheme: light) { body { background:#ffffff; } }
+</style>
 <script nonce="__NONCE__">
   (function () {
     var path = location.pathname;
