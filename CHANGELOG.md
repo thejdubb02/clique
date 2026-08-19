@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.2 — 2026-08-19
+
+**Changing the theme now repaints the open terminal immediately.** It was
+waiting for the next three-second poll — and with the settings sheet still
+covering the pane you were looking at, that reads as "changing the theme did
+not change the terminal". Applied on save now: 0.2s instead of up to 3.
+
+This is the second half of the terminal-theming problem. The first half was
+0.7.0, where every theme was missing the eight *bright* ANSI colours that CLIs
+lean on hardest — so the background changed and the output did not. Both
+halves verified in a real browser this time: one pane, no reload, Dracula to
+Trinity, every colour following.
+
 ## 0.9.1 — 2026-08-19
 
 **One mark per session, and it is the CLI's logo.** Showing a status dot *and*
