@@ -6,8 +6,6 @@ here ships it moves to the CHANGELOG and drops off this page.
 - **Why** a thing is ranked where it is: [ROADMAP.md](../ROADMAP.md), which is
   ordered by where five independent feature lists agreed without seeing each
   other's work.
-- **The full backlog**, including operational work that is not a feature:
-  the **CLIque** list in Nextcloud Tasks.
 - **Not committed to anything**: [ideas-inbox.md](ideas-inbox.md).
 
 ---
@@ -38,8 +36,6 @@ awareness win after the badge, and it costs hours.
 
 | | |
 |---|---|
-| **Vault entry** | Still named *muxpanel (devbox)*. Ten seconds in the Vaultwarden UI; the bash guard correctly stops an agent doing it. |
-| **No monitor at all** | CLIque binds loopback only, so it needs a **push** monitor on vps1's Kuma plus a heartbeat thread. The push token is a secret and goes in Vaultwarden. |
 | **Failure, rescue, orphans** | Name the ways a session can fail and show which one it is in; restart a CLI in place; reconcile records against tmux both ways so nothing is left running that nobody can see. |
 
 ---

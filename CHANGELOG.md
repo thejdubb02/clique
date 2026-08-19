@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.22.0 — 2026-08-19 10:55 PDT
+
+**Long press a session on a phone and the menu opens.**
+
+Rename, archive, move and kill were reachable only by right-clicking, which
+does not exist on touch. Folders got away with it — the pencil is the same menu
+with a way to find it — and tabs had the gear. Sidebar rows had nothing, so
+half the app was missing on the device most likely to be checking a session
+from the sofa.
+
+- A **half-second press** on any session row opens the same menu right-click
+  opens. A short buzz when it lands, because nothing has moved on screen yet
+  and a press that has taken is otherwise indistinguishable from one that has
+  not.
+- **Moving cancels it.** A press that turns into a scroll is a scroll, with
+  enough slop that a resting finger does not count as movement — a menu that
+  refuses to open is worse than one that opens when you meant to scroll.
+- Lifting after the menu opens no longer counts as a tap on the row, which
+  would have opened the session behind its own menu.
+- Menu rows get a **real tap target** on any coarse-pointer device, rather than
+  the padding a mouse cursor is happy with.
+
+Delegated to the sidebar rather than bound per row: the tree is rebuilt on
+every poll, and three listeners per session every three seconds is churn for
+nothing.
+
 ## 0.21.1 — 2026-08-19 10:50 PDT
 
 **`API.md` exists.** The settings sheet had been pointing at a full reference
@@ -537,10 +563,9 @@ built around.**
 - The browser's own state — sidebar width, collapsed state, open tabs — is
   carried across once on first load. Reopening to a default sidebar and no
   tabs is the moment a rename feels like a breakage.
-- **Live at https://example.invalid/clique.** The old `/mux` path
-  still resolves, so an existing bookmark will not 404.
-- The password moved with everything else, to `/root/.clique/password`.
-  Vaultwarden holds the only other copy.
+- **Served at `/clique` behind the tunnel.** The old `/mux` path still
+  resolved, so an existing bookmark would not 404.
+- The password moved with everything else, to `$CLIQUE_HOME/password`.
 
 ## 0.4.1 — 2026-08-18 20:24 PDT
 
@@ -631,7 +656,8 @@ written down in [SECURITY.md](SECURITY.md).
   a strict policy was free.
 - **The password is stored as an scrypt hash.** The server only verifies, so
   keeping the plaintext bought nothing. Set it with
-  `python3 -m clique password`. Vaultwarden now holds the only copy.
+  `python3 -m clique password`. Keep the plaintext in a password manager,
+  not next to the hash.
 - **API tokens hot-reload.** Minting an agent no longer needs a restart, and
   more importantly, revoking one takes effect immediately — a revocation that
   waits for a restart is not a revocation.

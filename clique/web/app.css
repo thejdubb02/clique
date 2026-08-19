@@ -743,3 +743,16 @@ a.give-value { color: var(--accent); }
                  color: var(--fg); }
 .clog-entry code { font-size: 11px; padding: 1px 4px; border-radius: 3px;
                    background: var(--field); }
+
+/* Touch. A long press on a session row opens the menu that right-click opens,
+   so the platform's own callout and text-selection have to get out of the way
+   — otherwise the browser offers "Copy" over the top of ours. */
+.session { -webkit-touch-callout: none; }
+.session .meta, .session .age { -webkit-user-select: none; user-select: none; }
+
+/* A finger is not a mouse pointer. Menu rows get a real tap target on any
+   coarse-pointer device rather than the 6px padding a cursor is fine with. */
+@media (pointer: coarse) {
+  #menu { min-width: 200px; }
+  #menu button { padding: 11px 16px; }
+}

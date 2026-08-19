@@ -6,3 +6,6 @@ data/state.json.bak
 data/*.pre-adopt
 clique/web/custom.css
 
+# Private to this box — not part of the public project
+tools/vault_sync.py
+
