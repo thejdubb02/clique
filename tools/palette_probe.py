@@ -28,6 +28,7 @@ from __future__ import annotations
 import re
 import sys
 import time
+import uuid
 from collections import Counter
 from pathlib import Path
 
@@ -82,7 +83,10 @@ def probe(cli_id: str, reg: Registry, seconds: float = 5.0) -> tuple[Counter, in
     where = cli.resolve()
     if not where:
         raise FileNotFoundError(cli.command)
-    argv = reg.launch_argv(cli_id, session_id="0" * 32, name="probe", cwd="/tmp")
+    # A real uuid, not a placeholder: a CLI handed a malformed session id
+    # exits immediately, and the probe then reports "not probed" for a reason
+    # that has nothing to do with colour.
+    argv = reg.launch_argv(cli_id, session_id=str(uuid.uuid4()), name="probe", cwd="/tmp")
     mux = f"sm-probe-{cli_id}"
     tmux.create(mux, "/tmp", argv, socket=SOCKET, width=100, height=30)
     time.sleep(seconds)

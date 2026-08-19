@@ -324,8 +324,14 @@ not, and `tools/palette_probe.py` says exactly why. Measured on this box:
 | CLI | 16 ANSI | greyscale | cube | truecolor | theme reaches |
 |---|---|---|---|---|---|
 | shell | 0 | 0 | 0 | 0 | everything (paints nothing) |
-| grok | 0 | 93 | 10 | 0 | 90% |
-| gemini | 0 | 3 | 71 | 0 | **4%** |
+| grok | 0 | 99 | 10 | 0 | 91% |
+| claude | 0 | 10 | 9 | 0 | 53% |
+| gemini | 0 | 3 | 67 | 0 | **4%** |
+
+**Not one of them emits truecolor.** That is the finding that matters, because
+truecolor is the only mechanism nothing can remap — an exact RGB is exact.
+Every colour all four of these CLIs paint is reachable if a theme is willing to
+claim the cube. "Gemini cannot be skinned" is a policy, not a limit.
 
 **The ladder that decides this**, from least specific to most:
 
