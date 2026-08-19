@@ -680,6 +680,69 @@ function sessionMenu(ev, s) {
   ]);
 }
 
+/* Long press, because touch has no right-click.
+ *
+ * Everything in the session menu — rename, archive, move, kill — was reachable
+ * only by right-clicking, which does not exist on a phone. Folders got away
+ * with it because the pencil is the same menu with a way to find it, and tabs
+ * because of the gear; sidebar rows had nothing, so half the app was missing
+ * on the device most likely to be checking on a session from the sofa.
+ *
+ * Delegated to the tree rather than bound per row: the sidebar is rebuilt on
+ * every poll, and three listeners per session every three seconds is churn for
+ * nothing.
+ */
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_SLOP = 10;   // px of drift still counted as holding still
+
+function wireTouchMenus() {
+  const tree = $("#tree");
+  let timer = null;
+  let from = null;
+  let fired = false;
+
+  const cancel = () => { clearTimeout(timer); timer = null; from = null; };
+
+  tree.addEventListener("touchstart", (ev) => {
+    cancel();
+    if (ev.touches.length !== 1) return;        // a pinch is not a press
+    const row = ev.target.closest(".session");
+    if (!row) return;
+    const touch = ev.touches[0];
+    from = { x: touch.clientX, y: touch.clientY, id: row.dataset.id };
+    fired = false;
+    timer = setTimeout(() => {
+      timer = null;
+      const s = session(from && from.id);
+      if (!s) return;
+      fired = true;
+      // The one moment a buzz is right: nothing has moved on screen yet, and
+      // without it a press that has landed feels identical to one that has not.
+      if (navigator.vibrate) navigator.vibrate(12);
+      sessionMenu({ clientX: from.x, clientY: from.y, preventDefault() {} }, s);
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+
+  tree.addEventListener("touchmove", (ev) => {
+    // A press that turns into a scroll is a scroll. The slop is generous: a
+    // finger resting on a list is never perfectly still, and a menu that
+    // refuses to open is worse than one that opens when you meant to scroll.
+    if (!from || !ev.touches.length) return;
+    const touch = ev.touches[0];
+    if (Math.abs(touch.clientX - from.x) > LONG_PRESS_SLOP
+        || Math.abs(touch.clientY - from.y) > LONG_PRESS_SLOP) cancel();
+  }, { passive: true });
+
+  // Not passive: lifting after the menu opened would otherwise become a tap on
+  // the row underneath, and the session would open behind its own menu.
+  tree.addEventListener("touchend", (ev) => {
+    if (fired) { ev.preventDefault(); fired = false; }
+    cancel();
+  }, { passive: false });
+
+  tree.addEventListener("touchcancel", cancel, { passive: true });
+}
+
 const PALETTE = ["#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
                  "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2"];
 
@@ -2675,6 +2738,7 @@ function setSidebar(show) {
 
 wire();
 wireResizer();
+wireTouchMenus();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 refresh().then(async () => {

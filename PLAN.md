@@ -3,7 +3,7 @@
 Status: **built and shipped as v0.1.0 on 2026-08-19.** Kept as the record of what
 was decided before implementation, and why. See README.md and CHANGELOG.md for
 what exists now.
-Reviewed against `/root/platform/CodemanPanel` and `/root/.codeman/app` (Codeman v1.18.4) on 2026-08-18.
+Reviewed against CodemanPanel and Codeman v1.18.4 on 2026-08-18.
 
 ---
 
@@ -34,7 +34,7 @@ Lifted or adapted, not rebuilt:
 
 - `auth.py` (133 lines) — password + signed cookie + login page. Take almost verbatim.
 - `store.py` (158 lines) — folder store, colour palette, **auto-filing by directory prefix**
-  (`/root/platform/` → WSG Platform). Adapt.
+  (directory prefix → a named folder). Adapt.
 - `data/groups.json` — the folder schema he already uses, with his six real groups and their
   colours. Reuse as the seed file.
 - `prefix_proxy.py:143` — a working hand-rolled WebSocket relay over stdlib sockets. This is
@@ -152,7 +152,7 @@ that requirement falls out of the config rather than needing a per-CLI code bran
 ## 5. File structure
 
 ```
-/root/platform/<name>/
+<repo>/
 ├── pyproject.toml
 ├── README.md
 ├── config/

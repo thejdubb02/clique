@@ -41,6 +41,7 @@ If you run more than two coding agents at once, you already know the problem: te
 | **Changelog** | Settings → Changelog: every release with the time it shipped, read from this repo's `CHANGELOG.md` so the two cannot disagree. |
 | **Monitoring** | `GET /healthz` answers without a login — point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |
+| **Touch** | Long press a session for the menu right-click gives, with tap targets sized for a finger. |
 | **Installable** | PWA with a full icon set. (The layout is not mobile-optimised yet.) |
 
 Not built, on purpose: subagent visualisation, a respawn controller, multi-host, a Ralph loop. Those need to know which vendor is talking. This product does not.

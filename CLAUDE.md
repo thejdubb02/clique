@@ -12,7 +12,6 @@ Docs, each with one job — read the one that matches the question:
 | What is being built next, in order | `docs/next.md` (short-lived; shipped work drops off it) |
 | Why it is ranked that way, what is refused | `ROADMAP.md` |
 | Raised but not committed to | `docs/ideas-inbox.md` |
-| The full backlog, ops work included | the **CLIque** list in Nextcloud Tasks |
 | What shipped | `CHANGELOG.md` |
 
 ## The API is the whole surface
@@ -99,5 +98,6 @@ When in doubt it goes on the server. The test is not "is it small" — it is
 `clique`, sessions prefixed `sm-`) · `store.py` state · `registry.py` the CLI
 registry · `web/` the front end, hand-written JS with no build.
 
-Runs under systemd as a user unit: `systemctl --user restart clique`, port
-3200, published on the tailnet. Password in Vaultwarden as *CLIque (devbox)*.
+Runs under systemd as a user unit (`deploy/clique.service`):
+`systemctl --user restart clique`, port 3200, loopback only. Password is an
+scrypt hash in `$CLIQUE_HOME/password`.
