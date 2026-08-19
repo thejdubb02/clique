@@ -103,6 +103,44 @@ Open question before building — what counts as an artifact:
 
 ---
 
+## Charging for it
+
+Raised 2026-08-19: can CLIque be a paid service as well as a self-hosted one?
+
+**The thing that cannot be sold is hosting the panel.** Anyone who reaches a
+CLIque has a shell as the user that started it — that is stated plainly in the
+README and it is not a bug. Running that for strangers is not a SaaS, it is
+being a compute provider: arbitrary code execution for money, with the abuse,
+the egress bill and the liability that comes with it. It also has to answer for
+whose CLI subscription is being used on whose hardware. Nobody should build
+that here.
+
+**The thing that can be sold is the part that is annoying to self-host.** Not
+the panel — reachability. Today, using CLIque from a phone means Tailscale or a
+reverse proxy, a certificate, and a DNS record, and that is the step where most
+self-hosters stop. A small hosted relay would sell:
+
+- one URL that reaches every box you run CLIque on, with no ports opened
+- identity, so a second person can be given access without sharing a password
+- **push to a phone when a session is waiting on you** — which is the attention
+  state, and the reason it was built before this was written down
+
+None of that runs anyone's code. It moves bytes and holds identities, which is
+a business with a cost floor you can predict.
+
+**Licensing.** MIT means a fork can host it too, and that is fine as long as
+what is charged for is the service and not the code. Relicensing the panel to
+buy exclusivity would cost more goodwill than the exclusivity is worth: the
+self-hosting audience is the distribution.
+
+**The order that keeps it honest:** the panel stays free and complete, and the
+paid tier is never a feature removed from it. The first paid thing should be
+something a self-hoster could do themselves and would rather not — which is
+exactly the test the outbound-webhook feature also passes, and why that one
+ships free.
+
+---
+
 ## Elsewhere
 
 Operational and product work that is tracked but does not belong in the
