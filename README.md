@@ -11,6 +11,7 @@
   <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square" alt="Python 3.11+"></a>
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
+  <a href="https://github.com/thejdubb02/clique/actions/workflows/tests.yml"><img src="https://github.com/thejdubb02/clique/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.24.0-A855F7?style=flat-square" alt="0.24.0"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
   <a href="https://buymeacoffee.com/jdubb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
@@ -115,7 +116,7 @@ That also means the real ceiling on concurrent sessions is the agents, not this.
 
 ## Tests
 
-Neither suite is mocked. The failure modes worth catching — tmux quoting, a PTY that never gets its first byte — only exist across a real socket.
+Neither suite is mocked. The failure modes worth catching — tmux quoting, a PTY that never gets its first byte — only exist across a real socket. GitHub Actions runs all three on every push.
 
 ```bash
 python3 tools/smoke.py                 # engine, against a real tmux server
