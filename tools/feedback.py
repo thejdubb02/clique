@@ -1,8 +1,8 @@
 """Collect what people are saying about CLIque into one file worth reading.
 
-Feature requests arrive in four places and none of them is a place anyone
+Feature requests arrive in three places and none of them is a place anyone
 checks daily: GitHub issues, GitHub discussions, and whatever gets said on Hacker
-News and Reddit. This pulls all four into `docs/feedback-inbox.md`, marks what
+News. This pulls all three into `docs/feedback-inbox.md`, marks what
 is new since the last run, and prints one line saying so.
 
 It is deliberately not a bug tracker. GitHub is the tracker; this is the
@@ -22,7 +22,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -139,35 +139,6 @@ def hackernews() -> list[dict]:
     return out
 
 
-def reddit() -> list[dict]:
-    """Reddit, which blocks anonymous JSON from a server address.
-
-    Left in and left honest. It answers 403 from anything that is not a
-    browser on a residential connection, so this reliably contributes nothing
-    and reliably says so — which is the point of PROBLEMS. Wiring it properly
-    means a free Reddit OAuth app, or pointing it at our own SearXNG.
-    """
-    out = []
-    for term in MENTIONS:
-        data = fetch("https://www.reddit.com/search.json?"
-                     + urllib.parse.urlencode({"q": term, "sort": "new", "limit": 20}),
-                     "Reddit")
-        for child in ((data or {}).get("data") or {}).get("children", []):
-            post = child.get("data") or {}
-            out.append({
-                "key": f"reddit:{post.get('id', '')}",
-                "kind": "reddit",
-                "title": post.get("title", ""),
-                "who": "u/" + str(post.get("author", "?")),
-                "when": datetime.fromtimestamp(
-                    post.get("created_utc") or 0, UTC).isoformat(),
-                "url": "https://reddit.com" + str(post.get("permalink", "")),
-                "extra": post.get("subreddit_name_prefixed", ""),
-                "comments": post.get("num_comments", 0),
-            })
-    return out
-
-
 def when(row: dict) -> str:
     """An ISO timestamp as a local date, because that is how anyone reads it."""
     try:
@@ -201,7 +172,7 @@ def problems() -> str:
 
 def main() -> int:
     quiet = "--quiet" in sys.argv
-    rows = issues() + discussions() + hackernews() + reddit()
+    rows = issues() + discussions() + hackernews()
 
     try:
         seen = set(json.loads(SEEN.read_text()))
@@ -226,7 +197,7 @@ Last collected {stamp:%Y-%m-%d %H:%M %Z}.
 {table([r for r in rows if r['kind'] in ('issue', 'discussion')])}
 ## Mentioned elsewhere
 
-{table([r for r in rows if r['kind'] in ('hn', 'reddit')])}
+{table([r for r in rows if r['kind'] == 'hn'])}
 {problems()}"""
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
