@@ -10,11 +10,28 @@ discovered later as a session that starts and immediately dies.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+#: Where CLIs get installed when they are not on a service's PATH.
+#:
+#: This list exists because grok was installed, working, and reported as
+#: missing: systemd hands a user unit a minimal PATH, and every one of these
+#: directories is somewhere a package manager routinely puts a binary.
+#: Widening the service PATH fixes the common case; this catches the rest.
+EXTRA_BIN_DIRS = [
+    Path.home() / ".local/bin",
+    Path.home() / ".npm-global/bin",
+    Path.home() / ".bun/bin",
+    Path.home() / ".cargo/bin",
+    Path.home() / ".deno/bin",
+    Path("/usr/local/bin"),
+    Path("/opt/homebrew/bin"),
+]
 
 #: Substitutions available in ``args``/``resume``.
 PLACEHOLDERS = {"id", "uuid", "name", "cwd", "mode", "cli_session_id"}
@@ -40,6 +57,9 @@ class CliType:
     modes: list[str] = field(default_factory=list)
     mode_key: str = "S-Tab"
     mode_label: str = "{mode} mode"
+    #: Filename in web/icons/. Drawn as a mask and tinted, so only the
+    #: silhouette matters — a flat single-colour shape, not artwork.
+    icon: str = ""
 
     @property
     def has_modes(self) -> bool:
@@ -50,10 +70,34 @@ class CliType:
     def default_mode(self) -> str | None:
         return self.modes[0] if self.modes else None
 
+    def resolve(self) -> str | None:
+        """Absolute path to the binary, or None if it is genuinely not here.
+
+        PATH first, then the usual install directories. Returning the resolved
+        path rather than a bool matters: it is what gets executed, so a CLI
+        found outside PATH still launches instead of merely being listed.
+        """
+        if "/" in self.command:
+            return self.command if os.access(self.command, os.X_OK) else None
+
+        found = shutil.which(self.command)
+        if found:
+            return found
+
+        for directory in EXTRA_BIN_DIRS:
+            candidate = directory / self.command
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+            # Some CLIs install into a directory named after themselves.
+            nested = directory.parent / f".{self.command}" / "bin" / self.command
+            if nested.is_file() and os.access(nested, os.X_OK):
+                return str(nested)
+        return None
+
     @property
     def installed(self) -> bool:
         """False is informational, not fatal — a CLI may be configured early."""
-        return shutil.which(self.command) is not None
+        return self.resolve() is not None
 
     def as_dict(self) -> dict:
         """The shape the frontend consumes. No Python types leak."""
@@ -64,6 +108,10 @@ class CliType:
             "modes": list(self.modes),
             "mode_key": self.mode_key,
             "installed": self.installed,
+            # Empty means "no drawing for this one" — the UI falls back to a
+            # letter badge, so a newly added CLI looks deliberate without
+            # anyone having to draw an icon first.
+            "icon": self.icon,
         }
 
 
@@ -97,6 +145,11 @@ def _validate(cli: CliType) -> None:
             f"— a new session has no prior id"
         )
 
+    if cli.icon and ("/" in cli.icon or ".." in cli.icon):
+        raise RegistryError(
+            f"{where}.icon: must be a bare filename in web/icons/, not a path"
+        )
+
     # A {mode} with no `modes` list would render empty and hand the CLI a bare
     # flag with no value, which fails in a way that looks like a CLI bug.
     if "mode" in _tokens(cli.args + cli.resume) and not cli.modes:
@@ -117,7 +170,7 @@ def parse(data: dict) -> dict[str, CliType]:
             raise RegistryError(f"cli.{cli_id}: expected a table")
         unknown_keys = set(raw) - {
             "label", "command", "args", "resume", "color",
-            "modes", "mode_key", "mode_label",
+            "modes", "mode_key", "mode_label", "icon",
         }
         if unknown_keys:
             raise RegistryError(
@@ -133,6 +186,7 @@ def parse(data: dict) -> dict[str, CliType]:
             modes=list(raw.get("modes", [])),
             mode_key=raw.get("mode_key", "S-Tab"),
             mode_label=raw.get("mode_label", "{mode} mode"),
+            icon=raw.get("icon", ""),
         )
         _validate(cli)
         types[cli_id] = cli
@@ -207,4 +261,6 @@ class Registry:
             "cli_session_id": cli_session_id or "",
         }
         rendered = [_TOKEN.sub(lambda m: ctx[m.group(1)], arg) for arg in template]
-        return [cli.command, *rendered]
+        # The resolved path, not the bare name: the CLI may live somewhere the
+        # service's PATH does not reach.
+        return [cli.resolve() or cli.command, *rendered]

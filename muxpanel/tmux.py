@@ -162,19 +162,37 @@ def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -
             time.sleep(0.25)
 
 
-def sweep_viewers(sockets: tuple[str | None, ...] = (SOCKET,)) -> int:
-    """Delete viewer sessions left behind by a crash.
+def sweep_viewers(
+    sockets: tuple[str | None, ...] = (SOCKET,),
+    *,
+    detached_only: bool = False,
+    min_age: int = 30,
+) -> int:
+    """Delete viewer sessions nothing is watching.
 
-    Run at startup. A viewer is disposable by construction — it holds no work,
-    only a client's view of someone else's — so removing a stale one can never
+    A viewer is disposable by construction — it holds no work, only one
+    client's view of someone else's session — so removing a stale one can never
     lose anything.
+
+    Two callers. At startup, everything goes: no browser can be attached yet.
+    While running, ``detached_only`` reaps viewers whose client has gone, which
+    is the case a restart creates — the server dies before its cleanup runs,
+    the browser reconnects and builds a new viewer, and the old one lingers
+    forever. ``min_age`` keeps that from racing a viewer created moments ago
+    and not yet attached.
+
+    Note the explicit prefix on ``list_sessions``: the default listing hides
+    viewers precisely because they are plumbing, and forgetting that here is
+    what let them accumulate ten-to-three against real clients.
     """
     removed = 0
+    now = time.time()
     for socket_name in sockets:
-        for pane in list_sessions(socket_name):
-            if pane.mux.startswith(VIEW_PREFIX):
-                kill(pane.mux, socket_name)
-                removed += 1
+        for pane in list_sessions(socket_name, prefix=VIEW_PREFIX):
+            if detached_only and (pane.attached or now - pane.created < min_age):
+                continue
+            kill(pane.mux, socket_name)
+            removed += 1
     return removed
 
 

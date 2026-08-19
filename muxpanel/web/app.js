@@ -26,11 +26,12 @@ const api = async (path, opts = {}) => {
   return body;
 };
 
-let state = { folders: [], sessions: [], clis: [], stats: {} };
+let state = { folders: [], sessions: [], clis: [], stats: {}, settings: {} };
 let openTabs = [];            // session ids, in tab order
 let activeId = null;
 const terms = new Map();      // id -> { term, fit, ws, el, retry }
 let repeat = 1;
+let showArchived = false;
 
 /* ------------------------------------------------------------------- helpers */
 
@@ -43,6 +44,44 @@ function ago(epoch) {
   if (secs < 3600) return Math.floor(secs / 60) + "m";
   if (secs < 86400) return Math.floor(secs / 3600) + "h";
   return Math.floor(secs / 86400) + "d";
+}
+
+/* The CLI marker: icon, colour chip, both, or nothing.
+ *
+ * Kept separate from the status dot on purpose. The dot says whether a session
+ * is alive and watched; the marker says which CLI it is. Folding them together
+ * would mean turning icons off also cost you the ability to see what is
+ * running, which is not a trade anyone asked for. */
+function markerFor(item, mode) {
+  if (mode === "none") return "";
+  if (mode === "color") return `<i class="cli-chip" style="background:${item.color}"></i>`;
+
+  // "icon" is the same shape in neutral grey; "both" tints it the CLI colour.
+  const tint = mode === "icon" ? "var(--dim)" : item.color;
+  if (item.icon) {
+    // A mask, not an <img>: the SVG supplies the silhouette and the panel
+    // supplies the colour, so one file serves both tinted and neutral modes.
+    const url = `icons/${encodeURIComponent(item.icon)}`;
+    return `<i class="cli-icon" style="-webkit-mask-image:url(${url});` +
+           `mask-image:url(${url});background:${tint}"></i>`;
+  }
+  // No drawing for this CLI: a letter badge, which looks deliberate and means
+  // adding a CLI never waits on someone drawing an icon first.
+  const letter = escapeHtml((item.label || item.cli || "?").trim()[0] || "?");
+  return `<i class="cli-letter" style="color:${tint};border-color:${tint}">${letter}</i>`;
+}
+
+function markerMode(cliId) {
+  const per = state.settings.marker_by_cli || {};
+  return per[cliId] || state.settings.marker_default || "both";
+}
+
+function sessionMarker(s, where) {
+  const on = where === "tabs" ? state.settings.markers_in_tabs
+                              : state.settings.markers_in_sidebar;
+  if (on === false) return "";
+  return markerFor({ color: s.color, icon: s.icon, label: s.cli_label, cli: s.cli },
+                   markerMode(s.cli));
 }
 
 function statusColor(s) {
@@ -88,18 +127,27 @@ function renderTree() {
   // Running-and-open first: what you are working on should not be somewhere
   // you have to scroll to.
   const groups = [];
-  const running = state.sessions.filter((s) => s.alive && openTabs.includes(s.id));
+  const live = state.sessions.filter((s) => !s.archived);
+  const running = live.filter((s) => s.alive && openTabs.includes(s.id));
   if (running.length) groups.push({ id: "__running", name: "Running", color: "#2d7d46", pinned: true, sessions: running });
 
   for (const folder of state.folders) {
     groups.push({
       ...folder,
-      sessions: state.sessions.filter((s) => s.folder === folder.id && !running.includes(s)),
+      sessions: live.filter((s) => s.folder === folder.id && !running.includes(s)),
     });
   }
-  const unfiled = state.sessions.filter(
+  const unfiled = live.filter(
     (s) => !running.includes(s) && !state.folders.some((f) => f.id === s.folder));
   if (unfiled.length) groups.push({ id: "__unfiled", name: "Ungrouped", color: "#8b8b8b", sessions: unfiled });
+
+  // Archived last, collapsed unless asked for. Archiving never touched tmux,
+  // so everything here is still running and one click from coming back.
+  const archived = state.sessions.filter((s) => s.archived);
+  if (archived.length) {
+    groups.push({ id: "__archived", name: "Archived", color: "#5a5a5a",
+                  collapsed: !showArchived, sessions: archived });
+  }
 
   for (const group of groups) {
     const shown = group.sessions.filter(matches);
@@ -143,6 +191,7 @@ function sessionRow(s) {
   row.dataset.id = s.id;
   row.innerHTML =
     `<i class="dot" style="background:${statusColor(s)}"></i>` +
+    sessionMarker(s, "sidebar") +
     `<span class="meta"><span class="name">${escapeHtml(s.name)}</span>` +
     `<span class="path">${escapeHtml(s.cwd)}</span></span>` +
     `<span class="age">${ago(s.created)}</span>`;
@@ -175,6 +224,10 @@ function wireDrop(el, folderId) {
 }
 
 function toggleFolder(group) {
+  if (group.id === "__archived") {
+    showArchived = !showArchived;
+    return renderTree();
+  }
   if (!group.id.startsWith("f-")) return;
   api("api/folders/" + group.id, {
     method: "PATCH", body: JSON.stringify({ collapsed: !group.collapsed }),
@@ -233,13 +286,51 @@ function sessionMenu(ev, s) {
       const row = document.querySelector(`.session[data-id="${s.id}"]`);
       if (row) renameInline(row, s);
     }],
+    [s.archived ? "Unarchive" : "Archive", async () => {
+      // Deliberately not a confirm: nothing is destroyed, and the session
+      // keeps running either way.
+      await api("api/sessions/" + s.id, {
+        method: "PATCH", body: JSON.stringify({ archived: !s.archived }),
+      });
+      if (!s.archived) closeTab(s.id, true);
+      refresh();
+    }],
     ["Kill session", () => killSession(s), true],
   ]);
+}
+
+const PALETTE = ["#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
+                 "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2"];
+
+function colorPicker(ev, folder) {
+  const menu = $("#menu");
+  menu.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "swatches";
+  for (const color of PALETTE) {
+    const swatch = document.createElement("button");
+    swatch.className = "swatch" + (color === folder.color ? " on" : "");
+    swatch.style.background = color;
+    swatch.title = color;
+    swatch.onclick = async () => {
+      menu.hidden = true;
+      await api("api/folders/" + folder.id, {
+        method: "PATCH", body: JSON.stringify({ color }),
+      });
+      refresh();
+    };
+    grid.appendChild(swatch);
+  }
+  menu.appendChild(grid);
+  menu.hidden = false;
+  menu.style.left = Math.min(ev.clientX, innerWidth - 190) + "px";
+  menu.style.top = Math.min(ev.clientY, innerHeight - 110) + "px";
 }
 
 function folderMenu(ev, folder) {
   ev.stopPropagation();
   showMenu(ev, [
+    ["Change colour", () => colorPicker(ev, folder)],
     ["Rename folder", async () => {
       const name = prompt("Folder name", folder.name);
       if (name) {
@@ -279,6 +370,7 @@ function renderTabs() {
     tab.innerHTML =
       `<span class="num">${index + 1}</span>` +
       `<i class="dot" style="background:${statusColor(s)}"></i>` +
+      sessionMarker(s, "tabs") +
       `<span class="label">${escapeHtml(s.name)}</span>` +
       `<button class="gear" title="Session settings">⚙</button>` +
       `<button class="x" title="Close tab (session keeps running)">✕</button>`;
@@ -467,11 +559,20 @@ function openModal() {
   const form = $("#newForm");
   const cliSelect = form.cli;
   cliSelect.innerHTML = "";
-  for (const cli of state.clis) {
+  // Auto-detected: only CLIs whose binary is actually present are offered.
+  // Listing the rest as disabled options was just noise once the catalogue
+  // grew past a handful.
+  const available = state.clis.filter((c) => c.installed);
+  for (const cli of available) {
     const option = document.createElement("option");
     option.value = cli.id;
-    option.textContent = cli.label + (cli.installed ? "" : " (not installed)");
-    option.disabled = !cli.installed;
+    option.textContent = cli.label;
+    cliSelect.appendChild(option);
+  }
+  if (!available.length) {
+    const option = document.createElement("option");
+    option.textContent = "No CLIs detected on this box";
+    option.disabled = true;
     cliSelect.appendChild(option);
   }
   const folderSelect = form.folder;
@@ -489,11 +590,73 @@ function openModal() {
   form.name.focus();
 }
 
+/* ----------------------------------------------------------------- settings */
+
+async function saveSettings(changes) {
+  // Settings live on the server, not in localStorage, so the panel looks the
+  // same on his phone as on the desktop.
+  state.settings = await api("api/settings", {
+    method: "PATCH", body: JSON.stringify(changes),
+  });
+  renderTree();
+  renderTabs();
+}
+
+function openSettings() {
+  $("#setTabs").checked = state.settings.markers_in_tabs !== false;
+  $("#setSidebar").checked = state.settings.markers_in_sidebar !== false;
+
+  const rows = $("#cliRows");
+  rows.innerHTML = "";
+  // Installed first: the ones he actually runs should not be below a list of
+  // ones he does not have.
+  const clis = [...state.clis].sort(
+    (a, b) => (b.installed - a.installed) || a.label.localeCompare(b.label));
+
+  for (const cli of clis) {
+    const mode = markerMode(cli.id);
+    const row = document.createElement("div");
+    row.className = "cli-row" + (cli.installed ? "" : " absent");
+    row.innerHTML =
+      `<span class="preview">${markerFor(cli, mode === "none" ? "both" : mode)}</span>` +
+      `<span class="label">${escapeHtml(cli.label)}` +
+      (cli.installed ? "" : ' <span class="tag">not installed</span>') +
+      `</span>`;
+
+    const select = document.createElement("select");
+    for (const [value, text] of [["both", "Both"], ["icon", "Icon"],
+                                 ["color", "Colour"], ["none", "None"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = text;
+      option.selected = value === mode;
+      select.appendChild(option);
+    }
+    select.onchange = async () => {
+      await saveSettings({ marker_by_cli: { [cli.id]: select.value } });
+      openSettings();  // repaint the preview beside the row
+    };
+    row.appendChild(select);
+    rows.appendChild(row);
+  }
+
+  const absent = clis.filter((c) => !c.installed).length;
+  $("#notInstalledNote").textContent = absent
+    ? `${absent} catalogued CLIs are not installed on this box, so they are not `
+      + `offered when starting a session. Install one and it appears here by itself.`
+    : "";
+  $("#settings").hidden = false;
+}
+
 /* ------------------------------------------------------------------- wiring */
 
 function wire() {
   $("#q").oninput = renderTree;
   $("#newTab").onclick = openModal;
+  $("#settingsBtn").onclick = openSettings;
+  $("#settingsDone").onclick = () => ($("#settings").hidden = true);
+  $("#setTabs").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
+  $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
   $("#cancel").onclick = () => ($("#modal").hidden = true);
   $("#collapse").onclick = () => setSidebar(false);
   $("#expand").onclick = () => setSidebar(true);
@@ -566,7 +729,11 @@ function wire() {
       const target = openTabs[Number(ev.key) - 1];
       if (target) { ev.preventDefault(); selectTab(target); }
     }
-    if (ev.key === "Escape") { $("#modal").hidden = true; $("#menu").hidden = true; }
+    if (ev.key === "Escape") {
+      $("#modal").hidden = true;
+      $("#menu").hidden = true;
+      $("#settings").hidden = true;
+    }
   };
 
   addEventListener("resize", () => {

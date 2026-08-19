@@ -45,6 +45,7 @@ class Panel:
         self.registry = registry
         self.auth = auth
         self.clients = 0
+        self._last_reap = 0.0
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ views
@@ -61,7 +62,23 @@ class Panel:
         for socket_name in sockets:
             for pane in tmux.list_sessions(socket_name):
                 panes[pane.mux] = pane
+
+        # Reap viewers whose browser has gone. This runs on the sidebar poll
+        # rather than on a timer because it needs no scheduling and the poll is
+        # already listing every session; the incremental cost is one kill for
+        # something that should not exist.
+        self._reap_viewers(tuple(sockets))
         return panes
+
+    def _reap_viewers(self, sockets: tuple[str | None, ...]) -> None:
+        now = time.time()
+        with self._lock:
+            if now - self._last_reap < 30:
+                return
+            self._last_reap = now
+        # Housekeeping must never break the session list.
+        with contextlib.suppress(tmux.TmuxError):
+            tmux.sweep_viewers(sockets, detached_only=True)
 
     def sessions_view(self) -> list[dict]:
         panes = self.live()
@@ -75,6 +92,7 @@ class Panel:
                 "cli": session.cli,
                 "cli_label": cli.label if cli else session.cli,
                 "color": cli.color if cli else "#8b8b8b",
+                "icon": cli.icon if cli else "",
                 "cwd": session.cwd,
                 "project": Path(session.cwd).name or session.cwd,
                 "folder": session.folder,
@@ -82,6 +100,7 @@ class Panel:
                 "modes": list(cli.modes) if cli else [],
                 "mode_key": cli.mode_key if cli else None,
                 "adopted": session.adopted,
+                "archived": session.archived,
                 "created": session.created,
                 "alive": pane is not None,
                 "attached": bool(pane and pane.attached),
@@ -100,6 +119,7 @@ class Panel:
             ],
             "sessions": self.sessions_view(),
             "clis": [c.as_dict() for c in self.registry.types().values()],
+            "settings": self.store.settings,
             "stats": sysinfo.snapshot(self.clients),
         }
 
@@ -326,11 +346,16 @@ class Handler(BaseHTTPRequestHandler):
         body = self._body()
         parts = path.strip("/").split("/")
         try:
+            if len(parts) == 2 and parts[1] == "settings":
+                return self._json(self.panel.store.update_settings(body))
             if len(parts) == 3 and parts[1] == "sessions":
-                updated = self.panel.store.update_session(
-                    parts[2], name=body.get("name"), folder=body.get("folder"),
-                    mode=body.get("mode"),
-                )
+                # Only fields the caller actually sent. `folder: null` is a
+                # real value (drag to Ungrouped), so "absent" and "null" have
+                # to stay distinguishable — passing body.get() for every field
+                # would make a rename silently unfile the session.
+                allowed = {"name", "folder", "mode", "archived"}
+                fields = {k: v for k, v in body.items() if k in allowed}
+                updated = self.panel.store.update_session(parts[2], **fields)
                 return self._json({"ok": bool(updated)}, 200 if updated else 404)
             if len(parts) == 3 and parts[1] == "folders":
                 updated = self.panel.store.update_folder(

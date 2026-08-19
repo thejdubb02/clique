@@ -241,3 +241,57 @@ button.primary:hover { filter: brightness(1.1); }
 #menu button:hover { background: var(--accent); color: #fff; }
 #menu button.danger { color: var(--err); }
 #menu button.danger:hover { background: var(--err); color: #fff; }
+
+/* --------------------------------------------------------------- CLI markers */
+
+/* Drawn as masks so one flat SVG serves both the tinted and the neutral mode —
+   the file supplies the silhouette, the panel supplies the colour. */
+.cli-icon {
+  width: 13px; height: 13px; flex: 0 0 13px; display: inline-block;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+}
+.cli-chip { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 9px; display: inline-block; }
+.cli-letter {
+  width: 13px; height: 13px; flex: 0 0 13px; display: inline-grid; place-items: center;
+  border: 1px solid; border-radius: 3px; font-size: 9px; font-weight: 600;
+  line-height: 1; text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------ settings */
+
+#settings { position: fixed; inset: 0; background: #000a; display: grid;
+            place-items: center; z-index: 45; }
+#settings .sheet {
+  width: min(520px, 94vw); max-height: 86vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 18px;
+}
+#settings h2 { margin: 0 0 16px; font-size: 14px; font-weight: 600; }
+#settings h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .07em;
+               text-transform: uppercase; color: var(--dim); font-weight: 600; }
+#settings section { margin-bottom: 20px; }
+#settings .note { margin: 8px 0 0; font-size: 12px; color: var(--dim); line-height: 1.5; }
+#settings .check { display: inline-flex; align-items: center; gap: 6px;
+                   margin-right: 16px; cursor: pointer; }
+
+.cli-rows { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.cli-row { display: flex; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 3px; }
+.cli-row:hover { background: var(--row); }
+.cli-row .preview { width: 14px; display: grid; place-items: center; }
+.cli-row .label { flex: 1; }
+.cli-row.absent .label { color: var(--dim); }
+.cli-row .tag { font-size: 10px; color: var(--dim); border: 1px solid var(--line);
+                border-radius: 3px; padding: 0 4px; margin-left: 4px; }
+.cli-row select { background: var(--field); color: var(--fg); border: 1px solid transparent;
+                  border-radius: 3px; padding: 3px 6px; font: inherit; }
+.cli-row select:focus { outline: none; border-color: var(--accent); }
+
+/* -------------------------------------------------------- folder colour picker */
+
+.swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 8px; }
+.swatch { width: 20px; height: 20px; border-radius: 4px; border: 2px solid transparent;
+          cursor: pointer; padding: 0; }
+.swatch:hover { border-color: var(--fg); }
+.swatch.on { border-color: var(--fg); }

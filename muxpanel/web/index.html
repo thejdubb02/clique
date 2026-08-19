@@ -26,7 +26,8 @@
     <header>
       <span class="brand">muxpanel</span>
       <button id="newFolder" class="hdr-btn" title="New folder">&#43;</button>
-      <button id="adopt" class="hdr-btn" title="Adopt sessions from Codeman">&#8681;</button>
+      <button id="adopt" class="hdr-btn" title="Adopt sessions from another tool">&#8681;</button>
+      <button id="settingsBtn" class="hdr-btn" title="Settings">&#9881;</button>
       <button id="collapse" class="hdr-btn" title="Hide sidebar (Ctrl+B)">&#10094;</button>
     </header>
     <div class="search"><input id="q" placeholder="Search sessions…" autocomplete="off"></div>
@@ -87,6 +88,35 @@
       <button type="submit" class="primary">Start</button>
     </div>
   </form>
+</div>
+
+<div id="settings" hidden>
+  <div class="sheet">
+    <h2>Settings</h2>
+
+    <section>
+      <h3>Where to show CLI markers</h3>
+      <label class="check"><input type="checkbox" id="setTabs"> Tab bar</label>
+      <label class="check"><input type="checkbox" id="setSidebar"> Sidebar</label>
+      <p class="note">
+        The live/attached status dot is separate and always shown — that is
+        status, not branding.
+      </p>
+    </section>
+
+    <section>
+      <h3>Per CLI</h3>
+      <p class="note">
+        <strong>Both</strong> is the icon tinted in the CLI's colour.
+        <strong>Icon</strong> is the same shape in grey.
+        <strong>Colour</strong> is a plain chip. <strong>None</strong> is nothing.
+      </p>
+      <div id="cliRows" class="cli-rows"></div>
+      <p class="note" id="notInstalledNote"></p>
+    </section>
+
+    <div class="actions"><button type="button" id="settingsDone" class="primary">Done</button></div>
+  </div>
 </div>
 
 <div id="menu" hidden></div>

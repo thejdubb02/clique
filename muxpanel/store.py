@@ -30,7 +30,23 @@ DEFAULT_FOLDERS = [
     {"id": "f-mark", "name": "Mark", "color": "#a63d2f", "match": ["/root/mark"]},
 ]
 
-PALETTE = ["#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f", "#8b8b8b"]
+PALETTE = ["#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
+           "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2"]
+
+#: How a CLI is marked in the tab bar and sidebar.
+#:
+#: "both" is an icon tinted in the CLI's colour; "icon" is the same shape in
+#: neutral grey; "color" is a plain colour chip; "none" is nothing at all. The
+#: live/attached status dot is separate and always shown — that is status, not
+#: branding, and hiding it would cost information rather than decoration.
+MARKER_MODES = ("both", "icon", "color", "none")
+
+DEFAULT_SETTINGS = {
+    "marker_default": "both",
+    "marker_by_cli": {},
+    "markers_in_tabs": True,
+    "markers_in_sidebar": True,
+}
 
 
 @dataclass
@@ -57,6 +73,9 @@ class Session:
     created: float = 0.0
     adopted: bool = False
     order: int = 0
+    #: Out of the way, not gone. Archiving never touches the tmux session, so
+    #: an archived session is still running and can be un-archived at any time.
+    archived: bool = False
 
 
 def new_id() -> str:
@@ -91,6 +110,7 @@ class Store:
         self._lock = threading.RLock()
         self.folders: list[Folder] = []
         self.sessions: list[Session] = []
+        self.settings: dict = dict(DEFAULT_SETTINGS)
         self._load()
 
     # ------------------------------------------------------------ persistence
@@ -111,6 +131,9 @@ class Store:
                         for f in folders]
         self.sessions = [Session(**{k: v for k, v in s.items() if k in Session.__annotations__})
                          for s in raw.get("sessions", [])]
+        # Merge rather than replace, so a setting added in a later version
+        # appears with its default instead of being missing.
+        self.settings = {**DEFAULT_SETTINGS, **(raw.get("settings") or {})}
         if not raw:
             self._write()
 
@@ -120,6 +143,7 @@ class Store:
             "version": 1,
             "folders": [asdict(f) for f in self.folders],
             "sessions": [asdict(s) for s in self.sessions],
+            "settings": self.settings,
         }
         tmp = self.path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload, indent=2))
@@ -157,13 +181,20 @@ class Store:
             return found
 
     def update_session(self, session_id: str, **fields) -> Session | None:
+        """Apply supplied fields. See the None handling below — it is load-bearing."""
         with self._lock:
             found = self.session(session_id)
             if not found:
                 return None
             for key, value in fields.items():
-                if hasattr(found, key) and value is not None:
-                    setattr(found, key, value)
+                if not hasattr(found, key):
+                    continue
+                # None means "not supplied" for every field except `folder`,
+                # where it is the actual value: dragging a session out of every
+                # folder has to be able to clear it.
+                if value is None and key != "folder":
+                    continue
+                setattr(found, key, value)
             self._write()
             return found
 
@@ -175,6 +206,35 @@ class Store:
                 session.order = rank.get(session.id, len(rank) + session.order)
             self.sessions.sort(key=lambda s: s.order)
             self._write()
+
+    # --------------------------------------------------------------- settings
+
+    def update_settings(self, changes: dict) -> dict:
+        """Merge a partial settings update.
+
+        Per-CLI marker choices merge one level deeper: the UI sends only the
+        CLI that changed, and replacing the whole map would silently reset
+        every other CLI to the default.
+        """
+        with self._lock:
+            for key, value in changes.items():
+                if key not in DEFAULT_SETTINGS:
+                    continue  # ignore unknown keys rather than storing junk
+                if key == "marker_by_cli" and isinstance(value, dict):
+                    merged = dict(self.settings.get("marker_by_cli") or {})
+                    for cli_id, mode in value.items():
+                        if mode in MARKER_MODES:
+                            merged[cli_id] = mode
+                        elif mode is None:
+                            merged.pop(cli_id, None)
+                    self.settings["marker_by_cli"] = merged
+                elif key == "marker_default":
+                    if value in MARKER_MODES:
+                        self.settings[key] = value
+                else:
+                    self.settings[key] = bool(value)
+            self._write()
+            return self.settings
 
     # ---------------------------------------------------------------- folders
 
@@ -200,8 +260,14 @@ class Store:
             if not found:
                 return None
             for key, value in fields.items():
-                if hasattr(found, key) and value is not None:
-                    setattr(found, key, value)
+                if not hasattr(found, key):
+                    continue
+                # None means "not supplied" for every field except `folder`,
+                # where it is the actual value: dragging a session out of every
+                # folder has to be able to clear it.
+                if value is None and key != "folder":
+                    continue
+                setattr(found, key, value)
             self._write()
             return found
 

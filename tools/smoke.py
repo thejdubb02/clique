@@ -47,7 +47,19 @@ def main() -> int:
     check("mode pill on for claude", types["claude"].has_modes)
     check("mode pill off for grok", not types["grok"].has_modes)
     argv = reg.launch_argv("shell", session_id="a" * 32, name="smoke", cwd="/tmp")
-    check("renders argv", argv[0] == "bash", argv)
+    # argv[0] is the *resolved* path, not the bare name: a CLI installed
+    # outside the service's PATH still has to launch. This is what grok needed.
+    check("renders argv with a resolved binary",
+          argv[0].endswith("/bash") and Path(argv[0]).is_file(), argv)
+    check("detects an installed CLI", types["shell"].installed)
+    check("reports a missing CLI as absent",
+          not any(c.installed for c in types.values() if c.command == "definitely-not-here"),
+          "")
+
+    from muxpanel.registry import parse as parse_registry
+    absent = parse_registry({"cli": {"nope": {"command": "definitely-not-here-9x"}}})["nope"]
+    check("resolve() returns None for a binary that is not here",
+          absent.resolve() is None and not absent.installed)
 
     print("engine")
     tmux.bootstrap(SOCKET, history_limit=9000)
