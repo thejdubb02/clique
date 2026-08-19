@@ -31,7 +31,27 @@ let openTabs = [];            // session ids, in tab order
 let activeId = null;
 const terms = new Map();      // id -> { term, fit, ws, el, retry }
 let repeat = 1;
-let showArchived = false;
+/* Which of the view-groups are shut.
+ *
+ * Running, Ungrouped and Archived are views over the sessions, not folders —
+ * there is no record on the server to store a flag against. So this lives in
+ * localStorage, under the same rule as sidebar width: a real folder's state is
+ * about the work and syncs, a view's state is about this screen and does not.
+ *
+ * Archived starts shut, because it is the one group whose whole point is being
+ * out of the way. */
+const VIEWS_KEY = "clique.viewsCollapsed";
+let viewsCollapsed = readViewsCollapsed();
+
+function readViewsCollapsed() {
+  try {
+    const saved = localStorage.getItem(VIEWS_KEY);
+    if (saved === null) return new Set(["__archived"]);
+    return new Set(JSON.parse(saved).filter((id) => typeof id === "string"));
+  } catch (err) {
+    return new Set(["__archived"]);
+  }
+}
 /* Sessions that were producing output on the previous poll. A busy -> quiet
  * transition is what "this one finished" means here, which is why it needs a
  * memory of the last poll rather than just the current state. */
@@ -294,7 +314,10 @@ function renderTree() {
   const groups = [];
   const live = state.sessions.filter((s) => !s.archived);
   const running = live.filter((s) => s.alive && openTabs.includes(s.id));
-  if (running.length) groups.push({ id: "__running", name: "Running", color: "#2d7d46", pinned: true, sessions: running });
+  if (running.length) {
+    groups.push({ id: "__running", name: "Running", color: "#2d7d46", pinned: true,
+                  collapsed: viewsCollapsed.has("__running"), sessions: running });
+  }
 
   for (const folder of state.folders) {
     groups.push({
@@ -304,14 +327,17 @@ function renderTree() {
   }
   const unfiled = live.filter(
     (s) => !running.includes(s) && !state.folders.some((f) => f.id === s.folder));
-  if (unfiled.length) groups.push({ id: "__unfiled", name: "Ungrouped", color: "#8b8b8b", sessions: unfiled });
+  if (unfiled.length) {
+    groups.push({ id: "__unfiled", name: "Ungrouped", color: "#8b8b8b",
+                  collapsed: viewsCollapsed.has("__unfiled"), sessions: unfiled });
+  }
 
   // Archived last, collapsed unless asked for. Archiving never touched tmux,
   // so everything here is still running and one click from coming back.
   const archived = state.sessions.filter((s) => s.archived);
   if (archived.length) {
     groups.push({ id: "__archived", name: "Archived", color: "#5a5a5a",
-                  collapsed: !showArchived, sessions: archived });
+                  collapsed: viewsCollapsed.has("__archived"), sessions: archived });
   }
 
   for (const group of groups) {
@@ -506,11 +532,14 @@ function wireDrop(el, folderId) {
 }
 
 function toggleFolder(group) {
-  if (group.id === "__archived") {
-    showArchived = !showArchived;
+  // A view-group has no server record to flip, so it was silently doing
+  // nothing — Running and Ungrouped could not be collapsed at all.
+  if (!group.id.startsWith("f-")) {
+    if (viewsCollapsed.has(group.id)) viewsCollapsed.delete(group.id);
+    else viewsCollapsed.add(group.id);
+    localStorage.setItem(VIEWS_KEY, JSON.stringify([...viewsCollapsed]));
     return renderTree();
   }
-  if (!group.id.startsWith("f-")) return;
   api("api/folders/" + group.id, {
     method: "PATCH", body: JSON.stringify({ collapsed: !group.collapsed }),
   }).then(refresh);
