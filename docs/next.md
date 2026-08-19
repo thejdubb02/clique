@@ -43,9 +43,9 @@ awareness win after the badge, and it costs hours.
 ## Bigger, and not today
 
 Mobile layout and the PWA · file handling (drop to upload, paste images,
-download, light browser) · public-repo assets and a LICENSE · the marketing
-site · the side-panel AI helper · emoji folder markers · searchable prompt
-history · individually revocable sessions.
+download, light browser) · the marketing site · the side-panel AI helper ·
+emoji folder markers · searchable prompt history · individually revocable
+sessions.
 
 `File routes need realpath containment` is blocked until there are file
 routes, and should be done *with* them rather than after.
