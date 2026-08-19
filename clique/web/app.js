@@ -801,6 +801,18 @@ function renderTree() {
   }
 }
 
+/* Recent enough to be worth a row.
+ *
+ * Without a ceiling this list only grows: a month of work is several hundred
+ * conversations, and a conversation from three weeks ago is something you go
+ * and search for rather than something you scroll past on the way to what is
+ * running. The palette still has all of it. */
+function recentEnough(conv) {
+  const days = state.settings.history_days;
+  if (!days) return true;
+  return (Date.now() / 1000 - (conv.updated || 0)) < days * 86400;
+}
+
 /* Past conversations belonging to a folder, after folding repeats. Used by the
  * folder header so a folder with no live sessions does not read as empty when
  * it holds two hundred conversations. */
@@ -811,6 +823,7 @@ function historyCount(group) {
   const keys = new Set();
   for (const c of resumable) {
     if (live.has(c.cli_session_id)) continue;
+    if (!recentEnough(c)) continue;
     if ((c.folder || "__unfiled") !== group.id) continue;
     keys.add(`${c.label}\u0000${c.cwd}`);
   }
@@ -837,6 +850,7 @@ function historyRows(group, query) {
   const live = new Set(state.sessions.map((s) => s.cli_session_id).filter(Boolean));
   const matching = resumable.filter((c) => {
     if (live.has(c.cli_session_id)) return false;   // already open as a session
+    if (!recentEnough(c)) return false;
     const folder = c.folder || "__unfiled";
     if (folder !== group.id) return false;
     if (!query) return true;
@@ -900,6 +914,19 @@ function historyRow(conv) {
       row.classList.remove("starting");
     }
   };
+
+  /* These rows had no menu at all, so right-clicking one produced the
+   * browser's — which is not "nothing happens", it is the panel visibly not
+   * being in charge of its own sidebar. They are not sessions and there is
+   * nothing here to kill: a past conversation is a transcript another tool
+   * wrote, and deleting somebody else's data is not this program's business.
+   * What is on offer is what you can actually do with one. */
+  row.oncontextmenu = (ev) => showMenu(ev, [
+    ["Resume this conversation", () => resumeConversation(conv)],
+    ["Copy its directory", () => copyText(conv.cwd).then(() => toast("Path copied"))],
+    ["Hide past conversations", () =>
+      saveSettings({ history_in_sidebar: false }).then(renderTree)],
+  ]);
   return row;
 }
 
@@ -3267,6 +3294,8 @@ function openSettings() {
 
   $("#setPalette").checked = s.palette_hotkey !== false;
   $("#setHistorySidebar").checked = s.history_in_sidebar !== false;
+  $("#setHistoryDays").value = s.history_days || 14;
+  $("#outHistoryDays").textContent = s.history_days || 14;
   $("#setStatusOnIcon").checked = !!s.status_on_icon;
   $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
@@ -3476,6 +3505,11 @@ function wire() {
   $("#setPalette").onchange = (ev) => saveSettings({ palette_hotkey: ev.target.checked });
   $("#setHistorySidebar").onchange = (ev) => {
     saveSettings({ history_in_sidebar: ev.target.checked }).then(renderTree);
+  $("#setHistoryDays").oninput = (ev) => {
+    $("#outHistoryDays").textContent = ev.target.value;
+  };
+  $("#setHistoryDays").onchange = (ev) =>
+    saveSettings({ history_days: Number(ev.target.value) }).then(renderTree);
   };
   $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });

@@ -205,6 +205,9 @@ class Panel:
         for session in sorted(self.store.sessions, key=lambda s: s.order):
             pane = panes.get(session.mux)
             cli = self.registry.types().get(session.cli)
+            # Computed once: it decides both what the row shows and whether a
+            # capture is worth doing for it.
+            signal = self._signal(session, pane, cli)
             out.append({
                 "id": session.id,
                 "name": session.name,
@@ -244,9 +247,15 @@ class Panel:
                 # still decides cheaply, and content decides when the clock
                 # has been saying yes for a while.
                 "busy": bool(pane and working.busy(pane, session.socket, now)),
+                # What it last said — but only for a session that is actually
+                # asking for a person. Working sessions change it every
+                # moment, and idle-and-read ones are not asking anything, so
+                # for those it is a capture spent on a line nobody reads.
+                "saying": (attention.saying(session.mux, pane.activity, session.socket)
+                           if pane and signal else ""),
                 # "waiting" or "error", from whichever tier of the attention
                 # ladder could answer. See Panel._signal.
-                "signal": self._signal(session, pane, cli),
+                "signal": signal,
             })
         return out
 
@@ -569,23 +578,6 @@ PEEK_WINDOW = 160
 #: for the handful of rows a pointer actually crosses, not an index.
 PEEK_CACHE = 64
 
-#: Characters a line can be made *entirely* of and still be saying nothing:
-#: box drawing, block elements, rules and separators. A line with one real word
-#: in it is never dropped, however much frame is around the word.
-_RULE_CHARS = frozenset(
-    " \t─━│┃┄┅┆┇┈┉┊┋┌┐└┘├┤┬┴┼╌╍╎╏═║╔╗╚╝╠╣╦╩╬▀▄█▌▐░▒▓▁▂▃▅▆▇"
-    "-_=~*.·•+<>|/\\[](){}"
-    # The lookalikes are the point: these are the prompt glyphs CLIs
-    # actually draw, and a line that is only one of them is a bare prompt.
-    "❯❮›‹»«▸▶◂◀⟩⟨"  # noqa: RUF001
-)
-
-
-def _is_rule(line: str) -> bool:
-    """Whether this line is frame rather than content."""
-    return not (set(line) - _RULE_CHARS)
-
-
 #: mux -> ((mux, activity, lines), rows). Module level, because a request
 #: handler is built and thrown away per request and a cache on one would be a
 #: cache of exactly one lookup.
@@ -903,8 +895,7 @@ class Handler(BaseHTTPRequestHandler):
         # a line is dropped when every character in it is a box-drawing glyph,
         # a rule or whitespace, which is a property of the text and true of
         # every tool that draws a frame.
-        rows = [row.rstrip() for row in text.splitlines()]
-        rows = [row for row in rows if row.strip() and not _is_rule(row)]
+        rows = attention.content_lines(text)
         rows = rows[-lines:]
         with _PEEK_LOCK:
             _PEEKED[session.mux] = (key, rows)

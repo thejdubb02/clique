@@ -394,6 +394,20 @@ def main() -> int:
         check("refuses" + why, status == 400 and body.get("error"), (status, body))
     shutil.rmtree(Path(fresh).parents[1], ignore_errors=True)
 
+    print("settings keep their own shape")
+    # The catch-all in update_settings used to be `bool(value)`, on the
+    # assumption that any setting without an explicit branch was a checkbox.
+    # The first numeric one stored 14 as True. The default is the schema.
+    _, back = call("/api/settings", "PATCH", {"history_days": 21})
+    check("a number stays a number", back.get("history_days") == 21, back.get("history_days"))
+    _, back = call("/api/settings", "PATCH", {"history_days": 9999})
+    check("and is clamped rather than refused", back.get("history_days") == 90,
+          back.get("history_days"))
+    _, back = call("/api/settings", "PATCH", {"history_in_sidebar": True})
+    check("a checkbox is still a checkbox", back.get("history_in_sidebar") is True,
+          back.get("history_in_sidebar"))
+    call("/api/settings", "PATCH", {"history_days": 14, "history_in_sidebar": False})
+
     print("read-only tokens")
     # The bypass this exists to stop: every write route is scoped, and the
     # WebSocket was not — so a token issued read-only could open a terminal

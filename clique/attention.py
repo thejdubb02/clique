@@ -50,6 +50,69 @@ _seen: dict[str, tuple[int, str]] = {}
 _lock = threading.Lock()
 
 
+#: Characters a line can be made *entirely* of and still be saying nothing:
+#: box drawing, block elements, rules, separators and bare prompt marks. A line
+#: with one real word in it is never dropped, however much frame surrounds it.
+_RULE_CHARS = frozenset(
+    " \t─━│┃┄┅┆┇┈┉┊┋┌┐└┘├┤┬┴┼╌╍╎╏═║╔╗╚╝╠╣╦╩╬▀▄█▌▐░▒▓▁▂▃▅▆▇"
+    "-_=~*.·•+<>|/\\[](){}"
+    # The lookalikes are the point: these are the prompt glyphs CLIs actually
+    # draw, and a line that is only one of them is a bare prompt.
+    "❯❮›‹»«▸▶◂◀⟩⟨"  # noqa: RUF001
+)
+
+
+def is_rule(line: str) -> bool:
+    """Whether this line is frame rather than content."""
+    return not (set(line) - _RULE_CHARS)
+
+
+def content_lines(text: str) -> list[str]:
+    """The lines that said something, in order."""
+    return [row.rstrip() for row in text.splitlines()
+            if row.strip() and not is_rule(row)]
+
+
+#: How much scrollback to search for a line worth quoting. A pane can be almost
+#: entirely frame, so the window is far wider than what is kept.
+SAYING_WINDOW = 160
+
+#: (mux) -> (activity, line). Same bargain as the verdict cache above: a pane
+#: that has stopped producing output cannot change what it last said.
+_said: dict[str, tuple[int, str]] = {}
+
+
+def saying(mux: str, activity: int, socket: str | None = tmux.SOCKET) -> str:
+    """The last thing this pane actually said, for a session that wants you.
+
+    The status ring says a session is waiting; this says what it is waiting
+    *for*, which is the difference between knowing you have to go and look and
+    not having to. It is one line, in the row, rather than a popup over the
+    top of everything — a preview that has to be summoned, positioned and
+    layered is three problems, and the answer fits where the path already is.
+
+    Only ever called for sessions that need a person, so this is a handful of
+    captures rather than one per session. A waiting pane's activity clock is
+    frozen, so the cache holds until something actually happens.
+    """
+    with _lock:
+        cached = _said.get(mux)
+        if cached and cached[0] == activity:
+            return cached[1]
+    try:
+        text = tmux.capture(mux, socket, lines=SAYING_WINDOW, styled=False)
+    except (tmux.TmuxError, OSError):
+        return ""
+    rows = content_lines(text)
+    line = rows[-1][:200] if rows else ""
+    with _lock:
+        _said[mux] = (activity, line)
+        if len(_said) > 512:
+            for stale in list(_said)[:256]:
+                _said.pop(stale, None)
+    return line
+
+
 def _patterns(raw: list[str]) -> list[re.Pattern]:
     key = tuple(raw)
     got = _compiled.get(key)

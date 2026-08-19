@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.41.0 — 2026-08-19 15:50 PDT
+
+**The sidebar shows your work again.** Past conversations were listed under
+every folder and they had quietly taken the place over: measured on a real
+install, **285 of them against 2 running sessions**, with 163 more than a
+fortnight old. At that ratio a sidebar is not a view of what is happening, it
+is a haystack with your work in it.
+
+They are **off by default** now, and capped at 14 days when switched on, so the
+list cannot grow without limit again. Nothing is lost either way — `Ctrl+K`
+then `~` searches every transcript however old, and the empty pane still offers
+the last few to pick up. Those are places built for looking something up; the
+sidebar is for seeing what is running.
+
+**Right-clicking one does something.** They had no menu at all, so a right-click
+produced the *browser's* — which does not read as "nothing happened", it reads
+as the panel not being in charge of its own sidebar. Resume it, copy its
+directory, or turn the whole listing off. Nothing offers to delete one: a past
+conversation is a transcript another tool wrote, and deleting someone else's
+data is not this program's business.
+
+**Any setting that was not a checkbox was being stored as one.** `update_settings`
+ended in a catch-all of `bool(value)`, on the assumption that anything without
+an explicit branch was a toggle. That held until a setting was a number, at
+which point 14 was silently stored as `True` — and it would have done the same
+to the next one. Values are now coerced to the shape of their own default,
+which is the schema and was there all along.
+
 ## 0.40.0 — 2026-08-19 15:42 PDT
 
 **Right-click works on sidebar rows again.** The preview popup added in 0.34.0

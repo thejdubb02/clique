@@ -255,11 +255,18 @@
       <h3>Sidebar</h3>
       <label class="check"><input type="checkbox" id="setHistorySidebar">
         List past conversations under each folder</label>
+      <label class="field row">Going back
+        <input type="range" id="setHistoryDays" min="1" max="90" step="1">
+        <output id="outHistoryDays"></output> days
+      </label>
       <p class="note">Every transcript your CLIs have kept, filed by the
          directory it belongs to, dimmed under the sessions that are actually
-         running. Click one to resume it. Turn this off and they are still
-         there — <kbd>Ctrl</kbd>+<kbd>K</kbd> then <kbd>~</kbd> searches all of
-         them.</p>
+         running. Click one to resume it.</p>
+      <p class="note">Off by default, and the limit is why: a month of work is
+         several hundred conversations, and at that ratio the sidebar stops
+         showing what is running and becomes a haystack with your work in it.
+         Nothing is lost either way — <kbd>Ctrl</kbd>+<kbd>K</kbd> then
+         <kbd>~</kbd> searches all of them, however old.</p>
 
       <h3>Keyboard</h3>
       <label class="check"><input type="checkbox" id="setPalette">

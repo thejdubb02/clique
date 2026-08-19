@@ -88,10 +88,24 @@ DEFAULT_SETTINGS = {
     #: there can hand it back; the palette stays reachable on Ctrl+Shift+P,
     #: which no terminal claims.
     "palette_hotkey": True,
-    #: Past conversations listed under the live sessions in each folder. On,
-    #: because a tool you have just moved to should show you your work rather
-    #: than an empty tree — but a few hundred rows is not everyone's sidebar.
-    "history_in_sidebar": True,
+    #: Past conversations listed under the live sessions in each folder.
+    #:
+    #: Off, and it used to be on. The reasoning for on was that a tool you have
+    #: just moved to should show you your work rather than an empty tree, and
+    #: that is right for the first ten minutes and wrong for every day after:
+    #: measured on a real install, 285 past conversations against 2 running
+    #: sessions. At that ratio the sidebar stops being a view of what is
+    #: happening and becomes a haystack with your work in it.
+    #:
+    #: Nothing is lost by it. History is searchable in the command palette —
+    #: everything, not a recent slice — and the empty pane offers the last few
+    #: to pick up. Those are places designed for looking something up; the
+    #: sidebar is for seeing what is running.
+    "history_in_sidebar": False,
+    #: Days of history the sidebar will show when it is switched on. Without a
+    #: ceiling the list only ever grows, and a conversation from three weeks
+    #: ago is something you search for rather than something you scroll past.
+    "history_days": 14,
     #: "auto" lets each CLI decide: a CLI that draws its own input box gets no
     #: second box under it, and one that does not — a shell, a readline tool —
     #: keeps the panel's, which is also the only place Run, the repeat counter
@@ -536,8 +550,34 @@ class Store:
                     # not be able to make the UI unreadable and unfixable.
                     with contextlib.suppress(TypeError, ValueError):
                         self.settings[key] = max(9, min(int(value), 28))
+                elif key == "history_days":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(1, min(int(value), 90))
                 else:
-                    self.settings[key] = bool(value)
+                    # Coerced to the shape of its own default.
+                    #
+                    # This used to be `bool(value)` outright, on the assumption
+                    # that anything not handled above was a checkbox. It held
+                    # right up until a setting was a number, at which point 14
+                    # was silently stored as True — and it would have done the
+                    # same to the next one. The default is the schema; there is
+                    # no reason to guess.
+                    #
+                    # bool before int deliberately: in Python a bool *is* an
+                    # int, so testing int first would catch every checkbox.
+                    default = DEFAULT_SETTINGS[key]
+                    if isinstance(default, bool):
+                        self.settings[key] = bool(value)
+                    elif isinstance(default, int):
+                        with contextlib.suppress(TypeError, ValueError):
+                            self.settings[key] = int(value)
+                    elif isinstance(default, str):
+                        self.settings[key] = str(value or "")[:1024]
+                    else:
+                        # Lists and dicts all have explicit branches above; if
+                        # one ever does not, storing it unchanged is closer to
+                        # right than turning it into True.
+                        self.settings[key] = value
             self._write()
             return self.settings
 
