@@ -88,6 +88,7 @@ nav {
   font-weight: 600;
   line-height: 1;
   padding: .55rem .85rem;
+  border: 1px solid transparent;
   border-radius: 6px;
   text-decoration: none;
 }
