@@ -28,7 +28,15 @@ from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import artifacts, changelog, migrate, sysinfo, tmux, version_string
+from . import (
+    artifacts,
+    attention,
+    changelog,
+    migrate,
+    sysinfo,
+    tmux,
+    version_string,
+)
 from .auth import Auth, landing_page, login_page
 from .history import History as ConversationHistory
 from .registry import Registry, RegistryError
@@ -211,8 +219,39 @@ class Panel:
                 # tmux's own activity clock, so it works for any CLI without
                 # CLIque knowing anything about it.
                 "busy": bool(pane and (time.time() - pane.activity) < 2),
+                # "waiting" or "error", from whichever tier of the attention
+                # ladder could answer. See Panel._signal.
+                "signal": self._signal(session, pane, cli),
             })
         return out
+
+    def _signal(self, session, pane, cli) -> str:
+        """Whether this session is waiting on a person, and how we know.
+
+        Three tiers, in order of how much they can be trusted:
+
+        1. What the session *said*, via the attention endpoint. Believed —
+           until output arrives after it, which means the session moved on and
+           the signal is describing a moment that has passed.
+        2. Patterns from ``clis.toml``, matched against a pane that has gone
+           quiet. A guess, and a good one, and only as good as the config.
+        3. Nothing. Most sessions, most of the time.
+
+        A busy pane never reaches tier 2: a session producing output is not
+        waiting on anyone, and capturing it would cost a subprocess per poll
+        to learn that.
+        """
+        if not pane:
+            return ""
+        if session.signal and pane.activity <= session.signal_at:
+            return session.signal
+        if (time.time() - pane.activity) < 2:
+            return ""
+        if not cli:
+            return ""
+        return attention.detect(session.mux, pane.activity,
+                                cli.waiting_patterns, cli.error_patterns,
+                                session.socket)
 
     def state(self) -> dict:
         return {
@@ -748,6 +787,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_input(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/paste"):
                 return self._paste_image(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/attention"):
+                return self._attention(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/seen"):
                 found = self.panel.store.touch_session(path.split("/")[3])
                 if not found:
@@ -758,6 +799,36 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
+
+    def _attention(self, session_id: str, body: dict) -> None:
+        """Let a session say, itself, that it is stuck.
+
+        The top tier of the attention ladder, and the only one that is not a
+        guess. A user wires this to whatever hook their CLI already offers —
+        a Claude Code hook, a shell trap, the last line of a script — and
+        CLIque believes what arrives without ever learning what sent it.
+
+        That inversion is the point: the vendor-specific knowledge lives in
+        someone's own hook config, where they can fix it the day it changes,
+        instead of in this codebase where it would be a release.
+        """
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        state = str(body.get("state") or "").strip().lower()
+        if state not in ("waiting", "error", "clear"):
+            return self._json(
+                {"error": 'state must be "waiting", "error" or "clear"'}, 400)
+
+        pane = self.panel.live().get(session.mux)
+        # Stamped with the pane's own clock rather than the wall clock, so the
+        # staleness test downstream compares like with like.
+        updated = self.panel.store.update_session(
+            session_id,
+            signal="" if state == "clear" else state,
+            signal_at=float(pane.activity if pane else 0),
+        )
+        return self._json({"ok": True, "signal": updated.signal if updated else ""})
 
     def _artifacts(self, session_id: str) -> None:
         """What this session's working directory has to show.

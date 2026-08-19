@@ -329,6 +329,41 @@ def main() -> int:
     check("markdown came back as structure, not markup",
           bool(newest.get("blocks")) and "spans" in newest["blocks"][0])
 
+    print("attention")
+    status, note = call("/api/sessions", "POST",
+                        {"cli": "shell", "cwd": "/tmp", "name": "smoke-attention"})
+    att_id = note.get("id", "")
+    check("session for the attention checks", status == 201 and bool(att_id), note)
+
+    status, said = call(f"/api/sessions/{att_id}/attention", "POST", {"state": "waiting"})
+    check("a session can say it is waiting",
+          status == 200 and said.get("signal") == "waiting", said)
+    _, state = call("/api/state")
+    row = next((x for x in state["sessions"] if x["id"] == att_id), {})
+    check("and the panel repeats it back", row.get("signal") == "waiting", row.get("signal"))
+
+    status, said = call(f"/api/sessions/{att_id}/attention", "POST", {"state": "error"})
+    check("an error outranks a question", said.get("signal") == "error", said)
+    status, _bad = call(f"/api/sessions/{att_id}/attention", "POST", {"state": "vibes"})
+    check("refuses a state it does not know", status == 400, status)
+    status, said = call(f"/api/sessions/{att_id}/attention", "POST", {"state": "clear"})
+    check("and can be cleared", said.get("signal") == "", said)
+
+    # A signal describes a moment. Output after it means the session carried
+    # on, and a stale "waiting" stuck to a working session is worse than none.
+    call(f"/api/sessions/{att_id}/attention", "POST", {"state": "waiting"})
+    # tmux's activity clock counts in whole seconds, so the output has to land
+    # in a later one than the signal did or there is nothing to compare.
+    time.sleep(1.2)
+    call(f"/api/sessions/{att_id}/send", "POST", {"text": "echo moved-on", "enter": True})
+    time.sleep(1.5)
+    _, state = call("/api/state")
+    row = next((x for x in state["sessions"] if x["id"] == att_id), {})
+    check("a signal goes stale once the session moves on",
+          row.get("signal") == "", row.get("signal"))
+
+    call(f"/api/sessions/{att_id}", "DELETE")
+
     print("per-CLI colours")
     status, saved = call("/api/settings", "PATCH",
                          {"cli_colors": {"claude": "#ABCDEF", "grok": "javascript:x",

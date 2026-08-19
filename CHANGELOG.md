@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.26.0 — 2026-08-19 12:19 PDT
+
+**Waiting on you, and stopped on an error, are now different from idle.**
+
+The question this whole thing exists to answer is *which of these needs me*,
+and until now a session waiting for an answer looked exactly like one that had
+finished. The activity clock cannot tell them apart; it only knows output
+stopped.
+
+Three tiers, each optional, each falling back to the one below:
+
+1. **The activity clock** — shipped, works for any CLI, says only working or
+   quiet.
+2. **Patterns over the pane** — regexes declared per CLI in `clis.toml`,
+   matched against the last forty lines once a session goes quiet. A CLI with
+   no patterns skips the tier. Generic defaults ship for Claude Code and are
+   meant to be edited: these are the prompts most CLIs show, not a
+   transcription of anyone's wording.
+3. **The session says so itself** — `POST /api/sessions/<id>/attention` with
+   `waiting`, `error` or `clear`. Wire it to a hook your CLI already has and it
+   is exact rather than guessed.
+
+Note what is not here: any knowledge of a vendor. Tier 2 reads config you can
+edit the day a prompt changes, without waiting for a release. Tier 3 receives
+an assertion and believes it. The line is that patterns stay strings in a TOML
+file.
+
+A signal goes stale by itself once output arrives after it. A session that
+carried on is not waiting, and a mark that sticks when it should not is a mark
+you learn to ignore.
+
+**Also: the wrong clock.** `busy` and unread were reading tmux's
+`session_activity`, which moves when a *client* does something and stands
+still while a detached session produces output for an hour. `window_activity`
+is the one that tracks the pane. Both are read now and the later wins — so a
+session with no browser attached finally looks busy while it is, and goes
+unread when it should.
+
+**And the pressure dots are legible.** CPU, memory, load and disk were on a
+smooth green-to-red hue ramp, which looks right in a screenshot and tells you
+nothing in use: the middle of that ramp is one indeterminate yellow, and 40%
+and 55% are the same colour to anyone not holding a swatch. Four hard bands
+now — calm, busy, high, critical — with critical pulsing, because at the point
+where something is about to go wrong the dot should find you rather than wait
+to be looked at.
+
 ## 0.25.0 — 2026-08-19 11:53 PDT
 
 **Which CLI am I in?**

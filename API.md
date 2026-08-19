@@ -140,6 +140,31 @@ The type is sniffed from the bytes rather than trusted from the name, the cap
 is 10 MB, and containment is checked after symlink resolution — the write can
 only ever land inside that directory.
 
+### `POST /api/sessions/<id>/attention`
+
+```json
+{"state": "waiting"}
+```
+
+`waiting`, `error`, or `clear`. Lets a session say for itself that it is stuck,
+which is the only tier of the attention ladder that is not a guess — wire it to
+a hook your CLI already has:
+
+```bash
+curl -XPOST -H "Authorization: Bearer $CLIQUE_TOKEN" \
+     -H "Content-Type: application/json" -d '{"state":"waiting"}' \
+     "$CLIQUE_URL/api/sessions/$ID/attention"
+```
+
+The signal is stamped with the pane's activity clock and goes stale by itself
+the moment output arrives after it — a session that carried on is no longer
+waiting, and a stuck "waiting" would teach you to ignore the mark. Returns the
+resulting `signal`.
+
+Sessions in `/api/state` carry `signal`: `"waiting"`, `"error"` or `""`, from
+whichever tier could answer — this endpoint first, then the per-CLI patterns in
+`clis.toml` matched against a pane that has gone quiet, then nothing.
+
 ### `GET /api/sessions/<id>/artifacts`
 
 Images that appeared in the session's working directory **after the session

@@ -173,6 +173,16 @@ class Session:
     #: not about the screen, so it survives a reload and follows you to another
     #: device. Sidebar width is the counter-example and stays local.
     draft: str = ""
+    #: What the session said about itself, if anything: "waiting" or "error".
+    #: Tier 3 of the attention ladder — set by a POST the user wires to
+    #: whatever hook their own CLI already has, and believed rather than
+    #: guessed at. Stored because a signal that vanished on restart would be
+    #: worse than no signal: you would learn not to trust it.
+    signal: str = ""
+    #: The tmux activity clock when the signal arrived. Output after this
+    #: point means the session moved on, and the signal is stale — which is
+    #: what stops "waiting" sticking to a session that carried on by itself.
+    signal_at: float = 0.0
 
 
 def new_id() -> str:

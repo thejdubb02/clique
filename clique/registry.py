@@ -124,6 +124,26 @@ class CliType:
     #: Omit it and the CLI simply has no resumable history, which is the right
     #: answer for `shell` and for anything whose transcripts we cannot find.
     history: dict = field(default_factory=dict)
+    #: How this CLI says it is stuck. A table of regexes matched against the
+    #: last lines of the pane once it goes quiet:
+    #:
+    #:   [cli.claude.attention]
+    #:   waiting = ["Do you want to proceed\\?"]
+    #:   error   = ["^Error:"]
+    #:
+    #: Config, not code — which is the whole point. CLIque never learns what a
+    #: vendor's prompt looks like; someone writes it down here, and can fix it
+    #: the day the vendor changes it without waiting for a release. Omit the
+    #: table and the session simply falls back to the activity clock.
+    attention: dict = field(default_factory=dict)
+
+    @property
+    def waiting_patterns(self) -> list[str]:
+        return [str(x) for x in (self.attention.get("waiting") or [])]
+
+    @property
+    def error_patterns(self) -> list[str]:
+        return [str(x) for x in (self.attention.get("error") or [])]
 
     @property
     def mode_seq(self) -> str:
@@ -258,7 +278,7 @@ def parse(data: dict) -> dict[str, CliType]:
             raise RegistryError(f"cli.{cli_id}: expected a table")
         unknown_keys = set(raw) - {
             "label", "command", "args", "resume", "color",
-            "modes", "mode_key", "mode_label", "icon", "history",
+            "modes", "mode_key", "mode_label", "icon", "history", "attention",
         }
         if unknown_keys:
             raise RegistryError(
@@ -276,6 +296,7 @@ def parse(data: dict) -> dict[str, CliType]:
             mode_label=raw.get("mode_label", "{mode} mode"),
             icon=raw.get("icon", ""),
             history=dict(raw.get("history") or {}),
+            attention=dict(raw.get("attention") or {}),
         )
         _validate(cli)
         types[cli_id] = cli

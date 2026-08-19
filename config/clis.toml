@@ -60,6 +60,38 @@ modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
 
+# How this CLI says it is stuck, as regexes matched against the last 40 lines
+# of the pane once it has gone quiet. Match one and the session's ring says
+# "waiting for you" instead of just "idle" — which is the difference between a
+# panel you have to check and one that tells you.
+#
+# These are deliberately generic: they are the prompts almost every CLI shows,
+# not a transcription of any one vendor's wording. Tune them to what you
+# actually see. That is the whole design — CLIque never learns what a vendor's
+# prompt looks like, you write it down here, and you can fix it the day it
+# changes without waiting for a release.
+#
+# For something exact rather than guessed, skip patterns entirely and have the
+# CLI tell CLIque directly:
+#
+#   curl -XPOST -H "Authorization: Bearer $CLIQUE_TOKEN" \
+#        -d '{"state":"waiting"}' "$CLIQUE_URL/api/sessions/$ID/attention"
+#
+# from a Claude Code hook, a shell trap, or the last line of a script.
+[cli.claude.attention]
+waiting = [
+  "\\(y/n\\)",
+  "\\[[Yy]/[Nn]\\]",
+  "Do you want to",
+  "Press Enter to continue",
+  "❯ 1\\.",
+]
+error = [
+  "^Error:",
+  "command not found",
+  "Traceback \\(most recent call last\\)",
+]
+
 # Where Claude Code keeps its transcripts. One directory per project, named
 # after the working directory with every "/" and "." replaced by "-", and one
 # .jsonl per conversation whose stem is the id `--resume` wants.

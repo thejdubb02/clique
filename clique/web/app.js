@@ -80,10 +80,12 @@ function ago(epoch) {
  * running, which is not a trade anyone asked for. */
 /* What a session is *doing*, which is not the same as whether it is attached.
  *
- * Four states, and only three of them draw anything:
+ * Five states, and only four of them draw anything:
  *
+ *   error    — it said so, or its pane matched an error pattern
  *   working  — output is arriving
- *   waiting  — it stopped and has not been looked at: the one that wants you
+ *   waiting  — it stopped and wants you: either it said so, or it went quiet
+ *              with something unread
  *   idle     — alive and quiet and read. Draws nothing, because most sessions
  *              are in this state most of the time and a sidebar of twenty
  *              indicators saying "fine" is a sidebar of noise.
@@ -112,6 +114,11 @@ function noteBusy(sessions) {
 function workState(s) {
   if (!s) return "idle";
   if (!s.alive) return "stopped";
+  // What the session said about itself beats anything derived from watching
+  // it, and an error beats a question: a CLI that failed and then offered a
+  // prompt is reporting the failure, which is the more useful of the two.
+  if (s.signal === "error") return "error";
+  if (s.signal === "waiting") return "waiting";
   if (s.busy || (busyUntil.get(s.id) || 0) > Date.now()) return "working";
   if (attention.has(s.id)) return "waiting";
   // Unread deliberately does *not* appear here. It already has a mark of its
@@ -233,7 +240,8 @@ function statusDot(s, where) {
  * something to people who can see it is half a signal. */
 const WORK_WORDS = {
   working: "working",
-  waiting: "finished, waiting for you",
+  waiting: "waiting for you",
+  error: "stopped on an error",
   idle: "idle",
   stopped: "stopped",
 };
@@ -355,16 +363,27 @@ async function refresh() {
  * because most of the interesting range is the first 70%: a box at 40% and a
  * box at 65% should not look the same shade of "fine".
  */
-function pressureColor(percent) {
+/* How hard the box is working, in four steps rather than a gradient.
+ *
+ * This used to be a smooth hue ramp from green to red, which looked right in
+ * a screenshot and was useless in practice: on a continuum, 40% and 55% are
+ * the same colour to anyone not holding a swatch, and the whole middle of the
+ * range reads as one indeterminate yellow. Four hard bands can be told apart
+ * at a glance and across the room, which is the only way a number you are not
+ * reading does any work.
+ *
+ * Critical also moves. At the point where something is about to go wrong, the
+ * dot should find you rather than wait to be looked at. */
+const PRESSURE = [[90, "critical"], [75, "high"], [50, "busy"], [0, "calm"]];
+
+function pressureLevel(percent) {
   const at = Math.max(0, Math.min(Number(percent) || 0, 100));
-  // 140deg green -> 45deg amber over the first 70%, then amber -> 0deg red.
-  const hue = at <= 70 ? 140 - (at / 70) * 95 : 45 - ((at - 70) / 30) * 45;
-  const sat = 55 + (at / 100) * 25;
-  return `hsl(${hue.toFixed(0)} ${sat.toFixed(0)}% 52%)`;
+  return (PRESSURE.find(([floor]) => at >= floor) || [0, "calm"])[1];
 }
 
 function statDot(percent) {
-  return `<i class="dot" style="background:${pressureColor(percent)}"></i>`;
+  const level = pressureLevel(percent);
+  return `<i class="dot stat" data-level="${level}" aria-hidden="true"></i>`;
 }
 
 function renderStats() {

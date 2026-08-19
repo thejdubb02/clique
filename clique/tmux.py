@@ -43,7 +43,14 @@ TIMEOUT = 10
 
 _FIELDS = (
     "session_name", "session_created", "session_attached", "session_windows",
-    "session_activity", "pane_pid", "pane_current_path", "pane_current_command",
+    # Both clocks, because they measure different things and only one of them
+    # is the one anyone means. `session_activity` moves when a *client* does
+    # something — attaching, detaching, a keystroke — and stands still while a
+    # detached session produces output for an hour. `window_activity` is the
+    # one that tracks the pane. Reading only the first is why a session with no
+    # browser attached never looked busy and never went unread.
+    "session_activity", "window_activity",
+    "pane_pid", "pane_current_path", "pane_current_command",
     # Which session group this belongs to, if any. Viewers are grouped onto
     # the session they show, and this is the only way to tell that a browser
     # watching through a viewer means the underlying session is being watched.
@@ -267,9 +274,13 @@ def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> lis
         panes.append(Pane(
             mux=name, socket=socket,
             created=int(parts[1] or 0), attached=parts[2] == "1",
-            windows=int(parts[3] or 1), activity=int(parts[4] or 0),
-            pid=int(parts[5] or 0), cwd=parts[6], command=parts[7],
-            group=parts[8],
+            windows=int(parts[3] or 1),
+            # The later of the two: a client interacting and a pane producing
+            # output are both activity, and whichever happened last is the
+            # answer to "when did anything happen here".
+            activity=max(int(parts[4] or 0), int(parts[5] or 0)),
+            pid=int(parts[6] or 0), cwd=parts[7], command=parts[8],
+            group=parts[9],
         ))
     return panes
 

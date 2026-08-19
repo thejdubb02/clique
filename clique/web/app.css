@@ -15,6 +15,14 @@
   --ok: #2d7d46;
   --warn: #c7915b;
   --dead: #6e6e6e;
+  /* Load pressure, in four steps. Deliberately louder than the rest of the
+     palette: these are the only marks on screen whose job is to be noticed
+     without being looked for. A theme may override them, but muting them
+     defeats the point. */
+  --calm: #22c55e;
+  --busy: #eab308;
+  --high: #f97316;
+  --critical: #ef4444;
   --err: #f85149;
   /* Derived in applySettings() from the theme, not hand-set per theme — a new
      theme stays one block in themes.js and nothing else. These are the
@@ -871,4 +879,34 @@ main { --cli: transparent; }
 
 @media (pointer: coarse) {
   .cli-swatch { width: 30px; height: 26px; }
+}
+
+/* ------------------------------------------------------ pressure and error */
+
+/* Four hard bands, not a gradient. A ramp looks better in a screenshot and
+   tells you nothing in use — the middle of a green-to-red gradient is one
+   indeterminate yellow, and 40% and 55% are indistinguishable. Steps can be
+   read across the room. */
+.dot.stat { width: 8px; height: 8px; flex: 0 0 8px; }
+.dot.stat[data-level="calm"]     { background: var(--calm); }
+.dot.stat[data-level="busy"]     { background: var(--busy); }
+.dot.stat[data-level="high"]     { background: var(--high);
+                                   box-shadow: 0 0 0 2px color-mix(in srgb, var(--high) 30%, transparent); }
+/* At the point where something is about to go wrong, the dot should find you
+   rather than wait to be looked at. */
+.dot.stat[data-level="critical"] { background: var(--critical);
+                                   box-shadow: 0 0 0 2px color-mix(in srgb, var(--critical) 40%, transparent);
+                                   animation: cli-nudge 1s ease-in-out infinite; }
+
+/* A session that stopped on an error. The loudest thing the ring vocabulary
+   has, because it is the only state where nothing is going to happen next. */
+.cli-status[data-work="error"]::after {
+  border-color: var(--critical);
+  animation: cli-nudge 1.4s ease-in-out infinite;
+}
+.dot[data-work="error"] { background: var(--critical);
+                          animation: cli-nudge 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dot.stat[data-level="critical"] { animation: none; }
 }
