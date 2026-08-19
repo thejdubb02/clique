@@ -408,6 +408,31 @@ def main() -> int:
           back.get("history_in_sidebar"))
     call("/api/settings", "PATCH", {"history_days": 14, "history_in_sidebar": False})
 
+    print("finding a directory you have not opened yet")
+    # The dropdown knows where you have been. This is the other half: a project
+    # you have never started a session in, which is exactly when you are least
+    # likely to remember where it lives.
+    import urllib.parse as _up
+    def browse(where):
+        return call("/api/browse?path=" + _up.quote(where))[1].get("dirs", [])
+
+    check("a trailing slash lists what is inside", "/tmp" in str(browse("/tmp/")))
+    made_dir = Path("/tmp") / f"clique-browse-{secrets.token_hex(3)}"
+    (made_dir / "alpha-project").mkdir(parents=True)
+    (made_dir / "alpha-notes").mkdir()
+    (made_dir / ".hidden").mkdir()
+    (made_dir / "a-file").write_text("x")
+    found = browse(str(made_dir) + "/alpha")
+    check("a partial segment matches its siblings", len(found) == 2, found)
+    check("files are never offered", not any("a-file" in d for d in browse(str(made_dir) + "/")))
+    check("hidden ones stay hidden until asked for",
+          not any(".hidden" in d for d in browse(str(made_dir) + "/")))
+    check("and appear once the dot is typed",
+          any(".hidden" in d for d in browse(str(made_dir) + "/.")))
+    check("a path that is not there completes to nothing", browse("/nope/nowhere/") == [])
+    check("and a relative one is refused outright", browse("some/where") == [])
+    shutil.rmtree(made_dir, ignore_errors=True)
+
     print("read-only tokens")
     # The bypass this exists to stop: every write route is scoped, and the
     # WebSocket was not — so a token issued read-only could open a terminal

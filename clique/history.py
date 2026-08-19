@@ -19,7 +19,9 @@ import json
 import re
 import threading
 import time
+import urllib.parse
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 #: How much of a transcript to read. A transcript can be thirty megabytes, and
@@ -65,6 +67,20 @@ class Conversation:
             "size": self.size,
             "branch": self.branch,
         }
+
+
+def _epoch(stamp: str) -> float:
+    """An ISO-8601 timestamp as seconds, or 0 if it is not one."""
+    if not stamp:
+        return 0.0
+    text = stamp.replace("Z", "+00:00")
+    # Sub-second precision beyond microseconds is valid ISO and not something
+    # fromisoformat accepts before 3.11 — trimmed rather than lost.
+    text = re.sub(r"\.(\d{6})\d+", r".\1", text)
+    try:
+        return datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        return 0.0
 
 
 def _decode_dashed(
@@ -195,7 +211,12 @@ class History:
 
     def _for_cli(self, cli_id: str, spec: dict) -> list[Conversation]:
         root = Path(str(spec.get("dir", ""))).expanduser()
-        if spec.get("layout") != "dashed-dir" or not root.is_dir():
+        if not root.is_dir():
+            return []
+        layout = spec.get("layout")
+        if layout == "prompt-log":
+            return self._from_prompt_log(cli_id, spec, root)
+        if layout != "dashed-dir":
             return []
         pattern = str(spec.get("pattern") or "*.jsonl")
 
@@ -225,4 +246,61 @@ class History:
                         branch=branch,
                     )
                 )
+        return out
+
+    def _from_prompt_log(self, cli_id: str, spec: dict, root: Path) -> list[Conversation]:
+        """One append-only log per project, a line per prompt. Grok's shape.
+
+        `~/.grok/sessions/%2Froot%2Fventures/prompt_history.jsonl` — the
+        directory name is the working directory, percent-encoded, and each line
+        carries the session id, the prompt and when it was sent. That is
+        everything a resumable conversation needs in one file, which makes this
+        cheaper to read than a directory of transcripts.
+
+        The *first* prompt of each session is kept as its label, matching the
+        other layout: what you asked for at the start is what the conversation
+        is about, and the last thing you said is usually "yes" or "carry on".
+        """
+        name = str(spec.get("file") or "prompt_history.jsonl")
+        out: list[Conversation] = []
+        for project_dir in root.iterdir():
+            if not project_dir.is_dir():
+                continue
+            log = project_dir / name
+            if not log.is_file():
+                continue
+            cwd = urllib.parse.unquote(project_dir.name)
+            first: dict[str, tuple[str, float]] = {}
+            try:
+                with log.open(encoding="utf-8", errors="replace") as handle:
+                    for line in handle:
+                        try:
+                            row = json.loads(line)
+                        except ValueError:
+                            continue
+                        sid = str(row.get("session_id") or "")
+                        prompt = str(row.get("prompt") or "").strip()
+                        if not sid or not prompt or row.get("is_bash"):
+                            continue
+                        when = _epoch(str(row.get("timestamp") or ""))
+                        held = first.get(sid)
+                        if held is None:
+                            first[sid] = (prompt, when)
+                        elif when > held[1]:
+                            # Keep the opening prompt, but track the latest
+                            # moment: that is when the conversation was last
+                            # touched, which is what the sidebar orders by.
+                            first[sid] = (held[0], when)
+            except OSError:
+                continue
+            for sid, (prompt, when) in first.items():
+                out.append(Conversation(
+                    cli=cli_id,
+                    cli_session_id=sid,
+                    cwd=cwd,
+                    label=" ".join(prompt.split())[:120],
+                    updated=when,
+                    size=0,
+                    branch="",
+                ))
         return out

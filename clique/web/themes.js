@@ -119,6 +119,11 @@ window.CLIQUE_THEMES = {
    * theme — everything that is not carrying meaning leans green. */
   trinity: {
     label: "Trinity", base: "dark",
+    /* Monochrome by design, so it owns the greyscale ramp too. Without this a
+     * CLI that paints its background with colour 233 — Grok does — renders
+     * neutral #121212 in the middle of a green terminal, and the theme reads
+     * as not having applied. See extendedAnsi in app.js. */
+    tint_greys: true,
     panel: { bg: "#050705", panel: "#0a0f0a", row: "#0f1a10", sel: "#0d3b18",
              field: "#0d1a0e", fg: "#b9ffc9", dim: "#4f8f5f", line: "#142a16",
              accent: "#00ff41" },

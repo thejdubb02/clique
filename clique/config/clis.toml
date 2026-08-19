@@ -147,6 +147,31 @@ icon    = "grok.svg"
 
 own_input = true
 
+# Grok keeps one append-only log per project rather than a transcript per
+# conversation: the directory name is the working directory percent-encoded,
+# and every line carries the session id, the prompt and when it was sent.
+# Verified against a real install rather than taken from documentation.
+[cli.grok.history]
+dir    = "~/.grok/sessions"
+layout = "prompt-log"
+file   = "prompt_history.jsonl"
+
+# Taken from what a real Grok CLI put on screen, not from documentation. Its
+# confirmations end in an escape hint and its choices are a numbered list with
+# a chevron on the selected row — the same shape Claude's `❯ 1.` catches.
+[cli.grok.attention]
+waiting = [
+  "Esc to cancel",
+  "Don.t ask me again",
+  "\\(y/n\\)",
+  "❯ ?[0-9]+\\.",
+]
+error = [
+  "^Error:",
+  "command not found",
+  "Traceback \\(most recent call last\\)",
+]
+
 [cli.shell]
 label   = "Shell"
 command = "bash"

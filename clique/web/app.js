@@ -2578,7 +2578,7 @@ async function attach(id) {
   const term = new Terminal({
     fontSize: state.settings.font_terminal || 13,
     fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
-    theme: currentTheme().term || {},
+    theme: termTheme(currentTheme()),
     scrollback: 20000,
     cursorBlink: true,
     allowProposedApi: true,
@@ -3025,13 +3025,7 @@ function knownDirs() {
 function fillCwdList() {
   const dirs = knownDirs();
 
-  const list = $("#cwdList");
-  list.textContent = "";
-  for (const { cwd } of dirs) {
-    const option = document.createElement("option");
-    option.value = cwd;
-    list.appendChild(option);
-  }
+  fillDatalist(dirs.map((d) => d.cwd));
 
   const pick = $("#cwdPick");
   pick.textContent = "";
@@ -3060,6 +3054,52 @@ function fillCwdList() {
     pick.appendChild(group);
   }
   pick.disabled = !dirs.length;
+}
+
+function fillDatalist(paths) {
+  const list = $("#cwdList");
+  list.textContent = "";
+  for (const cwd of paths) {
+    const option = document.createElement("option");
+    option.value = cwd;
+    list.appendChild(option);
+  }
+}
+
+/* Completing a path you have never opened here.
+ *
+ * The dropdown knows everywhere you have been, which is the right first answer
+ * and no answer at all for a project you have not started a session in yet —
+ * exactly when you are least likely to remember where it lives. So once you
+ * start typing a path, the suggestions come from the disk instead, the way a
+ * shell completes: a trailing slash lists what is inside, anything else
+ * matches the last segment against its siblings.
+ *
+ * Debounced, and only for something that already looks like a path, so
+ * ordinary typing does not become a directory listing per keystroke. */
+let browseTimer = null;
+
+function browseFrom(text) {
+  clearTimeout(browseTimer);
+  if (!text.startsWith("/") && !text.startsWith("~")) {
+    return fillDatalist(knownDirs().map((d) => d.cwd));
+  }
+  browseTimer = setTimeout(async () => {
+    let dirs = [];
+    try {
+      dirs = (await api("api/browse?path=" + encodeURIComponent(text))).dirs || [];
+    } catch {
+      return;                       // never worth interrupting a launch over
+    }
+    if ($("#newForm").cwd.value.trim() !== text) return;   // they typed on
+    /* The remembered directories stay in the list alongside what is on disk.
+     * They are ranked by how likely they are to be the answer, and losing that
+     * the moment someone types a slash would be trading a good answer for a
+     * complete one. */
+    const known = knownDirs().map((d) => d.cwd)
+      .filter((cwd) => cwd.toLowerCase().startsWith(text.toLowerCase()));
+    fillDatalist([...new Set([...known, ...dirs])]);
+  }, 180);
 }
 
 function openModal() {
@@ -3104,7 +3144,7 @@ function openModal() {
     checkWorkspace();
   };
   $("#modalErr").hidden = true;
-  form.cwd.oninput = checkWorkspace;
+  form.cwd.oninput = () => { checkWorkspace(); browseFrom(form.cwd.value.trim()); };
   checkWorkspace();
   $("#modal").hidden = false;
   form.name.focus();
@@ -3120,6 +3160,66 @@ function styleSlot(name) {
     document.head.appendChild(el);
   }
   return el;
+}
+
+/* The 256-colour palette, for themes that want to own it.
+ *
+ * A theme defines the sixteen ANSI colours. Indices 16-255 are the standard
+ * xterm cube and greyscale ramp, and nothing here touched them — so a CLI that
+ * paints its background with, say, colour 233 got neutral #121212 on every
+ * theme ever written. Grok does exactly that, which is why its pane looked
+ * untouched by a theme that had in fact been applied to it.
+ *
+ * Overriding the cube would be wrong: an application choosing colour 82 wants
+ * that green, not our idea of green. The *greyscale ramp* is different. Apps
+ * reach for 232-255 to mean "a shade near the background", which is a relative
+ * intention rather than an absolute colour, and honouring it against the
+ * theme's own background is closer to what they asked for than neutral grey.
+ *
+ * Opt-in per theme, because it is only right for a theme that is monochrome by
+ * design. Left alone, a theme keeps the standard ramp.
+ */
+const CUBE = [0, 95, 135, 175, 215, 255];
+
+function hexRgb(hex) {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) || 0);
+}
+
+function rgbHex([r, g, b]) {
+  return "#" + [r, g, b].map((v) =>
+    Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+}
+
+function extendedAnsi(theme) {
+  const out = [];
+  for (let r = 0; r < 6; r++) {
+    for (let g = 0; g < 6; g++) {
+      for (let b = 0; b < 6; b++) out.push(rgbHex([CUBE[r], CUBE[g], CUBE[b]]));
+    }
+  }
+  const from = hexRgb(theme.term.background || "#000000");
+  const to = hexRgb(theme.term.foreground || "#ffffff");
+  for (let i = 0; i < 24; i++) {
+    // The same 24 steps the standard ramp has, walked between this theme's
+    // own background and foreground instead of between black and white.
+    const at = (i + 1) / 25;
+    out.push(rgbHex([0, 1, 2].map((c) => from[c] + (to[c] - from[c]) * at)));
+  }
+  return out;
+}
+
+const _termThemes = new Map();
+
+function termTheme(theme) {
+  if (!theme.tint_greys) return theme.term || {};
+  let built = _termThemes.get(theme);
+  if (!built) {
+    built = { ...theme.term, extendedAnsi: extendedAnsi(theme) };
+    _termThemes.set(theme, built);
+  }
+  return built;
 }
 
 function currentTheme() {
@@ -3183,9 +3283,18 @@ function applySettings() {
   root.style.colorScheme = theme.base || "dark";
   root.style.setProperty("--font-panel", (s.font_panel || 13) + "px");
 
+  /* Applied when it changes, not on every poll.
+   *
+   * This runs three seconds apart forever, and assigning `options.theme` makes
+   * xterm rebuild its colour service and repaint the whole grid — so a panel
+   * left open was repainting every terminal it had, twenty times a minute, to
+   * arrive at exactly the colours already on screen. */
+  const stamp = (s.theme || "") + "|" + (s.appearance || "") + "|" + (s.font_terminal || 13);
   for (const entry of terms.values()) {
+    if (entry.painted === stamp) continue;
+    entry.painted = stamp;
     entry.term.options.fontSize = s.font_terminal || 13;
-    entry.term.options.theme = theme.term || {};
+    entry.term.options.theme = termTheme(theme);
     try { entry.fit.fit(); } catch (err) { /* not visible yet */ }
   }
 

@@ -818,6 +818,8 @@ class Handler(BaseHTTPRequestHandler):
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()
                                    if p.mux not in known])
+            if path == "/api/browse":
+                return self._json({"dirs": workspace.complete(query.get("path") or "")})
             if path == "/api/workspace":
                 return self._json(workspace.look(
                     query.get("cwd") or "",

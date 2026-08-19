@@ -217,6 +217,21 @@ repo too large to answer within three seconds.
 Advisory only — nothing is locked, refused or enforced. Pulled, never polled:
 this touches the disk, and it runs when someone has stopped typing a path.
 
+### `GET /api/browse?path=/root/pers`
+
+Directories that could complete a partial path, the way a shell completes one:
+a trailing slash lists what is inside, anything else matches the last segment
+against its siblings. Directories only; hidden ones appear only once the
+segment being typed starts with a dot. Capped at 60.
+
+```json
+{"dirs": ["/root/personal/whatbox-media-stack"]}
+```
+
+This is what the new-session dialog uses once you start typing a path. The
+dropdown beside it answers a different question — everywhere you have already
+worked — and neither is a substitute for the other.
+
 ### `POST /api/workspace` → `201` with the same shape
 
 ```json

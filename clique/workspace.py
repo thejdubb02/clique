@@ -93,6 +93,63 @@ def touched(cwd: Path, since: float) -> int:
     return hits
 
 
+#: Directories offered for one partial path. Enough to see what is there,
+#: short enough that a home directory full of projects is still a list.
+COMPLETIONS = 60
+
+
+def complete(prefix: str, limit: int = COMPLETIONS) -> list[str]:
+    """Directories that could finish this path.
+
+    The picker only knows where you have already been — every live session,
+    every past one, every conversation on disk. That is the right first answer
+    and it is no answer at all for a project you have not opened here yet,
+    which is exactly when you are least likely to remember the path.
+
+    So this completes against the filesystem, the way a shell does. A trailing
+    slash lists what is inside; anything else matches the last segment as a
+    prefix against its siblings.
+
+    Directories only, because that is the only thing the field accepts. Hidden
+    ones are skipped unless the segment being typed starts with a dot, which is
+    how a shell behaves and the reason nobody thinks about it.
+    """
+    text = (prefix or "").strip()
+    if not text.startswith("/") and not text.startswith("~"):
+        return []
+    # Split the raw text, not a parsed Path: `Path("/tmp/.")` drops the dot
+    # during parsing, so asking a Path for its `name` loses exactly the
+    # character that says "show me the hidden ones".
+    head, _, partial = text.rpartition("/")
+    try:
+        parent = Path(head or "/").expanduser()
+    except (RuntimeError, ValueError):
+        return []
+    if not parent.is_dir():
+        return []
+
+    wants_hidden = partial.startswith(".")
+    out: list[str] = []
+    try:
+        for entry in sorted(parent.iterdir(), key=lambda e: e.name.lower()):
+            if len(out) >= limit:
+                break
+            name = entry.name
+            if name.startswith(".") and not wants_hidden:
+                continue
+            if partial and not name.lower().startswith(partial.lower()):
+                continue
+            try:
+                if not entry.is_dir():
+                    continue
+            except OSError:
+                continue
+            out.append(str(entry))
+    except OSError:
+        return []
+    return out
+
+
 def make(cwd: str) -> tuple[bool, str]:
     """Create a directory. Returns (worked, why not).
 

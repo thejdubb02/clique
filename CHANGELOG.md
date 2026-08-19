@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.42.0 — 2026-08-19 15:59 PDT
+
+**Find a directory you have never opened here.** The picker knew everywhere you
+had already worked, which is the right first answer and no answer at all for a
+project you have not started a session in yet — exactly when you are least
+likely to remember where it lives. Start typing a path and the suggestions now
+come from the disk, the way a shell completes: a trailing slash lists what is
+inside, anything else matches the last segment against its siblings. The
+remembered directories stay in the list alongside them.
+
+**Grok's past conversations exist now.** Grok keeps one append-only log per
+project rather than a transcript per conversation — the directory name is the
+working directory, percent-encoded, and each line carries the session id, the
+prompt and when it was sent. CLIque only understood Claude's layout, so every
+Grok conversation was invisible and none of them could be resumed. Six were
+found on the machine this was written on, going back weeks.
+
+**Grok says when it is waiting for you.** It had no attention patterns at all,
+so a Grok session sitting on a confirmation looked exactly like one that had
+finished. The patterns are taken from what a real Grok CLI put on screen, not
+from documentation.
+
+**A theme can own the 256-colour greyscale ramp.** Themes define the sixteen
+ANSI colours; indices 16–255 are the standard xterm cube and nothing here
+touched them. Grok paints its background with colour 233, which is neutral
+`#121212` on every theme ever written — so on Trinity, a deliberately
+monochrome green theme, its pane looked untouched by a theme that had in fact
+been applied. Trinity now tints the greyscale ramp between its own background
+and foreground, and 233 renders `#051909` instead. Opt-in per theme: an
+application choosing colour 82 wants *that* green, but 232–255 means "a shade
+near the background", which is a relative intention worth honouring.
+
+**And the terminal stopped repainting every three seconds.** Applying the theme
+was unconditional on every poll, and assigning `options.theme` makes xterm
+rebuild its colour service and repaint the whole grid — so a panel left open
+repainted every terminal it had, twenty times a minute, to arrive at the
+colours already on screen. It happens when something actually changes now.
+
 ## 0.41.0 — 2026-08-19 15:50 PDT
 
 **The sidebar shows your work again.** Past conversations were listed under
