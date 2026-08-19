@@ -392,19 +392,8 @@ function showMenu(ev, items) {
 function sessionMenu(ev, s) {
   showMenu(ev, [
     ["Open", () => openSession(s.id)],
-    ["Rename", () => {
-      const row = document.querySelector(`.session[data-id="${s.id}"]`);
-      if (row) renameInline(row, s);
-    }],
-    [s.archived ? "Unarchive" : "Archive", async () => {
-      // Deliberately not a confirm: nothing is destroyed, and the session
-      // keeps running either way.
-      await api("api/sessions/" + s.id, {
-        method: "PATCH", body: JSON.stringify({ archived: !s.archived }),
-      });
-      if (!s.archived) closeTab(s.id, true);
-      refresh();
-    }],
+    ["Rename", () => renameSession(s)],
+    [s.archived ? "Unarchive" : "Archive", () => setArchived(s, !s.archived)],
     ["Kill session", () => killSession(s), true],
   ]);
 }
@@ -459,6 +448,45 @@ function folderMenu(ev, folder) {
   ]);
 }
 
+async function renameSession(s) {
+  const row = document.querySelector(`.session[data-id="${s.id}"]`);
+  if (row) return renameInline(row, s);
+  // Reached from the palette, where the row may be scrolled out of the tree,
+  // filtered out by the search box, or inside a collapsed folder.
+  const name = prompt("Session name", s.name);
+  if (!name || name.trim() === s.name) return;
+  await api("api/sessions/" + s.id, {
+    method: "PATCH", body: JSON.stringify({ name: name.trim() }),
+  });
+  refresh();
+}
+
+async function setArchived(s, archived) {
+  // Deliberately not a confirm: nothing is destroyed, and the session keeps
+  // running in tmux either way.
+  await api("api/sessions/" + s.id, {
+    method: "PATCH", body: JSON.stringify({ archived }),
+  });
+  if (archived) closeTab(s.id, true);
+  refresh();
+}
+
+async function newFolder() {
+  const name = prompt("Folder name");
+  if (!name) return;
+  await api("api/folders", { method: "POST", body: JSON.stringify({ name }) });
+  refresh();
+}
+
+async function adoptSessions() {
+  const found = await api("api/adoptable");
+  if (!found.length) return alert("Nothing to adopt — no other sessions found.");
+  if (!confirm(`Adopt ${found.length} session(s) started by another tool?`)) return;
+  const result = await api("api/sessions/adopt", { method: "POST", body: "{}" });
+  await refresh();
+  alert("Adopted: " + (result.adopted.join(", ") || "none"));
+}
+
 async function killSession(s) {
   if (!confirm(`Kill "${s.name}"? The CLI running in it is stopped for good.`)) return;
   closeTab(s.id, true);
@@ -510,6 +538,7 @@ function renderInputBar() {
 function selectTab(id) {
   activeId = id;
   attention.delete(id);   // looking at it is the acknowledgement
+  touchMru(id);
   for (const [tid, entry] of terms) {
     entry.el.style.display = tid === id ? "block" : "none";
   }
@@ -556,10 +585,13 @@ async function attach(id) {
   host.style.cssText = "position:absolute;inset:0;padding:6px 8px;";
   $("#terminal").appendChild(host);
 
+  // Built with the theme already on, not with the built-in dark and a repaint
+  // on the next poll: under a light theme that was a black pane flashing up
+  // for a moment every time a session opened.
   const term = new Terminal({
-    fontSize: 13,
+    fontSize: state.settings.font_terminal || 13,
     fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
-    theme: { background: "#1e1e1e", foreground: "#cccccc" },
+    theme: currentTheme().term || {},
     scrollback: 20000,
     cursorBlink: true,
     allowProposedApi: true,
@@ -568,6 +600,20 @@ async function attach(id) {
   term.loadAddon(fit);
   term.open(host);
   fit.fit();
+
+  /* The pane owns the keyboard — deliberately, and that is why tabs are
+   * Alt+1..9 rather than plain digits. The palette is the single exception,
+   * so it has to be taken from the pane here as well as bound on the
+   * document: without this, Ctrl+K would open the palette *and* have the CLI
+   * kill to end of line. Ctrl+Shift+P is safe to take outright, since nothing
+   * in a terminal claims it. */
+  term.attachCustomKeyEventHandler((ev) => {
+    if (ev.type !== "keydown" || !(ev.ctrlKey || ev.metaKey)) return true;
+    const key = ev.key.toLowerCase();
+    if (ev.shiftKey && key === "p") return false;
+    if (!ev.shiftKey && key === "k") return !paletteHotkeyOn();
+    return true;
+  });
 
   const entry = { term, fit, el: host, ws: null, closing: false, typed: "" };
   terms.set(id, entry);
@@ -894,6 +940,7 @@ function openSettings() {
     $(out).textContent = value + "px";
   }
 
+  $("#setPalette").checked = s.palette_hotkey !== false;
   $("#setStatusOnIcon").checked = !!s.status_on_icon;
   $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
@@ -1028,6 +1075,7 @@ function wire() {
   $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
+  $("#setPalette").onchange = (ev) => saveSettings({ palette_hotkey: ev.target.checked });
   $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
@@ -1069,19 +1117,8 @@ function wire() {
   $("#collapse").onclick = () => setSidebar(false);
   $("#expand").onclick = () => setSidebar(true);
 
-  $("#newFolder").onclick = async () => {
-    const name = prompt("Folder name");
-    if (name) { await api("api/folders", { method: "POST", body: JSON.stringify({ name }) }); refresh(); }
-  };
-
-  $("#adopt").onclick = async () => {
-    const found = await api("api/adoptable");
-    if (!found.length) return alert("Nothing to adopt — no other sessions found.");
-    if (!confirm(`Adopt ${found.length} session(s) started by another tool?`)) return;
-    const result = await api("api/sessions/adopt", { method: "POST", body: "{}" });
-    await refresh();
-    alert("Adopted: " + (result.adopted.join(", ") || "none"));
-  };
+  $("#newFolder").onclick = newFolder;
+  $("#adopt").onclick = adoptSessions;
 
   $("#newForm").onsubmit = async (ev) => {
     ev.preventDefault();
@@ -1124,11 +1161,45 @@ function wire() {
     ev.target.style.height = Math.min(ev.target.scrollHeight, 140) + "px";
   };
 
+  $("#palQ").oninput = renderPalette;
+  $("#palQ").onkeydown = (ev) => {
+    // Ctrl+N/P as well as the arrows: the people living in these panes all
+    // day already have that in their fingers from readline.
+    if (ev.key === "ArrowDown" || (ev.ctrlKey && ev.key === "n")) {
+      ev.preventDefault(); movePalette(1);
+    } else if (ev.key === "ArrowUp" || (ev.ctrlKey && ev.key === "p")) {
+      ev.preventDefault(); movePalette(-1);
+    } else if (ev.key === "Enter") {
+      ev.preventDefault(); runPaletteItem(palAt);
+    } else if (ev.key === "Escape") {
+      ev.preventDefault(); closePalette();
+    }
+    // Whatever the palette does not use, the app must not act on either:
+    // Ctrl+B while typing a query should type, not collapse the sidebar.
+    ev.stopPropagation();
+  };
+  $("#palette").onclick = (ev) => {
+    if (ev.target === $("#palette")) closePalette();   // the backdrop, not the box
+  };
+
   document.onclick = (ev) => {
     if (!$("#menu").contains(ev.target)) $("#menu").hidden = true;
   };
 
   document.onkeydown = (ev) => {
+    const key = ev.key.toLowerCase();
+    // Ctrl+Shift+P is always live; Ctrl+K can be handed back to the pane in
+    // settings, where it means kill-to-end-of-line.
+    if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && key === "p") {
+      ev.preventDefault();
+      openPalette(">");
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && key === "k" && paletteHotkeyOn()) {
+      ev.preventDefault();
+      openPalette("");
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.key === "b") {
       ev.preventDefault();
       setSidebar($("#sidebar").hidden);
@@ -1139,6 +1210,9 @@ function wire() {
       if (target) { ev.preventDefault(); selectTab(target); }
     }
     if (ev.key === "Escape") {
+      // Guarded: closing the palette hands focus back, and doing that when it
+      // was never open would steal focus from wherever it actually is.
+      if (!$("#palette").hidden) closePalette();
       $("#modal").hidden = true;
       $("#menu").hidden = true;
       $("#settings").hidden = true;
@@ -1146,6 +1220,326 @@ function wire() {
   };
 
   addEventListener("resize", refitAll);
+}
+
+/* --------------------------------------------------------- command palette */
+
+/* One box for every action, and the fastest way between sessions.
+ *
+ * The reason it exists is not that the buttons are hard to find. It is that
+ * numbered tabs work at five sessions and stop working at thirty, and that
+ * every feature added from here would otherwise arrive as one more button in
+ * the chrome. A palette absorbs them: new commands cost a line each and no
+ * pixels at all.
+ *
+ * Prefixes are borrowed from VS Code, because muscle memory is the point:
+ * nothing searches everything, ">" narrows to commands, "@" to sessions.
+ */
+
+const MRU_KEY = "muxpanel.mru";
+
+/* Most-recently-used session order, per browser.
+ *
+ * Stored beside the open-tabs list in localStorage rather than in server
+ * settings, for the same reason the sidebar width is: it describes how this
+ * screen has been used, not a preference about the tool. */
+let mru = readMru();
+let palItems = [];
+let palAt = 0;
+let palReturnTo = null;
+
+function readMru() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MRU_KEY) || "[]");
+    return Array.isArray(saved) ? saved.filter((id) => typeof id === "string") : [];
+  } catch (err) {
+    return [];   // a corrupt entry is not worth a broken palette
+  }
+}
+
+function touchMru(id) {
+  if (!id) return;
+  mru = [id, ...mru.filter((other) => other !== id)].slice(0, 200);
+  localStorage.setItem(MRU_KEY, JSON.stringify(mru));
+}
+
+function paletteHotkeyOn() {
+  return state.settings.palette_hotkey !== false;
+}
+
+/* Subsequence scoring, close enough to an editor's to feel familiar: every
+ * character of the query must appear in order, and *where* it appears decides
+ * the score. The start of a word beats the middle of one, and a run of
+ * adjacent characters beats the same letters scattered about — which is what
+ * makes "sent" find "wsg-sentinel" ahead of "session-tests". */
+function fuzzy(query, text) {
+  if (!query) return { score: 0, hits: [] };
+  const lower = text.toLowerCase();
+  const hits = [];
+  let score = 0;
+  let last = -2;
+  let run = 0;
+  for (const ch of query) {
+    const found = lower.indexOf(ch, last + 1);
+    if (found < 0) return null;
+    run = found === last + 1 ? run + 1 : 0;
+    const boundary = found === 0 || /[\s/\-_.:]/.test(text[found - 1]);
+    score += 1 + run * 4 + (boundary ? 6 : 0) + (found === 0 ? 4 : 0);
+    hits.push(found);
+    last = found;
+  }
+  // Shorter haystacks win ties, so a query matching a short session name
+  // outranks the same letters buried in a long path.
+  return { score: score - text.length * 0.05, hits };
+}
+
+function highlight(text, hits) {
+  if (!hits || !hits.length) return escapeHtml(text);
+  const marks = new Set(hits);
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    out += marks.has(i) ? `<b>${escapeHtml(text[i])}</b>` : escapeHtml(text[i]);
+  }
+  return out;
+}
+
+/* Paths are shortened from the left, because the tail is the part that
+ * identifies a directory and the head is the part every entry shares. */
+function shortPath(path, keep = 46) {
+  return path.length <= keep ? path : "…" + path.slice(-(keep - 1));
+}
+
+function paletteMarker(s) {
+  // The palette always draws a marker, even where the sidebar and the tab bar
+  // have theirs turned off: a column of bare names is the thing this box
+  // exists to stop you scanning.
+  const mode = markerMode(s.cli);
+  return markerFor(
+    { color: s.color, icon: s.icon, icon_full_color: s.icon_full_color,
+      label: s.cli_label, cli: s.cli },
+    mode === "none" ? "color" : mode);
+}
+
+function sessionTag(s) {
+  if (s.archived) return "archived";
+  if (!s.alive) return "stopped";
+  return openTabs.includes(s.id) ? "open" : "running";
+}
+
+function paletteSessions() {
+  const seen = new Map(mru.map((id, index) => [id, index]));
+  // Never used in this browser sorts after everything that has been, and
+  // archived sessions sort after that again.
+  const rank = (s) => (seen.has(s.id) ? seen.get(s.id) : 1000) + (s.archived ? 5000 : 0);
+  return [...state.sessions]
+    .sort((a, b) => rank(a) - rank(b))
+    .map((s) => ({
+      kind: "session",
+      id: s.id,
+      title: s.name,
+      detail: shortPath(s.cwd),
+      match: s.name + " " + s.cwd + " " + (s.cli_label || ""),
+      icon: paletteMarker(s),
+      tag: sessionTag(s),
+      run: () => openSession(s.id),
+    }));
+}
+
+function paletteCommands() {
+  const current = session(activeId);
+  const items = [];
+  const add = (title, detail, run, danger) =>
+    items.push({ kind: "command", title, detail, match: title + " " + (detail || ""),
+                 icon: "", run, danger });
+
+  add("New session", "Start a CLI in a directory", openModal);
+  add("New folder", "Group sessions in the sidebar", newFolder);
+  add("Adopt sessions", "Take over tmux sessions muxpanel did not start", adoptSessions);
+  add("Settings", "Themes, markers, snippets, notifications", openSettings);
+  add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
+  add("System history", "cpu and memory over the last hour", showHistory);
+
+  if (current) {
+    add("Rename session", current.name, () => renameSession(current));
+    add(current.archived ? "Unarchive session" : "Archive session",
+        current.name + " — nothing is killed either way",
+        () => setArchived(current, !current.archived));
+    add("Copy working directory", current.cwd, () => copyText(current.cwd));
+    add("Focus the terminal", current.name, focusTerminal);
+    add("Close tab", "The session keeps running in tmux", () => closeTab(current.id));
+  }
+  if (state.settings.input_mode !== "terminal") {
+    add("Focus the prompt box", "Type a prompt instead of driving the pane",
+        () => $("#prompt").focus());
+  }
+  if (openTabs.length > 1) {
+    add("Close every tab", `${openTabs.length} open · every session keeps running`,
+        closeAllTabs);
+  }
+
+  for (const [id, theme] of Object.entries(window.MUXPANEL_THEMES || {})) {
+    add("Theme: " + theme.label,
+        (state.settings.theme || "") === id ? "in use" : theme.base,
+        () => saveSettings({ theme: id }));
+  }
+  for (const mode of ["dark", "light", "system"]) {
+    add("Appearance: " + mode, "Used when no preset theme is chosen",
+        () => saveSettings({ appearance: mode }));
+  }
+  for (const sn of snippets()) {
+    add("Snippet: " + (sn.label || sn.trigger), sn.trigger + " — insert at the caret",
+        () => insertSnippet(sn));
+  }
+
+  // Destructive last, and the only entry that gets the danger colour.
+  if (current) add("Kill session", "Stops the CLI for good", () => killSession(current), true);
+  return items;
+}
+
+function closeAllTabs() {
+  for (const id of [...openTabs]) closeTab(id, true);
+  activeId = null;
+  renderTabs();
+  renderTree();
+}
+
+function focusTerminal() {
+  const entry = terms.get(activeId);
+  if (entry) entry.term.focus();
+}
+
+function insertSnippet(sn) {
+  const box = $("#prompt");
+  const filled = expandText(sn.text, false);
+  const caret = filled.indexOf("{cursor}");
+  const body = filled.replace("{cursor}", "");
+  const head = box.value.slice(0, box.selectionStart);
+  const tail = box.value.slice(box.selectionEnd);
+  box.value = head + body + tail;
+  const at = head.length + (caret >= 0 ? caret : body.length);
+  box.focus();
+  box.setSelectionRange(at, at);
+  box.dispatchEvent(new Event("input"));
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    // The clipboard API needs a secure context. Over the tailnet that is
+    // https and it is there; on a bare LAN address it simply is not, so fall
+    // back rather than fail without saying anything.
+    const box = document.createElement("textarea");
+    box.value = text;
+    box.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(box);
+    box.select();
+    document.execCommand("copy");
+    box.remove();
+  }
+}
+
+function openPalette(prefill) {
+  palReturnTo = document.activeElement;
+  $("#modal").hidden = true;
+  $("#menu").hidden = true;
+  $("#palette").hidden = false;
+  const input = $("#palQ");
+  input.value = prefill || "";
+  renderPalette();
+  input.focus();
+  input.select();
+}
+
+function closePalette() {
+  $("#palette").hidden = true;
+  // Give focus back to whatever had it, so opening the palette and changing
+  // your mind costs nothing — including the terminal you were typing into.
+  if (palReturnTo && document.contains(palReturnTo)) palReturnTo.focus();
+  else focusTerminal();
+  palReturnTo = null;
+}
+
+function renderPalette() {
+  const raw = $("#palQ").value;
+  const mode = raw[0] === ">" ? "command" : raw[0] === "@" ? "session" : "all";
+  const query = (mode === "all" ? raw : raw.slice(1)).trim().toLowerCase();
+
+  let pool = [];
+  if (mode !== "command") pool = pool.concat(paletteSessions());
+  if (mode !== "session") pool = pool.concat(paletteCommands());
+
+  const shown = [];
+  for (const item of pool) {
+    if (!query) { shown.push({ ...item, hits: [], score: 0 }); continue; }
+    const onTitle = fuzzy(query, item.title.toLowerCase());
+    const onRest = fuzzy(query, item.match.toLowerCase());
+    if (!onTitle && !onRest) continue;
+    // A title match outranks one found in a path or a CLI name, and only the
+    // title carries the highlight — marking letters inside a directory reads
+    // as damage rather than as a match.
+    const score = onTitle ? onTitle.score + 12 : onRest.score;
+    shown.push({ ...item, score, hits: onTitle ? onTitle.hits : [] });
+  }
+  if (query) shown.sort((a, b) => b.score - a.score);
+
+  palItems = shown.slice(0, 60);
+  // With no query, the first row is the session you are already looking at,
+  // so start one below it: Ctrl+K, Enter then means "back to the last one",
+  // which is the move this shortcut is really for.
+  palAt = (!query && palItems.length > 1 &&
+           palItems[0].kind === "session" && palItems[0].id === activeId) ? 1 : 0;
+  paintPalette();
+}
+
+function paintPalette() {
+  const list = $("#palList");
+  list.innerHTML = "";
+  if (!palItems.length) {
+    list.innerHTML = `<div class="pal-empty">Nothing matches.</div>`;
+    return;
+  }
+  palItems.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "pal-row" + (item.danger ? " danger" : "");
+    row.setAttribute("role", "option");
+    row.innerHTML =
+      `<span class="pal-icon">${item.icon || ""}</span>` +
+      `<span class="pal-text">` +
+        `<span class="pal-title">${highlight(item.title, item.hits)}</span>` +
+        (item.detail ? `<span class="pal-detail">${escapeHtml(item.detail)}</span>` : "") +
+      `</span>` +
+      (item.tag ? `<span class="pal-tag ${item.tag}">${escapeHtml(item.tag)}</span>` : "");
+    row.onmouseenter = () => { palAt = index; paintCursor(); };
+    row.onclick = () => runPaletteItem(index);
+    list.appendChild(row);
+  });
+  paintCursor();
+}
+
+/* Moving the highlight repaints two class names, not the list. Rebuilding the
+ * DOM on every arrow key made a long list visibly stutter. */
+function paintCursor() {
+  const rows = $("#palList").children;
+  for (let i = 0; i < rows.length; i++) {
+    rows[i].classList.toggle("on", i === palAt);
+    rows[i].setAttribute("aria-selected", i === palAt ? "true" : "false");
+  }
+  if (rows[palAt]) rows[palAt].scrollIntoView({ block: "nearest" });
+}
+
+function movePalette(delta) {
+  if (!palItems.length) return;
+  palAt = (palAt + delta + palItems.length) % palItems.length;
+  paintCursor();
+}
+
+function runPaletteItem(index) {
+  const item = palItems[index];
+  if (!item) return;
+  palReturnTo = null;      // the action decides where focus lands, not us
+  $("#palette").hidden = true;
+  item.run();
 }
 
 /* ------------------------------------------------------------ sidebar width */

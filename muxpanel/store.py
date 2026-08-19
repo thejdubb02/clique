@@ -61,6 +61,11 @@ DEFAULT_SETTINGS = {
     #: sidebar is scanned, the terminal is read.
     "font_panel": 13,
     "font_terminal": 13,
+    #: Ctrl+K opens the command palette, which means the pane never sees that
+    #: key — and Ctrl+K is readline's kill-to-end-of-line. Anyone who uses it
+    #: there can hand it back; the palette stays reachable on Ctrl+Shift+P,
+    #: which no terminal claims.
+    "palette_hotkey": True,
     #: "panel" keeps muxpanel's prompt box. "terminal" hides it and lets the
     #: CLI's own input field be the only one — two stacked prompts is
     #: redundant chrome. Snippets work in both: muxpanel owns the PTY, so an

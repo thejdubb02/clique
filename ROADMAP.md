@@ -29,7 +29,7 @@ already does the thing well — not to reimplement that tool.
 All three lists independently ranked these highest. Numbers in brackets are how
 many of the three named it.
 
-### 1. Command palette + fuzzy quick-switch (3/3)
+### 1. Command palette + fuzzy quick-switch (3/3) — **shipped in 0.4.0**
 `Ctrl`/`Cmd`+`K` for every action, and `Ctrl`+`P`-style jumping between
 sessions with most-recently-used first. Numbered tabs work at five sessions and
 become friction at thirty. Every list ranked this first or second, and one
@@ -145,7 +145,8 @@ Cheap, and it fires dozens of times a day.
 
 ## Done
 
-Session engine on its own tmux server · CLI registry with auto-detection ·
+Command palette on `Ctrl`+`K` — fuzzy, most-recently-used first, every action
+in one box · Session engine on its own tmux server · CLI registry with auto-detection ·
 folder tree with drag-drop, rename, search, archive, colours · numbered tabs ·
 live terminal with scrollback across reattach · per-CLI icons and colours,
 four display modes · working pulse and finished flash with optional chime ·

@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.0 — 2026-08-19
+
+**A command palette.** `Ctrl`+`K` opens one box that reaches every action and
+every session. It is the feature three independent LLM feature lists ranked
+first, and the reason they gave is the right one: numbered tabs work at five
+sessions and become friction at thirty, and without a palette every feature
+added from here arrives as one more button in the chrome.
+
+- Type nothing and it is a session switcher, **most-recently-used first**, so
+  `Ctrl`+`K` `↵` is "back to the one I was just in".
+- `>` narrows to commands, `@` to sessions — VS Code's prefixes, because
+  muscle memory is the point.
+- Fuzzy matching that scores *where* a match lands: the start of a word beats
+  the middle of one, and adjacent letters beat scattered ones. Only the title
+  is highlighted; marking letters inside a directory path reads as damage.
+- Commands cover what was previously button- or right-click-only: new session,
+  new folder, adopt, settings, sidebar, history, rename, archive, copy working
+  directory, close tab, close every tab, kill — plus every theme, every
+  appearance and every snippet, live.
+- `Ctrl`+`Shift`+`P` opens it straight into commands.
+- Escaping out gives focus back to wherever it came from, including the pane
+  you were typing in.
+
+**The pane keeps the keyboard, except for this.** `Ctrl`+`K` is readline's
+kill-to-end-of-line, so it is taken from the terminal explicitly rather than
+by accident — and it can be handed back in Settings → Appearance → Keyboard,
+where `Ctrl`+`Shift`+`P` still opens the palette either way.
+
+Also in this release:
+
+- New panes are built with the active theme already applied. Under a light
+  theme, opening a session used to flash a black pane for a moment.
+- The context menu's session actions became named functions, so the palette
+  runs the same code rather than a second copy of it.
+
 ## 0.3.1 — 2026-08-19
 
 Real logos, drawn properly. Icons are now classified automatically into two

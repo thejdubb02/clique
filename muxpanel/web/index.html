@@ -67,7 +67,7 @@
       <div id="terminal"></div>
       <div id="empty">
         <p>No session open.</p>
-        <p class="dim">Pick one on the left, or press <kbd>+</kbd> to start one.</p>
+        <p class="dim">Pick one on the left, or press <kbd>Ctrl</kbd>+<kbd>K</kbd>.</p>
       </div>
     </div>
 
@@ -143,6 +143,16 @@
         <input type="range" id="setFontTerminal" min="9" max="28" step="1">
         <output id="outFontTerminal"></output>
       </label>
+
+      <h3>Keyboard</h3>
+      <label class="check"><input type="checkbox" id="setPalette">
+        <kbd>Ctrl</kbd>+<kbd>K</kbd> opens the command palette</label>
+      <p class="note">The pane owns the keyboard everywhere else — which is why
+         tabs are <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd> and not plain digits.
+         The palette is the one key taken from it, and
+         <kbd>Ctrl</kbd>+<kbd>K</kbd> is readline’s kill-to-end-of-line. Turn
+         this off to hand it back; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>
+         still opens the palette either way.</p>
 
       <h3>Prompt box</h3>
       <label class="field">Where you type
@@ -245,6 +255,25 @@ python3 -m muxpanel token revoke tk_xxxxxxxx</pre>
          node_modules, no build step.</p>
     </section>
     </div>
+  </div>
+</div>
+
+<div id="palette" hidden>
+  <div class="pal-box" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="pal-field">
+      <span class="pal-mark">&#8250;</span>
+      <input id="palQ" autocomplete="off" spellcheck="false" role="combobox"
+             aria-expanded="true" aria-controls="palList" aria-autocomplete="list"
+             placeholder="Jump to a session, or run a command…">
+    </div>
+    <div id="palList" class="pal-list" role="listbox" aria-label="Results"></div>
+    <footer class="pal-foot">
+      <span><kbd>&#8593;</kbd><kbd>&#8595;</kbd> move</span>
+      <span><kbd>&#8629;</kbd> go</span>
+      <span><kbd>&gt;</kbd> commands only</span>
+      <span><kbd>@</kbd> sessions only</span>
+      <span><kbd>Esc</kbd> close</span>
+    </footer>
   </div>
 </div>
 
