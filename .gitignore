@@ -7,3 +7,9 @@ clique/web/custom.css
 # Private to this box — not part of the public project
 tools/vault_sync.py
 
+
+# The private half — strategy, competitors, pricing. Its own repo
+# (thejdubb02/clique-private) checked out here so both are in one place.
+# The pre-commit hook below refuses to stage anything under it; this line is
+# the first fence and that hook is the one that catches a hurry.
+/private/

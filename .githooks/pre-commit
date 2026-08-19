@@ -1,0 +1,14 @@
+#!/bin/sh
+# Refuse to commit anything that belongs to the private repo.
+#
+# .gitignore already covers private/, but an ignore is advisory: `git add -f`
+# walks straight through it, and so does a file that gets moved in later. This
+# is the fence that does not depend on anyone remembering.
+blocked=$(git diff --cached --name-only | grep -E '^private/|(^|/)(monetization|landscape)\.md$')
+if [ -n "$blocked" ]; then
+    echo "refusing: these belong in thejdubb02/clique-private, not the public repo" >&2
+    echo "$blocked" | sed 's/^/  /' >&2
+    echo "" >&2
+    echo "If this really is public, commit with --no-verify and mean it." >&2
+    exit 1
+fi
