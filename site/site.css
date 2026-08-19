@@ -125,10 +125,28 @@ h2 {
   margin: 0 0 .7rem;
 }
 .lede {
-  margin: 0 auto 1.5rem;
+  margin: 0 auto 1rem;
   color: var(--dim);
   max-width: 38rem;
 }
+.clis, .tag {
+  margin: 0 auto .35rem;
+  max-width: 42rem;
+  color: var(--dim);
+  font-size: .92rem;
+}
+.tag { color: var(--fg); font-weight: 600; margin-bottom: 1.4rem; }
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .4rem;
+  margin: 1rem 0 0;
+}
+.badges img { height: 20px; display: block; }
+.langs a { color: var(--dim); }
+.langs a:hover, .langs a.on { color: var(--fg); text-decoration: none; }
+.langs a.on { font-weight: 650; }
 
 .run {
   text-align: left;
@@ -427,6 +445,8 @@ footer p { margin: 0 0 .35rem; }
   .cli-status.wait::after,
   .caret { animation: none; }
 }
+
+:lang(zh-Hans) h1 { max-width: 12em; letter-spacing: 0; }
 
 @media (max-width: 960px) {
   .shot { height: 360px; }

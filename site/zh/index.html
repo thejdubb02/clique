@@ -1,34 +1,34 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hans">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CLIque — a folder for every CLI on the box</title>
-<meta name="description" content="Folder-organised coding sessions in a browser, kept alive in tmux. Self-host is free forever. A paid option if you don't want to run the setup.">
-<link rel="canonical" href="https://useclique.dev/">
+<title>CLIque — 给盒子上每一套 CLI 一个文件夹</title>
+<meta name="description" content="浏览器里的编程会话，活在 tmux 里。自托管永远免费。不想自己搭的话，付费方案在路上。">
+<link rel="canonical" href="https://useclique.dev/zh/">
 <link rel="alternate" hreflang="en" href="https://useclique.dev/">
 <link rel="alternate" hreflang="zh-Hans" href="https://useclique.dev/zh/">
 <link rel="alternate" hreflang="x-default" href="https://useclique.dev/">
-<meta property="og:locale" content="en_US">
+<meta property="og:locale" content="zh_CN">
 <meta name="theme-color" content="#0E1116">
-<link rel="icon" href="brand/mark.svg" type="image/svg+xml">
-<link rel="icon" href="brand/favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
-<meta property="og:title" content="CLIque — a folder for every CLI on the box">
-<meta property="og:description" content="A browser panel for every coding CLI on the box. Self-host is free forever. Paid option coming if you don't want to run the setup.">
+<link rel="icon" href="../brand/mark.svg" type="image/svg+xml">
+<link rel="icon" href="../brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+<meta property="og:title" content="CLIque — 给盒子上每一套 CLI 一个文件夹">
+<meta property="og:description" content="浏览器里的编程会话面板。自托管永远免费。不想自己搭的话，付费方案在路上。">
 <meta property="og:image" content="https://useclique.dev/brand/social-preview.png">
-<meta property="og:url" content="https://useclique.dev/">
+<meta property="og:url" content="https://useclique.dev/zh/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="site.css?v=9">
+<link rel="stylesheet" href="../site.css?v=9">
 
 <div class="page">
   <header>
-    <a class="word" href="/">
-      <img src="brand/mark.svg" width="20" height="20" alt="">
+    <a class="word" href="/zh/">
+      <img src="../brand/mark.svg" width="20" height="20" alt="">
       CLIque
     </a>
     <nav>
-      <a class="mit" href="/zh/" lang="zh-Hans" hreflang="zh-Hans">简体中文</a>
+      <a class="mit" href="/" lang="en" hreflang="en">English</a>
       <a class="mit" href="https://github.com/thejdubb02/clique/blob/main/LICENSE">MIT</a>
       <a class="btn-gh" href="https://github.com/thejdubb02/clique" rel="noopener">
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>
@@ -38,26 +38,26 @@
   </header>
 
   <section class="hero">
-    <p class="kicker">self-hosted · MIT · 24 MB · no telemetry</p>
-    <h1>A <em>folder</em> for every CLI on the box.</h1>
-    <p class="lede">Coding sessions in a browser, kept alive in tmux. Claude, Grok, Gemini, Codex, or anything you add in four lines. Self-host is free forever. A paid option is coming if you’d rather not run the setup.</p>
+    <p class="kicker">自托管 · MIT · 24 MB · 无遥测</p>
+    <h1>给盒子上每一套 CLI 一个<em>文件夹</em>。</h1>
+    <p class="lede">浏览器里的编程会话，活在 tmux 里。Claude、Grok、Gemini、Codex，或四行配置加上去的任何 CLI。自托管永远免费。不想自己搭的话，付费方案在路上。</p>
     <p class="clis">Claude Code · Grok · Gemini · Codex · OpenCode · Cursor · Cline · Shell</p>
-    <p class="tag">One panel · Your box</p>
+    <p class="tag">一块面板 · 你的机器</p>
 
     <div class="run">
       <div class="run-head">
         <span class="host">clique @ 127.0.0.1:3200</span>
-        <button type="button" class="copybtn" hidden data-idle="Copy" data-done="Copied" data-copy="git clone https://github.com/thejdubb02/clique.git
+        <button type="button" class="copybtn" hidden data-idle="复制" data-done="已复制" data-copy="git clone https://github.com/thejdubb02/clique.git
 cd clique
 python3 -m clique password
-python3 -m clique">Copy</button>
+python3 -m clique">复制</button>
       </div>
 <pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
 <span class="ps">$</span> cd clique
 <span class="ps">$</span> python3 -m clique password
 <span class="ps">$</span> python3 -m clique</code></pre>
     </div>
-    <p class="then">Python 3.11+ and tmux. Nothing else. Then open <code>http://127.0.0.1:3200</code>.</p>
+    <p class="then">需要 Python 3.11+ 和 tmux。没了。然后打开 <code>http://127.0.0.1:3200</code>。</p>
     <p class="badges">
       <a href="https://github.com/thejdubb02/clique/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
       <a href="https://github.com/thejdubb02/clique#quick-start"><img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square" alt="Python 3.11+"></a>
@@ -68,53 +68,53 @@ python3 -m clique">Copy</button>
     </p>
   </section>
 
-  <figure class="shot" aria-label="CLIque: folders of CLI sessions on the left, a terminal on the right. A ring around each logo shows working, waiting, or idle.">
+  <figure class="shot" aria-label="CLIque：左边是按文件夹排好的 CLI 会话，右边是终端。标志周围的环表示工作中、在等你、或空闲。">
     <div class="app">
       <aside>
         <div class="ah">
-          <img src="brand/mark.svg" width="13" height="13" alt="">
+          <img src="../brand/mark.svg" width="13" height="13" alt="">
           <span>CLIque</span>
         </div>
-        <div class="search">Search sessions…</div>
+        <div class="search">搜索会话…</div>
         <div class="tree">
-          <div class="fold">Work</div>
+          <div class="fold">工作</div>
           <div class="sess on">
-            <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(icons/claude.svg);mask-image:url(icons/claude.svg)"></i></span>
-            <span class="meta"><b>auth rewrite</b><small>~/proj/api</small></span>
+            <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(../icons/claude.svg);mask-image:url(../icons/claude.svg)"></i></span>
+            <span class="meta"><b>登录改写</b><small>~/proj/api</small></span>
           </div>
           <div class="sess">
-            <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(icons/grok.svg);mask-image:url(icons/grok.svg)"></i></span>
-            <span class="meta"><b>landing page</b><small>~/proj/site</small></span>
+            <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(../icons/grok.svg);mask-image:url(../icons/grok.svg)"></i></span>
+            <span class="meta"><b>落地页</b><small>~/proj/site</small></span>
           </div>
           <div class="sess">
-            <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(icons/gemini.svg);mask-image:url(icons/gemini.svg)"></i></span>
-            <span class="meta"><b>migrations</b><small>~/proj/db</small></span>
+            <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(../icons/gemini.svg);mask-image:url(../icons/gemini.svg)"></i></span>
+            <span class="meta"><b>迁移</b><small>~/proj/db</small></span>
           </div>
-          <div class="fold">Home</div>
+          <div class="fold">个人</div>
           <div class="sess">
-            <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(icons/codex.svg);mask-image:url(icons/codex.svg)"></i></span>
-            <span class="meta"><b>weekly notes</b><small>~/notes</small></span>
+            <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(../icons/codex.svg);mask-image:url(../icons/codex.svg)"></i></span>
+            <span class="meta"><b>每周笔记</b><small>~/notes</small></span>
           </div>
         </div>
       </aside>
       <div class="pane">
         <div class="tabs">
-          <div class="tab active" style="--cli:#D97757">auth rewrite</div>
-          <div class="tab">landing page</div>
+          <div class="tab active" style="--cli:#D97757">登录改写</div>
+          <div class="tab">落地页</div>
           <div class="plus">+</div>
           <div class="stats">cpu 12% · mem 24 MB</div>
         </div>
         <div class="term">
-          <div class="tline dim">claude · ~/proj/api · waiting on you</div>
-          <div class="tline">I’ll stop here. The session store looks right;</div>
-          <div class="tline">the middleware still lets a stale cookie through.</div>
+          <div class="tline dim">claude · ~/proj/api · 在等你</div>
+          <div class="tline">先停在这里。会话存储看起来没问题；</div>
+          <div class="tline">中间件还是会放过过期的 cookie。</div>
           <div class="tline"></div>
-          <div class="tline">Want me to patch <span class="file">app/auth.py</span>, or talk it through first?</div>
+          <div class="tline">要我改 <span class="file">app/auth.py</span>，还是先一起看一眼？</div>
           <div class="caret">▍</div>
         </div>
         <div class="bar">
-          <span class="field">Type a prompt, or a shell command…</span>
-          <span class="runbtn">Run</span>
+          <span class="field">输入提示词，或一条 shell 命令…</span>
+          <span class="runbtn">运行</span>
         </div>
       </div>
     </div>
@@ -122,60 +122,60 @@ python3 -m clique">Copy</button>
 
   <section class="tracks">
     <div>
-      <b>Self-host</b>
-      Free forever. MIT. Clone it, it runs on your box, it binds loopback.
+      <b>自托管</b>
+      永远免费。MIT。克隆下来，跑在你的机器上，只绑回环地址。
     </div>
     <div>
-      <b>Don’t want to self-host</b>
-      A paid option is on the way. Your sessions stay on a machine you control — we don’t host a shell for you.
+      <b>不想自托管</b>
+      付费方案在路上。会话仍留在你控制的机器上——我们不会替你托管一个 shell。
     </div>
   </section>
 
   <section class="facts">
-    <div><b>24 MB resident.</b> No framework, no <code>node_modules</code>, no build.</div>
-    <div><b>Loopback on purpose.</b> Anyone who reaches the panel has a terminal as you.</div>
-    <div><b>The ring is the status.</b> Spinning = working. Pulsing = waiting on you. Nothing = idle.</div>
+    <div><b>常驻 24 MB。</b> 没有框架，没有 <code>node_modules</code>，没有构建步骤。</div>
+    <div><b>故意绑回环。</b> 谁能摸到面板，谁就有你的终端。</div>
+    <div><b>环就是状态。</b> 转 = 在干活。闪 = 在等你。没有环 = 空闲。</div>
   </section>
 
   <section class="cfg">
-    <h2>Adding a CLI is config, never code.</h2>
+    <h2>加一套 CLI 是配置，永远不是改代码。</h2>
 <pre><code>[cli.grok]
 label   = "Grok CLI"
 command = "grok"
 args    = []
 color   = "#E8E8E8"</code></pre>
-    <p class="then">Reload the page. If adding one ever needs a code change, the design has failed.</p>
+    <p class="then">刷新页面。如果加一套还得改代码，设计就失败了。</p>
   </section>
 
   <section class="faq">
-    <h2>Questions</h2>
+    <h2>常见问题</h2>
     <details>
-      <summary>Do I have to put it on the internet?</summary>
-      <p>No. It binds loopback. Put a tunnel in front if you want it from another machine. Don’t hang it on the public internet — anyone who reaches the panel has a terminal as you.</p>
+      <summary>一定要挂到公网吗？</summary>
+      <p>不用。默认只绑回环地址。要从别的机器连，自己加隧道。别直接挂公网——谁能摸到面板，谁就有你的终端。</p>
     </details>
     <details>
-      <summary>What does it cost?</summary>
-      <p>Self-host is free forever, MIT. A paid option is coming for people who don’t want to run the setup. The panel still runs on a machine you control.</p>
+      <summary>要花钱吗？</summary>
+      <p>自托管永远免费，MIT。付费方案是给不想自己搭的人准备的。面板仍跑在你控制的机器上。</p>
     </details>
     <details>
-      <summary>What do I need?</summary>
-      <p>Python 3.11+ and tmux. Nothing else. No Node, no Docker, no account.</p>
+      <summary>需要什么？</summary>
+      <p>Python 3.11+ 和 tmux。没了。不要 Node，不要 Docker，不要账号。</p>
     </details>
     <details>
-      <summary>How do I add another coding CLI?</summary>
-      <p>Four lines in config. Reload the page. If it ever needs a code change, the design has failed.</p>
+      <summary>怎么再加一套编程 CLI？</summary>
+      <p>配置里四行。刷新页面。如果还得改代码，设计就失败了。</p>
     </details>
   </section>
 
   <section class="get">
-    <h2>Your box. Your CLIs. One panel.</h2>
+    <h2>你的机器。你的 CLI。一块面板。</h2>
     <div class="run">
       <div class="run-head">
         <span class="host">clique @ 127.0.0.1:3200</span>
-        <button type="button" class="copybtn" hidden data-idle="Copy" data-done="Copied" data-copy="git clone https://github.com/thejdubb02/clique.git
+        <button type="button" class="copybtn" hidden data-idle="复制" data-done="已复制" data-copy="git clone https://github.com/thejdubb02/clique.git
 cd clique
 python3 -m clique password
-python3 -m clique">Copy</button>
+python3 -m clique">复制</button>
       </div>
 <pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
 <span class="ps">$</span> cd clique
@@ -189,9 +189,9 @@ python3 -m clique">Copy</button>
   </section>
 
   <footer>
-    <p class="langs"><a href="/" class="on" lang="en">English</a> · <a href="/zh/" lang="zh-Hans">简体中文</a></p>
+    <p class="langs"><a href="/" lang="en">English</a> · <a href="/zh/" class="on" lang="zh-Hans">简体中文</a></p>
     <p><a href="https://github.com/thejdubb02/clique">github.com/thejdubb02/clique</a> · MIT · <a href="https://github.com/thejdubb02">Justin Willhite</a></p>
-    <p><a href="https://buymeacoffee.com/jdubb">Buy me a coffee</a> if it saved you an afternoon.</p>
+    <p><a href="https://buymeacoffee.com/jdubb">请我喝杯咖啡</a>，如果它替你省了一个下午。</p>
   </footer>
 </div>
 
