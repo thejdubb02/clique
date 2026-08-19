@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.16.0 — 2026-08-19
+
+**A tip jar, in About and on the repo page.** CLIque is free and staying that
+way; this is for anyone who wants to say thanks.
+
+- Buy Me a Coffee, plus BTC, SHIB and DOGE addresses.
+- **Addresses are shown in full and wrap** rather than truncating, with one
+  click to copy. A half-shown chain address is worse than none at all, because
+  someone will copy what they can see — and a wrong address does not bounce,
+  it just loses whatever was sent.
+- The same list is in the README, and `.github/FUNDING.yml` puts the coffee
+  link behind GitHub's own Sponsor button for when the repo goes public.
+
 ## 0.15.1 — 2026-08-19
 
 **The About tab in settings was invisible.** Seven tabs did not fit the sheet,

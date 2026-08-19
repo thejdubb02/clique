@@ -682,3 +682,16 @@ button.primary:hover { filter: brightness(1.1); }
             border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 #keys .keycell { min-width: 168px; }
 #keysClose { margin-top: 18px; }
+
+/* Support. The address is the point of the row, so it gets the full width and
+   wraps rather than truncating — a half-shown chain address is worse than none
+   at all, because someone will copy what they can see. */
+.give { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.give:last-child { border-bottom: 0; }
+.give-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.give-head b { font-size: 12px; }
+.give-head .note { font-size: 11px; }
+.give-value { display: block; font-size: 11px; line-height: 1.5;
+              word-break: break-all; color: var(--fg); }
+a.give-value { color: var(--accent); }
+.give-copy { margin-top: 6px; font-size: 11px; padding: 3px 10px; }

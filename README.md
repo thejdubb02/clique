@@ -10,7 +10,7 @@ running. Claude Code, Grok CLI or anything else is a block in
 **Live at https://example.invalid/clique** (tailnet only).
 Password is in Vaultwarden as *CLIque (devbox)*.
 
-## What works today (v0.15.0)
+## What works today (v0.16.0)
 
 | | |
 |---|---|
@@ -49,6 +49,19 @@ Measured: **24 MB resident**, against Codeman's 253 MB.
 
 That also means the real ceiling on concurrent sessions is Claude Code, not
 this. On a 16 GB box with ~9 GB free that is roughly 12–15 at once.
+
+## Support the dev
+
+CLIque is free and staying that way. If it saved you an afternoon, there is a
+tip jar.
+
+**[Buy me a coffee](https://buymeacoffee.com/jdubb)**
+
+| | |
+|---|---|
+| **BTC** — Bitcoin network | `3A3nA8BQFmXdvyUQokHhPd8HAd99wRDYFQ` |
+| **SHIB** — Ethereum network | `0x6b5DEd92946692D50642dC3af169727225E32D3b` |
+| **DOGE** — Dogecoin network | `DNiJeUJUVaVTDuteLXCtP7JVgvdL2NqoYp` |
 
 ## Adding a CLI
 
