@@ -38,6 +38,23 @@ main-thread stall gives that away for polish.
 Guidance for the details is vendored in `.claude/skills/` — see the README
 there for what was left out and why.
 
+## Looking at it
+
+Every other check here reasons about the code, and none of them can see that a
+control is invisible, that one thing is covering another, or that a theme did
+not reach the pane. That is where the bugs have actually been: a preview popup
+layered above the context menu broke right-click on every sidebar row and the
+suite stayed green through it.
+
+```bash
+~/.cache/clique-visual/bin/python tools/visual_check.py     # asserts, and writes screenshots
+```
+
+**Run it after any change to `web/`.** Setup is in the file's docstring — it
+needs Chromium and Playwright, so it lives in a virtualenv of its own and the
+product stays standard-library with no build step. Screenshots land in
+`/tmp/clique-visual/`; open them, do not just read the passes.
+
 ## The API is the whole surface
 
 Every action in the panel is an HTTP call — there is nothing the UI can do that
