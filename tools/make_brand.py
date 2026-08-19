@@ -321,19 +321,42 @@ def maskable_png(size: int) -> Image.Image:
     return canvas
 
 
+def _radial_glow(width, height, cx, cy, rx, ry, color, alpha):
+    """Soft ellipse of `color` at `alpha` (0-1), falloff squared."""
+    y, x = np.ogrid[:height, :width]
+    t = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2
+    a = np.clip(1.0 - t, 0, 1) ** 2 * alpha
+    layer = np.zeros((height, width, 4), np.uint8)
+    layer[..., 0], layer[..., 1], layer[..., 2] = color
+    layer[..., 3] = (a * 255).astype(np.uint8)
+    return Image.fromarray(layer, "RGBA")
+
+
 def social_png(width=1280, height=640) -> Image.Image:
-    """GitHub's social preview. Canvas is a fixed 1280x640; the lockup is
-    packed and centred so a thumbnail is not mostly empty ink."""
+    """GitHub social preview and the site OG card. 1280×640.
+
+    Same lockup energy as the marketing page: ink, a violet→cyan glow, the
+    mark, the current headline, a short CLI strip. Important type stays inside
+    a padded safe area so crops (Twitter, iMessage) don't eat the chevrons.
+    """
+    bar_h = 8
     canvas = Image.new("RGB", (width, height), _rgb(INK))
+    rgba = canvas.convert("RGBA")
+    rgba = Image.alpha_composite(
+        rgba,
+        _radial_glow(width, height, width * 0.38, height * 0.18, 520, 280, _rgb(GRAD_FROM), 0.22),
+    )
+    rgba = Image.alpha_composite(
+        rgba,
+        _radial_glow(width, height, width * 0.72, height * 0.78, 480, 240, _rgb(GRAD_TO), 0.14),
+    )
+    canvas = rgba.convert("RGB")
     pen = ImageDraw.Draw(canvas)
 
-    # A rule under the whole card, running the same way as the mark: purple on
-    # the left, cyan on the right. Painted as two halves in the first version,
-    # and backwards, which reads as carelessness at thumbnail size.
     bar = np.linspace(0, 1, width)[None, :, None]
     a, b = np.array(_rgb(GRAD_FROM), float), np.array(_rgb(GRAD_TO), float)
-    strip = np.repeat((a + (b - a) * bar).astype(np.uint8), 6, axis=0)
-    canvas.paste(Image.fromarray(strip), (0, height - 6))
+    strip = np.repeat((a + (b - a) * bar).astype(np.uint8), bar_h, axis=0)
+    canvas.paste(Image.fromarray(strip), (0, height - bar_h))
 
     def font(path, size):
         try:
@@ -341,49 +364,56 @@ def social_png(width=1280, height=640) -> Image.Image:
         except OSError:
             return ImageFont.load_default()
 
-    lato = font("/usr/share/fonts/truetype/lato/Lato-Black.ttf", 120)
-    lato_r = font("/usr/share/fonts/truetype/lato/Lato-Regular.ttf", 40)
-    mono = font("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 20)
-
-    title, tag, sub = (
-        "CLIque",
-        "Your private clique of CLIs",
-        "folder-organised CLI sessions in a browser, kept alive in tmux",
-    )
+    title_f = font("/usr/share/fonts/truetype/lato/Lato-Black.ttf", 108)
+    line_f = font("/usr/share/fonts/truetype/lato/Lato-Semibold.ttf", 34)
+    meta_f = font("/usr/share/fonts/truetype/lato/Lato-Regular.ttf", 22)
+    url_f = font("/usr/share/fonts/truetype/lato/Lato-Medium.ttf", 22)
 
     def size_of(text, fnt):
         box = pen.textbbox((0, 0), text, font=fnt)
         return box[2] - box[0], box[3] - box[1]
 
-    tw, th = size_of(title, lato)
-    gw, gh = size_of(tag, lato_r)
-    sw, sh = size_of(sub, mono)
-    gap_title, gap_tag = 10, 16
-    text_w = max(tw, gw, sw)
-    text_h = th + gap_title + gh + gap_tag + sh
-
-    icon_size = 300
-    icon = icon_png(icon_size)
-    gap = 48
-    group_w = icon_size + gap + text_w
-    group_h = max(icon_size, text_h)
-    ox = (width - group_w) // 2
-    oy = (height - 6 - group_h) // 2
-
-    canvas.paste(icon, (ox, oy + (group_h - icon_size) // 2), icon)
-    tx = ox + icon_size + gap
-    ty = oy + (group_h - text_h) // 2
-    # textbbox y-origin includes the font's top bearing; draw from ty as the
-    # visual top by offsetting with the bbox's y0.
     def draw(text, fnt, fill, x, y):
         y0 = pen.textbbox((0, 0), text, font=fnt)[1]
         pen.text((x, y - y0), text, font=fnt, fill=fill)
         return pen.textbbox((0, 0), text, font=fnt)[3] - y0
 
+    title = "CLIque"
+    pre, hi, post = "A ", "folder", " for every CLI on the box."
+    clis = "Claude Code  ·  Grok  ·  Gemini  ·  Codex  ·  OpenCode"
+    url = "useclique.dev"
+
+    tw, th = size_of(title, title_f)
+    line_w = size_of(pre, line_f)[0] + size_of(hi, line_f)[0] + size_of(post, line_f)[0]
+    cw, ch = size_of(clis, meta_f)
+    uw, uh = size_of(url, url_f)
+    gap1, gap2, gap3 = 14, 22, 18
+    text_w = max(tw, line_w, cw, uw)
+    line_h = size_of(hi, line_f)[1]
+    text_h = th + gap1 + line_h + gap2 + ch + gap3 + uh
+
+    icon_size = 268
+    icon = icon_png(icon_size, tile=False)
+    gap = 56
+    group_w = icon_size + gap + text_w
+    group_h = max(icon_size, text_h)
+    ox = (width - group_w) // 2
+    oy = (height - bar_h - group_h) // 2
+
+    canvas.paste(icon, (ox, oy + (group_h - icon_size) // 2), icon)
+    tx = ox + icon_size + gap
+    ty = oy + (group_h - text_h) // 2
+
     y = ty
-    y += draw(title, lato, (255, 255, 255), tx, y) + gap_title
-    y += draw(tag, lato_r, (150, 158, 173), tx, y) + gap_tag
-    draw(sub, mono, (105, 114, 130), tx, y)
+    y += draw(title, title_f, (255, 255, 255), tx, y) + gap1
+    x = tx
+    x += size_of(pre, line_f)[0]
+    draw(pre, line_f, (200, 206, 214), tx, y)
+    draw(hi, line_f, _rgb(SOLID), x, y)
+    draw(post, line_f, (200, 206, 214), x + size_of(hi, line_f)[0], y)
+    y += line_h + gap2
+    y += draw(clis, meta_f, (120, 128, 142), tx, y) + gap3
+    draw(url, url_f, _rgb(SOLID), tx, y)
     return canvas
 
 
