@@ -266,6 +266,15 @@ def main() -> int:
     have = set(re.findall(r'<symbol id="i-([a-z-]+)"', page))
     check("every icon drawn has a symbol behind it", used <= have, sorted(used - have))
 
+    # The whole reason these are inline SVG rather than an image or a font: a
+    # theme changes `color` and the icons follow. One `fill="#333"` from a
+    # future regenerate would silently opt that icon out, and it would only
+    # show up as an invisible control on somebody's light theme.
+    block = page.split("<!-- icons:start -->", 1)[1].split("<!-- icons:end -->", 1)[0]
+    painted = set(re.findall(r'(?:fill|stroke)="([^"]+)"', block))
+    check("no icon carries a colour of its own",
+          painted <= {"none", "currentColor"}, sorted(painted))
+
     print("mounted under a path prefix")
     # CLIque is documented as running behind `tailscale serve` at /clique,
     # which strips the prefix before the server sees it — so only the browser
