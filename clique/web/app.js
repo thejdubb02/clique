@@ -1137,6 +1137,11 @@ async function saveSettings(changes) {
   state.settings = await api("api/settings", {
     method: "PATCH", body: JSON.stringify(changes),
   });
+  // Apply here rather than waiting for the poll. Without this a theme change
+  // took up to three seconds to reach the panel and the open terminals, which
+  // reads as "changing the theme did not change the terminal" — especially
+  // with the settings sheet still covering the pane you were looking at.
+  applySettings();
   renderTree();
   renderTabs();
 }
