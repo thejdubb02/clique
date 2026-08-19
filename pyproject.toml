@@ -83,3 +83,6 @@ ignore = ["E501"]          # long lines are almost always a comment explaining w
 # fourteen times and train the reader to skim noqa comments.
 "clique/tmux.py" = ["S603", "S607"]
 "clique/__init__.py" = ["S603", "S607"]
+# Fullwidth punctuation is not a typo in Japanese or Chinese, it is the correct
+# character. RUF001 cannot know that and flags every one of them.
+"tools/site_i18n.py" = ["RUF001", "RUF002", "RUF003"]

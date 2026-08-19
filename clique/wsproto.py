@@ -17,9 +17,11 @@ import base64
 import contextlib
 import hashlib
 import os
+import select
 import socket
 import struct
 import threading
+import time
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -34,6 +36,10 @@ MAX_PAYLOAD = 8 * 1024 * 1024
 #: each, forever, and a buffer that only stops growing at FIN grows until the
 #: process dies. Keystrokes and resize messages are bytes; this is generous.
 MAX_MESSAGE = 16 * 1024 * 1024
+
+#: Seconds a half-delivered frame may stay half-delivered. Only ever applies
+#: once a frame has begun; an idle connection is never on a clock.
+FRAME_TIMEOUT = 30
 
 
 class WebSocketError(Exception):
@@ -114,12 +120,33 @@ class WebSocket:
     # ------------------------------------------------------------------ recv
 
     def _read_exact(self, count: int) -> bytes:
+        """Exactly `count` bytes, with a deadline once a frame has started.
+
+        Waiting for the *first* byte is normal and must not time out: a
+        terminal can sit idle for hours and the thread parked on it is doing
+        its job. A socket that has delivered half a header and then stopped is
+        a different thing — it is broken, or it is holding a thread open on
+        purpose, and each held thread has a PTY and a tmux viewer behind it.
+
+        The deadline is enforced with `select` rather than a socket timeout on
+        purpose. A timeout is a property of the socket, not of the read, so it
+        would apply to `sendall` too — and a `sendall` that gives up halfway
+        leaves the peer holding half a frame, which is a corrupted stream
+        rather than a closed one.
+        """
         chunks = bytearray()
+        deadline: float | None = None
         while len(chunks) < count:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not select.select([self.sock], [], [], remaining)[0]:
+                    raise WebSocketError("frame stalled")
             chunk = self.sock.recv(count - len(chunks))
             if not chunk:
                 raise WebSocketError("connection closed mid-frame")
             chunks += chunk
+            if deadline is None and len(chunks) < count:
+                deadline = time.monotonic() + FRAME_TIMEOUT
         return bytes(chunks)
 
     def recv(self) -> tuple[int, bytes] | None:
@@ -179,10 +206,13 @@ class WebSocket:
 
             if opcode in (OP_TEXT, OP_BINARY):
                 message_op = opcode
-            buffer += payload
-            if len(buffer) > MAX_MESSAGE:
+            # Checked before appending, not after: appending first means the
+            # buffer legitimately holds MAX_MESSAGE plus one whole frame at
+            # the moment it is rejected, and that overshoot is 8 MB.
+            if len(buffer) + len(payload) > MAX_MESSAGE:
                 self.close(1009)
                 return None
+            buffer += payload
             if fin:
                 return (message_op or OP_BINARY, bytes(buffer))
 

@@ -168,7 +168,11 @@ class PtyBridge:
             # SIGHUP is what a detaching terminal sends; `tmux attach` treats it
             # as a detach and leaves the session running. SIGKILL here would
             # also work, but only by accident of tmux's design.
-            with contextlib.suppress(ProcessLookupError):
+            gone = False
+            try:
                 os.kill(pid, signal.SIGHUP)
-            _reap(pid)
+            except ProcessLookupError:
+                gone = True     # already exited; nothing to wait for
+            if not gone:
+                _reap(pid)
             self.pid = None

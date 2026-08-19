@@ -110,8 +110,8 @@ When in doubt it goes on the server. The test is not "is it small" — it is
 
 ## Two consequences worth stating
 
-- **Adding a CLI is config, never code.** A block in `config/clis.toml` and a
-  reload. If it ever needs a code change, the design has failed.
+- **Adding a CLI is config, never code.** A block in `clique/config/clis.toml`
+  and a reload. If it ever needs a code change, the design has failed.
 - **tmux underneath does not mean a terminal on top.** A clean, advanced UI is
   wanted — with a switch to turn it off for anyone who wants the bare terminal
   feel.
