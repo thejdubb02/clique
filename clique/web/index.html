@@ -265,6 +265,14 @@ python3 -m clique token list
 python3 -m clique token revoke tk_xxxxxxxx</pre>
       <p class="note">Then call it with <code>Authorization: Bearer &lt;token&gt;</code>.
          Full reference in <code>API.md</code>.</p>
+
+      <h3>Monitoring</h3>
+      <p class="note"><code>GET /healthz</code> answers without a login, so
+         Uptime&nbsp;Kuma, Gatus, Healthchecks or anything else that watches a
+         URL needs no credential to watch this one. Anonymously it returns
+         <code>{"ok": true}</code> and nothing more — no version, no names.
+         Signed in, or with a token, it adds uptime, session counts and whether
+         tmux is reachable.</p>
       <div id="tokenRows" class="token-rows"></div>
     </section>
 
