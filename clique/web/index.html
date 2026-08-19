@@ -75,8 +75,19 @@
       <div id="terminal"></div>
       <div id="follow" hidden></div>
       <div id="empty">
-        <p>No session open.</p>
-        <p class="dim">Pick one on the left, or press <kbd>Ctrl</kbd>+<kbd>K</kbd>.</p>
+        <div class="empty-inner">
+          <p id="emptyNow" class="empty-now"></p>
+          <div id="emptyBack" class="empty-block" hidden>
+            <h3>Pick up where you left off</h3>
+            <div class="empty-list"></div>
+          </div>
+          <div id="emptyResume" class="empty-block" hidden>
+            <h3>Resume a conversation</h3>
+            <div class="empty-list"></div>
+          </div>
+          <p class="dim empty-hint">Press <kbd>Ctrl</kbd>+<kbd>K</kbd> to jump
+             anywhere, or <kbd>+</kbd> above for something new.</p>
+        </div>
       </div>
     </div>
 

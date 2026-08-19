@@ -1046,6 +1046,7 @@ function renderInputBar() {
     pill.hidden = true;
   }
   $("#empty").style.display = activeId ? "none" : "grid";
+  if (!activeId) renderEmpty();
 }
 
 /* Advance a session to its next mode and remember it.
@@ -1113,6 +1114,83 @@ async function pasteImages(items) {
     }
   }
   return true;
+}
+
+/* The pane with nothing in it.
+ *
+ * It used to say "No session open", which is the one thing the empty pane
+ * already demonstrates. This is the moment someone has just arrived or just
+ * finished, so it is worth something: what is happening on the box right now,
+ * and the two shortest routes back into work.
+ *
+ * All of it is state the panel already polls. No new endpoint, no service to
+ * reach, nothing to configure — an empty pane is not the place to start
+ * asking a self-hosted tool to phone somewhere for a weather icon. */
+const EMPTY_SESSIONS = 6;
+const EMPTY_RESUMABLE = 5;
+
+function renderEmpty() {
+  if (activeId) return;                 // nothing to draw behind a live pane
+  const sessions = state.sessions || [];
+  const alive = sessions.filter((x) => x.alive);
+  const wants = alive.filter((x) => workState(x) === "waiting" || workState(x) === "error");
+  const working = alive.filter((x) => workState(x) === "working");
+
+  const bits = [];
+  if (!sessions.length) bits.push("Nothing running yet");
+  else bits.push(`${alive.length} running`);
+  if (working.length) bits.push(`${working.length} working`);
+  if (wants.length) bits.push(`${wants.length} waiting for you`);
+  $("#emptyNow").textContent = bits.join(" · ");
+  $("#emptyNow").classList.toggle("wants", wants.length > 0);
+
+  // Most recently looked at first, and the ones that are still alive before
+  // the ones that are not — "where was I" almost always means a live session.
+  const recent = [...sessions]
+    .sort((a, b) => (b.alive - a.alive) || ((b.last_seen || 0) - (a.last_seen || 0)))
+    .filter((x) => !x.archived)
+    .slice(0, EMPTY_SESSIONS);
+  fillEmptyList($("#emptyBack"), recent.map((x) => ({
+    marker: sessionMarker(x, "sidebar") + statusDot(x, "sidebar"),
+    title: x.name || x.cli_label || x.cli,
+    detail: [(state.folders || []).find((f) => f.id === x.folder)?.name
+             || shortPath(x.cwd, 34),
+             x.last_seen ? ago(x.last_seen) : ""].filter(Boolean).join(" · "),
+    dead: !x.alive,
+    open: () => openSession(x.id),
+  })));
+
+  const conversations = (resumable || []).slice(0, EMPTY_RESUMABLE);
+  fillEmptyList($("#emptyResume"), conversations.map((c) => ({
+    marker: "",
+    title: c.label || "(untitled)",
+    detail: (c.project || "") + (c.updated ? " · " + ago(c.updated) : ""),
+    dead: false,
+    open: () => resumeConversation(c),
+  })));
+}
+
+function fillEmptyList(block, rows) {
+  block.hidden = !rows.length;
+  const list = block.querySelector(".empty-list");
+  list.textContent = "";
+  for (const row of rows) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "empty-row" + (row.dead ? " dead" : "");
+    const mark = document.createElement("span");
+    mark.className = "empty-mark";
+    mark.innerHTML = row.marker;
+    const title = document.createElement("span");
+    title.className = "empty-title";
+    title.textContent = row.title;
+    const detail = document.createElement("span");
+    detail.className = "empty-detail";
+    detail.textContent = row.detail;
+    button.append(mark, title, detail);
+    button.onclick = row.open;
+    list.append(button);
+  }
 }
 
 /* Clickable URLs in the pane.

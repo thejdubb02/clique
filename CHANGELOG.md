@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.28.1 — 2026-08-19 12:41 PDT
+
+**The empty pane does something now.**
+
+It used to say "No session open", which is the one fact an empty pane already
+demonstrates. That space is where you land after finishing something and where
+you arrive after signing in, so it is worth more than a label.
+
+It now shows what the box is doing — how many sessions are running, how many
+are working, and how many are waiting on you, that last one in the colour that
+means it — and then the two shortest routes back in: the sessions you looked at
+most recently, and conversations you can resume. One click each.
+
+All of it is state the panel already polls. No new endpoint, nothing to
+configure, and nothing fetched from anywhere: an empty pane is not the place to
+start having a self-hosted tool phone out for a weather icon.
+
 ## 0.28.0 — 2026-08-19 12:37 PDT
 
 **It installs with one command now.** `pip install clique`, and the packaging

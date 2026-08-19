@@ -239,9 +239,34 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 #terminal { position: absolute; inset: 0; padding: 6px 8px; }
 #terminal.hidden { visibility: hidden; }
 
+/* The pane with nothing in it. Not a placeholder — the two shortest routes
+   back into work, plus what the box is doing while you decide. */
 #empty { position: absolute; inset: 0; display: grid; place-content: center;
-         text-align: center; color: var(--fg); }
+         color: var(--fg); overflow: auto; padding: 24px; }
 #empty .dim { color: var(--dim); }
+.empty-inner { width: min(520px, 88vw); display: flex; flex-direction: column; gap: 18px; }
+.empty-now { margin: 0; text-align: center; color: var(--dim); font-size: 12px;
+             letter-spacing: .04em; text-transform: uppercase; }
+/* The one line worth colouring: something is actually asking for you. */
+.empty-now.wants { color: var(--warn); font-weight: 600; }
+.empty-block h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--dim);
+                  text-transform: uppercase; letter-spacing: .06em; }
+.empty-list { display: flex; flex-direction: column; gap: 1px; }
+.empty-row {
+  display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 8px;
+  padding: 7px 10px; background: none; border: 0; border-radius: 5px;
+  color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+  transition: background .12s ease;
+}
+.empty-row:hover { background: var(--row); }
+.empty-row.dead .empty-title { color: var(--dim); }
+.empty-mark { display: inline-flex; justify-content: center; }
+.empty-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty-detail { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.empty-hint { margin: 0; text-align: center; font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) { .empty-row { transition: none; } }
+@media (pointer: coarse) { .empty-row { padding: 11px 10px; } }
 kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inherit; }
 
 /* ---------------------------------------------------------------- input bar */
