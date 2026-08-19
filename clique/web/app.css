@@ -254,6 +254,42 @@ button.primary:hover { filter: brightness(1.1); }
                          background: var(--field); color: var(--fg); cursor: pointer; }
 .err { color: var(--err); font-size: 12px; }
 
+/* Tab reordering. A line on the edge the tab will land against, rather than
+   moving anything until the drop — a tab bar that reflows under the pointer is
+   harder to aim at, not easier. */
+.tab.dragging { opacity: .45; }
+.tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
+
+/* An app with no sidebar and no explanation is indistinguishable from a broken
+   one. Say so instead. */
+#offline { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+           z-index: 70; padding: 7px 14px; border-radius: 999px;
+           background: var(--err); color: #fff; font-size: 12px;
+           box-shadow: 0 6px 20px var(--shadow); }
+
+/* ------------------------------------------------------------------ history */
+
+/* Past conversations, under the live sessions in each folder. Visibly quieter
+   than a running session — this answers "where did I leave that", and must
+   never compete with "what is happening now". */
+.session.history { opacity: .62; }
+.session.history:hover { opacity: 1; background: var(--row); }
+.session.history .name { font-weight: 400; }
+.session.history .pal-icon { flex: 0 0 16px; display: flex; align-items: center;
+                             justify-content: center; }
+.session.history.starting { opacity: 1; }
+.session.history.starting .name::after { content: " — starting…"; color: var(--dim); }
+
+.session.history .repeats { margin-left: 6px; font-size: 10px; color: var(--dim);
+                            border: 1px solid var(--line); border-radius: 999px;
+                            padding: 0 5px; }
+.from-history { font-style: normal; margin-left: 4px; opacity: .55; }
+
+.history-more { padding: 4px 10px 6px 34px; font-size: 11px; color: var(--dim);
+                cursor: pointer; }
+.history-more:hover { color: var(--fg); text-decoration: underline; }
+
 /* ------------------------------------------------------------ command palette */
 
 /* Sits above everything, including the settings sheet: the palette is how you

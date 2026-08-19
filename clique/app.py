@@ -332,6 +332,24 @@ class Panel:
 
 
 
+class Server(ThreadingHTTPServer):
+    """The HTTP server, with a listen backlog that fits one page load.
+
+    Python's default `request_queue_size` is 5. A single page load is well
+    past that — the document, the stylesheet, three scripts, the brand mark,
+    the favicon, the manifest, then /api/state, /api/resumable and a WebSocket
+    upgrade. Overflowing the backlog drops connections, and the symptom is an
+    app that opens to an empty sidebar and quietly fills in three seconds
+    later when the poll comes round.
+
+    Both values have to be class attributes: `__init__` binds and listens, so
+    setting them on the instance afterwards is too late.
+    """
+
+    daemon_threads = True
+    request_queue_size = 128
+
+
 #: Paths served without a session. Brand images, the favicon and the web app
 #: manifest, and nothing else.
 #:
@@ -517,8 +535,16 @@ class Handler(BaseHTTPRequestHandler):
                 minutes = max(1, min(int(query.get("minutes") or 60), 180))
                 return self._json(self.panel.history.series(minutes))
             if path == "/api/resumable":
-                return self._json(
-                    [c.as_dict() for c in self.panel.conversations.conversations()])
+                # The folder is worked out here, not in the browser: the rule
+                # for which directory belongs where lives in the store and
+                # there should be exactly one copy of it.
+                folders = self.panel.store.folders
+                out = []
+                for conv in self.panel.conversations.conversations():
+                    row = conv.as_dict()
+                    row["folder"] = auto_folder(conv.cwd, folders)
+                    out.append(row)
+                return self._json(out)
             if path == "/api/adoptable":
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()
@@ -844,7 +870,6 @@ def serve(host: str, port: int, panel: Panel) -> None:
     stale = tmux.sweep_viewers((tmux.SOCKET, *tmux.FOREIGN_SOCKETS))
     if stale:
         print(f"cleared {stale} stale viewer session(s)", flush=True)
-    httpd = ThreadingHTTPServer((host, port), Handler)
-    httpd.daemon_threads = True
+    httpd = Server((host, port), Handler)
     print(f"clique {version_string()} on http://{host}:{port}", flush=True)
     httpd.serve_forever()

@@ -66,6 +66,10 @@ DEFAULT_SETTINGS = {
     #: there can hand it back; the palette stays reachable on Ctrl+Shift+P,
     #: which no terminal claims.
     "palette_hotkey": True,
+    #: Past conversations listed under the live sessions in each folder. On,
+    #: because a tool you have just moved to should show you your work rather
+    #: than an empty tree — but a few hundred rows is not everyone's sidebar.
+    "history_in_sidebar": True,
     #: "panel" keeps clique's prompt box. "terminal" hides it and lets the
     #: CLI's own input field be the only one — two stacked prompts is
     #: redundant chrome. Snippets work in both: CLIque owns the PTY, so an
