@@ -648,6 +648,43 @@ button.primary:hover { filter: brightness(1.1); }
 /* ------------------------------------------------------------ stats history */
 
 #stats { cursor: pointer; }
+/* Somebody else's outage. One line under the tabs, and only when there is
+ * something to say — see renderServices. Colour carries the severity, but not
+ * alone: the sentence says it in words too, because a red bar and an amber bar
+ * are the same bar to a good number of people. */
+#services { display: flex; flex-direction: column; }
+.svc {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 10px; font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--warn) 12%, var(--panel));
+  color: var(--fg);
+}
+.svc[data-level="major"], .svc[data-level="critical"] {
+  background: color-mix(in srgb, var(--err) 14%, var(--panel));
+}
+.svc[data-level="maintenance"] {
+  background: color-mix(in srgb, var(--dim) 12%, var(--panel));
+}
+.svc-mark { display: inline-flex; align-items: center; }
+.svc-said { font-weight: 600; }
+/* The provider's own sentence. It is allowed to be long and it is allowed to
+ * be missing; neither should push the link off the end of the bar. */
+.svc-detail { color: var(--dim); flex: 1 1 auto; min-width: 0;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-link {
+  flex: none; background: none; border: 1px solid var(--line);
+  color: var(--fg); border-radius: 5px; padding: 2px 8px;
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+.svc-link:hover { border-color: var(--accent); }
+
+/* On a phone the sentence is what matters and the provider's own wording is
+ * the first thing that can go. */
+@media (max-width: 620px) {
+  .svc-detail { display: none; }
+}
+
 #history {
   position: absolute; top: 36px; right: 8px; z-index: 30; width: 348px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
@@ -738,6 +775,20 @@ button.primary:hover { filter: brightness(1.1); }
    where the eye already is. */
 #lock { font-size: 12px; }
 #lock.on { background: var(--accent); color: #fff; border-color: transparent; }
+/* Connection state, over the pane rather than written into it. Top-centre and
+   small: it has to be noticeable without covering the line you were reading,
+   and it is gone the moment the socket is back. */
+.pane-note {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  z-index: 45; padding: 3px 10px; border-radius: 999px;
+  background: var(--panel); color: var(--dim); font-size: 11px;
+  border: 1px solid var(--line); box-shadow: 0 4px 14px var(--shadow);
+  pointer-events: none; white-space: nowrap;
+}
+@starting-style { .pane-note { opacity: 0; } }
+.pane-note { transition: opacity .18s ease; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pane-note { transition: none; } }
+
 #follow { position: absolute; right: 16px; bottom: 14px; z-index: 40;
           padding: 5px 12px; border-radius: 999px; cursor: pointer;
           background: var(--panel); color: var(--fg); font-size: 11px;

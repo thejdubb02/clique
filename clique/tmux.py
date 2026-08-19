@@ -225,6 +225,7 @@ def create_viewer(target: str, socket: str | None = SOCKET) -> str:
     """
     name = f"{VIEW_PREFIX}{uuid.uuid4().hex[:6]}"
     _run(["new-session", "-d", "-t", _session_target(target), "-s", name], socket)
+    _no_status(name, socket)
     return name
 
 
@@ -355,6 +356,35 @@ def create(
         args += ["-e", f"{key}={value}"]
     args += argv
     _run(args, socket)
+    _no_status(mux, socket)
+
+
+def _no_status(mux: str, socket: str | None) -> None:
+    """Turn tmux's status line off for this session specifically.
+
+    It is already off globally, set when the server starts — and that was not
+    enough. A user's own `~/.tmux.conf` is read by this server too, deliberately
+    so their keybindings work, and a config with a status-line plugin in it
+    switches the bar back on for each new session. The result was CLIque's own
+    plumbing on screen: a viewer session announcing itself as `sm-view-ba434f`
+    at the bottom of a pane, which is an internal name no user should ever
+    see.
+
+    A session-local value beats the global one, and unlike `-f /dev/null` it
+    costs the user nothing else they had configured.
+
+    Its own call rather than a `;`-chained one: after `new-session` has been
+    given a shell command, tmux folds a following separator into that command
+    rather than treating it as one. Never fatal — a status bar is ugly, not
+    broken — so a failure here is swallowed.
+    """
+    with contextlib.suppress(TmuxError, OSError):
+        # A third target form, and not interchangeable with the other two:
+        # `set-option` rejects the bare `=name` session target outright, while
+        # `=name:` is accepted and still exact. Dropping the `=` would work and
+        # would also let tmux prefix-match its way onto somebody else's
+        # session.
+        _run(["set-option", "-t", _pane_target(mux), "status", "off"], socket)
 
 
 def kill(mux: str, socket: str | None = SOCKET, *, force: bool = False) -> None:

@@ -179,15 +179,34 @@ function applyCliTint() {
 }
 
 function cliColor(cliId, shipped) {
-  return (state.settings.cli_colors || {})[cliId] || shipped || "var(--dim)";
+  return cssColor((state.settings.cli_colors || {})[cliId] || shipped);
+}
+
+/* A colour, or nothing.
+ *
+ * These values end up inside a `style` attribute built as a string, and a
+ * string that is not a colour is an opening — `red" onmouseover="…` closes
+ * the attribute and puts script in the sidebar. Escaping the quotes would
+ * stop that one trick and still leave CSS injection through `url(…)`, so this
+ * allows the three shapes that are actually used and refuses everything else.
+ *
+ * The server validates the same values on the way in. This is the second lock
+ * on purpose: a state file written by an older version, or by hand, reaches
+ * the browser without ever passing through the setter that checks. */
+const CSS_COLOR = /^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|var\(--[a-zA-Z0-9-]+\))$/;
+
+function cssColor(value, fallback = "var(--dim)") {
+  const text = String(value == null ? "" : value).trim();
+  return CSS_COLOR.test(text) ? text : fallback;
 }
 
 function markerFor(item, mode) {
   if (mode === "none") return "";
-  if (mode === "color") return `<i class="cli-chip" style="background:${item.color}"></i>`;
+  const own = cssColor(item.color);
+  if (mode === "color") return `<i class="cli-chip" style="background:${own}"></i>`;
 
   // "icon" is the same shape in neutral grey; "both" tints it the CLI colour.
-  const tint = mode === "icon" ? "var(--dim)" : item.color;
+  const tint = mode === "icon" ? "var(--dim)" : own;
   if (item.icon) {
     const url = `icons/${encodeURIComponent(item.icon)}`;
 
@@ -374,6 +393,7 @@ async function refresh() {
   renderTree();
   renderTabs();
   renderStats();
+  renderServices();
   renderVersion();
   // First load pulls history in so the sidebar is complete without anyone
   // having to open the palette to trigger it.
@@ -438,10 +458,35 @@ function baseVersion(text) {
   return String(text || "").split("+")[0];   // drop the +build suffix
 }
 
+/* The version this page's scripts came from.
+ *
+ * A panel is left open for days and the server underneath it gets upgraded —
+ * that is the normal way a self-hosted tool is used, and it means the browser
+ * can be running last week's app.js against this week's API. Every symptom of
+ * that looks like a bug in something else: a fix that "did not work", a
+ * feature that is missing, a route that 404s.
+ *
+ * Nothing is reloaded automatically. The terminals are safe either way — they
+ * live in tmux — but a page that reloads itself under someone's hands is its
+ * own kind of rude. Saying so once, with a button, is enough. */
+let loadedVersion = null;
+
+function noticeUpgrade() {
+  const running = state.version;
+  if (!running) return;
+  if (loadedVersion === null) { loadedVersion = running; return; }
+  if (running === loadedVersion || noticeUpgrade.told) return;
+  noticeUpgrade.told = true;
+  toast(`CLIque was updated to ${baseVersion(running)} — this page is still ` +
+        `running ${baseVersion(loadedVersion)}`, false,
+        { label: "Reload", run: () => location.reload() });
+}
+
 function renderVersion() {
   const el = $("#version");
   const running = baseVersion(state.version);
   const seen = state.settings.changelog_seen;
+  noticeUpgrade();
 
   if (running && !seen) {
     // First load ever. Stamp it quietly; nothing to announce.
@@ -563,6 +608,72 @@ async function showHistory() {
   box.hidden = false;
 }
 
+/* Somebody else's outage, said once.
+ *
+ * A CLI that has gone quiet and a provider that is down look identical from
+ * the outside, and the difference is whether you spend twenty minutes
+ * debugging your own prompt. The provider already publishes the answer.
+ *
+ * Drawn only when there is something to say. "All systems operational" is not
+ * news, and a bar that is always on screen is a bar nobody reads on the day it
+ * finally says something — which is the same reason an idle session draws no
+ * indicator. */
+const SERVICE_WORDS = {
+  maintenance: "under maintenance",
+  minor: "having trouble",
+  major: "having problems",
+  critical: "down",
+};
+
+function renderServices() {
+  const host = $("#services");
+  const rows = state.services || [];
+  host.textContent = "";
+  host.hidden = !rows.length;
+  if (!rows.length) return;
+
+  for (const row of rows) {
+    const cli = (state.clis || []).find((c) => c.id === row.cli);
+    const bar = document.createElement("div");
+    bar.className = "svc";
+    bar.dataset.level = row.indicator;
+
+    const mark = document.createElement("span");
+    mark.className = "svc-mark";
+    if (cli) {
+      mark.innerHTML = markerFor(
+        { color: cliColor(cli.id, cli.color), icon: cli.icon,
+          icon_full_color: cli.icon_full_color, label: cli.label, cli: cli.id },
+        markerMode(cli.id) === "none" ? "color" : markerMode(cli.id));
+    }
+
+    // textContent throughout: this is the one place in the panel showing text
+    // that came from somebody else's server, and a status page is not a thing
+    // to hand markup privileges to.
+    const said = document.createElement("span");
+    said.className = "svc-said";
+    said.textContent = `${row.label} is ${SERVICE_WORDS[row.indicator] || row.indicator}`;
+
+    const detail = document.createElement("span");
+    detail.className = "svc-detail";
+    detail.textContent = row.description || "";
+
+    bar.append(mark, said, detail);
+
+    if (row.url) {
+      const link = document.createElement("button");
+      link.type = "button";
+      link.className = "svc-link";
+      link.textContent = "Status page";
+      // The same rule the terminal's links follow: a plain click opens a tab,
+      // Ctrl or Cmd opens a window.
+      link.onclick = (ev) => openLink(row.url, ev.ctrlKey || ev.metaKey);
+      bar.append(link);
+    }
+    host.append(bar);
+  }
+}
+
 /* ------------------------------------------------------------------- sidebar */
 
 function renderTree() {
@@ -632,7 +743,7 @@ function renderTree() {
     const editable = !group.pinned && group.id.startsWith("f-");
     head.innerHTML =
       `<span class="caret">${group.collapsed ? "▸" : "▾"}</span>` +
-      `<i class="dot" style="background:${group.color}"></i>` +
+      `<i class="dot" style="background:${cssColor(group.color)}"></i>` +
       `<span class="name">${escapeHtml(group.name)}</span>` +
       (editable ? `<button class="folder-edit" title="Rename, recolour or delete">✎</button>` : "") +
       `<span class="count">${shown.length}` +
@@ -1759,7 +1870,12 @@ async function loadChangelog() {
   const host = $("#changelog");
   host.textContent = "Reading the changelog…";
   try {
-    const entries = await api("/api/changelog");
+    // Relative, like every other call. A leading slash escapes the <base href>
+    // and resolves against the site root — so this worked on
+    // http://127.0.0.1:3200/ and 404ed for anyone reaching the panel through
+    // `tailscale serve` at /clique, which is the documented way to run it.
+    // "Could not read the changelog" was the only symptom.
+    const entries = await api("api/changelog");
     clogLoaded = true;               // only latch on success, so a failure retries
     renderChangelog(entries);
   } catch {
@@ -2025,6 +2141,33 @@ function closeTab(id, silent) {
 
 /* ------------------------------------------------------------------ terminal */
 
+/* Reconnection: doubling from a second, capped, and finite.
+ *
+ * The ceiling matters more than the ladder. A tunnel that is down is down for
+ * minutes, and a client asking every second for those minutes is a client
+ * that would be rate-limited by anything sitting in front of it. Half an hour
+ * of trying is well past the point where a human would have reloaded. */
+const RETRY_BASE_MS = 1000;
+const RETRY_MAX_MS = 30000;
+const RETRY_GIVE_UP = 60;
+
+/* A line of our own, over the pane rather than in it.
+ *
+ * Created on demand and removed when it has nothing to say, so a pane that
+ * has never dropped carries no extra element at all. */
+function paneNote(entry, text) {
+  if (!text) {
+    if (entry.note) { entry.note.remove(); entry.note = null; }
+    return;
+  }
+  if (!entry.note) {
+    entry.note = document.createElement("div");
+    entry.note.className = "pane-note";
+    entry.el.appendChild(entry.note);
+  }
+  entry.note.textContent = text;   // never innerHTML: this sits over a terminal
+}
+
 function wsUrl(id, cols, rows) {
   const url = new URL("ws", document.baseURI);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -2050,6 +2193,24 @@ async function attach(id) {
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
+
+  /* Character widths from Unicode 11, not Unicode 6.
+   *
+   * xterm.js ships Unicode 6 tables, where U+26A0 WARNING SIGN is one cell
+   * wide. Followed by a variation selector it is drawn as an emoji, which
+   * every font makes two cells wide — so the terminal reserves one column,
+   * the glyph paints two, and the next character lands on top of it. That is
+   * the letters-over-each-other in a Claude Code status line, and it is not
+   * the CLI doing anything wrong.
+   *
+   * Loaded before `open` because the width tables have to be in place before
+   * anything is measured, and guarded because the addon is vendored — a
+   * missing file should cost the fix, not the terminal. */
+  if (window.Unicode11Addon) {
+    term.loadAddon(new Unicode11Addon.Unicode11Addon());
+    term.unicode.activeVersion = "11";
+  }
+
   term.open(host);
   fit.fit();
   wireLinks(term);
@@ -2072,7 +2233,8 @@ async function attach(id) {
   });
 
   const entry = { term, fit, el: host, ws: null, closing: false, typed: "",
-                  follow: true, behind: 0, pinned: 0, baseline: 0 };
+                  follow: true, behind: 0, pinned: 0, baseline: 0, attempt: 0,
+                  note: null };
   terms.set(id, entry);
 
   /* Scrolling up detaches the viewport; arriving back at the bottom
@@ -2092,15 +2254,38 @@ async function attach(id) {
     entry.ws = ws;
 
     ws.onmessage = (ev) => {
+      // Any byte from the server means the connection is good again, so the
+      // next drop starts from one second rather than from wherever the last
+      // outage climbed to.
+      entry.attempt = 0;
       writeOut(entry, id,
         typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data));
     };
+    ws.onopen = () => { entry.attempt = 0; paneNote(entry, ""); };
     ws.onclose = () => {
       if (entry.closing) return;
-      // A dropped tailnet connection should heal itself; a killed session
-      // should not be retried forever.
-      term.write("\r\n\x1b[90m— disconnected, retrying —\x1b[0m\r\n");
-      entry.retry = setTimeout(() => { if (!entry.closing) connect(); }, 2000);
+      /* A dropped tailnet connection should heal itself; a killed session
+       * should not be retried forever. The comment always said that and the
+       * code never did it — a fixed two-second retry with no end.
+       *
+       * And none of it belongs in the scrollback. Writing "disconnected"
+       * into the terminal puts our own chrome into the user's output, where
+       * it is permanent, unscrollable-past, and indistinguishable from
+       * something their program printed. A restart during an evening's work
+       * left a screen that was nothing but our own status lines, with the
+       * real output pushed off the top. Connection state is *about* the pane,
+       * not *from* it, so it goes on an overlay that clears itself. */
+      const known = session(id);
+      if (known && !known.alive) return paneNote(entry, "Session ended");
+      if (entry.attempt >= RETRY_GIVE_UP) {
+        return paneNote(entry, "Not reconnecting — close and reopen the tab");
+      }
+      const wait = Math.min(RETRY_BASE_MS * 2 ** entry.attempt, RETRY_MAX_MS);
+      entry.attempt += 1;
+      paneNote(entry, entry.attempt === 1
+        ? "Reconnecting…"
+        : `Reconnecting… (attempt ${entry.attempt})`);
+      entry.retry = setTimeout(() => { if (!entry.closing) connect(); }, wait);
     };
     ws.onerror = () => {};
   };
@@ -2409,6 +2594,15 @@ function chime() {
 
 function noticeFinished(sessions) {
   const s = state.settings;
+  /* Both of these are keyed by session id and neither had anything that
+   * removed a key. A panel left open for a week — which is the way this is
+   * meant to be used — creates and deletes sessions all day, and every one of
+   * them left an entry behind for as long as the tab stayed open. `busyUntil`
+   * was already pruned this way; these two were simply missed. */
+  const live = new Set(sessions.map((x) => x.id));
+  for (const id of [...wasBusy.keys()]) if (!live.has(id)) wasBusy.delete(id);
+  for (const id of [...attention]) if (!live.has(id)) attention.delete(id);
+
   for (const session of sessions) {
     const before = wasBusy.get(session.id) || false;
     wasBusy.set(session.id, session.busy);
@@ -2496,6 +2690,7 @@ function openSettings() {
     $("#setArtDirs").value = (s.artifact_dirs || []).join("\n");
   }
   $("#setFlash").checked = s.notify_flash !== false;
+  $("#setServices").checked = s.service_status !== false;
   $("#setSound").checked = !!s.notify_sound;
   $("#setIdle").value = s.notify_idle_seconds || 4;
   $("#outIdle").textContent = s.notify_idle_seconds || 4;
@@ -2721,6 +2916,8 @@ function wire() {
     pollArtifacts();
   };
   $("#setFlash").onchange = (ev) => saveSettings({ notify_flash: ev.target.checked });
+  $("#setServices").onchange = (ev) =>
+    saveSettings({ service_status: ev.target.checked }).then(renderServices);
   $("#setSound").onchange = (ev) => saveSettings({ notify_sound: ev.target.checked });
   $("#testChime").onclick = chime;
 

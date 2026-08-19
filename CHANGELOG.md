@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.31.0 — 2026-08-19 14:14 PDT
+
+**Somebody else's outage, said in your panel.** A CLI that has gone quiet and a
+provider that is down look identical from the outside, and the difference is
+whether you spend twenty minutes debugging your own prompt. CLIque now reads
+the public status page of the provider behind each CLI you have **running** and
+puts one line under the tabs when it is not good news, with a link to the page.
+
+- Nothing is drawn when everything is fine. "All systems operational" is not
+  news, and a bar that is always there is a bar nobody reads on the day it
+  finally says something.
+- Claude, Codex, Copilot and Cursor ship with a feed. Any other CLI is two
+  lines of TOML — `status = { url = "…/api/v2/status.json", page = "…" }` —
+  because adding a CLI has never been allowed to need a code change.
+- One format, Atlassian Statuspage. A second parser here would be the first
+  step towards a directory of per-vendor scrapers.
+- Read every five minutes, only for CLIs with a session open, and not at all
+  when the panel is idle. No identifier, no session name, no query string. This
+  is the only request CLIque makes on its own; `service_status: false` stops
+  the thread immediately and the panel never reaches the internet.
+
+**Overlapping characters in a status line are fixed.** xterm.js ships Unicode 6
+width tables, in which an emoji-presentation glyph such as `⚠️` is one cell
+wide. Fonts draw it as two, so the terminal reserved one column, the glyph
+painted two, and the next character landed on top of it — which is why a Claude
+Code status line looked like it was printing over itself. The Unicode 11 addon
+is vendored and active. Nothing was wrong with the CLI.
+
+**tmux's own status bar no longer shows through.** It was switched off
+globally, and that was not enough: this server reads your `~/.tmux.conf` on
+purpose so your keybindings work, and a config with a status-line plugin turns
+it back on per session. The result was CLIque's plumbing on screen — a viewer
+session announcing itself as `sm-view-ba434f` at the bottom of a pane. Now set
+on each session it creates, which beats the global value without costing you
+anything else you had configured.
+
+**The changelog tab works.** It fetched an absolute path, which escapes the
+`<base href>` and resolves against the site root — so it worked on
+`127.0.0.1:3200` and 404ed for everyone reaching the panel through
+`tailscale serve` at `/clique`, which is the documented way to run it. A test
+now fails the build on any API call that escapes the mount point.
+
+**Reconnecting no longer writes into your scrollback.** "— disconnected,
+retrying —" was printed into the terminal itself, where it is permanent,
+cannot be scrolled past, and is indistinguishable from something your program
+printed; a restart during an evening's work left a screen of nothing else with
+the real output pushed off the top. Connection state is about the pane, not
+from it, so it is an overlay that clears itself. The retry behind it was also
+fixed: it backed off not at all and never stopped, so a laptop shut overnight
+woke to twelve panes that had each tried twenty thousand times. It now doubles
+from one second to thirty, gives up after an hour, and stops immediately when
+the session is known to be gone.
+
+**The panel says when the server was upgraded under it.** A panel left open for
+days against a server that has been updated is a browser running last week's
+scripts, and every symptom of that looks like a bug somewhere else. It says so
+once, with a Reload button, and never reloads on its own.
+
+Also fixed, from a review of the front end and the storage layer:
+
+- **A folder colour was written into a `style` attribute unchecked**, and the
+  server never validated it — so recolouring a folder could put script on the
+  next person's screen. Hex only now, refused at the setter and refused again
+  at the point of drawing, because a state file written by hand never passes
+  through the setter.
+- **`POST` and `PATCH /api/folders` return the folder**, not `{"ok": true}`. A
+  caller whose colour was rejected had no way to find out.
+- **Two background loops could double up.** Turning the webhook off and on
+  again — or the new status feed — cleared the stop signal out from under a
+  thread that was still parked on it, leaving two watchers running and every
+  notification arriving twice. Each loop now retires when it is no longer the
+  current one.
+- **Two maps grew forever.** Sessions that had finished, and sessions marked
+  for attention, were keyed by id and never removed, in a panel meant to stay
+  open for weeks.
+- `node --check` now runs on the front end in the test suite. There is no
+  build step, which is the point — and it also meant nothing stood between a
+  typo and a panel that loads and then does nothing.
+
 ## 0.30.0 — 2026-08-19 13:49 PDT
 
 **A security pass, from three independent reviews.** Nothing here was reported

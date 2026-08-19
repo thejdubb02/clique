@@ -71,6 +71,11 @@
 
     <div id="history" hidden></div>
 
+    <!-- Only ever on screen when a provider behind a running CLI is having a
+         bad day. Nothing is drawn for "all systems operational": a banner that
+         is always there is a banner nobody reads on the day it matters. -->
+    <div id="services" hidden></div>
+
     <div id="termwrap">
       <div id="terminal"></div>
       <div id="follow" hidden></div>
@@ -286,6 +291,18 @@
          the delay if it fires too eagerly.</p>
       <button type="button" id="testChime">Test the chime</button>
 
+      <h3>Service status</h3>
+      <label class="check"><input type="checkbox" id="setServices">
+        Say when the provider behind a running CLI is having a bad day</label>
+      <p class="note">A session that has gone quiet looks exactly like a
+         provider that is down, and the difference is twenty minutes of
+         debugging your own prompt. CLIque reads the public status page for
+         CLIs you have open — Claude, Codex, Copilot and Cursor ship with one;
+         any other can be added in <code>clis.toml</code>. Every five minutes,
+         only while a session using that CLI is running, and nothing about you
+         is sent. This is the only request CLIque makes on its own; turn it off
+         and the panel never reaches the internet.</p>
+
       <h3>Clock</h3>
       <label class="field">Format
         <select id="setClock24">
@@ -457,5 +474,6 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
 <script src="themes.js"></script>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
+<script src="vendor/addon-unicode11.js"></script>
 <script src="app.js"></script>
 </html>

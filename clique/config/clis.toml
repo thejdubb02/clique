@@ -78,6 +78,8 @@ mode_label = "{mode} mode on (shift+tab to cycle)"
 #        -d '{"state":"waiting"}' "$CLIQUE_URL/api/sessions/$ID/attention"
 #
 # from a Claude Code hook, a shell trap, or the last line of a script.
+status  = { url = "https://status.claude.com/api/v2/status.json", page = "https://status.claude.com" }
+
 [cli.claude.attention]
 waiting = [
   "\\(y/n\\)",
@@ -137,12 +139,16 @@ command = "codex"
 args    = []
 color   = "#10A37F"
 
+status  = { url = "https://status.openai.com/api/v2/status.json", page = "https://status.openai.com" }
+
 [cli.copilot]
 icon    = "copilot.svg"
 label   = "GitHub Copilot CLI"
 command = "copilot"
 args    = []
 color   = "#F0F0F0"
+
+status  = { url = "https://www.githubstatus.com/api/v2/status.json", page = "https://www.githubstatus.com" }
 
 [cli.aider]
 label   = "Aider"
@@ -163,6 +169,8 @@ label   = "Cursor CLI"
 command = "cursor-agent"
 args    = []
 color   = "#7a7fd6"
+
+status  = { url = "https://status.cursor.com/api/v2/status.json", page = "https://status.cursor.com" }
 
 [cli.qwen]
 icon    = "qwen.svg"

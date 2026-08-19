@@ -161,24 +161,39 @@ class Watcher:
         self._before: dict[str, tuple[str, bool, bool]] = {}
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        #: Bumped on every start and stop; see ensure().
+        self._generation = 0
 
     # ----------------------------------------------------------------- loop
 
     def ensure(self) -> None:
-        """Start the loop if a webhook is configured, stop it if not."""
+        """Start the loop if a webhook is configured, stop it if not.
+
+        Clearing a URL sets the stop Event; setting one again clears it. A
+        thread that was parked in `wait()` across both never sees the stop and
+        carries on, so pasting a URL, removing it and pasting it back left two
+        watchers running and every notification arriving twice. The generation
+        counter is what makes the old one retire.
+        """
         wanted = bool(self.panel.store.settings.get("webhook_url"))
         running = self._thread is not None and self._thread.is_alive()
         if wanted and not running:
+            self._generation += 1
+            mine = self._generation
             self._stop.clear()
-            self._thread = threading.Thread(target=self._loop, daemon=True)
+            self._thread = threading.Thread(target=self._loop, args=(mine,),
+                                            daemon=True)
             self._thread.start()
         elif not wanted and running:
+            self._generation += 1
             self._stop.set()
             self._thread = None
 
-    def _loop(self) -> None:
+    def _loop(self, mine: int) -> None:
         while not self._stop.wait(INTERVAL):
             if not self.panel.store.settings.get("webhook_url"):
+                return
+            if mine != self._generation:
                 return
             try:
                 self.tick()

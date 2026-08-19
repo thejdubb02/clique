@@ -112,6 +112,18 @@ class CliType:
     mode_label: str = "{mode} mode"
     #: Filename in web/icons/. Drawn as a mask and tinted, so only the
     #: silhouette matters — a flat single-colour shape, not artwork.
+    #: Where to ask whether the service behind this CLI is having a bad day.
+    #:
+    #: `url` is a Statuspage v2 endpoint — `.../api/v2/status.json` — and
+    #: `page` is the human page to link to. One shape, not one adapter per
+    #: vendor: Anthropic, OpenAI, GitHub and Cursor all run Statuspage, and a
+    #: second format here would be the first step towards a per-vendor
+    #: directory of scrapers.
+    #:
+    #: A CLI with no block is simply never asked. Nothing is invented for it,
+    #: and a CLI that runs against your own model has no service to be down.
+    status: dict = field(default_factory=dict)
+
     icon: str = ""
     #: Where this CLI keeps its own conversation history, so past work can be
     #: found and resumed. A table, not code:
@@ -253,6 +265,23 @@ def _validate(cli: CliType) -> None:
             f"— a new session has no prior id"
         )
 
+    # A status block that is wrong should fail at load, next to the line that
+    # is wrong, rather than as a feed that quietly never reports anything.
+    if cli.status:
+        unknown = set(cli.status) - {"url", "page"}
+        if unknown:
+            raise RegistryError(
+                f"{where}.status: unknown key(s) {_show(unknown)}; known: url, page"
+            )
+        for key in ("url", "page"):
+            value = str(cli.status.get(key) or "")
+            if not value:
+                raise RegistryError(f"{where}.status: `{key}` is required")
+            if not value.startswith("https://"):
+                raise RegistryError(
+                    f"{where}.status.{key}: must be an https:// URL, not {value!r}"
+                )
+
     if cli.icon and ("/" in cli.icon or ".." in cli.icon):
         raise RegistryError(
             f"{where}.icon: must be a bare filename in web/icons/, not a path"
@@ -279,6 +308,7 @@ def parse(data: dict) -> dict[str, CliType]:
         unknown_keys = set(raw) - {
             "label", "command", "args", "resume", "color",
             "modes", "mode_key", "mode_label", "icon", "history", "attention",
+            "status",
         }
         if unknown_keys:
             raise RegistryError(
@@ -295,6 +325,7 @@ def parse(data: dict) -> dict[str, CliType]:
             mode_key=raw.get("mode_key", "S-Tab"),
             mode_label=raw.get("mode_label", "{mode} mode"),
             icon=raw.get("icon", ""),
+            status=dict(raw.get("status") or {}),
             history=dict(raw.get("history") or {}),
             attention=dict(raw.get("attention") or {}),
         )

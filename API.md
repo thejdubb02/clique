@@ -235,9 +235,49 @@ earlier runs rather than duplicating them.
 
 ## Folders
 
-- `POST /api/folders` → `201 {"id": "..."}` — body `name`, `color`
-- `PATCH /api/folders/<id>` — `name`, `color`, `collapsed`
+- `POST /api/folders` → `201` with the whole folder — body `name`, `color`
+- `PATCH /api/folders/<id>` → the folder — `name`, `color`, `collapsed`
 - `DELETE /api/folders/<id>` — sessions inside become Ungrouped
+
+`color` is three or six hex digits with a leading `#`, and nothing else — it is
+written into a `style` attribute in the sidebar. Anything else is ignored and
+the folder keeps the colour it had, so read the response back rather than
+assuming the value you sent is the value that stuck.
+
+## Service status
+
+`GET /api/state` carries `services`: the providers behind your **running** CLIs
+that are reporting a problem, worst first. Almost always empty — it holds the
+exceptions, not a commentary on four status pages being fine.
+
+```json
+[{"cli": "claude", "label": "Claude Code", "indicator": "major",
+  "description": "Elevated error rates", "url": "https://status.claude.com",
+  "checked": 1787200000}]
+```
+
+`indicator` is Statuspage's own vocabulary: `maintenance`, `minor`, `major` or
+`critical`. `none` never appears — an operational service is not news. A
+reading older than an hour is dropped rather than shown, so a box that has lost
+DNS says nothing instead of leaving yesterday's outage on the screen.
+
+The feed is a `status` block in `clis.toml` next to the launch command:
+
+```toml
+[cli.claude]
+status = { url = "https://status.claude.com/api/v2/status.json",
+           page = "https://status.claude.com" }
+```
+
+`url` must be an Atlassian Statuspage v2 endpoint — that one format covers
+Anthropic, OpenAI, GitHub and Cursor, and a second parser here would be the
+first step towards a directory of per-vendor scrapers. `page` is what the panel
+links to. Adding a feed for a CLI we have never heard of is those two lines and
+a reload; a CLI with no block is never asked about.
+
+Read every five minutes, and only for CLIs with a session open right now. An
+idle panel makes no requests. It sends no identifier, no session name and no
+query string. `service_status: false` stops the thread immediately.
 
 ## Settings
 
@@ -277,6 +317,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `cli_tint` | bool | Colour the pane edge, active tab and prompt box with the active CLI's colour |
 | `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
 | `changelog_seen` | version | Newest release whose notes have been read. Seeded on first load so a fresh install does not badge itself |
+| `service_status` | bool | Ask the provider behind a running CLI whether it is having a bad day. The only outbound requests CLIque makes without being told to — see **Service status** below. On by default |
 | `clock_24h` | bool | 24-hour clock. Not derived from the locale — people read one format at work and another at home |
 | `clock_zone` | IANA zone | Clock on the empty pane, e.g. `Europe/Lisbon`. Validated against the system zone database; a name that is not real is dropped rather than stored, because `Intl` throws on one. Blank means the browser's own |
 | `webhook_url` | url | Where to POST session events. `http`/`https` only; anything else is stored as `""` |

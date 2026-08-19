@@ -16,6 +16,7 @@ from __future__ import annotations
 import base64
 import binascii
 import contextlib
+import dataclasses
 import json
 import mimetypes
 import os
@@ -34,6 +35,7 @@ from . import (
     changelog,
     migrate,
     notify,
+    services,
     sysinfo,
     tmux,
     version_string,
@@ -110,6 +112,11 @@ class Panel:
         #: one on still costs nothing when idle.
         self.watcher = notify.Watcher(self)
         self.watcher.ensure()
+        #: Whether the service behind a running CLI is having a bad day. Same
+        #: bargain as the watcher: a thread only while it is switched on, and
+        #: it only asks about CLIs that have a session open right now.
+        self.services = services.Services(self)
+        self.services.ensure()
         self.clients = 0
         self.allowed_hosts = {h.strip().lower() for h in
                               os.environ.get("CLIQUE_ALLOWED_HOSTS", "").split(",")
@@ -269,6 +276,11 @@ class Panel:
             ],
             "sessions": self.sessions_view(),
             "clis": [c.as_dict() for c in self.registry.types().values()],
+            # Almost always empty, which is the point — this carries the
+            # exceptions, not a running commentary on four status pages being
+            # fine. It rides on the poll rather than taking a second one: the
+            # value changes every five minutes and costs nothing to send.
+            "services": self.services.snapshot(),
             # The secret never goes back out. /api/state needs only `_authed`,
             # so a read-only token was receiving it — and with it the ability
             # to forge a signature the receiver trusts. Whether one is set is
@@ -866,7 +878,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/folders":
                 folder = self.panel.store.add_folder(body.get("name") or "New folder",
                                                      body.get("color"))
-                return self._json({"id": folder.id}, 201)
+                # The whole record, not just the id. A caller that asked for a
+                # colour has no other way to learn that the one it sent was
+                # refused, and "the API is the whole surface" means a script
+                # should be able to see what it created without a second GET.
+                return self._json(dataclasses.asdict(folder), 201)
             if path == "/api/reorder":
                 self.panel.store.reorder_sessions(body.get("sessions") or [])
                 return self._json({"ok": True})
@@ -1069,6 +1085,9 @@ class Handler(BaseHTTPRequestHandler):
                 # the thread rather than leaving it spinning over a URL that
                 # is no longer there.
                 self.panel.watcher.ensure()
+                # Same for the status feeds: turning them off should stop the
+                # thread now, not at the next restart.
+                self.panel.services.ensure()
                 return self._json(updated)
             if len(parts) == 3 and parts[1] == "sessions":
                 # Only fields the caller actually sent. `folder: null` is a
@@ -1084,7 +1103,12 @@ class Handler(BaseHTTPRequestHandler):
                     parts[2], name=body.get("name"), color=body.get("color"),
                     collapsed=body.get("collapsed"),
                 )
-                return self._json({"ok": bool(updated)}, 200 if updated else 404)
+                # The record, for the same reason POST returns it: a colour
+                # that failed validation is kept, and `{"ok": true}` is not a
+                # way to find that out.
+                if not updated:
+                    return self._json({"ok": False}, 404)
+                return self._json(dataclasses.asdict(updated))
             return self._json({"error": "not found"}, 404)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)

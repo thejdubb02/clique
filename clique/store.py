@@ -29,6 +29,21 @@ from . import artifacts
 #: into a style attribute, so anything looser than a full match is an opening.
 _HEX = re.compile(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
 
+
+def colour(value, fallback: str) -> str:
+    """A colour we are willing to put in a stylesheet, or the fallback.
+
+    Folder colours reach the browser inside a `style` attribute. Anything that
+    is not a plain hex triple has no business there: a value like
+    `red" onmouseover="...` closes the attribute and adds script to the
+    sidebar, which turns "recolour a folder" into stored XSS for the next
+    person to open the panel. Settings colours were checked this way already;
+    folders were the path that never was.
+    """
+    text = str(value or "").strip()
+    return text if _HEX.fullmatch(text) else fallback
+
+
 #: Seeded on first run. Empty match lists — fill these with your own trees
 #: in the panel. A match is a directory prefix that auto-files new sessions.
 DEFAULT_FOLDERS = [
@@ -128,6 +143,13 @@ DEFAULT_SETTINGS = {
     #: whatever is running the first time a panel loads, so a fresh install
     #: does not open wearing a badge about its own arrival.
     "changelog_seen": "",
+    #: Whether to ask the provider behind a running CLI if it is having a bad
+    #: day. Statuspage feeds named in clis.toml, read every five minutes, and
+    #: only for CLIs that have a session open right now — an idle panel makes
+    #: no requests at all. On, because an outage banner nobody found in a
+    #: settings sheet is an outage banner nobody gets; off is one switch, for
+    #: anyone who wants a panel that never reaches the internet.
+    "service_status": True,
     #: An IANA zone for the clock on the empty pane — "Europe/Lisbon". Empty
     #: means the browser's own, which is right for most people and wrong for
     #: anyone whose box lives in a different country from they do.
@@ -523,7 +545,7 @@ class Store:
             folder = Folder(
                 id=f"f-{uuid.uuid4().hex[:8]}",
                 name=name,
-                color=color or PALETTE[len(self.folders) % len(PALETTE)],
+                color=colour(color, PALETTE[len(self.folders) % len(PALETTE)]),
                 order=len(self.folders),
             )
             self.folders.append(folder)
@@ -543,6 +565,8 @@ class Store:
                 # folder has to be able to clear it.
                 if value is None and key != "folder":
                     continue
+                if key == "color":
+                    value = colour(value, found.color)
                 setattr(found, key, value)
             self._write()
             return found

@@ -310,6 +310,22 @@ def main() -> int:
             check(f"anonymous cannot climb out of /brand/ to {label}",
                   err.code in (401, 403, 404), err.code)
 
+    # A folder colour is written straight into a `style` attribute in the
+    # sidebar, so anything that is not a hex triple is a way to put script on
+    # the next person's screen. The setter refuses it and keeps what was there.
+    status, folder = call("/api/folders", "POST",
+                          {"name": "smoke-colour", "color": 'red" onmouseover="x'})
+    check("a folder is created", status == 201 and folder.get("id"), folder)
+    if folder.get("id"):
+        check("a bad colour never reaches the sidebar",
+              re.fullmatch(r"#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}", folder.get("color", "")),
+              folder.get("color"))
+        status, patched = call("/api/folders/" + folder["id"], "PATCH",
+                               {"color": "javascript:alert(1)"})
+        check("and a bad one cannot be patched in later",
+              patched.get("color") == folder.get("color"), patched.get("color"))
+        call("/api/folders/" + folder["id"], "DELETE")
+
     status, _ = call("/", "POST", None)
     oversize = urllib.request.Request(BASE + "/", data=b"x" * 200,
                                       method="POST")

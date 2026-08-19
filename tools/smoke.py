@@ -8,13 +8,18 @@ tmux is actually running.
 
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
+from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from clique import notify, tmux
+from clique import notify, services, tmux
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
 
@@ -164,6 +169,84 @@ def main() -> int:
     check("a name that does not resolve is refused",
           not allow("http://clique-no-such-host.invalid/x"))
     check("and so is nonsense", not allow("not a url at all"))
+
+    print("service status")
+    # The two things that make this feature honest rather than a widget: it
+    # only ever asks about a CLI you actually have running, and it says
+    # nothing at all when everyone is up.
+    class _Store:
+        settings: ClassVar[dict] = {"service_status": True}
+        sessions: ClassVar[list] = []
+
+    class _Panel:
+        store = _Store()
+        registry = reg
+
+    svc = services.Services(_Panel())
+    _Store.sessions = [SimpleNamespace(cli="claude"),
+                       SimpleNamespace(cli="shell")]
+    asked = sorted(svc.wanted())
+    check("asks only about CLIs with a session open", asked == ["claude"], asked)
+    check("and never about one with no feed", "shell" not in asked, asked)
+
+    _Store.sessions = []
+    check("an idle panel asks nothing at all", svc.wanted() == {}, svc.wanted())
+
+    # A reading is only shown while it is a problem and while it is fresh.
+    now = int(time.time())
+    svc._seen = {
+        "claude": {"cli": "claude", "label": "Claude Code", "indicator": "none",
+                   "description": "All Systems Operational", "url": "", "checked": now},
+    }
+    check("an operational service is not news", svc.snapshot() == [], svc.snapshot())
+    svc._seen["claude"]["indicator"] = "major"
+    check("a real outage is", len(svc.snapshot()) == 1, svc.snapshot())
+    svc._seen["claude"]["checked"] = now - services.STALE - 1
+    check("and a reading nobody could refresh goes quiet rather than stale",
+          svc.snapshot() == [], svc.snapshot())
+
+    # Worst first, so the bar leads with the thing that matters.
+    svc._seen = {
+        "a": {"cli": "a", "label": "A", "indicator": "minor", "description": "",
+              "url": "", "checked": now},
+        "b": {"cli": "b", "label": "B", "indicator": "critical", "description": "",
+              "url": "", "checked": now},
+    }
+    check("worst first", [r["cli"] for r in svc.snapshot()] == ["b", "a"],
+          [r["cli"] for r in svc.snapshot()])
+
+    # The fetcher refuses the same addresses the webhook refuses.
+    check("a status feed cannot be pointed at cloud metadata",
+          services.read("http://169.254.169.254/api/v2/status.json") is None)
+    check("nor at a host that does not resolve",
+          services.read("https://clique-no-such-host.invalid/api/v2/status.json") is None)
+
+    print("front end")
+    # There is no build step, which is the point — and it also means nothing
+    # between a typo and the browser. A syntax error in app.js does not fail a
+    # Python test suite; it fails silently, in front of the user, as a panel
+    # that loads and then does nothing. `node --check` parses without running.
+    node = shutil.which("node") or shutil.which("nodejs")
+    if not node:
+        print("  · no node; skipping the parse check")
+    else:
+        for name in ("app.js", "themes.js"):
+            script = ROOT / "clique" / "web" / name
+            done = subprocess.run([node, "--check", str(script)],
+                                  capture_output=True, text=True)
+            check(f"{name} parses", done.returncode == 0,
+                  done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "")
+
+    print("mounted under a path prefix")
+    # CLIque is documented as running behind `tailscale serve` at /clique,
+    # which strips the prefix before the server sees it — so only the browser
+    # knows where the app is mounted, and every request has to be resolved
+    # against <base href>. One absolute path is enough to break a feature for
+    # everyone who followed the README, and to work perfectly on localhost.
+    # That is exactly how the changelog tab shipped broken.
+    script = (ROOT / "clique" / "web" / "app.js").read_text()
+    absolute = re.findall(r"""(?:api|fetch)\(\s*['"`]/[^'"`]*""", script)
+    check("no API call escapes the mount point", not absolute, absolute[:3])
 
     print("teardown")
     tmux.kill(mux, SOCKET)
