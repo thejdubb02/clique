@@ -1,6 +1,28 @@
 # Changelog
 
-## 0.19.0 — 2026-08-19
+## 0.20.0 — 2026-08-19 10:30 PDT
+
+**The changelog is in the app now, and it finally says what time it was.**
+
+- **Settings → Changelog** lists every release, newest first, read from the
+  same `CHANGELOG.md` this repo ships. One copy, so the notes in the app cannot
+  drift from the notes on disk — which is what happens to every second copy of
+  a release note by about the third release.
+- **Every entry carries a time, in Pacific.** Nineteen releases had shipped on
+  a single date, which made the date worthless for telling them apart or
+  putting them in order. Backfilled from the commit times, converted out of
+  UTC, so the evening ones correctly say the evening they happened rather than
+  the next morning in Greenwich.
+- The day is a heading and the entry is a time under it, and the release you
+  are actually running is marked.
+
+Fetched the first time the tab is opened rather than at load — release notes
+are read twice a year and the panel opens in a quarter of a second. Markdown is
+parsed on the server into structure rather than markup, so the browser builds
+elements instead of assigning HTML, and nothing out of a file can turn into a
+node by accident.
+
+## 0.19.0 — 2026-08-19 10:20 PDT
 
 **What you have not seen, and where you stopped reading.**
 
@@ -16,7 +38,7 @@ the `last_seen` already written on every tab switch, and the rule is a terminal
 decoration rather than text written into the buffer — writing into a pane that
 a full-screen CLI is repainting would garble whatever it was drawing.
 
-## 0.18.0 — 2026-08-19
+## 0.18.0 — 2026-08-19 10:19 PDT
 
 **Closing a tab has always kept the session running. Nothing ever said so.**
 The ✕ read as destructive, so people killed sessions they only meant to put
@@ -30,7 +52,7 @@ down.
   needed a home is the session still working with nothing on screen — the one
   you forget you started. It sits at the top of the sidebar.
 
-## 0.17.0 — 2026-08-19
+## 0.17.0 — 2026-08-19 10:05 PDT
 
 **A half-typed prompt survives everything now.** Switch tabs, reload the page,
 close the laptop and open it somewhere else — the words are still in the box.
@@ -44,7 +66,7 @@ close the laptop and open it somewhere else — the words are still in the box.
   exactly when someone expects their words to still be there.
 - Sending clears the draft, because it is no longer unsent.
 
-## 0.16.1 — 2026-08-19
+## 0.16.1 — 2026-08-19 09:59 PDT
 
 Marks beside each support option — a coin glyph in each project's colours, and
 a cup for Buy Me a Coffee. Drawn inline rather than fetched: no build step, no
@@ -52,7 +74,7 @@ CDN, and nothing to 404 on a box with no route to the internet. They are our
 own glyphs rather than the projects' official logos, which keeps someone else's
 trademarked artwork out of a repo that is about to go public.
 
-## 0.16.0 — 2026-08-19
+## 0.16.0 — 2026-08-19 09:56 PDT
 
 **A tip jar, in About and on the repo page.** CLIque is free and staying that
 way; this is for anyone who wants to say thanks.
@@ -65,7 +87,7 @@ way; this is for anyone who wants to say thanks.
 - The same list is in the README, and `.github/FUNDING.yml` puts the coffee
   link behind GitHub's own Sponsor button for when the repo goes public.
 
-## 0.15.1 — 2026-08-19
+## 0.15.1 — 2026-08-19 09:50 PDT
 
 **The About tab in settings was invisible.** Seven tabs did not fit the sheet,
 the strip scrolled horizontally, and its scrollbar was hidden by design — so
@@ -74,7 +96,7 @@ the last tab was off the edge with nothing on screen to suggest it existed.
 The strip wraps now instead of scrolling. Costs a second row on a narrow sheet,
 and it is the same fix a phone needs anyway.
 
-## 0.15.0 — 2026-08-19
+## 0.15.0 — 2026-08-19 09:43 PDT
 
 **A session you just started is now the first thing you see.** It was being
 filed into a folder automatically by its directory, which meant a new session
@@ -93,7 +115,7 @@ stopping something that had already stopped, and offered nothing for the thing
 you probably wanted: the row gone. Stopped sessions now offer **Delete**, with
 wording that says what it does. Running ones are unchanged.
 
-## 0.14.0 — 2026-08-19
+## 0.14.0 — 2026-08-19 09:40 PDT
 
 **Every binding, in one list.** Shortcuts existed only in `title` attributes,
 which meant they existed only for whoever already knew they were there.
@@ -107,7 +129,7 @@ which meant they existed only for whoever already knew they were there.
 - It says where a key is not ours to promise: the autonomy-mode key is
   whatever that CLI declares in the registry, so it differs between them.
 
-## 0.13.0 — 2026-08-19
+## 0.13.0 — 2026-08-19 09:35 PDT
 
 **The view no longer moves while you are reading it.** On a busy session, a
 line arriving mid-sentence dragged the pane to the bottom — and you cannot
@@ -130,7 +152,7 @@ keeps the scrollback; the viewport is put back after each write instead.
 Freezing the stream would have put the pane out of step with tmux, which holds
 the real scrollback and does not care what a browser is looking at.
 
-## 0.12.0 — 2026-08-19
+## 0.12.0 — 2026-08-19 09:23 PDT
 
 **You can paste a screenshot into a session.** A terminal cannot carry an
 image, so the only thing that can cross into a pane is text — which meant
@@ -158,7 +180,7 @@ rejected. Requests are capped at 10 MB, bodies are bounded before they are
 read, names are random and never overwrite, and the write is contained to
 `<cwd>/.claude-images` after symlink resolution.
 
-## 0.11.0 — 2026-08-19
+## 0.11.0 — 2026-08-19 07:33 PDT
 
 **The autonomy pill was static.** It showed whatever mode a session started in
 and never moved again — not when you clicked it, not when you cycled the mode
@@ -187,7 +209,7 @@ declare modes today. The rest of the registry is a catalogue and none of them
 is installed here, so nobody has verified which key cycles what, and a pill
 that names the wrong mode is worse than no pill.
 
-## 0.10.1 — 2026-08-19
+## 0.10.1 — 2026-08-19 07:20 PDT
 
 **Fixed: Running and Ungrouped could not be collapsed.** Clicking their headers
 did nothing at all. Collapsing was written to flip a flag on a folder record,
@@ -201,7 +223,7 @@ the work and follows you between devices; which *views* you keep shut is about
 this screen and stays here. Archived still starts closed, since being out of
 the way is the entire point of it.
 
-## 0.10.0 — 2026-08-19
+## 0.10.0 — 2026-08-19 07:17 PDT
 
 **The stats bar is a gauge now.** Every reading carries a dot that moves along
 a green-to-red ramp as the box works, so a glance says how hard it is
@@ -230,7 +252,7 @@ breathing without reading five numbers.
 - Only real folders get it. Running, Ungrouped and Archived are views over the
   sessions, not things with a name and a colour.
 
-## 0.9.2 — 2026-08-19
+## 0.9.2 — 2026-08-18 21:53 PDT
 
 **Changing the theme now repaints the open terminal immediately.** It was
 waiting for the next three-second poll — and with the settings sheet still
@@ -243,7 +265,7 @@ lean on hardest — so the background changed and the output did not. Both
 halves verified in a real browser this time: one pane, no reload, Dracula to
 Trinity, every colour following.
 
-## 0.9.1 — 2026-08-19
+## 0.9.1 — 2026-08-18 21:32 PDT
 
 **One mark per session, and it is the CLI's logo.** Showing a status dot *and*
 a logo was two marks for one session; the logo now carries the status colour
@@ -265,7 +287,7 @@ tab icon that does not match the one in the window is worse than a slightly
 busy one. Both chevrons, a third heavier, no tile — the tile's rounding is
 what was eating the space.
 
-## 0.9.0 — 2026-08-19
+## 0.9.0 — 2026-08-18 21:29 PDT
 
 **Your history is in the sidebar, in its folders.** Past conversations now sit
 under the live sessions in each folder — dimmed, because they answer "where did
@@ -303,7 +325,7 @@ of waiting out the poll, and a panel that really is unreachable says so rather
 than showing an empty app, which from the outside is indistinguishable from a
 broken one.
 
-## 0.8.0 — 2026-08-19
+## 0.8.0 — 2026-08-18 21:17 PDT
 
 **Every past conversation, findable and resumable.** 266 of them on this box,
 discovered in under half a second.
@@ -339,7 +361,7 @@ that resumes one — the only missing piece was finding them.
 **Also:** a new session now files itself into the right folder automatically,
 the same way an adopted one does. It only did that for adopted sessions.
 
-## 0.7.0 — 2026-08-19
+## 0.7.0 — 2026-08-18 21:11 PDT
 
 Four things found by actually looking at the running app rather than at the
 tests, which all passed throughout.
@@ -388,7 +410,7 @@ costume, not a theme — and everything not carrying meaning leans green.
 sign-in. The login page asked for a password and then tried to draw a logo
 that was behind that password.
 
-## 0.6.0 — 2026-08-19
+## 0.6.0 — 2026-08-18 20:48 PDT
 
 **A real identity.** The brand assets until now were CodemanPanel's, borrowed
 wholesale — one of them still carried `aria-label="CodemanPanel"`.
@@ -417,7 +439,7 @@ meta tags ship with the icons — so CLIque can be added to a home screen and
 opens standalone. The layout itself is not responsive yet; that is the next
 piece of the mobile work, and it is on the list.
 
-## 0.5.1 — 2026-08-19
+## 0.5.1 — 2026-08-18 20:35 PDT
 
 **Fixed: signing in landed on a white screen.**
 
@@ -443,7 +465,7 @@ first real login since the policy shipped, and the bug surfaced immediately.
   curl does not enforce CSP — the suite stayed green while the app served a
   blank page.
 
-## 0.5.0 — 2026-08-19 — **now CLIque**
+## 0.5.0 — 2026-08-18 20:29 PDT — **now CLIque**
 
 *Your private clique of CLIs.*
 
@@ -470,7 +492,7 @@ built around.**
 - The password moved with everything else, to `/root/.clique/password`.
   Vaultwarden holds the only other copy.
 
-## 0.4.1 — 2026-08-19
+## 0.4.1 — 2026-08-18 20:24 PDT
 
 The palette's "most recently used" order now lives on the server with the rest
 of the settings, so it is the same order on the desktop, on another machine,
@@ -483,7 +505,7 @@ is about the work. Sidebar width is about the screen — a 420px sidebar that
 suits a desktop is wrong on a laptop and absurd on a phone — so that one stays
 in the browser where it belongs.
 
-## 0.4.0 — 2026-08-19
+## 0.4.0 — 2026-08-18 20:22 PDT
 
 **A command palette.** `Ctrl`+`K` opens one box that reaches every action and
 every session. It is the feature three independent LLM feature lists ranked
@@ -518,7 +540,7 @@ Also in this release:
 - The context menu's session actions became named functions, so the palette
   runs the same code rather than a second copy of it.
 
-## 0.3.1 — 2026-08-19
+## 0.3.1 — 2026-08-18 20:07 PDT
 
 Real logos, drawn properly. Icons are now classified automatically into two
 kinds, because they cannot be drawn the same way:
@@ -537,7 +559,7 @@ Detection is by inspecting the file, not by a flag in config, so dropping a
 new icon into the directory does the right thing without anyone classifying it
 correctly.
 
-## 0.3.0 — 2026-08-19
+## 0.3.0 — 2026-08-18 18:52 PDT
 
 Security pass, driven by reading Codeman's hardening documentation and
 comparing it line by line. Four real gaps, one of them serious. Full model now
@@ -564,7 +586,7 @@ written down in [SECURITY.md](SECURITY.md).
   more importantly, revoking one takes effect immediately — a revocation that
   waits for a restart is not a revocation.
 
-## 0.2.3 — 2026-08-19
+## 0.2.3 — 2026-08-18 18:45 PDT
 
 The CLI icon can now carry the status colour, so a session shows one mark
 instead of two: shape says which CLI, colour says how it is doing. Off by
@@ -578,7 +600,7 @@ the unwatched colour. Viewer attachment is now folded back into the session it
 mirrors, so green and amber mean something again — a regression that had been
 invisible while a dot nobody looked at was carrying it.
 
-## 0.2.2 — 2026-08-19
+## 0.2.2 — 2026-08-18 18:42 PDT
 
 Draggable sidebar. Grab the edge, or focus it and use the arrow keys;
 double-click resets. The width is remembered per browser and comes back when
@@ -595,7 +617,7 @@ have a real icon. Aider publishes a wordmark rather than a mark and three
 others have no icon at a stable URL, so those four keep the letter badge,
 which is documented as a choice rather than left looking like a gap.
 
-## 0.2.1 — 2026-08-19
+## 0.2.1 — 2026-08-18 18:36 PDT
 
 The settings dialog is now furniture: fixed 560×640, same position, every tab.
 
@@ -610,7 +632,7 @@ The per-CLI rows became a grid rather than a flex row. The select was squeezing
 the label column, so names wrapped onto two lines and every row was a different
 height. Sixteen rows, all 32px, selects aligned to the pixel.
 
-## 0.1.0 — 2026-08-19
+## 0.1.0 — 2026-08-18 17:18 PDT
 
 First working version, replacing Codeman for day-to-day use.
 

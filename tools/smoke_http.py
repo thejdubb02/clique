@@ -287,6 +287,19 @@ def main() -> int:
     status, state = call("/api/state")
     check("gone from state", not any(s["id"] == sid for s in state["sessions"]))
 
+    print("changelog")
+    status, log = call("/api/changelog")
+    newest = log[0] if status == 200 and log else {}
+    check("serves parsed release notes", status == 200 and len(log) > 1, status)
+    check("every entry carries a wall-clock time",
+          bool(log) and all(e["time"] and e["zone"] for e in log),
+          next((e["version"] for e in log if not e["time"]), ""))
+    _, running = call("/api/state")
+    version = str(running.get("version", "")).split("+")[0]
+    check("newest first", bool(newest) and newest["version"] == version, version)
+    check("markdown came back as structure, not markup",
+          bool(newest.get("blocks")) and "spans" in newest["blocks"][0])
+
     print("static")
     req = urllib.request.Request(BASE + "/app.js")
     req.add_header("Cookie", cookie)
