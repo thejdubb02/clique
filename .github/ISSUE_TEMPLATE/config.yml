@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Idea, question, or "does it do X?"
+    url: https://github.com/thejdubb02/clique/discussions
+    about: Discussions is the low-stakes end. Nothing has to be a bug report.
   - name: Security advisory
     url: https://github.com/thejdubb02/clique/security/advisories/new
     about: A hole that reaches a terminal. Not a public issue.

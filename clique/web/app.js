@@ -2100,6 +2100,18 @@ function openSettings() {
   $("#cssPanel").value = s.css_panel || "";
   $("#cssTerminal").value = s.css_terminal || "";
   $("#aboutVersion").textContent = "version " + (state.version || "");
+  /* Prefilled report links.
+   *
+   * The version and the browser are the two things every report needs and
+   * nobody remembers to include, and they are both already here. Nothing is
+   * sent from the app itself — the link opens GitHub with the fields filled
+   * in, and the person decides what to do with it. A panel that phones home
+   * about its own bugs is a panel nobody self-hosts. */
+  const issue = "https://github.com/thejdubb02/clique/issues/new";
+  $("#linkBug").href = issue + "?template=bug.yml&"
+    + new URLSearchParams({ version: state.version || "",
+                            browser: navigator.userAgent.slice(0, 200) });
+  $("#linkFeature").href = issue + "?template=feature.yml";
 
   renderCliRows();
   renderSnippetRows();

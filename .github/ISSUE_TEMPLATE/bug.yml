@@ -23,8 +23,20 @@ body:
     attributes:
       label: Python, tmux, OS
       placeholder: "Python 3.12, tmux 3.4, Linux"
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: It is a browser app, and half of what breaks breaks in only one of them.
+      placeholder: Firefox 141 / Safari on iOS 19
   - type: textarea
     id: repro
     attributes:
       label: How to reproduce
       description: Short steps. If it needs a particular CLI, say which one.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything in the console or the journal?
+      description: Browser devtools console, or `journalctl --user -u clique`.
+      render: shell
