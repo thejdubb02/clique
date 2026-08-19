@@ -166,5 +166,46 @@ console.log("things that sit on top of other things");
         `palette ${palette}`);
 }
 
+console.log("tinted greys keep their contrast");
+{
+  // The point of tinting the 256-colour greyscale ramp is that a monochrome
+  // theme owns the shades a CLI paints with. The point of doing it by hue
+  // rather than by interpolation is that an application picking 233 chose how
+  // far from the background it wanted to be — that choice is not ours to move,
+  // and moving it is what makes text stop being readable on top.
+  global.window = {};
+  require(path.join(ROOT, "clique/web/themes.js"));
+  const CUBE = [0, 95, 135, 175, 215, 255];
+  eval(region("function hexRgb", "const _termThemes").replace(/^const CUBE.*$/m, ""));
+
+  const theme = global.window.CLIQUE_THEMES.trinity;
+  const ramp = extendedAnsi(theme).slice(216);
+  const lum = (hex) => {
+    const p = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    return 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+  };
+
+  check("the ramp still has 24 steps", ramp.length === 24, ramp.length);
+  let held = true;
+  let rising = true;
+  for (let i = 0; i < 24; i++) {
+    const v = 8 + 10 * i;
+    const standard = "#" + [v, v, v].map((c) => c.toString(16).padStart(2, "0")).join("");
+    if (Math.abs(lum(standard) - lum(ramp[i])) > 0.07) held = false;
+    if (i && lum(ramp[i]) <= lum(ramp[i - 1])) rising = false;
+  }
+  check("every step keeps the lightness xterm would have given it", held, ramp.slice(0, 3));
+  check("and the ramp still climbs from dark to light", rising);
+
+  // The cube is not ours. An application asking for colour 82 wants that
+  // green, not a theme's idea of one.
+  const cube = extendedAnsi(theme).slice(0, 216);
+  check("the 6x6x6 cube is left exactly as xterm defines it",
+        cube[0] === "#000000" && cube[215] === "#ffffff", [cube[0], cube[215]]);
+
+  const plain = global.window.CLIQUE_THEMES[""];
+  check("a theme that did not ask keeps the standard ramp", !plain.tint_greys);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

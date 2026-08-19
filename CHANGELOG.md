@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.43.0 — 2026-08-19 16:03 PDT
+
+**The tinted greys keep their contrast.** 0.42.0 made a theme able to own the
+256-colour greyscale ramp, and did it by walking from the theme's background to
+its foreground — which on a monochrome theme is a walk into a saturated colour.
+Shades an application meant as *subtle* came out as a wash, and the text on top
+of them had to compete with it.
+
+An application reaching for colour 233 has chosen how far from the background it
+wants to be. That choice is not ours to move; only the neutrality is. Each step
+now keeps exactly the lightness xterm would have given it and takes the theme's
+hue at a low saturation, so `#121212` becomes `#0f1510` rather than something
+darker and greener. Every contrast relationship survives, which is the
+difference between a themed terminal and a coloured one. The suite asserts the
+lightness across all 24 steps, that the ramp still climbs, and that the
+6×6×6 cube is left exactly as xterm defines it — an application asking for
+colour 82 wants *that* green.
+
+How far a theme goes is a number on the theme now, not a constant in the code.
+
 ## 0.42.0 — 2026-08-19 15:59 PDT
 
 **Find a directory you have never opened here.** The picker knew everywhere you

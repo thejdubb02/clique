@@ -3192,6 +3192,44 @@ function rgbHex([r, g, b]) {
     Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
 }
 
+/* Hue and saturation from a colour; lightness is not taken, because lightness
+ * is the thing being preserved. */
+function hueSat(hex) {
+  const [r, g, b] = hexRgb(hex).map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2;
+  if (max === min) return [0, 0];
+  const span = max - min;
+  const sat = light > 0.5 ? span / (2 - max - min) : span / (max + min);
+  let hue;
+  if (max === r) hue = (g - b) / span + (g < b ? 6 : 0);
+  else if (max === g) hue = (b - r) / span + 2;
+  else hue = (r - g) / span + 4;
+  return [hue / 6, sat];
+}
+
+function hslHex(h, s, l) {
+  if (!s) { const v = Math.round(l * 255); return rgbHex([v, v, v]); }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const channel = (t) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return rgbHex([channel(h + 1 / 3) * 255, channel(h) * 255, channel(h - 1 / 3) * 255]);
+}
+
+/* How much of the theme's hue the greys take, when a theme does not say.
+ * Deliberately small: this is a tint, and anything stronger stops being one.
+ * A theme can set `tint_greys` to a number of its own to go gentler or
+ * further, which is a line of config rather than a change here. */
+const TINT = 0.22;
+
 function extendedAnsi(theme) {
   const out = [];
   for (let r = 0; r < 6; r++) {
@@ -3199,13 +3237,27 @@ function extendedAnsi(theme) {
       for (let b = 0; b < 6; b++) out.push(rgbHex([CUBE[r], CUBE[g], CUBE[b]]));
     }
   }
-  const from = hexRgb(theme.term.background || "#000000");
-  const to = hexRgb(theme.term.foreground || "#ffffff");
+  /* Lightness is kept, hue is replaced.
+   *
+   * The first attempt at this walked from the theme's background to its
+   * foreground, and on a monochrome theme that is a walk into a saturated
+   * colour — so shades an application meant as *subtle* came out as a wash,
+   * and the text sitting on them lost its contrast.
+   *
+   * The greyscale ramp is a set of lightness steps. An application picking one
+   * has chosen how far from the background it wants to be, and that choice is
+   * the part worth keeping; only the neutrality is ours to change. So each
+   * step keeps the lightness the standard ramp gives it and takes the theme's
+   * hue at a low saturation. Contrast relationships survive intact, which is
+   * what makes it readable rather than merely coloured.
+   *
+   * The hue comes from the accent — a theme's background is often nearly
+   * neutral, and asking a near-grey what colour it is gets you no answer. */
+  const [hue, sat] = hueSat(theme.panel.accent || theme.term.foreground || "#808080");
+  const strength = typeof theme.tint_greys === "number" ? theme.tint_greys : TINT;
   for (let i = 0; i < 24; i++) {
-    // The same 24 steps the standard ramp has, walked between this theme's
-    // own background and foreground instead of between black and white.
-    const at = (i + 1) / 25;
-    out.push(rgbHex([0, 1, 2].map((c) => from[c] + (to[c] - from[c]) * at)));
+    const grey = (8 + 10 * i) / 255;      // exactly what xterm would have used
+    out.push(hslHex(hue, Math.min(sat, Math.max(0, strength)), grey));
   }
   return out;
 }
