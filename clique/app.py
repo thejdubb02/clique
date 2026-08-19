@@ -504,6 +504,23 @@ def image_extension(data: bytes) -> str:
 PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest")
 
 
+#: A terminal is at most this big. Unbounded values arrive from a query string
+#: and from control frames — both are the client talking — and both end up in
+#: an ioctl and in `tmux resize-window`.
+MAX_COLS, MAX_ROWS = 500, 300
+
+
+def _terminal_size(cols, rows) -> tuple[int, int]:
+    """Clamp a client-supplied terminal size, tolerating rubbish."""
+    def one(value, fallback: int, ceiling: int) -> int:
+        try:
+            return max(2, min(int(value), ceiling))
+        except (TypeError, ValueError):
+            return fallback
+
+    return one(cols, 120, MAX_COLS), one(rows, 32, MAX_ROWS)
+
+
 def _is_public_asset(path: str) -> bool:
     return path.startswith(PUBLIC_ASSETS[0]) or path in PUBLIC_ASSETS[1:]
 
@@ -1071,6 +1088,24 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed:
             return self._send(401, b"unauthorized", "text/plain")
 
+        # A cookie without an Origin header is not a browser. Every browser
+        # sends Origin on a WebSocket handshake without exception, so a
+        # cookie-authenticated handshake that lacks one did not come from a
+        # page — and the cookie is the credential a hostile page would be
+        # borrowing. Token callers are exempt: an Authorization header is
+        # never attached by a browser on its own, so it proves intent.
+        if self._bearer is None and origin is None:
+            return self._send(403, b"cross-site websocket blocked", "text/plain")
+
+        # Read-only tokens may *watch*. They may not type.
+        #
+        # This gate was missing entirely: the socket checked only that the
+        # caller was authenticated, and control frames send keystrokes, so a
+        # token issued as read-only could open a terminal and run anything.
+        # Every other write path in the server is scoped; this one was the
+        # hole under it.
+        may_write, _reason = self._may_write()
+
         key = self.headers.get("Sec-WebSocket-Key")
         if not key:
             return self._send(400, b"not a websocket request", "text/plain")
@@ -1082,8 +1117,7 @@ class Handler(BaseHTTPRequestHandler):
         if not tmux.exists(session.mux, session.socket):
             return self._send(409, b"session is no longer running", "text/plain")
 
-        cols = int(query.get("cols") or 120)
-        rows = int(query.get("rows") or 32)
+        cols, rows = _terminal_size(query.get("cols"), query.get("rows"))
 
         self.wfile.write(handshake_response(key))
         self.wfile.flush()
@@ -1133,8 +1167,8 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     opcode, payload = message
                     if opcode == OP_TEXT:
-                        self._control(session, bridge, payload)
-                    else:
+                        self._control(session, bridge, payload, may_write)
+                    elif may_write:
                         bridge.write(payload)
             finally:
                 stop.set()
@@ -1149,23 +1183,36 @@ class Handler(BaseHTTPRequestHandler):
             with self.panel._lock:
                 self.panel.clients = max(self.panel.clients - 1, 0)
 
-    def _control(self, session, bridge: PtyBridge, payload: bytes) -> None:
-        """Text frames are control; binary frames are keystrokes."""
+    def _control(self, session, bridge: PtyBridge, payload: bytes,
+                 may_write: bool = True) -> None:
+        """Text frames are control; binary frames are keystrokes.
+
+        Everything here is attacker-shaped: it is JSON from a socket, so a
+        missing key or a string where a number belongs must be ignored rather
+        than raise. An exception in this call unwinds the read loop and drops
+        a working terminal.
+        """
         try:
             message = json.loads(payload)
         except ValueError:
             return
+        if not isinstance(message, dict):
+            return
         kind = message.get("type")
         if kind == "resize":
-            cols = int(message.get("cols", 120))
-            rows = int(message.get("rows", 32))
+            cols, rows = _terminal_size(message.get("cols"), message.get("rows"))
             bridge.resize(cols, rows)
             # The PTY resize only tells tmux how big *this client* is. The
             # window is shared with anything else attached, so it also has to
             # be told, or the browser gets a small pane padded out with dots.
-            tmux.resize_window(session.mux, cols, rows, session.socket)
+            # A read-only viewer does not get to resize what others are
+            # looking at — its own view, yes; the shared window, no.
+            if may_write:
+                tmux.resize_window(session.mux, cols, rows, session.socket)
+        elif not may_write:
+            return                      # watching is allowed; typing is not
         elif kind == "key":
-            tmux.send_key(session.mux, str(message["key"]), session.socket)
+            tmux.send_key(session.mux, str(message.get("key") or ""), session.socket)
         elif kind == "run":
             tmux.send_text(session.mux, str(message.get("text", "")), session.socket,
                            enter=bool(message.get("enter", True)))

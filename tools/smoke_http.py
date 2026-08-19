@@ -280,6 +280,61 @@ def main() -> int:
     client.close()
     time.sleep(0.8)
 
+    print("read-only tokens")
+    # The bypass this exists to stop: every write route is scoped, and the
+    # WebSocket was not — so a token issued read-only could open a terminal
+    # and type into it, which is every permission the scope exists to withhold.
+    made = subprocess.run(
+        [sys.executable, "-m", "clique", "token", "create", "smoke-readonly",
+         "--read-only"],
+        capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]))
+    ro_token = ro_id = ""
+    for line in made.stdout.splitlines():
+        if line.strip().startswith("mxp_"):
+            ro_token = line.strip()
+        if line.startswith("created "):
+            ro_id = line.split()[1]
+    check("mints a read-only token", bool(ro_token), made.stdout[-120:])
+
+    status, _ = call("/api/state", body=None)
+    ro_req = urllib.request.Request(BASE + "/api/sessions", method="POST",
+                                    data=json.dumps({"cli": "shell", "cwd": "/tmp"}).encode())
+    ro_req.add_header("Content-Type", "application/json")
+    ro_req.add_header("Authorization", "Bearer " + ro_token)
+    try:
+        urllib.request.urlopen(ro_req, timeout=10)
+        check("refuses a write over HTTP", False, "the POST succeeded")
+    except urllib.error.HTTPError as err:
+        check("refuses a write over HTTP", err.code == 403, err.code)
+
+    # The oracle is a file on disk, not anything the terminal renders. Reading
+    # the pane back proves nothing here: a fresh socket is sent history-only
+    # scrollback, so a command sitting on the visible screen does not appear in
+    # it, and the check passes whether or not the command ran. A file either
+    # exists or it does not.
+    proof_keys = Path("/tmp") / f"clique-ro-keys-{secrets.token_hex(4)}"
+    proof_ctl = Path("/tmp") / f"clique-ro-ctl-{secrets.token_hex(4)}"
+
+    ro_client = Client(url, "", ro_token)
+    check("may still open a socket to watch", "101" in ro_client.status, ro_client.status)
+    ro_client.drain(1.5)
+    ro_client.send(f"touch {proof_keys}\n".encode())
+    ro_client.send(json.dumps({"type": "run", "text": f"touch {proof_ctl}"}).encode(), OP_TEXT)
+    ro_client.drain(2.5)
+    ro_client.close()
+    time.sleep(1.0)
+
+    check("keystrokes from a read-only token do not run",
+          not proof_keys.exists(), f"{proof_keys} was created")
+    check("nor does a control frame",
+          not proof_ctl.exists(), f"{proof_ctl} was created")
+    for leftover in (proof_keys, proof_ctl):
+        with contextlib.suppress(OSError):
+            leftover.unlink()
+
+    subprocess.run([sys.executable, "-m", "clique", "token", "revoke", ro_id],
+                   capture_output=True, cwd=str(Path(__file__).resolve().parents[1]))
+
     print("detach vs kill")
     status, state = call("/api/state")
     still = next((s for s in state["sessions"] if s["id"] == sid), None)
