@@ -5,7 +5,7 @@
 <title>CLIque — a folder for every CLI on the box</title>
 <meta name="description" content="Folder-organised coding sessions in a browser, kept alive in tmux. Self-hosted. Clone it. There is no cloud.">
 <link rel="canonical" href="https://useclique.dev/">
-<meta name="theme-color" content="#F1EDE3">
+<meta name="theme-color" content="#0E1116">
 <link rel="icon" href="brand/mark.svg" type="image/svg+xml">
 <link rel="icon" href="brand/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
@@ -15,26 +15,26 @@
 <meta property="og:url" content="https://useclique.dev/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="site.css?v=4">
+<link rel="stylesheet" href="site.css?v=5">
 
-<div class="split">
-  <div class="sheet">
-    <header>
-      <a class="word" href="/">
-        <img src="brand/mark.svg" width="22" height="22" alt="">
-        CLIque
-      </a>
-      <a class="gh" href="https://github.com/thejdubb02/clique">GitHub</a>
-    </header>
+<div class="page">
+  <header>
+    <a class="word" href="/">
+      <img src="brand/mark.svg" width="20" height="20" alt="">
+      CLIque
+    </a>
+    <a class="gh" href="https://github.com/thejdubb02/clique">GitHub</a>
+  </header>
 
-    <main>
+  <section class="hero">
+    <div class="copy">
       <h1>A folder for every CLI on the box.</h1>
       <p class="lede">Coding sessions in a browser, kept alive in tmux. Claude, Grok, Gemini, Codex, or anything you add in four lines. You clone it. It binds loopback. There is no cloud.</p>
 
       <div class="run">
         <div class="run-head">
           <span>On your machine</span>
-          <button type="button" class="copy" hidden>Copy</button>
+          <button type="button" class="copybtn" hidden>Copy</button>
         </div>
 <pre id="install"><code>git clone https://github.com/thejdubb02/clique.git
 cd clique
@@ -42,84 +42,86 @@ python3 -m clique password
 python3 -m clique</code></pre>
         <p class="then">Then <code>http://127.0.0.1:3200</code>. Python 3.11+ and tmux. Nothing else.</p>
       </div>
+    </div>
 
-      <ul class="facts">
-        <li><b>24 MB</b> resident. No framework, no <code>node_modules</code>.</li>
-        <li><b>Loopback.</b> Put a tunnel in front if you want. Don’t hang it on the public internet.</li>
-        <li><b>The ring</b> around a CLI’s logo is the whole status language: spinning = working, pulsing = waiting on you, nothing = idle.</li>
-      </ul>
+    <figure class="shot" aria-label="CLIque: folders of CLI sessions on the left, a terminal on the right. A ring around each logo shows working, waiting, or idle.">
+      <div class="app">
+        <aside>
+          <div class="ah">
+            <img src="brand/mark.svg" width="13" height="13" alt="">
+            <span>CLIque</span>
+          </div>
+          <div class="search">Search sessions…</div>
+          <div class="tree">
+            <div class="fold">Work</div>
+            <div class="sess on">
+              <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(icons/claude.svg);mask-image:url(icons/claude.svg)"></i></span>
+              <span class="meta"><b>auth rewrite</b><small>~/proj/api</small></span>
+            </div>
+            <div class="sess">
+              <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(icons/grok.svg);mask-image:url(icons/grok.svg)"></i></span>
+              <span class="meta"><b>landing page</b><small>~/proj/site</small></span>
+            </div>
+            <div class="sess">
+              <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(icons/gemini.svg);mask-image:url(icons/gemini.svg)"></i></span>
+              <span class="meta"><b>migrations</b><small>~/proj/db</small></span>
+            </div>
+            <div class="fold">Home</div>
+            <div class="sess">
+              <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(icons/codex.svg);mask-image:url(icons/codex.svg)"></i></span>
+              <span class="meta"><b>weekly notes</b><small>~/notes</small></span>
+            </div>
+          </div>
+        </aside>
+        <div class="pane">
+          <div class="tabs">
+            <div class="tab active" style="--cli:#D97757">auth rewrite</div>
+            <div class="tab">landing page</div>
+            <div class="plus">+</div>
+            <div class="stats">cpu 12% · mem 24 MB</div>
+          </div>
+          <div class="term">
+            <div class="tline dim">claude · ~/proj/api · waiting on you</div>
+            <div class="tline">I’ll stop here. The session store looks right;</div>
+            <div class="tline">the middleware still lets a stale cookie through.</div>
+            <div class="tline"></div>
+            <div class="tline">Want me to patch <span class="file">app/auth.py</span>, or talk it through first?</div>
+            <div class="caret">▍</div>
+          </div>
+          <div class="bar">
+            <span class="field">Type a prompt, or a shell command…</span>
+            <span class="runbtn">Run</span>
+          </div>
+        </div>
+      </div>
+    </figure>
+  </section>
 
-      <h2>Adding a CLI is config, never code.</h2>
-<pre class="toml"><code>[cli.grok]
+  <section class="facts">
+    <div><b>24 MB resident.</b> No framework, no <code>node_modules</code>, no build.</div>
+    <div><b>Loopback on purpose.</b> Anyone who reaches the panel has a terminal as you.</div>
+    <div><b>The ring is the status.</b> Spinning = working. Pulsing = waiting on you. Nothing = idle.</div>
+  </section>
+
+  <section class="cfg">
+    <h2>Adding a CLI is config, never code.</h2>
+<pre><code>[cli.grok]
 label   = "Grok CLI"
 command = "grok"
 args    = []
 color   = "#E8E8E8"</code></pre>
-      <p class="then">Reload the page. If adding one ever needs a code change, the design has failed.</p>
-    </main>
+    <p class="then">Reload the page. If adding one ever needs a code change, the design has failed.</p>
+  </section>
 
-    <footer>
-      <p><a href="https://github.com/thejdubb02/clique">github.com/thejdubb02/clique</a> · MIT · <a href="https://github.com/thejdubb02">Justin Willhite</a></p>
-      <p><a href="https://buymeacoffee.com/jdubb">Buy me a coffee</a> if it saved you an afternoon.</p>
-    </footer>
-  </div>
-
-  <figure class="stage" aria-label="CLIque: folders of CLI sessions on the left, a terminal on the right. A ring around each logo shows working, waiting, or idle. It is running at 127.0.0.1:3200.">
-    <div class="app">
-      <aside>
-        <div class="ah">
-          <img src="brand/mark.svg" width="13" height="13" alt="">
-          <span>CLIque</span>
-        </div>
-        <div class="search">Search sessions…</div>
-        <div class="tree">
-          <div class="fold">Work</div>
-          <div class="sess on">
-            <span class="cli-status wait" style="--c:#D97757"><i style="-webkit-mask-image:url(icons/claude.svg);mask-image:url(icons/claude.svg)"></i></span>
-            <span class="meta"><b>auth rewrite</b><small>~/proj/api</small></span>
-          </div>
-          <div class="sess">
-            <span class="cli-status work" style="--c:#E8E8E8"><i style="-webkit-mask-image:url(icons/grok.svg);mask-image:url(icons/grok.svg)"></i></span>
-            <span class="meta"><b>landing page</b><small>~/proj/site</small></span>
-          </div>
-          <div class="sess">
-            <span class="cli-status" style="--c:#1f6feb"><i style="-webkit-mask-image:url(icons/gemini.svg);mask-image:url(icons/gemini.svg)"></i></span>
-            <span class="meta"><b>migrations</b><small>~/proj/db</small></span>
-          </div>
-          <div class="fold">Home</div>
-          <div class="sess">
-            <span class="cli-status" style="--c:#10A37F"><i style="-webkit-mask-image:url(icons/codex.svg);mask-image:url(icons/codex.svg)"></i></span>
-            <span class="meta"><b>weekly notes</b><small>~/notes</small></span>
-          </div>
-        </div>
-      </aside>
-      <div class="pane">
-        <div class="tabs">
-          <div class="tab active" style="--cli:#D97757">auth rewrite</div>
-          <div class="tab">landing page</div>
-          <div class="plus">+</div>
-          <div class="stats">cpu 12% · mem 24 MB</div>
-        </div>
-        <div class="term">
-          <div class="tline dim">claude · ~/proj/api · waiting on you</div>
-          <div class="tline">I’ll stop here. The session store looks right;</div>
-          <div class="tline">the middleware still lets a stale cookie through.</div>
-          <div class="tline"></div>
-          <div class="tline">Want me to patch <span class="file">app/auth.py</span>, or talk it through first?</div>
-          <div class="caret">▍</div>
-        </div>
-        <div class="bar">
-          <span class="field">Type a prompt, or a shell command…</span>
-          <span class="runbtn">Run</span>
-        </div>
-      </div>
-    </div>
-  </figure>
+  <footer>
+    <p><a href="https://github.com/thejdubb02/clique">github.com/thejdubb02/clique</a> · MIT · <a href="https://github.com/thejdubb02">Justin Willhite</a></p>
+    <p><a href="https://buymeacoffee.com/jdubb">Buy me a coffee</a> if it saved you an afternoon.</p>
+  </footer>
 </div>
 
 <script>
 (function () {
-  var btn = document.querySelector(".copy");
+  var btn = document.querySelector(".copybtn");
   var pre = document.getElementById("install");
   if (!btn || !pre || !navigator.clipboard) return;
   btn.hidden = false;
