@@ -58,6 +58,17 @@ function readViewsCollapsed() {
 const wasBusy = new Map();
 const attention = new Set();   // session ids waiting to be looked at
 
+/* Unread: this pane has produced output since you last looked at it.
+ *
+ * Flashing says *something happened*; this says *what you have not seen*, and
+ * it survives you being away for an hour. Both facts already exist — tmux's
+ * activity clock and the last_seen we already write on every tab switch — so
+ * this stores nothing new. The pane you are looking at is never unread. */
+function unread(s) {
+  return Boolean(s && s.alive && s.id !== activeId
+                 && s.activity > (s.last_seen || 0));
+}
+
 /* ------------------------------------------------------------------- helpers */
 
 function session(id) { return state.sessions.find((s) => s.id === id); }
@@ -503,6 +514,7 @@ function sessionRow(s) {
   const row = document.createElement("div");
   row.className = "session" + (s.id === activeId ? " active" : "") +
     (s.alive ? "" : " dead") + (s.busy ? " busy" : "") +
+    (unread(s) ? " unread" : "") +
     (attention.has(s.id) ? " attention" : "");
   row.draggable = true;
   row.dataset.id = s.id;
@@ -730,7 +742,8 @@ function renderTabs() {
     if (!s) return;
     const tab = document.createElement("div");
     tab.className = "tab" + (id === activeId ? " active" : "") +
-      (s.busy ? " busy" : "") + (attention.has(id) ? " attention" : "");
+      (s.busy ? " busy" : "") + (unread(s) ? " unread" : "") +
+      (attention.has(id) ? " attention" : "");
     tab.title = s.cwd;
     tab.innerHTML =
       `<span class="num">${index + 1}</span>` +
@@ -1152,12 +1165,40 @@ function renderFollow() {
     : "Following output — scroll up, or press Ctrl+Shift+L, to pause";
 }
 
+/* A rule across the pane at the point you left it, so coming back to four
+ * hundred new lines tells you where your eye stopped. It is a decoration, not
+ * text written into the buffer: writing into a pane a full-screen CLI is
+ * repainting would garble whatever it was drawing. */
+function markDeparture(id) {
+  const entry = terms.get(id);
+  if (!entry) return;
+  try {
+    entry.leftMark = entry.term.registerMarker(0);
+  } catch (err) { /* proposed API; the unread dot carries on without it */ }
+}
+
+function showDeparture(id) {
+  const entry = terms.get(id);
+  if (!entry || !entry.leftMark) return;
+  try {
+    if (entry.sinceLine) entry.sinceLine.dispose();
+    entry.sinceLine = entry.term.registerDecoration({
+      marker: entry.leftMark, x: 0, width: entry.term.cols,
+    });
+    if (entry.sinceLine) {
+      entry.sinceLine.onRender((el) => el.classList.add("since-line"));
+    }
+  } catch (err) { /* as above: a missing line is not worth an error */ }
+}
+
 function selectTab(id) {
+  if (activeId && activeId !== id) markDeparture(activeId);
   if (draftFor && draftFor !== id) saveDraft(true);   // commit before reusing the box
   activeId = id;
   attention.delete(id);   // looking at it is the acknowledgement
   renderFollow();         // the badge belongs to the pane you switched to
   loadDraft(id);
+  showDeparture(id);
   markSeen(id);
   for (const [tid, entry] of terms) {
     entry.el.style.display = tid === id ? "block" : "none";

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.19.0 — 2026-08-19
+
+**What you have not seen, and where you stopped reading.**
+
+- **An unread dot** on any session that produced output while you were
+  elsewhere, in the sidebar and on its tab. Flashing says *something happened*
+  and is gone a second later; this is still there an hour later, which is the
+  point of it. Looking at the pane clears it.
+- **A rule across the pane** at the point you left, so coming back to four
+  hundred new lines shows where your eye stopped.
+
+Neither stores anything new. The dot compares tmux's own activity clock against
+the `last_seen` already written on every tab switch, and the rule is a terminal
+decoration rather than text written into the buffer — writing into a pane that
+a full-screen CLI is repainting would garble whatever it was drawing.
+
 ## 0.18.0 — 2026-08-19
 
 **Closing a tab has always kept the session running. Nothing ever said so.**

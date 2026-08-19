@@ -12,19 +12,12 @@ here ships it moves to the CHANGELOG and drops off this page.
 
 ---
 
-## Today — the one left
+## Today — all four shipped
 
-These are all hours, not days, and all of them fire many times an hour once
-there are a dozen sessions open.
-
-### 1. Unread marker and a since-last-viewed separator
-A line in the scrollback where you stopped reading, and a mark on sessions
-that produced output while you were elsewhere. Flashing says *something
-happened*; this says *what you have not seen*.
-
-*The activity clock that drives the busy pulse already has what this needs.*
-
----
+Scroll lock (0.13.0), prompt drafts (0.17.0), close-and-keep with a home for
+running sessions (0.18.0), unread marker and the since-last-viewed rule
+(0.19.0). Screenshot paste (0.12.0), the shortcut reference (0.14.0) and the
+support section (0.16.0) were not on this list and shipped anyway.
 
 ## Next, if the day holds
 
