@@ -785,11 +785,37 @@ function renderInputBar() {
   // registry config — there is no per-CLI branch here.
   if (s && s.modes && s.modes.length) {
     pill.hidden = false;
-    pill.textContent = (s.mode || s.modes[0]) + " mode on (shift+tab to cycle)";
+    const now = s.mode || s.modes[0];
+    // The label is the CLI's own, from the registry. It was hardcoded to
+    // Claude Code's wording, which read as a lie on any other CLI.
+    pill.textContent = (s.mode_label || "{mode} mode").replace("{mode}", now);
   } else {
     pill.hidden = true;
   }
   $("#empty").style.display = activeId ? "none" : "grid";
+}
+
+/* Advance a session to its next mode and remember it.
+ *
+ * Nothing here knows what a mode means. The registry says which modes exist
+ * and in what order; this walks that list and stores where it got to, so the
+ * pill says what the CLI is actually on rather than what it started on.
+ *
+ * `sent` is whether the keystroke has already reached the pane — true when the
+ * user pressed it themselves, false when they clicked the pill and we still
+ * have to send it. */
+function cycleMode(s, sent) {
+  if (!s || !s.modes || !s.modes.length) return;
+  const at = s.modes.indexOf(s.mode || s.modes[0]);
+  const next = s.modes[(at + 1) % s.modes.length];
+  if (!sent && s.mode_key) control({ type: "key", key: s.mode_key });
+  // Stamped locally first so the pill turns over on the keystroke rather than
+  // on the next poll, then persisted so a reload does not forget it.
+  s.mode = next;
+  renderInputBar();
+  api("api/sessions/" + s.id, {
+    method: "PATCH", body: JSON.stringify({ mode: next }),
+  }).catch(() => {});
 }
 
 function selectTab(id) {
@@ -917,6 +943,16 @@ async function attach(id) {
         return;   // swallow the Tab; it was the expansion key this time
       }
     }
+    /* The user cycling the mode themselves must move the pill too, or it
+     * silently drifts and starts describing a mode the CLI is not in. The key
+     * is passed straight through — this observes it, it does not intercept
+     * it. A CLI whose key we cannot translate reports an empty sequence and
+     * simply never matches. */
+    const current = session(id);
+    if (current && current.mode_seq && data === current.mode_seq) {
+      cycleMode(current, true);
+    }
+
     if (data === "\r" || data === "\n" || data === "\u001b") entry.typed = "";
     else if (data === "\u007f") entry.typed = entry.typed.slice(0, -1);
     else if (data >= " " && data.length === 1) entry.typed += data;
@@ -1447,10 +1483,7 @@ function wire() {
   $("#repPlus").onclick = () => setRepeat(repeat + 1);
   $("#repMinus").onclick = () => setRepeat(repeat - 1);
 
-  $("#modePill").onclick = () => {
-    const s = session(activeId);
-    if (s && s.mode_key) control({ type: "key", key: s.mode_key });
-  };
+  $("#modePill").onclick = () => cycleMode(session(activeId), false);
 
   $("#prompt").onkeydown = (ev) => {
     if (ev.key === "Tab" && expandInBox(ev.target)) { ev.preventDefault(); return; }

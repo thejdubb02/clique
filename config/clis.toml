@@ -18,10 +18,21 @@
 #   {cli_session_id}  the CLI's own session id; `resume` only
 #
 # Optional keys:
-#   modes       list of autonomy/permission modes. Presence of this key is what
-#               makes the mode pill appear in the UI; omit it and the pill is
-#               hidden. There is no per-CLI branch in the code.
-#   mode_key    the key CLIque sends into the pane to cycle mode
+#   modes       list of autonomy/permission modes, in the order the CLI cycles
+#               them. Presence of this key is what makes the mode pill appear;
+#               omit it and the pill is hidden. There is no per-CLI branch in
+#               the code.
+#   mode_key    the key that cycles mode. Sent into the pane when the pill is
+#               clicked, and watched for coming *out* of the keyboard so that
+#               cycling by hand moves the pill too. "S-Tab", "Tab" and
+#               "C-<letter>" can be recognised both ways; anything else can be
+#               sent but not detected, and the pill will drift out of step.
+#
+#               The order in `modes` must match the order the CLI actually
+#               cycles in. CLIque cannot read the CLI's real mode — that would
+#               mean parsing its output — so it counts steps instead. Get the
+#               order wrong and the pill will confidently name the wrong mode,
+#               which is worse than having no pill.
 #   mode_label  text shown in the pill, {mode} substituted
 #   resume      argv used instead of `args` when reattaching to a known
 #               {cli_session_id}

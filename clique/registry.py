@@ -126,6 +126,29 @@ class CliType:
     history: dict = field(default_factory=dict)
 
     @property
+    def mode_seq(self) -> str:
+        """What a terminal actually sends when `mode_key` is pressed.
+
+        `mode_key` is written in tmux's notation because that is what sends it
+        *into* a pane. Recognising the same key coming *out* of the keyboard
+        needs the escape sequence instead — otherwise CLIque only knows about
+        mode changes it made itself, and the pill drifts the moment anyone
+        cycles the mode by hand.
+
+        Only the shapes that appear in the registry are translated. An
+        unrecognised key gives "", which means "cannot detect this one" and is
+        handled as such rather than guessed at.
+        """
+        key = self.mode_key or ""
+        if key in ("S-Tab", "BTab"):
+            return "\x1b[Z"
+        if key == "Tab":
+            return "\t"
+        if len(key) == 3 and key.startswith("C-") and key[2].isalpha():
+            return chr(ord(key[2].lower()) - 96)
+        return ""
+
+    @property
     def has_modes(self) -> bool:
         """Whether the UI should show a mode pill for this CLI."""
         return bool(self.modes)
