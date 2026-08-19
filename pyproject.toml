@@ -1,6 +1,6 @@
 [project]
 name = "clique"
-version = "0.21.0"
+version = "0.21.1"
 description = "Your private clique of CLIs. Folder-organised, CLI-agnostic coding sessions in a browser, persisted in tmux"
 requires-python = ">=3.11"
 dependencies = []          # deliberate: stdlib only, so it still starts in two years
