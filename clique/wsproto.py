@@ -29,6 +29,12 @@ OP_CLOSE, OP_PING, OP_PONG = 0x8, 0x9, 0xA
 #: A single frame larger than this is a bug or an attack, not a terminal.
 MAX_PAYLOAD = 8 * 1024 * 1024
 
+#: And a cap on the *reassembled* message, because the per-frame limit does not
+#: bound anything on its own: a client can send continuation frames of 8 MB
+#: each, forever, and a buffer that only stops growing at FIN grows until the
+#: process dies. Keystrokes and resize messages are bytes; this is generous.
+MAX_MESSAGE = 16 * 1024 * 1024
+
 
 class WebSocketError(Exception):
     pass
@@ -136,6 +142,16 @@ class WebSocket:
             masked = bool(second & 0x80)
             length = second & 0x7F
 
+            # RFC 6455 §5.1: every frame from a client is masked, and a server
+            # that receives an unmasked one MUST fail the connection. Masking
+            # is not confidentiality — it exists so a hostile page cannot make
+            # a proxy see attacker-chosen bytes as a second request. Accepting
+            # unmasked frames is how a browser-facing socket becomes a way to
+            # poison a cache in front of it.
+            if not masked:
+                self.close(1002)
+                return None
+
             try:
                 if length == 126:
                     length = struct.unpack("!H", self._read_exact(2))[0]
@@ -164,6 +180,9 @@ class WebSocket:
             if opcode in (OP_TEXT, OP_BINARY):
                 message_op = opcode
             buffer += payload
+            if len(buffer) > MAX_MESSAGE:
+                self.close(1009)
+                return None
             if fin:
                 return (message_op or OP_BINARY, bytes(buffer))
 

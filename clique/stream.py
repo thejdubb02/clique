@@ -28,6 +28,26 @@ from collections.abc import Callable
 READ_SIZE = 65536
 
 
+def _reap(pid: int) -> None:
+    """Wait for a child to actually die, without blocking the caller.
+
+    This used to be a single `waitpid(pid, WNOHANG)` immediately after the
+    SIGHUP, which almost never succeeds — the child has not finished exiting
+    yet, so the call returns "not yet" and nobody ever asks again. Every
+    detach left a zombie, and this process is meant to run for weeks with tabs
+    opening and closing all day.
+
+    A short-lived thread doing the blocking wait is the smallest fix that is
+    actually correct: no signal handler to install (SIGCHLD to SIG_IGN would
+    break `subprocess` everywhere else), and no polling loop to tune.
+    """
+    def wait() -> None:
+        with contextlib.suppress(ChildProcessError, OSError):
+            os.waitpid(pid, 0)
+
+    threading.Thread(target=wait, name=f"reap-{pid}", daemon=True).start()
+
+
 class PtyBridge:
     def __init__(
         self,
@@ -76,22 +96,29 @@ class PtyBridge:
         # daemon thread with nobody to catch it.
         if self.fd is None:
             return
-        while not self._stopping.is_set():
-            try:
-                data = os.read(self.fd, READ_SIZE)
-            except OSError as exc:
-                # EIO is how a PTY reports the far end closed. It is the normal
-                # end of a session, not an error worth surfacing.
-                if exc.errno not in (errno.EIO, errno.EBADF):
-                    raise
-                break
-            if not data:
-                break
-            try:
-                self.on_output(data)
-            except Exception:  # noqa: BLE001 - a dead browser must not kill the pump
-                break
-        self._finish()
+        # try/finally, because _finish is what closes the PTY and the socket.
+        # It used to sit after the loop, so an unexpected errno re-raised out
+        # of a daemon thread with nobody to catch it — leaking the descriptor
+        # and leaving the browser attached to a session that had stopped
+        # sending. The rare error is exactly the case that must still clean up.
+        try:
+            while not self._stopping.is_set():
+                try:
+                    data = os.read(self.fd, READ_SIZE)
+                except OSError as exc:
+                    # EIO is how a PTY reports the far end closed. It is the
+                    # normal end of a session, not an error worth surfacing.
+                    if exc.errno not in (errno.EIO, errno.EBADF):
+                        raise
+                    break
+                if not data:
+                    break
+                try:
+                    self.on_output(data)
+                except Exception:  # noqa: BLE001 - a dead browser must not kill the pump
+                    break
+        finally:
+            self._finish()
 
     def _finish(self) -> None:
         self.close()
@@ -143,6 +170,5 @@ class PtyBridge:
             # also work, but only by accident of tmux's design.
             with contextlib.suppress(ProcessLookupError):
                 os.kill(pid, signal.SIGHUP)
-            with contextlib.suppress(ChildProcessError):
-                os.waitpid(pid, os.WNOHANG)
+            _reap(pid)
             self.pid = None

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import threading
 import time
@@ -321,10 +322,27 @@ class Store:
             "settings": self.settings,
         }
         tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, indent=2))
+        # Flushed and fsynced before the rename, not just written.
+        #
+        # `write_text` followed by `replace` looks atomic and is not: the
+        # rename is ordered, the *data* is not, so a machine that loses power
+        # between them comes back to a state file of the right name and zero
+        # length. Every session, folder and setting, gone — and the panel
+        # would come up empty rather than obviously broken, which is worse.
+        # The directory is synced too, or the rename itself can be lost.
+        with open(tmp, "w") as handle:
+            handle.write(json.dumps(payload, indent=2))
+            handle.flush()
+            os.fsync(handle.fileno())
         if self.path.exists():
             self.path.replace(self.path.with_suffix(".json.bak"))
         tmp.replace(self.path)
+        with contextlib.suppress(OSError):
+            directory = os.open(self.path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
 
     def save(self) -> None:
         with self._lock:

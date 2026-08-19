@@ -333,7 +333,7 @@ def _radial_glow(width, height, cx, cy, rx, ry, color, alpha):
 
 
 def social_png(width=1280, height=640) -> Image.Image:
-    """GitHub social preview and the site OG card. 1280×640.
+    """GitHub social preview and the site OG card. 1280x640.
 
     Same lockup energy as the marketing page: ink, a violet→cyan glow, the
     mark, the current headline, a short CLI strip. Important type stays inside
