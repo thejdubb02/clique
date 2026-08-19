@@ -159,8 +159,15 @@
     <h2>New session</h2>
     <label>Name <input name="name" placeholder="What is it for?" autocomplete="off"></label>
     <label>CLI <select name="cli"></select></label>
-    <label>Working directory <input name="cwd" value="/root" autocomplete="off" required></label>
+    <label>Working directory
+      <input name="cwd" list="cwdList" autocomplete="off" required
+             placeholder="Where should it run?">
+    </label>
+    <datalist id="cwdList"></datalist>
     <label>Folder <select name="folder"></select></label>
+    <!-- What is already going on in that directory. Only ever shown when there
+         is something to say; see checkWorkspace. -->
+    <p class="heads-up" id="modalHeads" hidden></p>
     <p class="err" id="modalErr" hidden></p>
     <div class="actions">
       <button type="button" id="cancel">Cancel</button>

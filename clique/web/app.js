@@ -2744,6 +2744,112 @@ function escapeHtml(text) {
 
 /* ------------------------------------------------------------------- modal */
 
+/* A sentence before you start, not a lock afterwards.
+ *
+ * Two agents in one directory is the cheap mistake with the expensive
+ * recovery: both editing the same files, neither aware of the other, and an
+ * afternoon working out which change came from where. Nothing here prevents
+ * it — no locks, no forced worktrees, no refusing to start. Somebody starting
+ * a second session in a busy folder usually means to. They just did not know.
+ *
+ * On demand, and debounced: this touches the disk and runs git, so it happens
+ * when a person has stopped typing a path, not on every keystroke. An idle
+ * panel never calls it at all.
+ */
+let headsTimer = null;
+
+function checkWorkspace() {
+  clearTimeout(headsTimer);
+  headsTimer = setTimeout(async () => {
+    const box = $("#modalHeads");
+    const cwd = $("#newForm").cwd.value.trim();
+    box.hidden = true;
+    if (!cwd) return;
+    let look;
+    try {
+      look = await api("api/workspace?cwd=" + encodeURIComponent(cwd));
+    } catch {
+      return;                       // never worth interrupting a launch over
+    }
+    // Still the directory we asked about? The field moves while we are away.
+    if ($("#newForm").cwd.value.trim() !== cwd) return;
+    if (!look.exists) return;       // the server says so on submit, and better
+
+    const said = [];
+    if (look.sessions.length === 1) {
+      said.push(`${look.sessions[0].name} is already running here`);
+    } else if (look.sessions.length > 1) {
+      said.push(`${look.sessions.length} sessions are already running here`);
+    }
+    if (look.touched) {
+      said.push(`${look.touched} file${look.touched === 1 ? " was" : "s were"}` +
+                " written in the last 15 minutes");
+    }
+    // Uncommitted work is only worth mentioning alongside something else. On
+    // its own it is the normal state of every repo anyone works in, and a
+    // panel that says so every time is a panel you stop reading.
+    if (said.length && look.dirty) {
+      said.push(`${look.dirty} uncommitted change${look.dirty === 1 ? "" : "s"}` +
+                (look.branch ? ` on ${look.branch}` : ""));
+    }
+    if (!said.length) return;
+    box.textContent = said.join(" · ");
+    box.hidden = false;
+  }, 350);
+}
+
+/* Every directory CLIque already knows you work in.
+ *
+ * Typing a path from memory is the slowest part of starting a session, and
+ * the panel has never needed to be told: it knows where every live session is
+ * running, where every past one ran, and — from the conversation history —
+ * where you were working before CLIque existed. This is that, ranked, with no
+ * new state and nothing asked of the server.
+ *
+ * A native `<datalist>` rather than a picker. It is type-ahead on a desktop
+ * and a proper suggestion list on a phone keyboard, it costs no widget, no
+ * library and no build step, and typing somewhere it has never heard of still
+ * works — which a dropdown would have taken away.
+ *
+ * The order is how likely it is to be the answer:
+ *   1. running here now
+ *   2. sessions you looked at most recently
+ *   3. directories from past conversations
+ */
+const CWD_SUGGESTIONS = 24;
+
+function knownDirs() {
+  const rank = new Map();          // cwd -> score, highest wins
+  const note = (cwd, score) => {
+    if (!cwd) return;
+    rank.set(cwd, Math.max(rank.get(cwd) || 0, score));
+  };
+
+  for (const s of state.sessions || []) {
+    if (s.archived) continue;
+    // Alive outranks everything, then most recently looked at. last_seen is
+    // seconds, so it is already the tiebreaker — it just needs to sit below
+    // the alive bonus rather than swamping it.
+    note(s.cwd, (s.alive ? 4e9 : 0) + (s.last_seen || s.created || 0));
+  }
+  for (const c of resumable || []) note(c.cwd, (c.updated || 0) / 2);
+
+  return [...rank.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, CWD_SUGGESTIONS)
+    .map(([cwd]) => cwd);
+}
+
+function fillCwdList() {
+  const list = $("#cwdList");
+  list.textContent = "";
+  for (const cwd of knownDirs()) {
+    const option = document.createElement("option");
+    option.value = cwd;
+    list.appendChild(option);
+  }
+}
+
 function openModal() {
   const form = $("#newForm");
   const cliSelect = form.cli;
@@ -2773,8 +2879,14 @@ function openModal() {
     folderSelect.appendChild(option);
   }
   const current = session(activeId);
-  form.cwd.value = current ? current.cwd : "/root";
+  fillCwdList();
+  /* Where you are, then where you were, then the server's own home — never a
+   * path baked into the page. "/root" lived here until now, which was the
+   * machine this was written on rather than anybody else's default. */
+  form.cwd.value = current ? current.cwd : (knownDirs()[0] || state.home || "");
   $("#modalErr").hidden = true;
+  form.cwd.oninput = checkWorkspace;
+  checkWorkspace();
   $("#modal").hidden = false;
   form.name.focus();
 }

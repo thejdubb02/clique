@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.35.0 — 2026-08-19 14:45 PDT
+
+**Stop typing paths from memory.** The working directory field in the new
+session dialog now suggests everywhere CLIque already knows you work: what is
+running right now, then what you looked at most recently, then the directories
+your past conversations came from. It is a native suggestion list, so it is
+type-ahead on a desktop and a proper list on a phone keyboard — and typing
+somewhere it has never heard of still works, which a dropdown would have taken
+away.
+
+The field also stops defaulting to `/root`. That was the machine this was
+written on rather than anybody's default; it is now where you were last, or the
+home of whoever started the server.
+
+**And it tells you what is already happening there.** Two agents in one
+directory is the cheap mistake with the expensive recovery — both editing the
+same files, neither aware of the other, and an afternoon spent working out
+which change came from where. Before you start, the dialog says so:
+
+> *api rewrite is already running here · 13 files were written in the last 15
+> minutes · 2 uncommitted changes on main*
+
+Advisory only. No locks, no forced worktrees, nothing refused — somebody
+starting a second session in a busy folder usually means to, they just did not
+know. Uncommitted changes are only mentioned alongside something else, because
+on their own they are the normal state of every repo anyone works in.
+
+It reads exactly three things: CLIque's own session list, file timestamps, and
+git where a repo happens to be — the list the product is allowed to read. A
+directory that is not a repo simply reports less. Pulled when you stop typing a
+path, never polled, so an idle panel still costs what it always did. Available
+to scripts as `GET /api/workspace?cwd=…`.
+
 ## 0.34.0 — 2026-08-19 14:40 PDT
 
 **Which one actually needs you — one answer, not twenty indicators.** The

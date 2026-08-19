@@ -39,6 +39,7 @@ from . import (
     sysinfo,
     tmux,
     version_string,
+    workspace,
 )
 from .auth import Auth, landing_page, login_page
 from .history import History as ConversationHistory
@@ -796,6 +797,11 @@ class Handler(BaseHTTPRequestHandler):
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()
                                    if p.mux not in known])
+            if path == "/api/workspace":
+                return self._json(workspace.look(
+                    query.get("cwd") or "",
+                    [x for x in self.panel.store.sessions
+                     if not x.archived and x.mux in self.panel.live()]))
             if path.startswith("/api/sessions/") and path.endswith("/peek"):
                 return self._peek(path.split("/")[3], query.get("lines") or "")
             if path.startswith("/api/sessions/") and path.endswith("/artifacts"):

@@ -778,6 +778,14 @@ button.primary:hover { filter: brightness(1.1); }
    where the eye already is. */
 #lock { font-size: 12px; }
 #lock.on { background: var(--accent); color: #fff; border-color: transparent; }
+/* What is already happening where you are about to start. Not an error — the
+   dialog has one of those and it is red — so this is the colour of a note. */
+.heads-up {
+  margin: 2px 0 0; padding: 6px 9px; border-radius: 4px; font-size: 11.5px;
+  color: var(--fg); background: color-mix(in srgb, var(--warn) 14%, var(--panel));
+  border-left: 2px solid var(--warn);
+}
+
 /* "Needs you" on the empty pane. The only block there that is about a problem
    rather than a convenience, so it is the only one that carries a colour. */
 .empty-block.needs h3 { color: var(--warn); }

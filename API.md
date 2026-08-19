@@ -47,6 +47,8 @@ The whole panel in one object, and what the browser polls every three seconds.
 | Key | |
 |---|---|
 | `version` | e.g. `0.21.0+8f32d69` |
+| `home` | the home directory of whoever started the server — where a new session starts when nothing better is known |
+| `home` | the home directory of whoever started the server — where a new session starts when nothing better is known |
 | `folders` | `id`, `name`, `color`, `collapsed`, `order` |
 | `sessions` | see below |
 | `clis` | every CLI the registry knows: `id`, `label`, `command`, `installed`, `modes`, `color`, `icon` |
@@ -190,6 +192,23 @@ resulting `signal`.
 Sessions in `/api/state` carry `signal`: `"waiting"`, `"error"` or `""`, from
 whichever tier could answer — this endpoint first, then the per-CLI patterns in
 `clis.toml` matched against a pane that has gone quiet, then nothing.
+
+### `GET /api/workspace?cwd=/srv/app`
+
+What is already going on in a directory, asked before starting something in it.
+
+```json
+{"cwd": "/srv/app", "exists": true, "branch": "main", "dirty": 2,
+ "touched": 13, "sessions": [{"id": "...", "name": "api rewrite", "cli": "claude"}]}
+```
+
+`sessions` are live CLIque sessions whose working directory resolves to the
+same path; `touched` counts files written in the last 15 minutes; `dirty` and
+`branch` come from git and are `0`/`""` where there is no repo, no git, or a
+repo too large to answer within three seconds.
+
+Advisory only — nothing is locked, refused or enforced. Pulled, never polled:
+this touches the disk, and it runs when someone has stopped typing a path.
 
 ### `GET /api/sessions/<id>/peek?lines=8`
 

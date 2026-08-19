@@ -98,5 +98,42 @@ console.log("what needs you first");
   check("nor the one you are already looking at", !nextUp().some((r) => r.s.id === "b"));
 }
 
+console.log("directories the panel already knows");
+{
+  const code = region("const CWD_SUGGESTIONS", "function openModal()");
+
+  let state;
+  let resumable;
+  const $ = () => ({ textContent: "", appendChild() {} });
+  void $;
+
+  eval(code);
+
+  const now = Math.floor(Date.now() / 1000);
+  state = { sessions: [
+    { cwd: "/srv/old",   alive: 0, last_seen: now - 10 },
+    { cwd: "/srv/live",  alive: 1, last_seen: now - 5000 },
+    { cwd: "/srv/dupe",  alive: 0, last_seen: now - 900 },
+    { cwd: "/srv/dupe",  alive: 1, last_seen: now - 9000 },
+    { cwd: "/srv/gone",  alive: 0, last_seen: now, archived: 1 },
+    { cwd: "",           alive: 1, last_seen: now },
+  ]};
+  resumable = [{ cwd: "/srv/history", updated: now }, { cwd: "/srv/live", updated: now }];
+
+  const dirs = knownDirs();
+  // A live session is where you are working, so it beats a more recent look at
+  // something that has since stopped.
+  check("a running directory outranks a recently-viewed dead one",
+        dirs.indexOf("/srv/live") < dirs.indexOf("/srv/old"), dirs.join(","));
+  check("a directory appears once however many sessions are in it",
+        dirs.filter((d) => d === "/srv/dupe").length === 1, dirs.join(","));
+  check("and it is ranked by its best session, not its worst",
+        dirs.indexOf("/srv/dupe") < dirs.indexOf("/srv/old"), dirs.join(","));
+  check("past conversations are offered too", dirs.includes("/srv/history"));
+  check("but rank below anything with a session", dirs.indexOf("/srv/history") > 0, dirs.join(","));
+  check("archived is not somewhere you are working", !dirs.includes("/srv/gone"));
+  check("and an empty path is never offered", !dirs.includes(""));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
