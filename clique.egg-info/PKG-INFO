@@ -1,3 +1,51 @@
+Metadata-Version: 2.1
+Name: clique
+Version: 0.27.1
+Summary: Your private clique of CLIs. Folder-organised, CLI-agnostic coding sessions in a browser, persisted in tmux
+Author: Justin Willhite
+License: MIT License
+        
+        Copyright (c) 2026 Justin Willhite
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/thejdubb02/clique
+Project-URL: Changelog, https://github.com/thejdubb02/clique/blob/main/CHANGELOG.md
+Project-URL: Issues, https://github.com/thejdubb02/clique/issues
+Project-URL: API, https://github.com/thejdubb02/clique/blob/main/API.md
+Keywords: tmux,terminal,session-manager,web-terminal,coding-agents,claude-code,self-hosted,multi-agent
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: MacOS
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Software Development
+Classifier: Topic :: Terminals :: Terminal Emulators/X Terminals
+Classifier: Topic :: Utilities
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
 <p align="center">
   <img src="clique/web/brand/social-preview.png" alt="CLIque — Your private clique of CLIs" width="800">
 </p>
@@ -12,7 +60,7 @@
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/thejdubb02/clique/actions/workflows/tests.yml"><img src="https://github.com/thejdubb02/clique/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.28.0-A855F7?style=flat-square" alt="0.28.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.27.1-A855F7?style=flat-square" alt="0.27.1"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
   <a href="https://buymeacoffee.com/jdubb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
   <a href="#support-the-dev"><img src="https://img.shields.io/badge/Donate-BTC%20%7C%20SHIB%20%7C%20DOGE-5FA8F5?style=flat-square" alt="Donate"></a>
@@ -69,24 +117,12 @@ What is next, and why that order: [ROADMAP.md](ROADMAP.md). What shipped: [CHANG
 Needs **Python 3.11+** and **tmux**. Nothing else.
 
 ```bash
-pip install clique-panel     # or: uvx --from clique-panel clique
-
-clique password              # prompted; stored as an scrypt hash
-clique                       # http://127.0.0.1:3200
-```
-
-The command is `clique`; the package is `clique-panel` because `clique` on PyPI
-belongs to an unrelated library. State lives in `$CLIQUE_HOME`, default
-`~/.clique`. To edit the CLI catalogue on an installed copy, `clique config`
-puts one in there for you.
-
-From a checkout instead:
-
-```bash
 git clone https://github.com/thejdubb02/clique.git
 cd clique
-python3 -m clique password
-python3 -m clique
+
+export CLIQUE_HOME="$HOME/.clique"   # where the password and session secret live
+python3 -m clique password           # prompted; stored as an scrypt hash
+python3 -m clique                    # http://127.0.0.1:3200
 ```
 
 It binds to loopback on purpose. Put a tunnel in front of it (Tailscale Serve, Caddy, nginx) if you want it from another machine — do not bind it to the public internet. Anyone who reaches the panel has a terminal as the user that started it.
@@ -102,7 +138,7 @@ A systemd user unit is in [`deploy/`](deploy/README.md).
 
 ## Adding a CLI
 
-A block in [`clique/config/clis.toml`](clique/config/clis.toml). Reload the page. No restart, no code:
+A block in [`config/clis.toml`](config/clis.toml). Reload the page. No restart, no code:
 
 ```toml
 [cli.grok]

@@ -182,15 +182,6 @@ body.resizing #termwrap { pointer-events: none; }
 #railDots { display: flex; flex-direction: column; gap: 8px; align-items: center;
             margin-top: 12px; }
 #railDots .dot { cursor: pointer; width: 8px; height: 8px; }
-/* A bare button so the marker inside keeps its own size and its ring has room
-   to sit outside it — the ring is drawn on a negative inset, so a container
-   that clips would swallow it. */
-.rail-dot {
-  display: grid; place-items: center; width: 100%; min-height: 22px;
-  background: none; border: 0; padding: 2px 0; cursor: pointer;
-  overflow: visible;
-}
-.rail-dot:hover { background: var(--row); border-radius: 4px; }
 
 /* ------------------------------------------------------------------ tab bar */
 

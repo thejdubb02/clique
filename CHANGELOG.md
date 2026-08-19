@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.28.0 — 2026-08-19 12:37 PDT
+
+**It installs with one command now.** `pip install clique`, and the packaging
+finally ships the thing people came for.
+
+The wheel used to carry the server and none of the interface — every static
+file, the vendored xterm.js, the icons, and the CLI catalogue were all outside
+the package, so an installed copy would have started and served 404s. The
+catalogue moved to `clique/config/clis.toml` and the web assets are declared as
+package data. Verified the only way that means anything: built the wheel,
+installed it into a clean virtualenv, started it, and loaded the page from
+site-packages.
+
+The version is read from `clique/__init__.py` now, so there is one number to
+bump and the wheel cannot disagree with what the panel reports about itself.
+
+Where the CLI catalogue is read from, in order and with no magic: `--config` if
+given, then `$CLIQUE_HOME/clis.toml` if it exists, then the copy in the package
+— which in a checkout is the repo's own file, so editing it works exactly as it
+always did. `clique config` writes an editable copy into `$CLIQUE_HOME` for an
+installed copy, and refuses to do it in a checkout, where it would put a shadow
+file in front of the repo's and make the next edit appear to do nothing.
+
+**The collapsed rail keeps your markers.** It drew a plain dot regardless of
+what you had chosen, so shrinking the sidebar quietly threw away both the CLI
+icons and the status rings — the two marks that make a column of sessions
+readable at all. It now makes the same two calls a sidebar row makes, so
+whichever of them your settings put in charge is what appears there too.
+
 ## 0.27.1 — 2026-08-19 12:29 PDT
 
 **URLs in the pane are clickable.** A click opens a new tab; `Ctrl`/`Cmd` and a

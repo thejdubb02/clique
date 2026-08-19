@@ -4,7 +4,7 @@ CLIque is a **driver, not an IDE**. That is the filter for every patch.
 
 ## Before you write code
 
-1. **Adding a CLI is config, never code.** A block in [`config/clis.toml`](config/clis.toml) and a reload. If your CLI needs a code change to appear, open an issue rather than a per-CLI branch — that is a design failure we want to see.
+1. **Adding a CLI is config, never code.** A block in [`clique/config/clis.toml`](clique/config/clis.toml) and a reload. If your CLI needs a code change to appear, open an issue rather than a per-CLI branch — that is a design failure we want to see.
 2. **Filesystem, tmux, and process state only.** If a feature needs to know which vendor is talking, understand its protocol, or interpret what a model thinks, it does not belong in the core. See [ROADMAP.md](ROADMAP.md).
 3. **Clean room on Codeman (and everyone else).** Features are fair inspiration. **Source code is not.** Do not read another tool's source to implement something here.
 

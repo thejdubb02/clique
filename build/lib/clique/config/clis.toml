@@ -1,0 +1,211 @@
+# CLI type registry.
+#
+# Adding a coding CLI to CLIque is adding a block here. If a new CLI ever
+# needs a Python change, this design has failed — say so rather than patching
+# around it.
+#
+# Entries are cheap. CLIque checks whether each command actually exists on
+# this box (PATH first, then the usual install directories) and the new-session
+# picker offers only the ones that are really here. So this file is a catalogue
+# of what CLIque *knows how to run*, not a claim about what is installed.
+#
+# Placeholders usable in `args` and `resume`:
+#   {id}              clique's session id (full uuid)
+#   {uuid}            alias for {id}
+#   {name}            the session name the user typed
+#   {cwd}             working directory
+#   {mode}            current autonomy mode; only valid if `modes` is set
+#   {cli_session_id}  the CLI's own session id; `resume` only
+#
+# Optional keys:
+#   modes       list of autonomy/permission modes, in the order the CLI cycles
+#               them. Presence of this key is what makes the mode pill appear;
+#               omit it and the pill is hidden. There is no per-CLI branch in
+#               the code.
+#   mode_key    the key that cycles mode. Sent into the pane when the pill is
+#               clicked, and watched for coming *out* of the keyboard so that
+#               cycling by hand moves the pill too. "S-Tab", "Tab" and
+#               "C-<letter>" can be recognised both ways; anything else can be
+#               sent but not detected, and the pill will drift out of step.
+#
+#               The order in `modes` must match the order the CLI actually
+#               cycles in. CLIque cannot read the CLI's real mode — that would
+#               mean parsing its output — so it counts steps instead. Get the
+#               order wrong and the pill will confidently name the wrong mode,
+#               which is worse than having no pill.
+#   mode_label  text shown in the pill, {mode} substituted
+#   resume      argv used instead of `args` when reattaching to a known
+#               {cli_session_id}
+#   icon        filename in clique/web/icons/. Drawn as a mask and tinted, so
+#               only the silhouette is used. Leave it out and the UI draws a
+#               letter badge in the CLI's colour, which is a perfectly good
+#               marker — do not add a bad icon just to fill the field.
+#
+# ---------------------------------------------------------------------------
+# A NOTE ON FLAGS. The four CLIs at the top have had their flags checked
+# against `--help` on this box. The rest launch bare, which is always safe for
+# an interactive TUI but means no mode pill and no resume. If you use one of
+# them seriously, check its `--help` and fill in `args`/`modes` — that is a
+# five-line edit here, not a code change.
+# ---------------------------------------------------------------------------
+
+[cli.claude]
+label      = "Claude Code"
+command    = "claude"
+args       = ["--permission-mode", "{mode}", "--session-id", "{id}", "--name", "{name}"]
+resume     = ["--permission-mode", "{mode}", "--resume", "{cli_session_id}"]
+color      = "#D97757"
+icon       = "claude.svg"
+modes      = ["auto", "default", "acceptEdits", "plan"]
+mode_key   = "S-Tab"
+mode_label = "{mode} mode on (shift+tab to cycle)"
+
+# How this CLI says it is stuck, as regexes matched against the last 40 lines
+# of the pane once it has gone quiet. Match one and the session's ring says
+# "waiting for you" instead of just "idle" — which is the difference between a
+# panel you have to check and one that tells you.
+#
+# These are deliberately generic: they are the prompts almost every CLI shows,
+# not a transcription of any one vendor's wording. Tune them to what you
+# actually see. That is the whole design — CLIque never learns what a vendor's
+# prompt looks like, you write it down here, and you can fix it the day it
+# changes without waiting for a release.
+#
+# For something exact rather than guessed, skip patterns entirely and have the
+# CLI tell CLIque directly:
+#
+#   curl -XPOST -H "Authorization: Bearer $CLIQUE_TOKEN" \
+#        -d '{"state":"waiting"}' "$CLIQUE_URL/api/sessions/$ID/attention"
+#
+# from a Claude Code hook, a shell trap, or the last line of a script.
+[cli.claude.attention]
+waiting = [
+  "\\(y/n\\)",
+  "\\[[Yy]/[Nn]\\]",
+  "Do you want to",
+  "Press Enter to continue",
+  "❯ 1\\.",
+]
+error = [
+  "^Error:",
+  "command not found",
+  "Traceback \\(most recent call last\\)",
+]
+
+# Where Claude Code keeps its transcripts. One directory per project, named
+# after the working directory with every "/" and "." replaced by "-", and one
+# .jsonl per conversation whose stem is the id `--resume` wants.
+[cli.claude.history]
+dir     = "~/.claude/projects"
+layout  = "dashed-dir"
+pattern = "*.jsonl"
+
+[cli.gemini]
+label      = "Gemini CLI"
+command    = "gemini"
+args       = ["--approval-mode", "{mode}", "--session-id", "{id}"]
+resume     = ["--approval-mode", "{mode}", "--resume", "{cli_session_id}"]
+color      = "#1f6feb"
+icon       = "gemini.svg"
+modes      = ["yolo", "default", "auto_edit", "plan"]
+mode_key   = "S-Tab"
+mode_label = "{mode} mode"
+
+[cli.grok]
+label   = "Grok CLI"
+command = "grok"
+args    = ["--always-approve"]
+resume  = ["--always-approve", "--resume", "{cli_session_id}"]
+color   = "#E8E8E8"
+icon    = "grok.svg"
+# No `modes`: grok's approval is one boolean flag, not a cycle. The pill is
+# hidden because the key is absent, not because anything knows what grok is.
+
+[cli.shell]
+label   = "Shell"
+command = "bash"
+args    = ["-l"]
+color   = "#8b8b8b"
+icon    = "shell.svg"
+
+# --------------------------------------------------------------- unverified --
+
+[cli.codex]
+icon    = "codex.svg"
+label   = "Codex CLI"
+command = "codex"
+args    = []
+color   = "#10A37F"
+
+[cli.copilot]
+icon    = "copilot.svg"
+label   = "GitHub Copilot CLI"
+command = "copilot"
+args    = []
+color   = "#F0F0F0"
+
+[cli.aider]
+label   = "Aider"
+command = "aider"
+args    = []
+color   = "#4fb477"
+
+[cli.opencode]
+icon    = "opencode.svg"
+label   = "OpenCode"
+command = "opencode"
+args    = []
+color   = "#e8a33d"
+
+[cli.cursor]
+icon    = "cursor.svg"
+label   = "Cursor CLI"
+command = "cursor-agent"
+args    = []
+color   = "#7a7fd6"
+
+[cli.qwen]
+icon    = "qwen.svg"
+label   = "Qwen Code"
+command = "qwen"
+args    = []
+color   = "#615CED"
+
+[cli.goose]
+icon    = "goose.svg"
+label   = "Goose"
+command = "goose"
+args    = ["session"]
+color   = "#d96f6f"
+
+[cli.crush]
+label   = "Crush"
+command = "crush"
+args    = []
+color   = "#ff5fa2"
+
+[cli.amazonq]
+label   = "Amazon Q"
+command = "q"
+args    = ["chat"]
+color   = "#ff9900"
+
+[cli.plandex]
+label   = "Plandex"
+command = "plandex"
+args    = []
+color   = "#3aa3a0"
+
+[cli.droid]
+icon    = "droid.svg"
+label   = "Factory Droid"
+command = "droid"
+args    = []
+color   = "#C9C9C9"
+
+[cli.cline]
+icon    = "cline.png"
+label   = "Cline"
+command = "cline"
+args    = []
+color   = "#5b8def"

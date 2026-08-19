@@ -552,20 +552,13 @@ function renderTree() {
 
   const dots = $("#railDots");
   dots.innerHTML = "";
-  /* The rail is the sidebar with the words taken away, not a different thing.
-   * It used to draw a plain dot regardless of what you had chosen, so
-   * collapsing the sidebar quietly threw away the CLI markers *and* the
-   * status rings — the two marks that make a column of sessions readable at
-   * all. Same two calls the sidebar row makes, so whichever of them your
-   * settings put in charge is the one that appears here too. */
   for (const s of state.sessions.filter((x) => x.alive)) {
-    const button = document.createElement("button");
-    button.className = "rail-dot";
-    button.type = "button";
-    button.title = s.name + " — " + WORK_WORDS[workState(s)];
-    button.innerHTML = sessionMarker(s, "sidebar") + statusDot(s, "sidebar");
-    button.onclick = () => openSession(s.id);
-    dots.appendChild(button);
+    const dot = document.createElement("i");
+    dot.className = "dot";
+    dot.dataset.work = workState(s);
+    dot.title = s.name + " — " + WORK_WORDS[dot.dataset.work];
+    dot.onclick = () => openSession(s.id);
+    dots.appendChild(dot);
   }
 }
 

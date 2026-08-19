@@ -1,9 +1,39 @@
 [project]
-name = "clique"
-version = "0.24.0"
+# `clique` on PyPI is taken by an unrelated library (a numerical-collection
+# manager, still published). The *command* is still `clique`; only the name you
+# install by differs, which is ordinary — plenty of tools work that way.
+name = "clique-panel"
+# Read from clique/__init__.py, so the release process has one number to bump
+# and the wheel can never disagree with what the panel reports about itself.
+dynamic = ["version"]
 description = "Your private clique of CLIs. Folder-organised, CLI-agnostic coding sessions in a browser, persisted in tmux"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = []          # deliberate: stdlib only, so it still starts in two years
+authors = [{ name = "Justin Willhite" }]
+keywords = ["tmux", "terminal", "session-manager", "web-terminal",
+            "coding-agents", "claude-code", "self-hosted", "multi-agent"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Software Development",
+  "Topic :: Terminals :: Terminal Emulators/X Terminals",
+  "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/thejdubb02/clique"
+Changelog = "https://github.com/thejdubb02/clique/blob/main/CHANGELOG.md"
+Issues = "https://github.com/thejdubb02/clique/issues"
+API = "https://github.com/thejdubb02/clique/blob/main/API.md"
 
 [project.scripts]
 clique = "clique.__main__:main"
@@ -12,8 +42,20 @@ clique = "clique.__main__:main"
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.dynamic]
+version = { attr = "clique.__version__" }
+
 [tool.setuptools.packages.find]
 include = ["clique*"]
+
+# The panel is the product, and it is all static files. Without this the wheel
+# ships the server and none of the interface, which starts and serves 404s.
+[tool.setuptools.package-data]
+clique = [
+  "web/*.html", "web/*.css", "web/*.js", "web/*.webmanifest",
+  "web/vendor/*", "web/icons/*", "web/brand/*",
+  "config/*.toml",
+]
 
 [tool.ruff]
 line-length = 100
