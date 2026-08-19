@@ -137,7 +137,15 @@ body {
   padding: 4px 10px 4px 22px; cursor: pointer; user-select: none;
 }
 .session:hover { background: var(--row); }
-.session.active { background: var(--sel); }
+/* The session you are looking at. A background alone was too quiet against a
+   dark theme — this is the one row in a list of thirty that has to be findable
+   without reading, so it also takes the active CLI's colour down its edge,
+   which is the same language the tab bar and pane border already speak. */
+.session.active { background: var(--sel);
+                  box-shadow: inset 3px 0 0 var(--active-edge, var(--accent)); }
+/* A collapsed folder draws no rows at all, so the header carries it instead. */
+.folder-head.has-active .name { color: var(--fg); font-weight: 600; }
+.folder-head.has-active { box-shadow: inset 3px 0 0 var(--active-edge, var(--accent)); }
 .session.dragging { opacity: .4; }
 .session .meta { flex: 1; min-width: 0; }
 .session .name {
@@ -894,7 +902,7 @@ a.give-value { color: var(--accent); }
 /* One property, set on <main> when the tab changes; everything that follows
    the active CLI reads it. Transparent is the off switch, which is why there
    is no second rule for the disabled case. */
-main { --cli: transparent; }
+:root { --cli: transparent; --active-edge: var(--accent); }
 /* A line along the top of the pane. Two pixels is enough to catch the eye on
    a switch and little enough to disappear while you read. */
 #termwrap { border-top: 2px solid var(--cli); }

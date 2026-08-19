@@ -143,11 +143,39 @@ function workState(s) {
  * One custom property, set in one place. Everything that wants to follow the
  * active CLI reads `--cli`, which is why turning the whole thing off is one
  * assignment rather than a hunt through the stylesheet. */
+/* Scroll the sidebar to the session you just switched to.
+ *
+ * Only when it is actually out of view, and never smoothly — the sidebar is a
+ * list someone is reading, and animating it under them on every tab change is
+ * the kind of motion that reads as the page misbehaving rather than helping.
+ * A collapsed folder has no row to reach, and its header is already marked. */
+function revealActive() {
+  requestAnimationFrame(() => {
+    const row = document.querySelector(".session.active");
+    if (!row) return;
+    const tree = $("#tree");
+    const rowBox = row.getBoundingClientRect();
+    const treeBox = tree.getBoundingClientRect();
+    if (rowBox.top < treeBox.top || rowBox.bottom > treeBox.bottom) {
+      row.scrollIntoView({ block: "nearest" });
+    }
+  });
+}
+
 function applyCliTint() {
   const s = session(activeId);
   const off = state.settings.cli_tint === false || !s;
-  document.querySelector("main").style.setProperty(
-    "--cli", off ? "transparent" : cliColor(s.cli, s.color));
+  const colour = s ? cliColor(s.cli, s.color) : "";
+  /* Set at the root, not on <main>: the sidebar is a sibling of the pane and
+   * would never have seen a property scoped to it — which is how the active
+   * row ended up with an invisible edge.
+   *
+   * Two properties, because they answer different questions. `--cli` is the
+   * tint and goes transparent when the tint is switched off. `--active-edge`
+   * is "which row am I on", which has to stay visible either way. */
+  const root = document.documentElement.style;
+  root.setProperty("--cli", off ? "transparent" : colour);
+  root.setProperty("--active-edge", off || !colour ? "var(--accent)" : colour);
 }
 
 function cliColor(cliId, shipped) {
@@ -590,7 +618,14 @@ function renderTree() {
     if (query && !shown.length) continue;
 
     const head = document.createElement("div");
-    head.className = "folder-head";
+    /* A folder holding the session you are looking at says so, whether it is
+     * open or shut. Collapsed groups were the gap: the active row carries the
+     * highlight, and a collapsed group draws no rows, so switching to a
+     * session inside one left the entire sidebar looking like nothing was
+     * selected. The header is the only thing on screen at that point, so it
+     * has to be the thing that answers. */
+    const holdsActive = group.sessions.some((x) => x.id === activeId);
+    head.className = "folder-head" + (holdsActive ? " has-active" : "");
     head.dataset.folder = group.id;
     // Only real folders can be edited. Running, Ungrouped and Archived are
     // views over the sessions, not things with a name and a colour.
@@ -1937,6 +1972,7 @@ function selectTab(id) {
   setArtifacts([]);
   pollArtifacts();
   applyCliTint();
+  revealActive();
   renderFollow();         // the badge belongs to the pane you switched to
   loadDraft(id);
   showDeparture(id);

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.29.1 — 2026-08-19 13:06 PDT
+
+**You can tell which session you are in from the sidebar again.**
+
+Three things were wrong at once, and the third hid the first two.
+
+The active row's highlight was a background colour and nothing else, which is
+too quiet against a dark theme when it is one row in thirty. It now takes the
+active CLI's colour down its left edge — the same language the tab bar and the
+pane border already speak.
+
+That edge was reading a custom property set on `<main>`, and the sidebar is a
+*sibling* of `<main>`, so it never saw it. Both properties are set at the root
+now. They are also two properties rather than one, because "which CLI is this"
+and "which row am I on" are different questions: turning the CLI tint off
+should not take the selection highlight with it.
+
+And the case that prompted this: **a collapsed folder draws no rows at all**,
+so switching to a session inside one left the whole sidebar looking like
+nothing was selected — because nothing was, there was nothing there to select.
+A folder holding the active session now says so in its header, open or shut.
+The sidebar also scrolls a selected row into view when it is off-screen,
+without animating, because a list someone is reading should not slide under
+them.
+
 ## 0.29.0 — 2026-08-19 13:04 PDT
 
 **Fixed: pasting text did nothing if the clipboard also held an image.**
