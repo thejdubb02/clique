@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.39.0 — 2026-08-19 15:26 PDT
+
+**Move a session to another folder without dragging it.** Filing a session
+somewhere else was drag-and-drop and nothing else — which does not exist on a
+phone, and is not discoverable on a desktop either, since nothing about a row
+says it can be dragged. Right-click a session (long-press on touch) and there
+is now **Move to folder…** and **Take out of its folder**.
+
+Worth saying plainly, because the two get conflated: a session's **folder** is
+a label and can change whenever you like. Its **working directory** cannot —
+the CLI is already running there, and no process can be moved to a different
+one. If a session is in the wrong directory, the answer is a new session in the
+right one.
+
 ## 0.38.0 — 2026-08-19 15:17 PDT
 
 **The overlapping text in menus is fixed, and it was not the renderer.** Two

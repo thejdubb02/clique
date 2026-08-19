@@ -1017,8 +1017,15 @@ function renameInline(row, s) {
 
 /* --------------------------------------------------------------- context menu */
 
+/* The event the open menu was positioned from, so a second menu — picking a
+ * folder to move into, say — opens in the same place rather than jumping to a
+ * corner. A submenu that appears somewhere else reads as a different thing
+ * having happened. */
+let lastMenuEvent = null;
+
 function showMenu(ev, items) {
   ev.preventDefault();
+  lastMenuEvent = ev;
   const menu = $("#menu");
   menu.innerHTML = "";
   for (const [label, fn, danger] of items) {
@@ -1038,12 +1045,21 @@ function showMenu(ev, items) {
  * stopping something that already stopped — and hides the thing they probably
  * do want, which is the row gone. */
 function sessionMenu(ev, s) {
+  const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
   showMenu(ev, [
     ["Open", () => openSession(s.id)],
     // Hover does this on a desktop; on touch there is no hover and long-press
     // is already this menu, so this is how a phone gets the same answer.
     ...(s.alive ? [["Peek at the last lines", () => peekAt(s.id, null)]] : []),
     ["Rename", () => renameSession(s)],
+    /* Moving a session between folders was drag-and-drop and nothing else.
+     *
+     * There is no drag on a phone, which made half the sidebar's organisation
+     * unreachable on the device most likely to be checking on a session — the
+     * same gap the long-press menu exists to close. It is also not discoverable
+     * on a desktop: nothing about a row says it can be dragged. */
+    ...(folders.length ? [["Move to folder…", () => moveToFolder(s)]] : []),
+    ...(s.folder ? [["Take out of its folder", () => setFolder(s, null)]] : []),
     [s.archived ? "Unarchive" : "Archive", () => setArchived(s, !s.archived)],
     [s.alive ? "Kill session" : "Delete session", () => killSession(s), true],
   ]);
@@ -1208,6 +1224,32 @@ function wirePeek() {
   // rather than leaving it pointing at a row that is no longer there.
   tree.addEventListener("scroll", hidePeek, { passive: true });
   addEventListener("keydown", (ev) => { if (ev.key === "Escape") hidePeek(); });
+}
+
+/* Which folder a session is filed under.
+ *
+ * The working directory is not this, and cannot be changed: a CLI is already
+ * running with a cwd and no process can be moved to another one. The folder is
+ * a label on the session — where it appears in the sidebar — and that is free
+ * to change at any time.
+ */
+async function setFolder(s, folder) {
+  await api("api/sessions/" + s.id, {
+    method: "PATCH", body: JSON.stringify({ folder }),
+  });
+  const where = folder
+    ? ((state.folders || []).find((f) => f.id === folder) || {}).name || "a folder"
+    : "Ungrouped";
+  toast(`${s.name} moved to ${where}`);
+  refresh();
+}
+
+function moveToFolder(s) {
+  const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
+  showMenu(lastMenuEvent, folders.map((f) => [
+    f.name + (f.id === s.folder ? "  ·  where it is now" : ""),
+    () => { if (f.id !== s.folder) setFolder(s, f.id); },
+  ]));
 }
 
 /* Long press, because touch has no right-click.

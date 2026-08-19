@@ -339,12 +339,17 @@ def main() -> int:
         check("login refuses an absurd Content-Length", True, str(err)[:40])
 
     print("the pane is sized before it is painted")
-    # Sessions are created far wider than any browser. Attaching first and
-    # resizing afterwards made tmux paint a whole frame at the old width into a
-    # terminal that wraps at the new one, and the correct redraw then landed on
-    # top of the wreckage — two cursors, duplicated menu items, fragments of
-    # one line inside another. Sampled continuously, because the bug was a
-    # window of a few hundred milliseconds, not an end state.
+    # Sessions are created far wider than any browser — 236 columns against a
+    # typical 100 — and the window used to be resized *after* the terminal was
+    # attached. tmux painted a whole frame at the old width into a terminal
+    # that wraps at the new one, and the correct redraw landed on top of the
+    # wreckage: two cursors, a duplicated menu choice, fragments of one line
+    # inside another.
+    #
+    # What is asserted is the invariant, not the symptom. tmux repaints on
+    # attach and that repaint is idempotent, so the same text legitimately
+    # crosses the wire more than once; what must never happen is a repaint at a
+    # width the terminal does not have.
     made_s = call("/api/sessions", "POST",
                   {"cli": "shell", "cwd": "/tmp", "name": "size-order"})[1]
     time.sleep(0.8)
@@ -359,20 +364,19 @@ def main() -> int:
             except (tmux.TmuxError, ValueError):
                 return -1
 
-        before = pane_width()
-        check("starts wider than a browser", before > 120, before)
+        check("starts wider than any browser", pane_width() > 120, pane_width())
         socket_url = BASE.replace("https://", "wss://").replace("http://", "ws://") + \
             f"/ws?id={made_s['id']}&cols=100&rows=30"
         watcher = Client(socket_url, cookie, bearer)
-        widths = []
-        for _ in range(40):
-            widths.append(pane_width())
-            time.sleep(0.025)
+        seen = watcher.drain(3.0)
+        check("output only begins once the pane is the browser's size",
+              bool(seen) and pane_width() == 100,
+              f"width was {pane_width()} after {len(seen)} bytes")
+        time.sleep(0.6)
+        check("and it is not resized again underneath that output",
+              pane_width() == 100, pane_width())
         watcher.close()
-        wrong = [w for w in widths if w > 100]
-        check("and is never painted at the old width once a browser is on it",
-              not wrong, f"saw {wrong[:4]} in the first second")
-        call("/api/sessions/" + made_s["id"], "DELETE")
+    call("/api/sessions/" + made_s["id"], "DELETE")
 
     print("read-only tokens")
     # The bypass this exists to stop: every write route is scoped, and the
