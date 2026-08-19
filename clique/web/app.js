@@ -742,10 +742,10 @@ function renderTree() {
     // views over the sessions, not things with a name and a colour.
     const editable = !group.pinned && group.id.startsWith("f-");
     head.innerHTML =
-      `<span class="caret">${group.collapsed ? "▸" : "▾"}</span>` +
+      `<span class="caret">${icon(group.collapsed ? "chevron-right" : "chevron-down")}</span>` +
       `<i class="dot" style="background:${cssColor(group.color)}"></i>` +
       `<span class="name">${escapeHtml(group.name)}</span>` +
-      (editable ? `<button class="folder-edit" title="Rename, recolour or delete">✎</button>` : "") +
+      (editable ? `<button class="folder-edit" title="Rename, recolour or delete">${icon("pencil")}</button>` : "") +
       `<span class="count">${shown.length}` +
       (historyCount(group) ? `<i class="from-history">+${historyCount(group)}</i>` : "") +
       `</span>`;
@@ -1191,8 +1191,8 @@ function renderTabs() {
       statusDot(s, "tabs") +
       sessionMarker(s, "tabs") +
       `<span class="label">${escapeHtml(s.name)}</span>` +
-      `<button class="gear" title="Session settings">⚙</button>` +
-      `<button class="x" title="Close tab (session keeps running)">✕</button>`;
+      `<button class="gear" title="Session settings">${icon("settings")}</button>` +
+      `<button class="x" title="Close tab (session keeps running)">${icon("x")}</button>`;
     tab.onclick = () => selectTab(id);
     tab.querySelector(".x").onclick = (ev) => { ev.stopPropagation(); closeTab(id); };
     tab.querySelector(".gear").onclick = (ev) => { ev.stopPropagation(); sessionMenu(ev, s); };
@@ -1248,6 +1248,24 @@ function moveTab(moved, target, after) {
   renderTabs();
 }
 
+/* Whether the panel should draw a prompt box for the session in front.
+ *
+ * "auto" asks the CLI, which is the only one that knows: Claude, Codex and
+ * the rest draw a box of their own, and ours underneath it is the redundant
+ * half of two stacked prompts. A shell draws no box, and there ours is not a
+ * duplicate — it is the only place Run, the repeat counter and a saved draft
+ * exist at all.
+ *
+ * With no session open the box stays, because the empty pane is one of the
+ * places you start work from. */
+function promptWanted() {
+  const mode = state.settings.input_mode || "auto";
+  if (mode === "panel") return true;
+  if (mode === "terminal") return false;
+  const s = session(activeId);
+  return !(s && s.own_input);
+}
+
 function renderInputBar() {
   const s = session(activeId);
   const pill = $("#modePill");
@@ -1262,6 +1280,22 @@ function renderInputBar() {
   } else {
     pill.hidden = true;
   }
+
+  /* The prompt box goes; the pill stays.
+   *
+   * Hiding the whole bar was the old behaviour and it was wrong: the pill is
+   * the control for a CLI's permission mode, so switching off a duplicate
+   * text box also took away the way to see and change what Claude was allowed
+   * to do. They are hidden separately now, and the bar itself only goes when
+   * there is nothing left in it. */
+  const wants = promptWanted();
+  for (const sel of ["#prompt", ".stepper", ".runsplit"]) {
+    const el = $(sel);
+    if (el) el.hidden = !wants;
+  }
+  $("#inputbar").hidden = !wants && pill.hidden;
+  $("#inputbar").classList.toggle("pill-only", !wants && !pill.hidden);
+
   $("#empty").style.display = activeId ? "none" : "grid";
   if (!activeId) renderEmpty();
 }
@@ -1586,7 +1620,7 @@ function setArtifacts(items) {
   artItems = items;
   const button = $("#artBtn");
   button.hidden = !items.length;
-  button.textContent = "\u25A3 " + items.length;
+  button.innerHTML = icon("image") + String(items.length);
   button.title = items.length === 1
     ? "1 image this session made"
     : items.length + " images this session made";
@@ -2434,6 +2468,16 @@ function setRepeat(value) {
   $("#repeat").textContent = repeat;
 }
 
+/* One icon from the sprite in index.html.
+ *
+ * A string rather than an element, because every caller here is building
+ * markup. `name` is never user data — it is a literal at every call site — so
+ * there is nothing to escape, and the sprite is the only place the drawing
+ * lives. */
+function icon(name, cls = "ico") {
+  return `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
+
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -2562,8 +2606,9 @@ function applySettings() {
   styleSlot("term").textContent = s.css_terminal
     ? `#termwrap { ${s.css_terminal} }` : "";
 
-  // Most CLIs draw their own prompt; two stacked boxes is redundant chrome.
-  $("#inputbar").hidden = s.input_mode === "terminal";
+  // The input bar is decided per session, not per settings change — "auto"
+  // depends on which CLI is in front. renderInputBar owns it.
+  renderInputBar();
 }
 
 /* ------------------------------------------------------------ notifications */
@@ -2647,7 +2692,7 @@ function openSettings() {
     themeSelect.appendChild(option);
   }
   $("#setAppearance").value = s.appearance || "dark";
-  $("#setInputMode").value = s.input_mode || "panel";
+  $("#setInputMode").value = s.input_mode || "auto";
 
   for (const [slider, out, value] of [
     ["#setFontPanel", "#outFontPanel", s.font_panel || 13],
@@ -3318,7 +3363,7 @@ function paletteCommands() {
         "Ctrl+Shift+L · scrolling up does it too", toggleFollow);
     add("Close tab", "The session keeps running in tmux", () => closeTab(current.id));
   }
-  if (state.settings.input_mode !== "terminal") {
+  if (promptWanted()) {
     add("Focus the prompt box", "Type a prompt instead of driving the pane",
         () => $("#prompt").focus());
   }

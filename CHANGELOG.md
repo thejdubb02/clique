@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.32.0 — 2026-08-19 14:23 PDT
+
+**One prompt box, not two.** Claude, Codex, Gemini and most of the rest draw
+their own input box at the bottom of the pane, and CLIque was putting a second
+one directly underneath it. On the new `auto` setting — the default — the panel
+does not draw a box for a CLI that already has one. A shell draws no box, and
+there the panel's stays, because it is not a duplicate of anything: it is the
+only place Run, the repeat counter and a saved draft exist at all.
+
+Which CLIs have their own box is `own_input = true` in `clis.toml`, so it is a
+line of config for a CLI we have never heard of rather than a code change.
+
+The mode pill no longer goes with it — and it used to. Anyone who turned the
+old setting to "terminal" to stop the double box also lost the control for
+Claude's permission mode, with nothing saying why. The pill is what the bar
+carries now when the box is gone.
+
+**Real icons.** The panel drew its controls with Unicode characters — `✕`,
+`⚙`, `✎`, `▸`, `⇩` — which is a set only by accident: each one comes from
+whatever font the operating system picks, so the weights disagreed, the sizes
+disagreed, and several were missing outright on a phone. Twelve Lucide icons
+are now vendored into a single inline sprite: about 4 KB, no request, no font,
+no build step, and `currentColor` so every theme recolours them for free.
+`tools/build_icons.py` regenerates it and the test suite fails if the page and
+the icon list disagree.
+
 ## 0.31.0 — 2026-08-19 14:14 PDT
 
 **Somebody else's outage, said in your panel.** A CLI that has gone quiet and a

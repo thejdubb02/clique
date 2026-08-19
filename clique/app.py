@@ -209,6 +209,9 @@ class Panel:
                 "icon": cli.icon if cli else "",
                 "icon_full_color": bool(cli and cli.icon
                                         and registry_icon_is_colour(cli.icon)),
+                # Whether this CLI draws its own input box, so the panel can
+                # stop drawing a second one under it.
+                "own_input": bool(cli and cli.own_input),
                 "cwd": session.cwd,
                 "project": Path(session.cwd).name or session.cwd,
                 "folder": session.folder,

@@ -53,7 +53,8 @@ The whole panel in one object, and what the browser polls every three seconds.
 | `settings` | the full settings object — see **Settings** |
 | `stats` | the same snapshot as `/api/stats` |
 
-Each session carries `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
+Each session carries `own_input` — whether this CLI draws its own input box,
+which is what `input_mode: "auto"` reads — plus `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
 `folder`, `mode` (and `modes`, `mode_label`), `adopted`, `archived`, `draft`,
 `created`, `last_seen`, `order`, plus the live facts: `alive`, `attached`,
 `command`, `activity` (tmux's own clock) and `busy` — output within the last
@@ -269,6 +270,12 @@ status = { url = "https://status.claude.com/api/v2/status.json",
            page = "https://status.claude.com" }
 ```
 
+A second optional key sits beside it: `own_input = true` marks a CLI that
+draws its own input box at the bottom of the pane, so the panel does not stack
+a second one underneath. Purely about what is on screen — a shell prints `>`
+and is not doubled by anything, and there the panel's box is the only place
+Run, the repeat counter and a saved draft live.
+
 `url` must be an Atlassian Statuspage v2 endpoint — that one format covers
 Anthropic, OpenAI, GitHub and Cursor, and a second parser here would be the
 first step towards a directory of per-vendor scrapers. `page` is what the panel
@@ -305,7 +312,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `font_terminal` | 9–28 | The pane, read at a different distance |
 | `palette_hotkey` | bool | Whether `Ctrl`+`K` opens the palette or is handed to the pane |
 | `history_in_sidebar` | bool | Past conversations listed under live sessions |
-| `input_mode` | `"panel"` \| `"terminal"` | Keep CLIque's prompt box, or let the CLI's own be the only one |
+| `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it. The mode pill is never hidden by this |
 | `css_both`, `css_panel`, `css_terminal` | string | Custom CSS, applied in that order |
 | `snippets` | list | `{"trigger", "label", "text"}`; malformed entries are dropped here rather than becoming a render error later |
 | `notify_flash` | bool | Flash a tab whose session finished |

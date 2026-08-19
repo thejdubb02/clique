@@ -112,6 +112,19 @@ class CliType:
     mode_label: str = "{mode} mode"
     #: Filename in web/icons/. Drawn as a mask and tinted, so only the
     #: silhouette matters — a flat single-colour shape, not artwork.
+    #: Whether this CLI draws its own input box at the bottom of the pane.
+    #:
+    #: Purely about what is on screen. A CLI with a boxed prompt sitting
+    #: directly above CLIque's own prompt box is two input boxes stacked, and
+    #: the panel's one is the redundant half. A CLI that just prints `>` and
+    #: waits — a shell, most readline tools — is not doubled by anything, and
+    #: there the panel's box is the only place Run, the repeat counter and a
+    #: saved draft live.
+    #:
+    #: Read only when `input_mode` is "auto", which is the default. The two
+    #: explicit settings still win.
+    own_input: bool = False
+
     #: Where to ask whether the service behind this CLI is having a bad day.
     #:
     #: `url` is a Statuspage v2 endpoint — `.../api/v2/status.json` — and
@@ -232,6 +245,7 @@ class CliType:
             # anyone having to draw an icon first.
             "icon": self.icon,
             "icon_full_color": bool(self.icon) and icon_is_full_colour(self.icon),
+            "own_input": self.own_input,
         }
 
 
@@ -308,7 +322,7 @@ def parse(data: dict) -> dict[str, CliType]:
         unknown_keys = set(raw) - {
             "label", "command", "args", "resume", "color",
             "modes", "mode_key", "mode_label", "icon", "history", "attention",
-            "status",
+            "status", "own_input",
         }
         if unknown_keys:
             raise RegistryError(
@@ -325,6 +339,7 @@ def parse(data: dict) -> dict[str, CliType]:
             mode_key=raw.get("mode_key", "S-Tab"),
             mode_label=raw.get("mode_label", "{mode} mode"),
             icon=raw.get("icon", ""),
+            own_input=bool(raw.get("own_input", False)),
             status=dict(raw.get("status") or {}),
             history=dict(raw.get("history") or {}),
             attention=dict(raw.get("attention") or {}),

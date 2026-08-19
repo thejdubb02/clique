@@ -170,6 +170,14 @@ def main() -> int:
           not allow("http://clique-no-such-host.invalid/x"))
     check("and so is nonsense", not allow("not a url at all"))
 
+    print("the prompt box decides itself")
+    # The distinction is about what is on screen, not about what reads input.
+    # A shell reads input and is not doubled by anything; the panel's box is
+    # the only place Run, the repeat counter and a draft live there.
+    check("a boxed CLI says so", types["claude"].own_input)
+    check("a shell does not", not types["shell"].own_input)
+    check("and it reaches the browser", reg.get("claude").as_dict()["own_input"] is True)
+
     print("service status")
     # The two things that make this feature honest rather than a widget: it
     # only ever asks about a CLI you actually have running, and it says
@@ -236,6 +244,27 @@ def main() -> int:
                                   capture_output=True, text=True)
             check(f"{name} parses", done.returncode == 0,
                   done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "")
+
+    print("icons")
+    # The sprite is generated, and a hand-edit or a half-finished rename would
+    # otherwise show up as an invisible button rather than a failure.
+    done = subprocess.run([sys.executable, str(ROOT / "tools" / "build_icons.py"), "--check"],
+                          capture_output=True, text=True)
+    check("the sprite matches the icon list", done.returncode == 0,
+          (done.stderr or done.stdout).strip()[:120])
+
+    page = (ROOT / "clique" / "web" / "index.html").read_text()
+    script = (ROOT / "clique" / "web" / "app.js").read_text()
+    used = set(re.findall(r'href="#i-([a-z-]+)"', page + script))
+    # Names inside an icon() call, including the ternary in the folder caret —
+    # pull the whole argument list, then every quoted string out of it.
+    # Only the first argument — the icon name. The second is a CSS class, and
+    # the function's own definition has no quoted first argument at all, so it
+    # contributes nothing.
+    for call in re.findall(r"icon\(([^)]*)\)", script):
+        used |= set(re.findall(r"""['"]([a-z-]+)['"]""", call.split(",")[0]))
+    have = set(re.findall(r'<symbol id="i-([a-z-]+)"', page))
+    check("every icon drawn has a symbol behind it", used <= have, sorted(used - have))
 
     print("mounted under a path prefix")
     # CLIque is documented as running behind `tailscale serve` at /clique,

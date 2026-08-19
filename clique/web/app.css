@@ -775,6 +775,46 @@ button.primary:hover { filter: brightness(1.1); }
    where the eye already is. */
 #lock { font-size: 12px; }
 #lock.on { background: var(--accent); color: #fff; border-color: transparent; }
+/* Icons.
+ *
+ * One rule, because they are one set: sized in `em` so an icon tracks whatever
+ * text it sits beside — the sidebar font-size setting moves them without a
+ * second thought — and `currentColor` throughout, so a theme that recolours
+ * text recolours the icons with it and no theme has to name them.
+ *
+ * `vertical-align` rather than flex, because several of these sit inside
+ * buttons that are otherwise plain text. */
+.ico {
+  width: 1.05em; height: 1.05em;
+  vertical-align: -0.16em;
+  flex: none;
+  stroke: currentColor;
+  pointer-events: none;   /* the button is the target, never the glyph */
+}
+/* The sprite itself is never drawn — only referenced. Hidden here rather than
+   inline, so there is no inline style for the CSP to have an opinion about. */
+#sprite { display: none; }
+
+/* A button that is now nothing but an icon has no text to centre itself
+   against, so it centres explicitly. `:has` rather than a class on every one
+   of them: the markup says what is in the button, and a class would be the
+   same fact written twice and able to disagree. */
+button:has(> .ico:only-child) {
+  display: inline-flex; align-items: center; justify-content: center;
+}
+button > .ico:only-child { vertical-align: baseline; }
+
+/* The caret is a fixed 14px control rather than text, so its icon is sized in
+   pixels to match — an em here would track a font-size the box does not use. */
+.folder-head .caret .ico { width: 13px; height: 13px; vertical-align: -0.18em; }
+#artBtn .ico { margin-right: 4px; }
+
+/* With the prompt box hidden, the bar is carrying one control. It should read
+   as a small strip under the pane rather than an empty version of the box that
+   used to be there. */
+#inputbar.pill-only { padding: 4px 8px; min-height: 0; }
+#inputbar.pill-only .pill { margin: 0; }
+
 /* Connection state, over the pane rather than written into it. Top-centre and
    small: it has to be noticeable without covering the line you were reading,
    and it is gone the moment the socket is back. */

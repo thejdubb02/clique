@@ -92,11 +92,18 @@ DEFAULT_SETTINGS = {
     #: because a tool you have just moved to should show you your work rather
     #: than an empty tree — but a few hundred rows is not everyone's sidebar.
     "history_in_sidebar": True,
-    #: "panel" keeps clique's prompt box. "terminal" hides it and lets the
-    #: CLI's own input field be the only one — two stacked prompts is
-    #: redundant chrome. Snippets work in both: CLIque owns the PTY, so an
-    #: expansion is injected into the pane either way.
-    "input_mode": "panel",
+    #: "auto" lets each CLI decide: a CLI that draws its own input box gets no
+    #: second box under it, and one that does not — a shell, a readline tool —
+    #: keeps the panel's, which is also the only place Run, the repeat counter
+    #: and a saved draft live. "panel" always shows it, "terminal" never does.
+    #:
+    #: The mode pill is not part of this. It is the control for a CLI's
+    #: permission mode, and hiding it along with the prompt box was the bug in
+    #: the two-value version of this setting.
+    #:
+    #: Snippets work whatever this says: CLIque owns the PTY, so an expansion
+    #: is injected into the pane either way.
+    "input_mode": "auto",
     #: Three independent slots, applied in this order: both, then panel, then
     #: terminal. Carried over from CodemanPanel, where custom CSS is the escape
     #: hatch that stops every small preference becoming a feature request.
