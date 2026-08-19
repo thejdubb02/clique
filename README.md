@@ -126,17 +126,17 @@ They will not catch a UI that renders wrong. Open the page for that.
 
 Patches welcome, with a short filter: [CONTRIBUTING.md](CONTRIBUTING.md). Feature ideas that need to know which vendor is talking get refused — that is the product, not a freeze.
 
-## Support the project
+## Support the dev
 
-CLIque is free and staying that way. If it saved you an afternoon:
+Free, and staying that way. If it saved you an afternoon, this is the tip jar.
 
 **[Buy me a coffee](https://buymeacoffee.com/jdubb)**
 
-| | |
-|---|---|
-| **BTC** | `3A3nA8BQFmXdvyUQokHhPd8HAd99wRDYFQ` |
-| **SHIB** (Ethereum) | `0x6b5DEd92946692D50642dC3af169727225E32D3b` |
-| **DOGE** | `DNiJeUJUVaVTDuteLXCtP7JVgvdL2NqoYp` |
+| | Network | Address |
+|---|---|---|
+| **BTC** | Bitcoin | `3A3nA8BQFmXdvyUQokHhPd8HAd99wRDYFQ` |
+| **SHIB** | Ethereum | `0x6b5DEd92946692D50642dC3af169727225E32D3b` |
+| **DOGE** | Dogecoin | `DNiJeUJUVaVTDuteLXCtP7JVgvdL2NqoYp` |
 
 ## License
 
