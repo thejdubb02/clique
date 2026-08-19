@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.1 — 2026-08-19
+
+Real logos, drawn properly. Icons are now classified automatically into two
+kinds, because they cannot be drawn the same way:
+
+- A **glyph** — one colour on transparency — stays a CSS mask, so the panel
+  supplies the colour and one file serves the tinted, grey and status-coloured
+  modes.
+- A **badge** — a logo with its own background or several colours — is drawn
+  as a real image. Used as a mask it flattened to a solid square, which is
+  exactly how Cline and OpenCode were rendering.
+
+Gemini and Cursor gained their true multi-colour marks, and the tintable ones
+now carry their real brand colours rather than approximations.
+
+Detection is by inspecting the file, not by a flag in config, so dropping a
+new icon into the directory does the right thing without anyone classifying it
+correctly.
+
 ## 0.3.0 — 2026-08-19
 
 Security pass, driven by reading Codeman's hardening documentation and

@@ -28,6 +28,7 @@ from pathlib import Path
 from . import sysinfo, tmux, version_string
 from .auth import Auth, landing_page, login_page
 from .registry import Registry, RegistryError
+from .registry import icon_is_full_colour as registry_icon_is_colour
 from .store import Session, Store, new_id
 from .stream import PtyBridge
 from .tokens import TokenStore
@@ -144,6 +145,8 @@ class Panel:
                 "cli_label": cli.label if cli else session.cli,
                 "color": cli.color if cli else "#8b8b8b",
                 "icon": cli.icon if cli else "",
+                "icon_full_color": bool(cli and cli.icon
+                                        and registry_icon_is_colour(cli.icon)),
                 "cwd": session.cwd,
                 "project": Path(session.cwd).name or session.cwd,
                 "folder": session.folder,

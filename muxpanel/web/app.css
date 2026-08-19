@@ -270,6 +270,12 @@ button.primary:hover { filter: brightness(1.1); }
   -webkit-mask-position: center; mask-position: center;
   -webkit-mask-size: contain; mask-size: contain;
 }
+/* Real logos, drawn rather than tinted. Same box as the masks so rows stay
+   aligned whichever kind a CLI happens to have. */
+.cli-img {
+  width: 13px; height: 13px; flex: 0 0 13px; display: inline-block;
+  object-fit: contain; border-radius: 2px;
+}
 .cli-chip { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 9px; display: inline-block; }
 .cli-letter {
   width: 13px; height: 13px; flex: 0 0 13px; display: inline-grid; place-items: center;
@@ -380,6 +386,7 @@ button.primary:hover { filter: brightness(1.1); }
 .session.busy .dot, .tab.busy .dot,
 .session.busy .cli-icon, .tab.busy .cli-icon,
 .session.busy .cli-chip, .tab.busy .cli-chip,
+.session.busy .cli-img, .tab.busy .cli-img,
 .session.busy .cli-letter, .tab.busy .cli-letter {
   animation: breathe 1.4s ease-in-out infinite;
 }

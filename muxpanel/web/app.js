@@ -64,9 +64,20 @@ function markerFor(item, mode) {
   // "icon" is the same shape in neutral grey; "both" tints it the CLI colour.
   const tint = mode === "icon" ? "var(--dim)" : item.color;
   if (item.icon) {
-    // A mask, not an <img>: the SVG supplies the silhouette and the panel
-    // supplies the colour, so one file serves both tinted and neutral modes.
     const url = `icons/${encodeURIComponent(item.icon)}`;
+
+    // A logo with its own background or several colours cannot be a mask —
+    // it flattens to a solid square, which is how Cline and OpenCode were
+    // rendering. Draw those as the real image instead. Grey mode desaturates
+    // rather than tinting, since there is nothing to tint.
+    if (item.icon_full_color) {
+      const grey = mode === "icon" ? "filter:grayscale(1);opacity:.75;" : "";
+      return `<img class="cli-img" src="${url}" alt="" style="${grey}">`;
+    }
+
+    // A single-colour glyph works as a mask: the file supplies the
+    // silhouette, the panel supplies the colour. That is what lets one file
+    // serve the tinted, grey and status-coloured modes.
     return `<i class="cli-icon" style="-webkit-mask-image:url(${url});` +
            `mask-image:url(${url});background:${tint}"></i>`;
   }
@@ -89,7 +100,8 @@ function sessionMarker(s, where) {
   // When the icon carries status, the CLI's own colour steps aside: shape
   // already says which CLI it is, so colour is free to say how it is doing.
   const item = { color: statusOnIcon(s) ? statusColor(s) : s.color,
-                 icon: s.icon, label: s.cli_label, cli: s.cli };
+                 icon: s.icon, icon_full_color: s.icon_full_color,
+                 label: s.cli_label, cli: s.cli };
   return markerFor(item, statusOnIcon(s) && mode === "icon" ? "both" : mode);
 }
 
@@ -100,6 +112,9 @@ function sessionMarker(s, where) {
  * status altogether is a worse trade than showing two small marks. */
 function statusOnIcon(s) {
   if (!state.settings.status_on_icon) return false;
+  // A full-colour logo cannot carry a status colour — there is nothing to
+  // tint — so those sessions keep the separate dot.
+  if (s.icon_full_color && markerMode(s.cli) !== "color") return false;
   return markerMode(s.cli) !== "none";
 }
 

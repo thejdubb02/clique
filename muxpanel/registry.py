@@ -41,6 +41,59 @@ RESUME_ONLY = {"cli_session_id"}
 
 _TOKEN = re.compile(r"\{([a-z_]+)\}")
 
+#: Where icon files live, relative to this package.
+ICON_DIR = Path(__file__).parent / "web" / "icons"
+
+_icon_kind_cache: dict[str, tuple[float, bool]] = {}
+
+
+def icon_is_full_colour(filename: str) -> bool:
+    """Whether an icon must be drawn as an image rather than tinted as a mask.
+
+    Two kinds of icon exist in the wild and they cannot be drawn the same way.
+
+    A *glyph* — one colour on transparency — works as a CSS mask: the file
+    supplies the silhouette and the panel supplies the colour, which is what
+    lets one file serve the tinted, grey and status-coloured modes.
+
+    A *badge* — a logo with its own background or several colours — does not.
+    Used as a mask it flattens to a solid square, which is exactly how Cline
+    and OpenCode were rendering. Those have to be drawn at full colour as an
+    ordinary image, losing tintability but gaining the real logo.
+
+    Detected rather than declared, so dropping a new icon in the directory
+    does the right thing without anyone having to classify it correctly.
+    """
+    path = ICON_DIR / filename
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return False
+    cached = _icon_kind_cache.get(filename)
+    if cached and cached[0] == mtime:
+        return cached[1]
+
+    if path.suffix.lower() != ".svg":
+        full = True                        # a raster logo is never a silhouette
+    else:
+        try:
+            body = path.read_text(errors="replace")
+        except OSError:
+            return False
+        colours = {c.lower() for c in re.findall(r"#[0-9a-fA-F]{3,6}", body)}
+        box = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', body)
+        background = False
+        if box:
+            w, h = box.group(1), box.group(2)
+            background = bool(
+                re.search(rf'<rect[^>]*width="{w}"[^>]*height="{h}"', body)
+                or re.search(rf'<rect[^>]*height="{h}"[^>]*width="{w}"', body)
+            )
+        full = background or len(colours) >= 2 or "Gradient" in body
+
+    _icon_kind_cache[filename] = (mtime, full)
+    return full
+
 
 class RegistryError(Exception):
     """Raised for a malformed clis.toml, always naming the CLI and the key."""
@@ -112,6 +165,7 @@ class CliType:
             # letter badge, so a newly added CLI looks deliberate without
             # anyone having to draw an icon first.
             "icon": self.icon,
+            "icon_full_color": bool(self.icon) and icon_is_full_colour(self.icon),
         }
 
 

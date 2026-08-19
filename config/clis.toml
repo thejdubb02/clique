@@ -43,7 +43,7 @@ label      = "Claude Code"
 command    = "claude"
 args       = ["--permission-mode", "{mode}", "--session-id", "{id}", "--name", "{name}"]
 resume     = ["--permission-mode", "{mode}", "--resume", "{cli_session_id}"]
-color      = "#c7915b"
+color      = "#D97757"
 icon       = "claude.svg"
 modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
@@ -65,7 +65,7 @@ label   = "Grok CLI"
 command = "grok"
 args    = ["--always-approve"]
 resume  = ["--always-approve", "--resume", "{cli_session_id}"]
-color   = "#6f42c1"
+color   = "#E8E8E8"
 icon    = "grok.svg"
 # No `modes`: grok's approval is one boolean flag, not a cycle. The pill is
 # hidden because the key is absent, not because anything knows what grok is.
@@ -84,14 +84,14 @@ icon    = "codex.svg"
 label   = "Codex CLI"
 command = "codex"
 args    = []
-color   = "#10a37f"
+color   = "#10A37F"
 
 [cli.copilot]
 icon    = "copilot.svg"
 label   = "GitHub Copilot CLI"
 command = "copilot"
 args    = []
-color   = "#e6e6e6"
+color   = "#F0F0F0"
 
 [cli.aider]
 label   = "Aider"
@@ -118,7 +118,7 @@ icon    = "qwen.svg"
 label   = "Qwen Code"
 command = "qwen"
 args    = []
-color   = "#a259ff"
+color   = "#615CED"
 
 [cli.goose]
 icon    = "goose.svg"
@@ -150,7 +150,7 @@ icon    = "droid.svg"
 label   = "Factory Droid"
 command = "droid"
 args    = []
-color   = "#8b949e"
+color   = "#C9C9C9"
 
 [cli.cline]
 icon    = "cline.png"
