@@ -57,8 +57,35 @@ header {
   text-decoration: none;
 }
 .word:hover { text-decoration: none; }
-.gh { color: var(--dim); font-size: .92rem; }
-.gh:hover { color: var(--fg); }
+nav {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+}
+.mit {
+  color: var(--dim);
+  font-size: .85rem;
+  text-decoration: none;
+}
+.mit:hover { color: var(--fg); }
+.btn-gh {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  background: #f0f6fc;
+  color: #1f2328;
+  font-size: .88rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: .55rem .85rem;
+  border-radius: 6px;
+  text-decoration: none;
+}
+.btn-gh:hover {
+  background: #fff;
+  text-decoration: none;
+}
+.btn-gh svg { display: block; flex: 0 0 16px; }
 
 .hero {
   display: grid;
@@ -337,4 +364,5 @@ footer p { margin: 0 0 .35rem; }
   .app aside { width: 148px; flex-basis: 148px; }
   .meta small, .stats { display: none; }
   .copybtn { min-height: 44px; padding: .4rem .7rem; }
+  .btn-gh { min-height: 44px; padding: .7rem .9rem; }
 }
