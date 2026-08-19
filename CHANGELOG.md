@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.15.0 — 2026-08-19
+
+**A session you just started is now the first thing you see.** It was being
+filed into a folder automatically by its directory, which meant a new session
+could appear anywhere in the tree — or, if a folder rule matched, somewhere you
+were not looking at all.
+
+- New sessions land in **Ungrouped** unless you pick a folder when you create
+  them. Filing is a decision made afterwards, if at all.
+- **Ungrouped now sits above the folders**, not below them.
+- Auto-filing by directory stays where it earns its keep — **adoption**, where
+  there is nobody to ask.
+
+**The right-click menu names what is actually there to destroy.** A session
+whose process ended long ago still offered *Kill*, which asked you to confirm
+stopping something that had already stopped, and offered nothing for the thing
+you probably wanted: the row gone. Stopped sessions now offer **Delete**, with
+wording that says what it does. Running ones are unchanged.
+
 ## 0.14.0 — 2026-08-19
 
 **Every binding, in one list.** Shortcuts existed only in `title` attributes,

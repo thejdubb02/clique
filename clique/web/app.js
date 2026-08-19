@@ -319,17 +319,22 @@ function renderTree() {
                   collapsed: viewsCollapsed.has("__running"), sessions: running });
   }
 
-  for (const folder of state.folders) {
-    groups.push({
-      ...folder,
-      sessions: live.filter((s) => s.folder === folder.id && !running.includes(s)),
-    });
-  }
+  /* Ungrouped sits above the folders, not below them. A session you have
+   * just started is the one you are looking for, and filing it is a decision
+   * you make afterwards — so it has to be somewhere you can see without
+   * scrolling past every folder you already have. */
   const unfiled = live.filter(
     (s) => !running.includes(s) && !state.folders.some((f) => f.id === s.folder));
   if (unfiled.length) {
     groups.push({ id: "__unfiled", name: "Ungrouped", color: "#8b8b8b",
                   collapsed: viewsCollapsed.has("__unfiled"), sessions: unfiled });
+  }
+
+  for (const folder of state.folders) {
+    groups.push({
+      ...folder,
+      sessions: live.filter((s) => s.folder === folder.id && !running.includes(s)),
+    });
   }
 
   // Archived last, collapsed unless asked for. Archiving never touched tmux,
@@ -590,12 +595,16 @@ function showMenu(ev, items) {
   menu.style.top = Math.min(ev.clientY, innerHeight - menu.offsetHeight - 8) + "px";
 }
 
+/* The destructive item names what is actually there to destroy. Offering
+ * "Kill" on a session whose process ended long ago asks someone to confirm
+ * stopping something that already stopped — and hides the thing they probably
+ * do want, which is the row gone. */
 function sessionMenu(ev, s) {
   showMenu(ev, [
     ["Open", () => openSession(s.id)],
     ["Rename", () => renameSession(s)],
     [s.archived ? "Unarchive" : "Archive", () => setArchived(s, !s.archived)],
-    ["Kill session", () => killSession(s), true],
+    [s.alive ? "Kill session" : "Delete session", () => killSession(s), true],
   ]);
 }
 
@@ -698,7 +707,10 @@ async function adoptSessions() {
 }
 
 async function killSession(s) {
-  if (!confirm(`Kill "${s.name}"? The CLI running in it is stopped for good.`)) return;
+  const question = s.alive
+    ? `Kill "${s.name}"? The CLI running in it is stopped for good.`
+    : `Delete "${s.name}"? Nothing is running in it — this removes the session from the sidebar.`;
+  if (!confirm(question)) return;
   closeTab(s.id, true);
   await api("api/sessions/" + s.id, { method: "DELETE" });
   refresh();
@@ -2033,7 +2045,11 @@ function paletteCommands() {
   }
 
   // Destructive last, and the only entry that gets the danger colour.
-  if (current) add("Kill session", "Stops the CLI for good", () => killSession(current), true);
+  if (current) {
+    add(current.alive ? "Kill session" : "Delete session",
+        current.alive ? "Stops the CLI for good" : "Nothing is running — removes it from the sidebar",
+        () => killSession(current), true);
+  }
   return items;
 }
 
