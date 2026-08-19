@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from clique import notify, tmux
+from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
 
 SOCKET = "clique-smoke"
@@ -41,7 +42,11 @@ def main() -> int:
     tmux._run(["kill-server"], SOCKET, check=False)
 
     print("registry")
-    reg = Registry(ROOT / "config" / "clis.toml")
+    # The same file the app resolves to, asked for the same way. Naming the
+    # path here by hand is what let it rot when the catalogue moved into the
+    # package: the suite went on passing against a stale copy left on disk
+    # while CI, which has no stale copy, failed.
+    reg = Registry(config_path(None))
     types = reg.types()
     check("loads clis.toml", set(types) >= {"claude", "grok", "shell"}, sorted(types))
     check("mode pill on for claude", types["claude"].has_modes)
