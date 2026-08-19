@@ -1,6 +1,4 @@
-# CLIque
-
-**Your private clique of CLIs.**
+<img src="clique/web/brand/lockup.svg" alt="CLIque — Your private clique of CLIs" width="420">
 
 Folder-organised, CLI-agnostic coding sessions in a browser, persisted in tmux.
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.6.0 — 2026-08-19
+
+**A real identity.** The brand assets until now were CodemanPanel's, borrowed
+wholesale — one of them still carried `aria-label="CodemanPanel"`.
+
+The mark is two chevrons: a large one with a smaller one tucked into its
+opening. A prompt, and then a second prompt — many CLIs, one place. Drawn from
+[the original](docs/brand/original-mark.jpg), traced, and then regularised so
+the arms are symmetric and the proportions are exact.
+
+- Violet `#A855F7` to cyan `#22D3EE` on near-black. Developer tooling is
+  almost uniformly blue; this reads as itself in a crowded tab strip, and both
+  ends stay legible on light and on dark.
+- **Everything is generated** by `tools/make_brand.py` from one definition of
+  the geometry. The SVGs are written from it and the PNGs are *drawn* from the
+  same numbers rather than rasterised from the SVGs — so there is no renderer
+  to install and no way for vector and raster to drift apart.
+- Sixteen files: tiled logo, bare mark, monochrome mark, lockup, eight raster
+  sizes, an Apple touch icon, an Android maskable icon, a multi-size `.ico`,
+  and GitHub's 1280×640 social preview.
+- The 16px icon is not the 512px one shrunk. It drops the tile and the second
+  chevron and thickens the stroke by half, because at that size the full mark
+  is mud and a true-weight stroke is a wire outline.
+
+**Installable on a phone.** A web app manifest, `theme-color`, and the iOS
+meta tags ship with the icons — so CLIque can be added to a home screen and
+opens standalone. The layout itself is not responsive yet; that is the next
+piece of the mobile work, and it is on the list.
+
 ## 0.5.1 — 2026-08-19
 
 **Fixed: signing in landed on a white screen.**

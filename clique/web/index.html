@@ -18,15 +18,20 @@
     document.write('<base href="' + path.replace(/"/g, "") + '">');
   })();
 </script>
-<link rel="icon" href="brand/logo.svg" type="image/svg+xml">
+<link rel="icon" href="brand/mark.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0E1116">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/xterm.css">
 <link rel="stylesheet" href="app.css">
 
 <div id="shell">
   <aside id="sidebar">
     <header>
-      <img class="brand-mark" src="brand/logo.svg" alt="" width="15" height="15">
+      <img class="brand-mark" src="brand/mark.svg" alt="" width="15" height="15">
       <span class="brand">CLIque</span>
       <button id="newFolder" class="hdr-btn" title="New folder">&#43;</button>
       <button id="adopt" class="hdr-btn" title="Adopt sessions from another tool">&#8681;</button>

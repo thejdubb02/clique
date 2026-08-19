@@ -1,36 +1,51 @@
 # Brand assets
 
-| File | Use |
-|---|---|
-| `icon.svg` | the favicon — carries a `prefers-color-scheme` rule so the neutral adapts to the browser theme |
-| `icon-light-bg.svg` / `icon-dark-bg.svg` | fixed-colour variants, for places that cannot run CSS |
-| `favicon.ico` | fallback for browsers without SVG favicon support; uses a mid tone that survives either background |
-| `icon-{16..512}.png` | raster sizes |
-| `lockup.svg` / `lockup-dark-bg.svg` | icon plus wordmark, for a README header |
-| `social-preview.png` | 1280x640, for GitHub's social preview setting |
-
-Colours: accent `#39afec`, neutral `#545454` (`#8b949e` on dark).
-
-## Regenerating
+**Do not hand-edit anything in this directory.** Every file is generated:
 
 ```bash
-python3 docs/brand/make_assets.py
+python3 tools/make_brand.py
 ```
 
-The mark is seven rounded rectangles defined once in `SHAPES`, shared by the SVG
-writer and the Pillow renderer so the vector and raster versions cannot drift.
-Pillow is the only dependency — no SVG rasteriser is assumed to exist.
+The mark is defined once, as geometry, in `tools/make_brand.py`. The SVGs are
+written from it and the PNGs are *drawn* from the same numbers rather than
+rasterised from the SVGs — so there is no renderer to install (no Inkscape, no
+rsvg) and no way for the vector and the raster to drift apart.
 
-The original design came from Gemini as a single flat contact sheet
-(`source/` in the project's Nextcloud folder). It was rebuilt as vector rather
-than cropped, because cropping would have baked in the transparency
-checkerboard and JPEG artefacts.
+## The mark
 
----
+Two chevrons: a large one, with a smaller one tucked into its opening. A
+prompt, and then a second prompt — many CLIs, one place.
 
-## Reused here
+Traced from the original drawing and then regularised, so the arms are
+symmetric and the proportions are exact rather than approximately right.
 
-These files came from `/root/platform/CodemanPanel/docs/brand/`, unchanged.
-Same author, same estate, and CLIque is the tool that replaces the pair —
-carrying the mark over is continuity, not appropriation. `make_assets.py` in
-the original repo regenerates them all from the SVG if the mark ever changes.
+## Colours
+
+| | |
+|---|---|
+| Ink | `#0E1116` — near-black with a trace of blue, so it sits with the panel instead of punching a hole in it |
+| Gradient | `#A855F7` violet → `#22D3EE` cyan, running along the chevrons |
+| Solid | `#5FA8F5`, for anywhere a gradient cannot go |
+
+The gradient is stretched across the span the mark actually occupies on the
+diagonal, which is measured from the geometry rather than assumed. Ramped
+corner to corner instead, both endpoints land in the empty corners of the tile
+and the whole mark is painted out of the middle third of the ramp — which
+renders as one flat blue.
+
+## Files
+
+| File | Use |
+|---|---|
+| `logo.svg` | the full mark: chevrons on the ink tile |
+| `mark.svg` | chevrons alone, gradient, transparent — the favicon and the sidebar |
+| `mark-mono.svg` | chevrons alone in `currentColor`, for one-colour contexts |
+| `lockup.svg` | mark plus wordmark and tagline, for a README header |
+| `icon-{16..512}.png` | raster sizes. 16px drops the tile and the second chevron and thickens the stroke — at that size the full mark is mud |
+| `apple-touch-icon.png` | 180px, iOS home screen |
+| `icon-maskable-512.png` | full-bleed ink, mark at 60%, for Android launchers that crop |
+| `favicon.ico` | 16/32/48/64, each drawn at its own scale rather than downsampled from one source |
+| `social-preview.png` | 1280×640, for GitHub's social preview setting |
+
+`favicon.ico` is also copied to `clique/web/favicon.ico`, because browsers ask
+for it at the root whatever the markup says.
