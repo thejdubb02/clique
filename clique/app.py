@@ -13,6 +13,8 @@ haunting the sidebar forever.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import contextlib
 import json
 import mimetypes
@@ -352,6 +354,46 @@ class Server(ThreadingHTTPServer):
     request_queue_size = 128
 
 
+#: Where a pasted image lands: inside the session's own working directory, so
+#: the CLI can read it with a relative path and it travels with the project.
+#: The name matches what the tool CLIque replaces used, so existing habits and
+#: any .gitignore already covering it keep working.
+PASTE_DIR = ".claude-images"
+
+#: Biggest image accepted. A screenshot is well under a megabyte; ten is
+#: generous and stops a paste being a memory attack.
+MAX_PASTE_BYTES = 10 * 1024 * 1024
+
+#: And the ceiling on any request body, base64 overhead included.
+MAX_BODY_BYTES = MAX_PASTE_BYTES * 4 // 3 + 8192
+
+#: Leading bytes -> extension. The type comes from the *content*, never from a
+#: filename or a Content-Type the browser supplied: this route writes a file
+#: into a working directory, so what it is has to be established here.
+IMAGE_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"GIF87a", ".gif"),
+    (b"GIF89a", ".gif"),
+    (b"BM", ".bmp"),
+)
+
+
+def _inside(child: Path, parent: Path) -> bool:
+    """Whether `child` is `parent` or sits under it. Both must be resolved."""
+    return child == parent or parent in child.parents
+
+
+def image_extension(data: bytes) -> str:
+    """The extension for these bytes, or "" if they are not an image we know."""
+    for magic, ext in IMAGE_MAGIC:
+        if data.startswith(magic):
+            return ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return ""
+
+
 #: Paths served without a session. Brand images, the favicon and the web app
 #: manifest, and nothing else.
 #:
@@ -425,6 +467,10 @@ class Handler(BaseHTTPRequestHandler):
     def _body(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
+            return {}
+        # Bounded, because a pasted image arrives through here and an unbounded
+        # Content-Length is a one-request way to exhaust memory.
+        if length > MAX_BODY_BYTES:
             return {}
         try:
             return json.loads(self.rfile.read(length) or b"{}")
@@ -638,6 +684,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if path.startswith("/api/sessions/") and path.endswith("/send"):
                 return self._send_input(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/paste"):
+                return self._paste_image(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/seen"):
                 found = self.panel.store.touch_session(path.split("/")[3])
                 if not found:
@@ -648,6 +696,65 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
+
+    def _paste_image(self, session_id: str, body: dict) -> None:
+        """Write a pasted image into the session's directory and say where.
+
+        Sharing a screenshot with an agent is otherwise impossible: a terminal
+        has no way to carry an image, so the only thing that can cross is a
+        path. The browser has the bytes, the pane has the CLI, and this is the
+        bridge — it saves the file and hands back a path the CLI can open.
+
+        Containment is checked *after* resolution, not before, because that is
+        the only order that survives a symlinked working directory. The write
+        can only ever land inside `<cwd>/.claude-images`.
+        """
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+
+        try:
+            raw = base64.b64decode(body.get("data") or "", validate=True)
+        except (ValueError, binascii.Error):
+            return self._json({"error": "not valid base64"}, 400)
+        if not raw:
+            return self._json({"error": "empty paste"}, 400)
+        if len(raw) > MAX_PASTE_BYTES:
+            return self._json({"error": "image too large"}, 413)
+
+        ext = image_extension(raw)
+        if not ext:
+            return self._json({"error": "not an image this understands"}, 415)
+
+        try:
+            root = Path(session.cwd).resolve(strict=True)
+        except OSError:
+            return self._json({"error": "working directory is gone"}, 409)
+        if not root.is_dir():
+            return self._json({"error": "working directory is gone"}, 409)
+
+        target_dir = (root / PASTE_DIR).resolve()
+        if target_dir != root / PASTE_DIR and not _inside(target_dir, root):
+            return self._json({"error": "refused: escapes the working directory"}, 403)
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_dir = target_dir.resolve(strict=True)
+            if not _inside(target_dir, root):
+                return self._json({"error": "refused: escapes the working directory"}, 403)
+            name = f"paste-{int(time.time() * 1000)}-{secrets.token_hex(4)}{ext}"
+            target = target_dir / name
+            # Exclusive create: never overwrite something already there, even
+            # if a name somehow collides.
+            with open(target, "xb") as fh:
+                fh.write(raw)
+        except OSError as exc:
+            return self._json({"error": f"could not save: {exc}"}, 500)
+
+        return self._json({
+            "path": str(target),
+            "relative": f"{PASTE_DIR}/{name}",
+            "bytes": len(raw),
+        }, 201)
 
     def _send_input(self, session_id: str, body: dict) -> None:
         session = self.panel.store.session(session_id)

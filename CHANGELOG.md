@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.12.0 — 2026-08-19
+
+**You can paste a screenshot into a session.** A terminal cannot carry an
+image, so the only thing that can cross into a pane is text — which meant
+showing an agent what you were looking at involved saving the file yourself,
+finding its path, and typing it out.
+
+- `Ctrl`/`Cmd`+`V` with an image on the clipboard saves it into the session's
+  own working directory, under `.claude-images/`, and puts the path where you
+  were already typing. Nothing is sent on your behalf: the CLI does not see it
+  until you press enter.
+- **Text paste is untouched.** The handler only claims the event when the
+  clipboard actually holds an image; everything else goes through to the
+  terminal as before.
+- It knows nothing about any CLI. Every coding agent can already read a file
+  from a path, so this needed no registry entry and no per-CLI branch.
+- The path lands in the pane, or in the prompt box if that is where the caret
+  was — or if the pane's socket is down, because a path that silently
+  disappears is worse than one in the wrong place. A toast says which.
+
+**What it refuses.** The type is established from the file's own leading bytes,
+never from a filename or a `Content-Type` the browser supplied — this route
+writes into a working directory, so what the bytes are has to be settled
+server-side. PNG, JPEG, GIF, WebP and BMP are recognised; anything else is
+rejected. Requests are capped at 10 MB, bodies are bounded before they are
+read, names are random and never overwrite, and the write is contained to
+`<cwd>/.claude-images` after symlink resolution.
+
 ## 0.11.0 — 2026-08-19
 
 **The autonomy pill was static.** It showed whatever mode a session started in
