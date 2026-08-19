@@ -1,9 +1,13 @@
 """Collect what people are saying about CLIque into one file worth reading.
 
-Feature requests arrive in three places and none of them is a place anyone
-checks daily: GitHub issues, GitHub discussions, and whatever gets said on Hacker
-News. This pulls all three into `docs/feedback-inbox.md`, marks what
-is new since the last run, and prints one line saying so.
+Requests arrive as issues, as discussions, and — most easily missed — as
+replies buried in a thread opened weeks ago. This pulls all three into
+`docs/feedback-inbox.md`, marks what is new since the last run, and prints one
+line saying so.
+
+Official channels only, on purpose. What people say about CLIque elsewhere is
+interesting, and it is not a queue. Mixing the two would mean triaging opinions
+alongside requests, and the requests are what lose.
 
 It is deliberately not a bug tracker. GitHub is the tracker; this is the
 triage board in front of it, which is the thing that decides what gets built.
@@ -19,9 +23,6 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -70,14 +71,41 @@ def issues() -> list[dict]:
     return out
 
 
+def issue_comments() -> list[dict]:
+    """Every recent comment on every issue, in one call.
+
+    Here because the request in an issue is often not the one in its title.
+    Someone opens "the tabs are confusing", three people argue underneath it,
+    and the thing worth building is in the fourth reply. Watching only the
+    openings misses all of that.
+    """
+    rows = gh("api", f"repos/{REPO}/issues/comments"
+                     "?per_page=50&sort=created&direction=desc") or []
+    out = []
+    for row in rows:
+        body = " ".join((row.get("body") or "").split())
+        out.append({
+            "key": f"comment:{row.get('id')}",
+            "kind": "comment",
+            "title": body[:140] or "(empty)",
+            "who": (row.get("user") or {}).get("login", "?"),
+            "when": row.get("created_at", ""),
+            "url": row.get("html_url", ""),
+            "extra": "on #" + str(row.get("issue_url", "")).rsplit("/", 1)[-1],
+            "comments": 0,
+        })
+    return out
+
+
 def discussions() -> list[dict]:
     """Open discussions. Only reachable over GraphQL, hence the query."""
     query = """
     query($owner:String!,$name:String!){
       repository(owner:$owner,name:$name){
         discussions(first:50, orderBy:{field:CREATED_AT, direction:DESC}){
-          nodes{ number title url createdAt comments{totalCount}
-                 author{login} category{name} }
+          nodes{ number title url createdAt category{name} author{login}
+                 comments(last:20){ totalCount
+                   nodes{ url createdAt bodyText author{login} } } }
         }
       }
     }"""
@@ -86,7 +114,7 @@ def discussions() -> list[dict]:
               "-F", f"owner={owner}", "-F", f"name={name}")
     nodes = (((data or {}).get("data") or {}).get("repository") or {})
     nodes = (nodes.get("discussions") or {}).get("nodes") or []
-    return [{
+    out = [{
         "key": f"discussion:{n['number']}",
         "kind": "discussion",
         "title": n.get("title", ""),
@@ -96,45 +124,19 @@ def discussions() -> list[dict]:
         "extra": (n.get("category") or {}).get("name", ""),
         "comments": (n.get("comments") or {}).get("totalCount", 0),
     } for n in nodes]
-
-
-#: Sources that did not answer this run. Collected rather than swallowed: an
-#: empty section should mean "nobody said anything", and if it can also mean
-#: "the source refused us" then the whole file stops being trustworthy.
-PROBLEMS: list[str] = []
-
-
-def fetch(url: str, source: str) -> object:
-    req = urllib.request.Request(url, headers={"User-Agent": "clique-feedback/1"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as res:
-            return json.loads(res.read().decode())
-    except urllib.error.HTTPError as err:
-        PROBLEMS.append(f"{source} refused the request ({err.code} {err.reason})")
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as err:
-        PROBLEMS.append(f"{source} did not answer ({type(err).__name__})")
-    # One source being down is not a reason to lose the ones that are up.
-    return None
-
-
-def hackernews() -> list[dict]:
-    out = []
-    for term in MENTIONS:
-        data = fetch("https://hn.algolia.com/api/v1/search_by_date?"
-                     + urllib.parse.urlencode({"query": term, "hitsPerPage": 20}),
-                     "Hacker News")
-        for hit in (data or {}).get("hits", []):
-            ident = hit.get("objectID", "")
+    # Replies come back on the same round trip, so watching them costs nothing.
+    for n in nodes:
+        for c in (n.get("comments") or {}).get("nodes") or []:
+            body = " ".join((c.get("bodyText") or "").split())
             out.append({
-                "key": f"hn:{ident}",
-                "kind": "hn",
-                "title": (hit.get("title") or hit.get("story_title")
-                          or (hit.get("comment_text") or "")[:120] or "(comment)"),
-                "who": hit.get("author", "?"),
-                "when": hit.get("created_at", ""),
-                "url": f"https://news.ycombinator.com/item?id={ident}",
-                "extra": "",
-                "comments": hit.get("num_comments") or 0,
+                "key": f"dcomment:{c.get('url', '')}",
+                "kind": "comment",
+                "title": body[:140] or "(empty)",
+                "who": (c.get("author") or {}).get("login", "?"),
+                "when": c.get("createdAt", ""),
+                "url": c.get("url", ""),
+                "extra": f"on discussion #{n['number']}",
+                "comments": 0,
             })
     return out
 
@@ -162,17 +164,9 @@ def table(rows: list[dict]) -> str:
     return "\n".join(out) + "\n"
 
 
-def problems() -> str:
-    if not PROBLEMS:
-        return ""
-    lines = "\n".join(f"- {p}" for p in sorted(set(PROBLEMS)))
-    return ("\n### Sources that did not answer\n\n" + lines
-            + "\n\nAn empty section above may mean silence, or it may mean this.\n")
-
-
 def main() -> int:
     quiet = "--quiet" in sys.argv
-    rows = issues() + discussions() + hackernews()
+    rows = issues() + issue_comments() + discussions()
 
     try:
         seen = set(json.loads(SEEN.read_text()))
@@ -195,10 +189,12 @@ Last collected {stamp:%Y-%m-%d %H:%M %Z}.
 ## Open on GitHub
 
 {table([r for r in rows if r['kind'] in ('issue', 'discussion')])}
-## Mentioned elsewhere
+## Replies
 
-{table([r for r in rows if r['kind'] == 'hn'])}
-{problems()}"""
+Someone answering their own thread three days later is where the actual
+requirement usually turns up.
+
+{table([r for r in rows if r['kind'] == 'comment'])}"""
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(body)

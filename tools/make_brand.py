@@ -322,7 +322,7 @@ def maskable_png(size: int) -> Image.Image:
 
 
 def social_png(width=1280, height=640) -> Image.Image:
-    """GitHub's social preview. Canvas is a fixed 1280×640; the lockup is
+    """GitHub's social preview. Canvas is a fixed 1280x640; the lockup is
     packed and centred so a thumbnail is not mostly empty ink."""
     canvas = Image.new("RGB", (width, height), _rgb(INK))
     pen = ImageDraw.Draw(canvas)

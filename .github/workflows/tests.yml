@@ -2,8 +2,11 @@ name: tests
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -13,8 +16,6 @@ jobs:
     name: smoke
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      CLIQUE_HOME: ${{ runner.temp }}/clique-home
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,15 +28,22 @@ jobs:
       - name: api surface
         run: python3 tools/api_drift.py
       - name: server
+        env:
+          CLIQUE_HOME: ${{ runner.temp }}/clique-home
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p "$CLIQUE_HOME"
           python3 -m clique password 'ci-smoke-password'
           python3 -m clique --host 127.0.0.1 --port 3200 &
-          echo $! > "$RUNNER_TEMP/clique.pid"
-          trap 'kill "$(cat "$RUNNER_TEMP/clique.pid")" 2>/dev/null || true' EXIT
-          for _ in $(seq 1 50); do
-            curl -fsS http://127.0.0.1:3200/healthz && break
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          i=0
+          until curl -fsS http://127.0.0.1:3200/healthz; do
+            i=$((i + 1))
+            if [ "$i" -gt 50 ]; then
+              echo "server did not start"
+              exit 1
+            fi
             sleep 0.2
           done
           python3 tools/smoke_http.py
