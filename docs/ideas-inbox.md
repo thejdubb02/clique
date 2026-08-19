@@ -168,6 +168,74 @@ session secret already live.
 
 ---
 
+## Making the terminal feel fast
+
+Raised 2026-08-19, from comparing against Ghostty and WezTerm — not
+competitors, but the same "does this feel fast" complaint applies.
+
+**Verified in the repo first, because none of this should be assumed:**
+xterm.js is vendored as a single 478 K built file with the fit addon (1.5 K)
+beside it. The renderer is xterm's **default DOM renderer** — no WebGL addon
+is loaded. There is **no scrollback search**. `Ctrl`/`Cmd`+`K`, `Ctrl`/`Cmd`+`B`
+and `Escape` are taken; `Ctrl`/`Cmd`+`F` is not.
+
+**The constraint that governs all three.** Anything added here is vendored the
+way xterm.js already is — the built browser file, copied in, version recorded
+in the commit that adds it. Never npm, never a bundler. If licensing makes
+that awkward, a clean-room reimplementation is the fallback; a build step is
+not. The zero-dependency claim is worth more than any one of these.
+
+### 1. WebGL renderer — cheapest, do first
+
+xterm's WebGL addon is a near drop-in swap and noticeably faster on heavy
+scrollback and fast output, which is exactly what an agent dumping a build log
+produces.
+
+The part that needs care is not turning it on, it is turning it off again:
+a WebGL context can fail to initialise and can be *lost* later on low-power
+devices and mobile Safari. It needs a real fallback to the canvas/DOM renderer
+on both `contextloss` and a failed init — not an exception in the console and
+a blank pane. Needs checking on an actual phone, which is also the moment to
+confirm the terminal itself still renders there even though the surrounding
+layout is admittedly unfinished.
+
+### 2. Scrollback search
+
+xterm has a search addon; same vendoring. A small bar in the existing visual
+language — nine presets, light/dark/system and three CSS slots all have to
+keep working, so it cannot be a one-off styled element. Forward and backward
+through matches, a case toggle, `Escape` to close, and `Ctrl`/`Cmd`+`F` is
+free.
+
+### 3. Local echo — the one that actually fixes "laggy"
+
+The real fix, because the product's whole case is reaching a self-hosted box
+from somewhere else over a real network. Typed characters currently wait for a
+full round trip.
+
+**Codeman published exactly this as `xterm-zerolag-input`** — MIT, ~6 KB
+gzipped, no dependencies, built so other tools could adopt it rather than
+re-solve it. Their notes say two earlier attempts failed the same way: by
+writing the local characters straight into the terminal, where the terminal's
+own repaints stomp on them. The approach that works renders them as a **DOM
+overlay above the terminal**, which is then silently replaced when the real
+echo arrives.
+
+⚠️ **Clean room.** The repo's third rule is that Codeman's code is never read
+or used. A package it published for others to adopt is a genuinely different
+thing from its application source — but the rule exists so the question never
+has to be argued, and the safe reading is the strict one. Take the *finding*
+(overlay, not direct writes; two prior attempts failed the other way), which is
+public knowledge now it has been written down, and implement from the xterm.js
+API. Do not read their source.
+
+### Not to chase
+
+The rest of Ghostty's surface — GPU shaders, the Kitty graphics protocol,
+ligatures. None of it came from a complaint anyone actually had here.
+
+---
+
 ## Elsewhere
 
 Operational and product work that is tracked but does not belong in the
