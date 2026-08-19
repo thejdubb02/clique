@@ -31,6 +31,21 @@ Docs, each with one job — read the one that matches the question:
    The same applies to any other tool we borrow ideas from, including the
    VS Code Claude Code extension.
 
+## It has to work on a phone
+
+Every feature, menu and settings pane is built for a phone browser and the
+installed PWA from the start, not retrofitted. The overall layout is not
+responsive yet — that is a known, tracked job — but nothing new should add to
+that debt.
+
+- **Overflow wraps or is visible.** Never hidden behind a scrollbar that is
+  itself hidden: that is how the About tab disappeared.
+- **Nothing lives only behind right-click or hover.** There is no hover on
+  touch, and no right-click either — anything reachable that way needs a
+  long-press or a visible control too.
+- **Sheets and popovers size to the viewport** (`min(Xpx, 9Xvw)`), and touch
+  targets are big enough to hit with a thumb.
+
 ## Where state lives
 
 **Anything a person chose, chose once, or half-typed goes on the server.**

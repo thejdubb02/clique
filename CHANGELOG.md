@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.1 — 2026-08-19
+
+**The About tab in settings was invisible.** Seven tabs did not fit the sheet,
+the strip scrolled horizontally, and its scrollbar was hidden by design — so
+the last tab was off the edge with nothing on screen to suggest it existed.
+
+The strip wraps now instead of scrolling. Costs a second row on a narrow sheet,
+and it is the same fix a phone needs anyway.
+
 ## 0.15.0 — 2026-08-19
 
 **A session you just started is now the first thing you see.** It was being
