@@ -13,3 +13,12 @@ tools/vault_sync.py
 # The pre-commit hook below refuses to stage anything under it; this line is
 # the first fence and that hook is the one that catches a hurry.
 /private/
+
+# Build artefacts. `pip wheel .` drops these in the working tree and they are
+# regenerated from source every time — committing them means reviewing a diff
+# of generated files and shipping a stale copy of the code beside the real one.
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc

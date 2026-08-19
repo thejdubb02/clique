@@ -1,2 +1,0 @@
-[console_scripts]
-clique = clique.__main__:main
