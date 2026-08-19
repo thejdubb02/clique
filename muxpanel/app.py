@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import json
 import mimetypes
+import os
 import threading
 import time
 import traceback
@@ -38,6 +39,36 @@ WEB = Path(__file__).parent / "web"
 #: typing. Ping often enough to stay under any sane idle timeout.
 PING_SECONDS = 25
 
+#: Host headers this server will answer to.
+#:
+#: Without this, DNS rebinding works: an attacker's page resolves their domain
+#: to 127.0.0.1, the browser then treats requests to it as same-origin with
+#: *their* page, and every same-origin protection we have is bypassed. The
+#: server has to reject the request on the Host header before any handler runs.
+#:
+#: Loopback literals, the tailnet, and the usual tunnel providers. Anything
+#: else has to be named in MUXPANEL_ALLOWED_HOSTS.
+ALLOWED_HOST_SUFFIXES = (".ts.net", ".trycloudflare.com", ".cfargotunnel.com",
+                         ".ngrok.io", ".ngrok-free.app", ".ngrok.app")
+ALLOWED_HOST_EXACT = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
+
+def host_allowed(host: str, extra: set[str]) -> bool:
+    """Whether a Host/Origin hostname is one we answer to."""
+    name = (host or "").split("://")[-1].rsplit("@", 1)[-1]
+    name = name.split("]")[0].lstrip("[") if name.startswith("[") else name.split(":")[0]
+    name = name.lower().rstrip(".")
+    if not name:
+        return False
+    if name in ALLOWED_HOST_EXACT or name in extra:
+        return True
+    if name.replace(".", "").isdigit():
+        return True                       # a bare IPv4 literal cannot be rebound
+    if any(name.endswith(suffix) for suffix in ALLOWED_HOST_SUFFIXES):
+        return True
+    return any(name == e.lstrip(".") or name.endswith(e)
+               for e in extra if e.startswith("."))
+
 
 class Panel:
     """Everything the request handlers share. One instance per process."""
@@ -51,6 +82,9 @@ class Panel:
         #: Failed logins per client address, for throttling.
         self.failures: dict[str, list[float]] = {}
         self.clients = 0
+        self.allowed_hosts = {h.strip().lower() for h in
+                              os.environ.get("MUXPANEL_ALLOWED_HOSTS", "").split(",")
+                              if h.strip()}
         self.history = sysinfo.History()
         self._last_reap = 0.0
         self._lock = threading.Lock()
@@ -231,6 +265,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        # Everything this app loads is its own; nothing is fetched from a CDN.
+        # That makes a strict policy free to adopt and worth having: it turns
+        # any future injected <script src> into a blocked request rather than
+        # code execution. 'unsafe-inline' for style only, because themes are
+        # applied as inline custom properties and custom CSS is a feature.
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; "
+            "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
+        )
         for key, value in (extra or {}).items():
             self.send_header(key, value)
         self.end_headers()
@@ -287,8 +332,14 @@ class Handler(BaseHTTPRequestHandler):
             if not referer:
                 return True
             origin = "/".join(referer.split("/")[:3])
+        if origin == "null":
+            return False        # an opaque origin is a sandboxed frame, not our page
         host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
-        return origin.split("://")[-1].split(":")[0] == host.split(":")[0]
+        same = origin.split("://")[-1].split(":")[0] == host.split(":")[0]
+        # Either it matches the host we were reached on, or it is a host we
+        # would have answered to anyway. The second case covers a tunnel that
+        # rewrites Host but not Origin.
+        return same or host_allowed(origin, self.panel.allowed_hosts)
 
     def _may_write(self) -> tuple[bool, str]:
         """(allowed, reason). Writes need auth, scope, and a same-origin check."""
@@ -306,6 +357,17 @@ class Handler(BaseHTTPRequestHandler):
     def _secure(self) -> bool:
         return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
 
+    def _host_ok(self) -> bool:
+        """Runs before anything else, including auth.
+
+        A rebound host has to be refused before a handler sees the request —
+        after that point the browser already considers the page same-origin
+        with ours and every other check is arguing with a decision the browser
+        has already made.
+        """
+        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        return host_allowed(host, self.panel.allowed_hosts)
+
     def _route(self) -> tuple[str, dict]:
         parsed = urllib.parse.urlparse(self.path)
         query = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
@@ -314,6 +376,8 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------- GET
 
     def do_GET(self) -> None:
+        if not self._host_ok():
+            return self._send(403, b"host not allowed", "text/plain")
         path, query = self._route()
 
         if path == "/ws":
@@ -358,6 +422,8 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------ POST
 
     def do_POST(self) -> None:
+        if not self._host_ok():
+            return self._send(403, b"host not allowed", "text/plain")
         path, _ = self._route()
 
         if path == "/":
@@ -365,10 +431,18 @@ class Handler(BaseHTTPRequestHandler):
             form = urllib.parse.parse_qs(self.rfile.read(length).decode())
             attempt = (form.get("password") or [""])[0]
             who = self.client_address[0] if self.client_address else "?"
-            if self._throttled(who):
-                return self._send(429, login_page("Too many attempts. Wait a minute."),
-                                  "text/html; charset=utf-8")
+            throttled = self._throttled(who)
+            # Check the password even when throttled, so a correct one always
+            # gets through. Behind a tunnel every request arrives from the same
+            # loopback address, so a per-IP lockout would lock out the only
+            # legitimate user along with the attacker — which is a denial of
+            # service dressed as a protection.
             if not self.panel.auth.check_password(attempt):
+                if throttled:
+                    self._record_failure(who)
+                    time.sleep(2.0)
+                    return self._send(429, login_page("Too many attempts. Wait a minute."),
+                                      "text/html; charset=utf-8")
                 # Deliberately slow, and counted: this endpoint is reachable by
                 # anyone who can reach the tunnel, and guessing should be both
                 # expensive and self-limiting.
@@ -423,6 +497,8 @@ class Handler(BaseHTTPRequestHandler):
     # --------------------------------------------------------- PATCH / DELETE
 
     def do_PATCH(self) -> None:
+        if not self._host_ok():
+            return self._send(403, b"host not allowed", "text/plain")
         path, _ = self._route()
         allowed, reason = self._may_write()
         if not allowed:
@@ -452,6 +528,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._fail(exc)
 
     def do_DELETE(self) -> None:
+        if not self._host_ok():
+            return self._send(403, b"host not allowed", "text/plain")
         path, _ = self._route()
         allowed, reason = self._may_write()
         if not allowed:
@@ -497,6 +575,18 @@ class Handler(BaseHTTPRequestHandler):
         the entire resource story: no viewer, no process.
         """
         self.close_connection = True
+
+        # Cross-Site WebSocket Hijacking. A WebSocket handshake is not subject
+        # to CORS and SameSite=Lax does not cover it, so a hostile page can
+        # open a socket to this origin and the browser will attach the session
+        # cookie. Without this check that page gets a live root terminal. The
+        # Origin header is the only thing separating "our page" from "any page
+        # the user happened to visit", and it must be checked before the
+        # handshake completes.
+        origin = self.headers.get("Origin")
+        if origin is not None and not self._same_origin():
+            return self._send(403, b"cross-site websocket blocked", "text/plain")
+
         if not self._authed:
             return self._send(401, b"unauthorized", "text/plain")
 

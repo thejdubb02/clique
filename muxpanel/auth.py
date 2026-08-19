@@ -52,7 +52,50 @@ def _load_secret(path: Path) -> bytes:
     return secret
 
 
+#: Marks a stored value as a hash rather than a password.
+HASH_PREFIX = "scrypt$"
+
+#: Deliberately modest. This gates a personal tool on a private tailnet, and
+#: the server derives the key on every login attempt — parameters tuned for
+#: offline-cracking resistance would also be a self-inflicted delay on a box
+#: that is already running several AI CLIs.
+_SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1}
+
+
+def hash_password(plain: str, salt: bytes | None = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    key = hashlib.scrypt(plain.encode(), salt=salt, dklen=32, **_SCRYPT)
+    return f"{HASH_PREFIX}{salt.hex()}${key.hex()}"
+
+
+def verify_password(stored: str, attempt: str) -> bool:
+    """Compare against a hash, or against a plaintext for older installs."""
+    if not stored.startswith(HASH_PREFIX):
+        # Plaintext, from before hashing existed. Still constant-time.
+        return hmac.compare_digest(stored, attempt or "")
+    try:
+        _, salt_hex, key_hex = stored.split("$", 2)
+    except ValueError:
+        return False
+    try:
+        candidate = hashlib.scrypt(
+            (attempt or "").encode(), salt=bytes.fromhex(salt_hex), dklen=32, **_SCRYPT)
+    except (ValueError, MemoryError):
+        return False
+    return hmac.compare_digest(candidate.hex(), key_hex)
+
+
 class Auth:
+    """Password gate.
+
+    The stored value is a scrypt hash, not the password. The server only ever
+    needs to *verify*, so keeping the plaintext buys nothing and costs
+    everything if the file is ever read — by a backup, a stray `cat`, or a
+    process that should not have been able to. Plaintext files are still
+    accepted so an existing install keeps working, and are upgraded in place
+    the first time the password is set through the CLI.
+    """
+
     def __init__(self, password: str, secret_path: Path, ttl: int = DEFAULT_TTL) -> None:
         if not password:
             raise AuthDisabled(
@@ -85,7 +128,7 @@ class Auth:
             return False
 
     def check_password(self, attempt: str) -> bool:
-        return hmac.compare_digest(attempt or "", self.password)
+        return verify_password(self.password, attempt)
 
     @staticmethod
     def token_from_cookies(header: str | None) -> str | None:

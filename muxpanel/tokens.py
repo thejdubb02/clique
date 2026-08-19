@@ -23,6 +23,7 @@ exempt from the CSRF origin check that cookie requests must pass.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -57,7 +58,22 @@ class TokenStore:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self.tokens: list[Token] = []
+        self._mtime = -1.0
         self._load()
+
+    def _reload_if_changed(self) -> None:
+        """Pick up tokens minted or revoked since startup.
+
+        Adding an agent should not cost a restart, and revoking one should
+        take effect immediately — a revocation that waits for a restart is not
+        a revocation.
+        """
+        try:
+            mtime = self.path.stat().st_mtime
+        except OSError:
+            return
+        if mtime != self._mtime:
+            self._load()
 
     def _load(self) -> None:
         try:
@@ -68,6 +84,10 @@ class TokenStore:
             Token(**{k: v for k, v in t.items() if k in Token.__annotations__})
             for t in raw if isinstance(t, dict)
         ]
+        try:
+            self._mtime = self.path.stat().st_mtime
+        except OSError:
+            self._mtime = -1.0
 
     def _write(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -78,6 +98,8 @@ class TokenStore:
         with os.fdopen(fd, "w") as fh:
             json.dump([asdict(t) for t in self.tokens], fh, indent=2)
         tmp.replace(self.path)
+        with contextlib.suppress(OSError):
+            self._mtime = self.path.stat().st_mtime
 
     def create(self, name: str, scopes: list[str] | None = None) -> tuple[Token, str]:
         """Mint a token. The plaintext is returned once and never stored."""
@@ -105,14 +127,22 @@ class TokenStore:
         """Match a presented token. Constant-time, and it records the use."""
         if not raw or not raw.startswith(PREFIX):
             return None
+        self._reload_if_changed()
         presented = _digest(raw)
         for token in self.tokens:
             # compare_digest over the hashes, so a timing side channel cannot
             # be used to walk a valid token out of the server.
             if hmac.compare_digest(token.hash, presented):
-                token.last_used = time.time()
-                # Deliberately not written on every call — last_used is a
-                # convenience, and a disk write per API request is not.
+                now = time.time()
+                stale = now - token.last_used
+                token.last_used = now
+                # Persisted at most hourly. A write per API request would be
+                # absurd, but never writing made `token list` report "never
+                # used" for a token in daily use — which is exactly the column
+                # you would read to decide whether to revoke something.
+                if stale > 3600:
+                    with contextlib.suppress(OSError):
+                        self._write()
                 return token
         return None
 

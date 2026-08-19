@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import sys
 import time
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from . import tmux, version_string
 from .app import Panel, serve
-from .auth import Auth, AuthDisabled
+from .auth import Auth, AuthDisabled, hash_password
 from .registry import Registry, RegistryError
 from .store import Store
 from .tokens import TokenStore
@@ -34,6 +35,22 @@ def read_password(explicit: str | None) -> str:
         return (HOME / "password").read_text().strip()
     except OSError:
         return ""
+
+
+def set_password(args) -> int:
+    """Write a hashed password. The plaintext never touches disk."""
+    plain = args.value or getpass.getpass("New password: ")
+    if len(plain) < 8:
+        print("too short — this gates a root terminal", file=sys.stderr)
+        return 1
+    target = HOME / "password"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(hash_password(plain) + "\n")
+    print(f"password updated in {target} (scrypt hash, not the password)")
+    print("restart to apply:  systemctl --user restart muxpanel")
+    return 0
 
 
 def manage_tokens(args) -> int:
@@ -89,10 +106,15 @@ def main(argv: list[str] | None = None) -> int:
     make.add_argument("target", nargs="?", help="name to create, or id to revoke")
     make.add_argument("--read-only", action="store_true")
 
+    pw = sub.add_parser("password", help="set the login password (stored hashed)")
+    pw.add_argument("value", nargs="?", help="omit to be prompted")
+
     args = parser.parse_args(argv)
 
     if args.command == "token":
         return manage_tokens(args)
+    if args.command == "password":
+        return set_password(args)
 
     if not tmux.available():
         print("tmux not found. Install: sudo apt install tmux", file=sys.stderr)

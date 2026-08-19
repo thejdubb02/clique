@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0 — 2026-08-19
+
+Security pass, driven by reading Codeman's hardening documentation and
+comparing it line by line. Four real gaps, one of them serious. Full model now
+written down in [SECURITY.md](SECURITY.md).
+
+- **Cross-Site WebSocket Hijacking is closed.** A WebSocket handshake is not
+  subject to CORS and `SameSite=Lax` does not cover it, so any page you visited
+  could have opened a socket to this origin and had the browser attach your
+  session cookie — a live root terminal for a hostile page. The upgrade now
+  validates `Origin` before completing.
+- **DNS rebinding is closed.** A `Host` allowlist runs before auth and before
+  any handler. Loopback, IP literals, `.ts.net`, common tunnel providers, plus
+  anything in `MUXPANEL_ALLOWED_HOSTS`.
+- **Login throttling no longer locks out the legitimate user.** Behind a tunnel
+  every request arrives from the same loopback address, so a per-IP lockout hit
+  the only real user along with the attacker. A correct password now always
+  gets through.
+- **Content-Security-Policy** added. Everything is served from this origin, so
+  a strict policy was free.
+- **The password is stored as an scrypt hash.** The server only verifies, so
+  keeping the plaintext bought nothing. Set it with
+  `python3 -m muxpanel password`. Vaultwarden now holds the only copy.
+- **API tokens hot-reload.** Minting an agent no longer needs a restart, and
+  more importantly, revoking one takes effect immediately — a revocation that
+  waits for a restart is not a revocation.
+
 ## 0.2.3 — 2026-08-19
 
 The CLI icon can now carry the status colour, so a session shows one mark

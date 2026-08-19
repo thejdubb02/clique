@@ -16,6 +16,7 @@ import secrets
 import socket
 import ssl
 import struct
+import subprocess
 import sys
 import time
 import urllib.error
@@ -29,10 +30,17 @@ import contextlib
 from muxpanel.wsproto import OP_BINARY, OP_TEXT
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3200").rstrip("/")
-PASSWORD = Path(os.environ.get("MUXPANEL_HOME", "/root/.muxpanel")).joinpath("password").read_text().strip()
+
+#: The password on disk is an scrypt hash and cannot be reversed, which is the
+#: point. So the suite authenticates with a throwaway API token it mints and
+#: revokes around the run — which also exercises the path an agent uses.
+#: Set MUXPANEL_TEST_PASSWORD to additionally cover the login form.
+PASSWORD = os.environ.get("MUXPANEL_TEST_PASSWORD", "")
 
 passed = failed = 0
 cookie = ""
+bearer = ""
+token_id = ""
 
 
 def check(label: str, cond: bool, detail: str = "") -> None:
@@ -45,12 +53,15 @@ def check(label: str, cond: bool, detail: str = "") -> None:
         print(f"  FAIL {label} {detail}")
 
 
-def call(path: str, method: str = "GET", body: dict | None = None):
+def call(path: str, method: str = "GET", body: dict | None = None, anon: bool = False):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(BASE + path, data=data, method=method)
     req.add_header("Content-Type", "application/json")
-    if cookie:
-        req.add_header("Cookie", cookie)
+    if not anon:
+        if bearer:
+            req.add_header("Authorization", "Bearer " + bearer)
+        if cookie:
+            req.add_header("Cookie", cookie)
     try:
         with urllib.request.urlopen(req, timeout=15) as res:
             raw = res.read()
@@ -86,7 +97,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 class Client:
     """A masking WebSocket client. Servers never mask; clients always must."""
 
-    def __init__(self, url: str, cookie: str) -> None:
+    def __init__(self, url: str, cookie: str, bearer: str = "") -> None:
         parsed = urllib.parse.urlparse(url)
         secure = parsed.scheme == "wss"
         port = parsed.port or (443 if secure else 80)
@@ -103,7 +114,10 @@ class Client:
             f"Host: {parsed.hostname}\r\n"
             "Upgrade: websocket\r\nConnection: Upgrade\r\n"
             f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
-            f"Cookie: {cookie}\r\n\r\n"
+            f"Origin: {parsed.scheme.replace('ws', 'http')}://{parsed.hostname}\r\n"
+            + (f"Cookie: {cookie}\r\n" if cookie else "")
+            + (f"Authorization: Bearer {bearer}\r\n" if bearer else "")
+            + "\r\n"
         ).encode())
         self.buffer = b""
         while b"\r\n\r\n" not in self.buffer:
@@ -179,12 +193,44 @@ class Client:
             self.sock.close()
 
 
+def mint_token() -> None:
+    """A throwaway token for the run, revoked in teardown."""
+    global bearer, token_id
+    result = subprocess.run(
+        [sys.executable, "-m", "muxpanel", "token", "create", "smoke-test"],
+        capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]),
+    )
+    for line in result.stdout.splitlines():
+        if line.strip().startswith("mxp_"):
+            bearer = line.strip()
+        if line.startswith("created "):
+            token_id = line.split()[1]
+
+
+def revoke_token() -> None:
+    if token_id:
+        subprocess.run(
+            [sys.executable, "-m", "muxpanel", "token", "revoke", token_id],
+            capture_output=True, text=True,
+            cwd=str(Path(__file__).resolve().parents[1]),
+        )
+
+
 def main() -> int:
     print("auth")
-    status, _ = call("/api/state")
+    status, _ = call("/api/state", anon=True)
     check("API refuses anonymous callers", status == 401, status)
-    login()
-    check("login sets a cookie", cookie.startswith("muxpanel="), cookie[:20])
+
+    mint_token()
+    check("mints an API token", bearer.startswith("mxp_"), bearer[:8])
+    status, _ = call("/api/state")
+    check("token works without a restart", status == 200, status)
+
+    if PASSWORD:
+        login()
+        check("login sets a cookie", cookie.startswith("muxpanel="), cookie[:20])
+    else:
+        print("  --   login form not covered (set MUXPANEL_TEST_PASSWORD)")
 
     print("api")
     status, state = call("/api/state")
@@ -212,7 +258,7 @@ def main() -> int:
     print("terminal")
     url = BASE.replace("https://", "wss://").replace("http://", "ws://") + \
           f"/ws?id={sid}&cols=100&rows=30"
-    client = Client(url, cookie)
+    client = Client(url, cookie, bearer)
     check("websocket handshake", "101" in client.status, client.status)
     client.drain(1.5)  # scrollback + initial paint
     client.send(b"echo hello-from-muxpanel\n")
@@ -250,7 +296,12 @@ def main() -> int:
     # before we see it, so assert "not served" rather than a specific code.
     check("refuses path traversal", status != 200, status)
 
+    print("hardening")
+    status, _ = call("/api/state", anon=True)
+    check("still refuses anonymous callers", status == 401, status)
+
     print(f"\n{passed} passed, {failed} failed")
+    revoke_token()
     return 1 if failed else 0
 
 
