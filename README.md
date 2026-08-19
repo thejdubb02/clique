@@ -29,9 +29,13 @@ Password is in Vaultwarden as *CLIque (devbox)*.
 | Mobile | Installable as a PWA with a full icon set. The layout is not responsive yet |
 
 Not built, and deliberately: subagent visualisation, respawn controller,
-multi-host, Ralph loop. What is planned, and what is deliberately refused, is
-in [ROADMAP.md](ROADMAP.md) — ranked by where five independent feature lists
-agreed without seeing each other's work.
+multi-host, Ralph loop.
+
+- **What is being built next, in order** — [docs/next.md](docs/next.md)
+- **Why it is ranked that way, and what is deliberately refused** —
+  [ROADMAP.md](ROADMAP.md), ordered by where five independent feature lists
+  agreed without seeing each other's work
+- **Raised but not committed to** — [docs/ideas-inbox.md](docs/ideas-inbox.md)
 
 ## Why it is stdlib-only
 
