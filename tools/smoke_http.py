@@ -329,6 +329,60 @@ def main() -> int:
     check("markdown came back as structure, not markup",
           bool(newest.get("blocks")) and "spans" in newest["blocks"][0])
 
+    print("artifacts")
+    # A real directory with a real PNG in it: the whole feature is a filesystem
+    # read, so mocking the filesystem would test nothing that can break.
+    art_dir = Path("/tmp") / f"clique-art-{secrets.token_hex(4)}"
+    art_dir.mkdir()
+    status, art_session = call("/api/sessions", "POST",
+                               {"cli": "shell", "cwd": str(art_dir), "name": "smoke-art"})
+    art_id = art_session.get("id", "")
+    check("session for the artifact checks", status == 201 and bool(art_id), art_session)
+    status, listing = call(f"/api/sessions/{art_id}/artifacts")
+    check("a fresh directory has nothing to show", status == 200 and listing == [], listing)
+
+    # Smallest valid PNG: a 1x1 image, so the magic-byte check has something
+    # true to agree with rather than a file that merely ends in .png.
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    (art_dir / "shot.png").write_bytes(png)
+    (art_dir / "notes.txt").write_bytes(b"not an image")
+    status, listing = call(f"/api/sessions/{art_id}/artifacts")
+    check("finds an image written after the session started",
+          status == 200 and [row["rel"] for row in listing] == ["shot.png"], listing)
+    check("hands back both paths a caller needs",
+          bool(listing) and listing[0]["path"] == str(art_dir / "shot.png"), listing)
+
+    def fetch_raw(path: str):
+        req = urllib.request.Request(BASE + path)
+        req.add_header("Cookie", cookie)
+        if bearer:
+            req.add_header("Authorization", "Bearer " + bearer)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as res:
+                return res.status, res.headers.get("Content-Type", ""), res.read()
+        except urllib.error.HTTPError as err:
+            return err.code, err.headers.get("Content-Type", ""), err.read()
+
+    status, kind, body = fetch_raw(f"/api/sessions/{art_id}/artifact?rel=shot.png")
+    check("serves the image itself", status == 200 and body == png, status)
+    check("typed from its bytes, not its name", kind == "image/png", kind)
+
+    # The three ways a path can try to leave the working directory. All of them
+    # are re-derived server-side, so none of them depends on the browser.
+    for label, rel in (("climbing out", "../etc/passwd"),
+                       ("an absolute path", "/etc/hostname"),
+                       ("a file that is not an image", "notes.txt")):
+        status, _kind, _body = fetch_raw(
+            f"/api/sessions/{art_id}/artifact?rel={urllib.parse.quote(rel)}")
+        check(f"refuses {label}", status == 404, status)
+
+    call(f"/api/sessions/{art_id}", "DELETE")
+    with contextlib.suppress(OSError):
+        (art_dir / "shot.png").unlink()
+        (art_dir / "notes.txt").unlink()
+        art_dir.rmdir()
+
     print("static")
     req = urllib.request.Request(BASE + "/app.js")
     req.add_header("Cookie", cookie)

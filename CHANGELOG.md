@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.23.0 — 2026-08-19 11:17 PDT
+
+**An agent takes a screenshot; now you can look at it.**
+
+Pasting has worked in one direction for a while: `Ctrl`/`Cmd`+`V` puts an image
+in the session's own directory and hands the CLI the path, because a path is
+the only thing that can cross between a browser holding bytes and a terminal
+that cannot draw a picture. Nothing carried the answer back. An agent that
+screenshotted a page had produced something you had to leave the panel to see.
+
+Sessions that made an image grow a count in the tab bar. Clicking it opens the
+grid, clicking a thumbnail opens it full size, and **Send path** drops the file
+back where you are typing — the same landing paste already uses, so the round
+trip is one gesture each way.
+
+Deliberately not a file browser. It lists images that appeared in the working
+directory *while the session was running*, one level deep, in directories you
+choose (Settings → Images). That rule is what separates what the agent made
+from what the project already contained, and it is filesystem state — no vendor
+is asked what happened, and no agent has to be told this exists.
+
+Everything the browser sends is re-derived server-side: a path that climbs out
+of the working directory is refused after symlink resolution, and the
+`Content-Type` comes from the file's magic bytes, never its name.
+
 ## 0.22.0 — 2026-08-19 10:55 PDT
 
 **Long press a session on a phone and the menu opens.**

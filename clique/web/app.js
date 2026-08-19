@@ -1010,6 +1010,120 @@ async function pasteImages(items) {
   return true;
 }
 
+/* Artifacts — the other direction of paste.
+ *
+ * Ctrl+V already gets an image *to* an agent: the browser holds the bytes, the
+ * pane holds the CLI, and a path is the only thing that can cross. Nothing
+ * carried the answer back. A terminal cannot draw a picture, so a screenshot
+ * an agent had just taken was something you left the panel to look at.
+ *
+ * This asks no vendor what it did and needs no agent told it exists — it is
+ * files that appeared in the working directory while the session was running,
+ * which is the only kind of state this product reads at all. */
+const ART_POLL_MS = 6000;
+let artItems = [];
+let artOpen = false;
+
+function artSrc(item) {
+  return "api/sessions/" + encodeURIComponent(activeId)
+    + "/artifact?rel=" + encodeURIComponent(item.rel);
+}
+
+async function pollArtifacts() {
+  // Only the session in front, and only while someone is looking: this is a
+  // directory listing per poll, and the whole point of the product is that it
+  // costs nothing to leave running.
+  if (!activeId || state.settings.artifacts_show === false) return setArtifacts([]);
+  if (document.hidden) return;
+  try {
+    setArtifacts(await api("api/sessions/" + encodeURIComponent(activeId) + "/artifacts"));
+  } catch {
+    /* A session can end mid-poll. The next one will agree with reality. */
+  }
+}
+
+function setArtifacts(items) {
+  const changed = items.length !== artItems.length
+    || items.some((it, i) => it.rel !== artItems[i].rel || it.mtime !== artItems[i].mtime);
+  artItems = items;
+  const button = $("#artBtn");
+  button.hidden = !items.length;
+  button.textContent = "\u25A3 " + items.length;
+  button.title = items.length === 1
+    ? "1 image this session made"
+    : items.length + " images this session made";
+  if (artOpen && changed) renderArtifacts();
+}
+
+function renderArtifacts() {
+  const grid = $("#artGrid");
+  grid.textContent = "";
+  if (!artItems.length) {
+    const note = document.createElement("p");
+    note.className = "dim";
+    note.textContent = "Nothing yet. Images written into this session\u2019s "
+      + "working directory show up here.";
+    grid.append(note);
+    return;
+  }
+  for (const item of artItems) {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "art-cell";
+    cell.title = item.rel;
+    const img = document.createElement("img");
+    img.src = artSrc(item);
+    img.alt = item.name;
+    img.loading = "lazy";        // thirty thumbnails is thirty requests otherwise
+    const cap = document.createElement("span");
+    cap.textContent = item.name;
+    cell.append(img, cap);
+    cell.onclick = () => showArtifact(item);
+    grid.append(cell);
+  }
+}
+
+function showArtifact(item) {
+  $("#artGrid").hidden = true;
+  $("#artOne").hidden = false;
+  $("#artBack").hidden = false;
+  $("#artImg").src = artSrc(item);
+  $("#artImg").alt = item.name;
+  $("#artName").textContent = item.rel;
+  $("#artTitle").textContent = item.name;
+  // The absolute path, because that is what an agent can open — the same
+  // thing paste hands over, arriving the same way.
+  $("#artSend").onclick = () => {
+    closeArtifacts();
+    toast("Path is in " + deliverPath(item.path));
+  };
+  $("#artCopy").onclick = () => copyText(item.path).then(() => toast("Path copied"));
+}
+
+function showArtifactGrid() {
+  $("#artGrid").hidden = false;
+  $("#artOne").hidden = true;
+  $("#artBack").hidden = true;
+  // Dropped rather than left behind a `hidden`, so a large image is not held
+  // in memory for as long as the tab is open.
+  $("#artImg").removeAttribute("src");
+  $("#artTitle").textContent = "Images";
+}
+
+function openArtifacts() {
+  artOpen = true;
+  $("#art").hidden = false;
+  showArtifactGrid();
+  renderArtifacts();
+  pollArtifacts();
+}
+
+function closeArtifacts() {
+  artOpen = false;
+  $("#art").hidden = true;
+  $("#artImg").removeAttribute("src");
+}
+
 /* Put the path where the person is already typing, and say where that was.
  *
  * The pane gets it unless they were typing in the prompt box — but only if the
@@ -1425,6 +1539,10 @@ function selectTab(id) {
   if (draftFor && draftFor !== id) saveDraft(true);   // commit before reusing the box
   activeId = id;
   attention.delete(id);   // looking at it is the acknowledgement
+  // The last session's images are not this one's. Clear first, ask after, so
+  // the count never briefly belongs to the tab you just left.
+  setArtifacts([]);
+  pollArtifacts();
   renderFollow();         // the badge belongs to the pane you switched to
   loadDraft(id);
   showDeparture(id);
@@ -1916,6 +2034,12 @@ function openSettings() {
   $("#setStatusOnIcon").checked = !!s.status_on_icon;
   $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
+  $("#setArtShow").checked = s.artifacts_show !== false;
+  // Not repainted while it has focus: this is a textarea someone types a list
+  // into, and a poll landing mid-edit would move their cursor.
+  if (document.activeElement !== $("#setArtDirs")) {
+    $("#setArtDirs").value = (s.artifact_dirs || []).join("\n");
+  }
   $("#setFlash").checked = s.notify_flash !== false;
   $("#setSound").checked = !!s.notify_sound;
   $("#setIdle").value = s.notify_idle_seconds || 4;
@@ -2055,6 +2179,16 @@ function wire() {
   $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
+  $("#setArtShow").onchange = (ev) => {
+    saveSettings({ artifacts_show: ev.target.checked });
+    pollArtifacts();
+  };
+  // On blur, not on every keystroke: a half-typed directory name is not a
+  // setting, and the server would store each prefix on the way there.
+  $("#setArtDirs").onblur = (ev) => {
+    saveSettings({ artifact_dirs: ev.target.value.split("\n") });
+    pollArtifacts();
+  };
   $("#setFlash").onchange = (ev) => saveSettings({ notify_flash: ev.target.checked });
   $("#setSound").onchange = (ev) => saveSettings({ notify_sound: ev.target.checked });
   $("#testChime").onclick = chime;
@@ -2172,6 +2306,12 @@ function wire() {
     if (ev.target === $("#keys")) $("#keys").hidden = true;   // the backdrop
   };
   $("#follow").onclick = () => setFollow(activeId, true);
+  $("#artBtn").onclick = openArtifacts;
+  $("#artClose").onclick = closeArtifacts;
+  $("#artBack").onclick = showArtifactGrid;
+  $("#art").onclick = (ev) => {
+    if (ev.target === $("#art")) closeArtifacts();          // the backdrop
+  };
 
   // Capture phase: xterm handles paste on its own textarea, so this has to see
   // the event first. It only claims the event when there is an image in it.
@@ -2231,6 +2371,9 @@ function wire() {
       $("#menu").hidden = true;
       $("#settings").hidden = true;
       $("#keys").hidden = true;
+      // A full image goes back to the grid first; Escape twice leaves.
+      if (!$("#art").hidden && !$("#artOne").hidden) showArtifactGrid();
+      else closeArtifacts();
     }
   };
 
@@ -2754,3 +2897,8 @@ refresh().then(async () => {
   saveWorkspace(true);
 });
 setInterval(refresh, 3000);
+// Slower than the sidebar poll on purpose: this one touches a filesystem, and
+// nobody is waiting on a screenshot to the second.
+setInterval(pollArtifacts, ART_POLL_MS);
+// Coming back to the tab should not mean waiting out the interval.
+addEventListener("visibilitychange", () => { if (!document.hidden) pollArtifacts(); });

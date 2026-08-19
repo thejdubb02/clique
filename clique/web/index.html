@@ -58,6 +58,7 @@
       <button id="newTab" class="tab-add" title="New session">&#43;</button>
       <button id="lock" class="tab-add" title="Following output — scroll up, or press Ctrl+Shift+L, to pause">&#8675;</button>
       <button id="keysBtn" class="tab-add" title="Keyboard shortcuts (Ctrl+Shift+/)">?</button>
+      <button id="artBtn" class="tab-add" title="Images this session made" hidden></button>
       <div id="stats" title="Click for the last hour">
         <span id="cpu">cpu —</span>
         <span id="mem">mem —</span>
@@ -110,6 +111,27 @@
   </form>
 </div>
 
+<div id="art" hidden>
+  <div class="sheet art-sheet">
+    <div class="art-head">
+      <button type="button" id="artBack" class="hdr-btn" title="All images" hidden>&#10094;</button>
+      <h2 id="artTitle">Images</h2>
+      <button type="button" id="artClose" class="hdr-btn" title="Close">&#10005;</button>
+    </div>
+    <div id="artGrid" class="art-grid"></div>
+    <figure id="artOne" hidden>
+      <img id="artImg" alt="">
+      <figcaption>
+        <code id="artName"></code>
+        <span class="art-acts">
+          <button type="button" id="artSend">Send path</button>
+          <button type="button" id="artCopy">Copy path</button>
+        </span>
+      </figcaption>
+    </figure>
+  </div>
+</div>
+
 <div id="keys" hidden>
   <div class="sheet">
     <h2>Keyboard shortcuts</h2>
@@ -130,6 +152,7 @@
       <button data-pane="markers">CLI markers</button>
       <button data-pane="snippets">Snippets</button>
       <button data-pane="notify">Notifications</button>
+      <button data-pane="images">Images</button>
       <button data-pane="css">Custom CSS</button>
       <button data-pane="api">API</button>
       <button data-pane="changelog">Changelog</button>
@@ -236,6 +259,22 @@
          but a CLI pausing to think looks the same as one that is done — raise
          the delay if it fires too eagerly.</p>
       <button type="button" id="testChime">Test the chime</button>
+    </section>
+
+    <section class="pane" data-pane="images" hidden>
+      <label class="check"><input type="checkbox" id="setArtShow">
+        Show images a session makes</label>
+      <label class="field">Where to look
+        <textarea id="setArtDirs" rows="4" spellcheck="false"></textarea>
+      </label>
+      <p class="note">One directory per line, relative to each session’s own
+         working directory; <code>.</code> is that directory itself. Nothing is
+         searched recursively, and only images that appeared <em>after</em> the
+         session started are listed — which is what keeps a project’s own
+         artwork out of it.</p>
+      <p class="note">This is the other half of pasting a screenshot. That gets
+         an image to an agent; this brings one back, because a terminal has no
+         way to draw a picture.</p>
     </section>
 
     <section class="pane" data-pane="css" hidden>

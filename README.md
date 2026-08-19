@@ -11,7 +11,7 @@
   <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square" alt="Python 3.11+"></a>
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.22.0-A855F7?style=flat-square" alt="0.22.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.23.0-A855F7?style=flat-square" alt="0.23.0"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
 </p>
 
@@ -40,6 +40,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. |
 | **Scroll lock** | Scroll up and the view detaches from the stream. A badge says how far behind you are; the bottom, the lock, or `Ctrl`/`Cmd`+`Shift`+`L` catches you up. |
 | **Paste a screenshot** | `Ctrl`/`Cmd`+`V` saves the image into the session's own directory and drops the path where you were typing. Nothing is sent until you press enter. |
+| **See what it made** | An agent writes a screenshot into the session's directory and a count appears in the tab bar. Grid, full size, and the path back into your prompt in one click. |
 | **Prompt drafts** | A half-typed instruction survives a tab switch, a reload, and a closed laptop. Per session, on the server, so it follows you to another device. |
 | **Workspace** | Open tabs, their order, the one in front, and which groups are collapsed live on the server. Sign in somewhere else and the panes are where you left them. |
 | **Unread** | A dot on anything that produced output while you were elsewhere, and a rule in the pane where you stopped reading. |

@@ -756,3 +756,53 @@ a.give-value { color: var(--accent); }
   #menu { min-width: 200px; }
   #menu button { padding: 11px 16px; }
 }
+
+/* ------------------------------------------------------------- artifacts */
+
+/* The other direction of paste. Chrome only exists when there is something to
+   show: the tabbar button stays hidden until the session has actually made an
+   image, so a session that never takes a screenshot never grows a button. */
+
+#art { position: fixed; inset: 0; background: var(--scrim); display: grid;
+       place-items: center; z-index: 80; }
+.art-sheet { width: min(880px, 94vw); max-height: 86vh; overflow: auto;
+             background: var(--panel); border: 1px solid var(--line);
+             border-radius: 10px; padding: 16px 18px;
+             box-shadow: 0 10px 40px var(--shadow); }
+.art-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.art-head h2 { flex: 1; margin: 0; font-size: 14px; font-weight: 600;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.art-grid { display: grid; gap: 10px;
+            grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }
+.art-cell { display: flex; flex-direction: column; gap: 6px; padding: 6px;
+            background: var(--field); border: 1px solid var(--line);
+            border-radius: 6px; cursor: pointer; font: inherit;
+            color: var(--dim); text-align: left; }
+/* Hover is the one place motion is free here: a grid is scanned, not watched,
+   so nothing is competing for the eye and the transition is never repeated
+   often enough to become noise. */
+.art-cell { transition: border-color .12s ease, color .12s ease; }
+.art-cell:hover { border-color: var(--accent); color: var(--fg); }
+.art-cell img { width: 100%; height: 104px; object-fit: cover;
+                border-radius: 4px; background: var(--bg); display: block; }
+.art-cell span { font-size: 11px; overflow: hidden; text-overflow: ellipsis;
+                 white-space: nowrap; }
+
+#artOne { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+#artOne img { max-width: 100%; max-height: 64vh; object-fit: contain;
+              border-radius: 6px; background: var(--bg); align-self: center; }
+#artOne figcaption { display: flex; align-items: center; gap: 10px;
+                     flex-wrap: wrap; }
+#artOne code { flex: 1; min-width: 0; font-size: 11px; color: var(--dim);
+               overflow-wrap: anywhere; }
+.art-acts { display: flex; gap: 6px; flex: 0 0 auto; }
+
+@media (pointer: coarse) {
+  .art-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+  .art-acts button { padding: 9px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-cell { transition: none; }
+}

@@ -28,7 +28,7 @@ from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import changelog, migrate, sysinfo, tmux, version_string
+from . import artifacts, changelog, migrate, sysinfo, tmux, version_string
 from .auth import Auth, landing_page, login_page
 from .history import History as ConversationHistory
 from .registry import Registry, RegistryError
@@ -417,9 +417,21 @@ IMAGE_MAGIC = (
 )
 
 
-def _inside(child: Path, parent: Path) -> bool:
-    """Whether `child` is `parent` or sits under it. Both must be resolved."""
-    return child == parent or parent in child.parents
+#: Containment, defined once. The paste route and the artifact routes are the
+#: two places a working directory is touched, and they must agree about what
+#: "inside it" means.
+_inside = artifacts.inside
+
+
+#: Extension -> the type it is served as. Beside IMAGE_MAGIC so the two cannot
+#: drift: nothing is ever served as a type the magic did not establish.
+IMAGE_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".webp": "image/webp",
+}
 
 
 def image_extension(data: bytes) -> str:
@@ -643,6 +655,10 @@ class Handler(BaseHTTPRequestHandler):
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()
                                    if p.mux not in known])
+            if path.startswith("/api/sessions/") and path.endswith("/artifacts"):
+                return self._artifacts(path.split("/")[3])
+            if path.startswith("/api/sessions/") and path.endswith("/artifact"):
+                return self._artifact(path.split("/")[3], query.get("rel") or "")
             if path.startswith("/api"):
                 return self._json({"error": "not found"}, 404)
             return self._static(path)
@@ -742,6 +758,53 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
+
+    def _artifacts(self, session_id: str) -> None:
+        """What this session's working directory has to show.
+
+        The other half of paste. A terminal cannot draw a picture, so an agent
+        that takes a screenshot has, until it is listed here, produced
+        something you have to leave the panel to look at.
+        """
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        settings = self.panel.store.settings
+        if not settings.get("artifacts_show", True):
+            return self._json([])
+        return self._json(artifacts.scan(
+            session.cwd,
+            settings.get("artifact_dirs") or [],
+            # Only what appeared while this session has been running. A
+            # directory full of committed images is the project, not the work.
+            since=session.created,
+        ))
+
+    def _artifact(self, session_id: str, relative: str) -> None:
+        """Serve one image out of a session's working directory.
+
+        The type comes from the bytes, never from the extension: this reads a
+        file a browser asked for by name, and what a name claims about its
+        contents is not evidence.
+        """
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        target = artifacts.locate(session.cwd, relative)
+        if target is None:
+            return self._json({"error": "not an artifact of this session"}, 404)
+        try:
+            if target.stat().st_size > MAX_PASTE_BYTES:
+                return self._json({"error": "image too large"}, 413)
+            raw = target.read_bytes()
+        except OSError:
+            return self._json({"error": "could not read it"}, 404)
+        kind = IMAGE_TYPES.get(image_extension(raw))
+        if not kind:
+            return self._json({"error": "not an image this understands"}, 415)
+        # No-store, because the file behind a name can be overwritten by the
+        # next screenshot and a cached one would be a lie.
+        return self._send(200, raw, kind, {"Cache-Control": "no-store"})
 
     def _paste_image(self, session_id: str, body: dict) -> None:
         """Write a pasted image into the session's directory and say where.
