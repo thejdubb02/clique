@@ -99,10 +99,19 @@ function sessionMarker(s, where) {
   const mode = markerMode(s.cli);
   // When the icon carries status, the CLI's own colour steps aside: shape
   // already says which CLI it is, so colour is free to say how it is doing.
-  const item = { color: statusOnIcon(s) ? statusColor(s) : s.color,
+  const carries = statusOnIcon(s);
+  const item = { color: carries ? statusColor(s) : s.color,
                  icon: s.icon, icon_full_color: s.icon_full_color,
                  label: s.cli_label, cli: s.cli };
-  return markerFor(item, statusOnIcon(s) && mode === "icon" ? "both" : mode);
+  const drawn = markerFor(item, carries && mode === "icon" ? "both" : mode);
+
+  // A multi-colour logo keeps its own colours and wears the status as a ring.
+  // Tinting it would flatten it to a solid square; adding a dot beside it
+  // would be two marks for one session.
+  if (carries && s.icon_full_color && mode !== "color" && drawn) {
+    return `<span class="cli-ring" style="--ring:${statusColor(s)}">${drawn}</span>`;
+  }
+  return drawn;
 }
 
 /* Whether this session's marker is standing in for the status dot.
@@ -112,9 +121,9 @@ function sessionMarker(s, where) {
  * status altogether is a worse trade than showing two small marks. */
 function statusOnIcon(s) {
   if (!state.settings.status_on_icon) return false;
-  // A full-colour logo cannot carry a status colour — there is nothing to
-  // tint — so those sessions keep the separate dot.
-  if (s.icon_full_color && markerMode(s.cli) !== "color") return false;
+  // A full-colour logo cannot be *tinted* with the status colour, but it can
+  // be ringed with it — see sessionMarker. Either way it carries status, so
+  // the separate dot stays away. Showing both was the thing to fix.
   return markerMode(s.cli) !== "none";
 }
 

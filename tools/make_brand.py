@@ -275,18 +275,20 @@ def icon_png(size: int, *, tile: bool = True, inset: float = 0.0) -> Image.Image
 
 
 def small_icon_png(size: int, pad: float = 0.06) -> Image.Image:
-    """The favicon treatment, for sizes where the full mark stops working.
+    """The favicon treatment: the whole mark, no tile, filling the canvas.
 
-    At 16px the tile, its rounding and the second chevron all turn to mud. One
-    chevron, edge to edge and with no tile behind it, is the only thing that
-    still reads as a shape — and being transparent it sits on any tab colour.
+    Dropping the tile is what buys the room — at 16px its rounding eats the
+    corners and the mark shrinks to nothing inside it. Transparent also sits
+    on any tab colour, light or dark, which a fixed dark tile does not.
 
-    Framed by measuring the chevron rather than by hand-tuned offsets, which is
-    how the first version ended up with its tip cropped off the right edge.
+    Framed by measuring the geometry rather than by hand-tuned offsets, which
+    is how the first version ended up with its tip cropped off the edge.
     """
-    #: Half again as heavy. At 16px the true weight is barely two pixels and
-    #: reads as a wire outline instead of a mark.
-    bold = 1.5
+    #: A third heavier, because at 16px the true weight is barely two pixels
+    #: and reads as a wire outline. An earlier version also dropped the small
+    #: chevron for legibility, and the result was a tab icon that did not match
+    #: the one in the window — worse than a slightly busy 16px.
+    bold = 1.35
     pts, round_w = polygons(only=1, bold=bold)[0]
     half = round_w / 2
     xs = [x for x, _ in pts]

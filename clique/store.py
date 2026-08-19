@@ -47,11 +47,13 @@ DEFAULT_SETTINGS = {
     "marker_by_cli": {},
     "markers_in_tabs": True,
     "markers_in_sidebar": True,
-    #: Let the CLI icon carry the status colour and drop the separate dot, so
-    #: shape says which CLI and colour says how it is doing. Falls back to the
-    #: dot wherever there is no icon to carry it — losing status entirely
-    #: would be a worse trade than showing two marks.
-    "status_on_icon": False,
+    #: One mark per session, not two. The CLI's logo carries the status colour
+    #: — shape says which CLI it is, colour says how it is doing — and the
+    #: separate dot is dropped. A logo with its own colours cannot be tinted,
+    #: so those get a status ring around them instead; either way exactly one
+    #: mark is drawn. The dot only comes back where a session has no marker at
+    #: all, because losing status entirely is the worse trade.
+    "status_on_icon": True,
     #: Preset palette id from web/themes.js. "" is the built-in dark.
     "theme": "",
     #: "dark" | "light" | "system". Themes carry their own base, so this only
