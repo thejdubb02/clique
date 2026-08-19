@@ -51,6 +51,27 @@ commit — not after.
 
 ---
 
+## Talking to the rest of a self-hosted box
+
+Raised 2026-08-19: make CLIque easy to wire into Uptime Kuma "and others".
+
+**The shape matters more than the list.** A self-hoster runs some unguessable
+combination of Uptime Kuma, Gatus, ntfy, Gotify, Home Assistant, Discord and
+Mattermost, and per-service integrations means a settings sheet full of logos
+and a permanent queue of "please add mine". Two generic things cover all of it:
+
+1. **`/healthz`** — shipped in 0.20.0. Any monitor that can watch a URL can
+   watch CLIque, with no credential to configure.
+2. **One outbound webhook** on session events — died, finished, wants input.
+   Uptime Kuma's push monitors, ntfy, Gotify, Discord and Mattermost are all
+   "POST some JSON to this URL", so one field serves every one of them.
+   Tracked in Nextcloud.
+
+Refused for now: a Prometheus `/metrics` endpoint. It is a third format for
+the same numbers `/healthz` already returns, and nobody has asked.
+
+---
+
 ## Elsewhere
 
 Operational and product work that is tracked but does not belong in the
