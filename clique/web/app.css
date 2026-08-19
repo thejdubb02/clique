@@ -419,11 +419,47 @@ button.primary:hover { filter: brightness(1.1); }
 /* A logo with its own colours cannot be tinted, so it wears its status as a
    ring. One mark either way — a logo *and* a dot is two marks for one
    session, which is what this replaced. */
-.cli-ring { position: relative; display: inline-flex; flex: 0 0 auto; }
-.cli-ring::after {
-  content: ""; position: absolute; inset: -2.5px; border-radius: 5px;
-  box-shadow: 0 0 0 1.5px var(--ring); pointer-events: none;
+/* ------------------------------------------------- status, around the logo */
+
+/* The logo says which CLI. The ring says how it is doing. Neither borrows the
+   other's channel, which is the whole point: a Claude mark that is not Claude's
+   colour is no longer something you can pick out of a list at a glance.
+
+   Three drawn states and one that draws nothing. Idle is the common case — most
+   sessions are fine most of the time — and twenty indicators all saying "fine"
+   is twenty things to look past on the way to the one that isn't. */
+.cli-status { position: relative; display: inline-flex; flex: 0 0 auto; }
+.cli-status::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%;
+  border: 1.5px solid transparent; pointer-events: none;
 }
+
+/* Working: an arc going round. Rotation is the only property here that
+   animates, it is composited, and it is the one shape the eye already reads as
+   "in progress" without a legend. */
+.cli-status[data-work="working"]::after {
+  border-top-color: var(--accent); border-right-color: var(--accent);
+  animation: cli-spin 1s linear infinite;
+}
+/* Finished and not looked at — the state the whole sidebar exists to surface,
+   so it is the only one that is both solid and moving. */
+.cli-status[data-work="waiting"]::after {
+  border-color: var(--warn); animation: cli-nudge 1.8s ease-in-out infinite;
+}
+/* Stopped: no ring at all, and the mark itself goes quiet. Nothing is
+   happening, and the row should look like nothing is happening. */
+.cli-status[data-work="stopped"] { filter: grayscale(1); opacity: .45; }
+
+@keyframes cli-spin { to { transform: rotate(360deg); } }
+@keyframes cli-nudge { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* The dot, where a marker is turned off, speaks the same five words. */
+.dot[data-work="working"] { background: var(--accent);
+                            animation: cli-nudge 1.2s ease-in-out infinite; }
+.dot[data-work="waiting"] { background: var(--warn);
+                            animation: cli-nudge 1.8s ease-in-out infinite; }
+.dot[data-work="idle"]    { background: var(--dim); opacity: .5; }
+.dot[data-work="stopped"] { background: var(--dead); }
 .cli-letter {
   width: 13px; height: 13px; flex: 0 0 13px; display: inline-grid; place-items: center;
   border: 1px solid; border-radius: 3px; font-size: 9px; font-weight: 600;
@@ -526,19 +562,9 @@ button.primary:hover { filter: brightness(1.1); }
 
 /* ------------------------------------------------ working / wants-attention */
 
-/* A session producing output. The dot breathes rather than spins: a spinner
-   at 7px reads as a rendering artefact, a slow pulse reads as alive. */
-/* The pulse follows whichever mark is doing the talking — the dot normally,
-   the icon or chip when it has taken over status duty. */
-.session.busy .dot, .tab.busy .dot,
-.session.busy .cli-icon, .tab.busy .cli-icon,
-.session.busy .cli-chip, .tab.busy .cli-chip,
-.session.busy .cli-img, .tab.busy .cli-img,
-.session.busy .cli-ring::after, .tab.busy .cli-ring::after,
-.session.busy .cli-letter, .tab.busy .cli-letter {
-  animation: breathe 1.4s ease-in-out infinite;
-}
-@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+/* Nothing fades the marker itself any more. Blinking the logo out of existence
+   to say "busy" cost the one thing on the row that identifies the session, and
+   the ring says it without taking anything away. */
 
 /* Finished while you were looking elsewhere. Stays until the tab is opened,
    because a flash you missed is the same as no flash at all. */
@@ -552,13 +578,10 @@ button.primary:hover { filter: brightness(1.1); }
 .session.attention .name { color: var(--warn); font-weight: 600; }
 @keyframes nudge { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 
+/* Reduced motion keeps every state distinguishable — the arc still points to
+   working, the ring still points to waiting. Only the movement stops. */
 @media (prefers-reduced-motion: reduce) {
-  .session.busy .dot, .tab.busy .dot, .tab.attention::after,
-  .session.busy .cli-icon, .tab.busy .cli-icon,
-  .session.busy .cli-chip, .tab.busy .cli-chip,
-  .session.busy .cli-img, .tab.busy .cli-img,
-  .session.busy .cli-ring::after, .tab.busy .cli-ring::after,
-  .session.busy .cli-letter, .tab.busy .cli-letter { animation: none; }
+  .cli-status::after, .dot[data-work], .tab.attention::after { animation: none; }
 }
 
 /* ------------------------------------------------------------ stats history */
