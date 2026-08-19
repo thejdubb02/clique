@@ -380,6 +380,15 @@ button.primary:hover { filter: brightness(1.1); }
   object-fit: contain; border-radius: 2px;
 }
 .cli-chip { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 9px; display: inline-block; }
+
+/* A logo with its own colours cannot be tinted, so it wears its status as a
+   ring. One mark either way — a logo *and* a dot is two marks for one
+   session, which is what this replaced. */
+.cli-ring { position: relative; display: inline-flex; flex: 0 0 auto; }
+.cli-ring::after {
+  content: ""; position: absolute; inset: -2.5px; border-radius: 5px;
+  box-shadow: 0 0 0 1.5px var(--ring); pointer-events: none;
+}
 .cli-letter {
   width: 13px; height: 13px; flex: 0 0 13px; display: inline-grid; place-items: center;
   border: 1px solid; border-radius: 3px; font-size: 9px; font-weight: 600;
@@ -490,6 +499,7 @@ button.primary:hover { filter: brightness(1.1); }
 .session.busy .cli-icon, .tab.busy .cli-icon,
 .session.busy .cli-chip, .tab.busy .cli-chip,
 .session.busy .cli-img, .tab.busy .cli-img,
+.session.busy .cli-ring::after, .tab.busy .cli-ring::after,
 .session.busy .cli-letter, .tab.busy .cli-letter {
   animation: breathe 1.4s ease-in-out infinite;
 }
@@ -511,6 +521,8 @@ button.primary:hover { filter: brightness(1.1); }
   .session.busy .dot, .tab.busy .dot, .tab.attention::after,
   .session.busy .cli-icon, .tab.busy .cli-icon,
   .session.busy .cli-chip, .tab.busy .cli-chip,
+  .session.busy .cli-img, .tab.busy .cli-img,
+  .session.busy .cli-ring::after, .tab.busy .cli-ring::after,
   .session.busy .cli-letter, .tab.busy .cli-letter { animation: none; }
 }
 

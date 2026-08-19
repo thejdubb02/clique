@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.1 — 2026-08-19
+
+**One mark per session, and it is the CLI's logo.** Showing a status dot *and*
+a logo was two marks for one session; the logo now carries the status colour
+by default and pulses while the session is working.
+
+- A logo with its own colours cannot be tinted — used as a mask it flattens to
+  a solid square — so those wear the status as a **ring** instead. Previously
+  they fell back to showing the dot as well, which was the exact thing this
+  was meant to stop.
+- The plain dot still returns where a session has no marker at all: a CLI set
+  to **None**, or markers turned off. Losing status entirely is the worse
+  trade, and that has not changed.
+- Turn it off in Settings → CLI markers → Status to go back to a dot beside
+  the logo.
+
+**The favicon is the logo again.** It had been drawing only the large chevron,
+on the grounds that both turn to mud at 16px. True, and beside the point: a
+tab icon that does not match the one in the window is worse than a slightly
+busy one. Both chevrons, a third heavier, no tile — the tile's rounding is
+what was eating the space.
+
 ## 0.9.0 — 2026-08-19
 
 **Your history is in the sidebar, in its folders.** Past conversations now sit
