@@ -20,7 +20,7 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "BLE"]
 ignore = ["E501"]          # long lines are almost always a comment explaining why
 
 [tool.ruff.lint.per-file-ignores]

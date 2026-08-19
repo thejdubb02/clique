@@ -1,0 +1,18 @@
+[Unit]
+Description=muxpanel — folder-organised CLI sessions in a browser, persisted in tmux
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/platform/muxpanel
+# The password is read from /root/.muxpanel/password (0600) at startup rather
+# than passed here. Units end up in git, and an environment variable would be
+# visible to anyone who can run `ps`.
+ExecStart=/usr/bin/python3 -m muxpanel --host 127.0.0.1 --port 3200
+Restart=on-failure
+RestartSec=5
+# Sessions live in tmux, not in this process, so a restart costs a reconnect
+# and nothing else. Restarting freely is the right default.
+
+[Install]
+WantedBy=default.target

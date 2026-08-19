@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>muxpanel</title>
+<script>
+  // Resolve every asset, API call and WebSocket against wherever this page is
+  // mounted. muxpanel is served under /mux by `tailscale serve`, which strips
+  // the prefix before it reaches us — so the SERVER never sees /mux and only
+  // the browser knows. Without this, a relative "app.css" at /mux resolves to
+  // "/app.css", which is Codeman's origin, and the page loads bare.
+  //
+  // document.write is deliberate: <base> must exist before the parser reaches
+  // the stylesheet below.
+  (function () {
+    var path = location.pathname;
+    if (!path.endsWith("/")) path += "/";
+    document.write('<base href="' + path.replace(/"/g, "") + '">');
+  })();
+</script>
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="app.css">
+
+<div id="shell">
+  <aside id="sidebar">
+    <header>
+      <span class="brand">muxpanel</span>
+      <button id="newFolder" class="hdr-btn" title="New folder">&#43;</button>
+      <button id="adopt" class="hdr-btn" title="Adopt sessions from Codeman">&#8681;</button>
+      <button id="collapse" class="hdr-btn" title="Hide sidebar (Ctrl+B)">&#10094;</button>
+    </header>
+    <div class="search"><input id="q" placeholder="Search sessions…" autocomplete="off"></div>
+    <div id="tree" class="tree"></div>
+    <footer id="version"></footer>
+  </aside>
+
+  <nav id="rail" hidden>
+    <button id="expand" class="hdr-btn" title="Show sidebar (Ctrl+B)">&#10095;</button>
+    <div id="railDots"></div>
+  </nav>
+
+  <main>
+    <div id="tabbar">
+      <div id="tabs"></div>
+      <button id="newTab" class="tab-add" title="New session">&#43;</button>
+      <div id="stats">
+        <span id="cpu">cpu —</span>
+        <span id="mem">mem —</span>
+        <span id="clients" title="Connected terminals"><i class="dot"></i>0</span>
+      </div>
+    </div>
+
+    <div id="termwrap">
+      <div id="terminal"></div>
+      <div id="empty">
+        <p>No session open.</p>
+        <p class="dim">Pick one on the left, or press <kbd>+</kbd> to start one.</p>
+      </div>
+    </div>
+
+    <div id="inputbar">
+      <button id="modePill" class="pill" hidden></button>
+      <textarea id="prompt" rows="1" placeholder="Type a prompt, or a shell command…"></textarea>
+      <div class="stepper">
+        <button id="repMinus" title="Fewer repeats">&minus;</button>
+        <span id="repeat">1</span>
+        <button id="repPlus" title="More repeats">&plus;</button>
+      </div>
+      <div class="runsplit">
+        <button id="run" class="primary">Run</button>
+        <button id="runShell" title="Run in a shell session for this directory">Shell</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="modal" hidden>
+  <form id="newForm">
+    <h2>New session</h2>
+    <label>Name <input name="name" placeholder="What is it for?" autocomplete="off"></label>
+    <label>CLI <select name="cli"></select></label>
+    <label>Working directory <input name="cwd" value="/root" autocomplete="off" required></label>
+    <label>Folder <select name="folder"></select></label>
+    <p class="err" id="modalErr" hidden></p>
+    <div class="actions">
+      <button type="button" id="cancel">Cancel</button>
+      <button type="submit" class="primary">Start</button>
+    </div>
+  </form>
+</div>
+
+<div id="menu" hidden></div>
+
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script src="app.js"></script>
+</html>

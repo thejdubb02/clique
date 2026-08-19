@@ -1,0 +1,17 @@
+# Repo-local gitleaks config, layered on top of the global pre-commit scan.
+#
+# The only thing exempted is the vendored xterm.js bundle. Minified code puts
+# `t.FourKeyMap=...` and `t.SequencerByKey=...` on one enormous line, and
+# gitleaks' generic-api-key rule reads "Key=" followed by entropy as a
+# credential. Verified by hand: all three findings are property assignments in
+# MIT-licensed third-party code, not secrets.
+#
+# Scoped to that one directory on purpose. Exempting the whole repo, or turning
+# the rule off, would be trading a real guard for a formatting artefact.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendored third-party bundles (see muxpanel/web/vendor/README.md)"
+paths = ['''muxpanel/web/vendor/.*''']

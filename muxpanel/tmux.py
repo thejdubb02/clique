@@ -22,6 +22,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+import uuid
 from dataclasses import dataclass
 
 #: Our own tmux server. Codeman and anything hand-rolled use the default one.
@@ -29,6 +30,9 @@ SOCKET = "muxpanel"
 
 #: Session names we created. Codeman uses ``codeman-``.
 PREFIX = "sm-"
+
+#: Per-viewer sessions. Never the thing a user opened — always a window onto it.
+VIEW_PREFIX = f"{PREFIX}view-"
 
 #: Scrollback tmux keeps per pane. Reattach can only show what tmux still has.
 HISTORY_LIMIT = 20000
@@ -141,6 +145,9 @@ def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -
         # our own tab bar, so tmux's status line is duplicate chrome.
         ";", "set-option", "-g", "status", "off",
         ";", "set-option", "-g", "bell-action", "none",
+        # Size to the most recent client, not the smallest. Without this, a
+        # phone attaching to a session squeezes the same session on a desktop.
+        ";", "set-option", "-g", "window-size", "latest",
     ]
     # A server that is still shutting down from a previous run answers
     # "server exited unexpectedly" once, then comes up clean. Retrying beats
@@ -153,6 +160,36 @@ def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -
             if attempt == 2 or "exited unexpectedly" not in str(exc):
                 raise
             time.sleep(0.25)
+
+
+def sweep_viewers(sockets: tuple[str | None, ...] = (SOCKET,)) -> int:
+    """Delete viewer sessions left behind by a crash.
+
+    Run at startup. A viewer is disposable by construction — it holds no work,
+    only a client's view of someone else's — so removing a stale one can never
+    lose anything.
+    """
+    removed = 0
+    for socket_name in sockets:
+        for pane in list_sessions(socket_name):
+            if pane.mux.startswith(VIEW_PREFIX):
+                kill(pane.mux, socket_name)
+                removed += 1
+    return removed
+
+
+def create_viewer(target: str, socket: str | None = SOCKET) -> str:
+    """A grouped session sharing ``target``'s windows, sized independently.
+
+    Plain ``attach-session`` makes every client share one size, so tmux shrinks
+    the pane to the smallest one watching. That matters most for a session
+    adopted from another tool: attaching from a browser would resize it under
+    the tool that is still running it. A grouped session gets its own size and
+    leaves the original alone.
+    """
+    name = f"{VIEW_PREFIX}{uuid.uuid4().hex[:6]}"
+    _run(["new-session", "-d", "-t", _session_target(target), "-s", name], socket)
+    return name
 
 
 def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> list[Pane]:
@@ -179,6 +216,8 @@ def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> lis
         name = parts[0]
         if prefix and not name.startswith(prefix):
             continue
+        if name.startswith(VIEW_PREFIX) and prefix != VIEW_PREFIX:
+            continue  # plumbing, not a session anyone opened
         panes.append(Pane(
             mux=name, socket=socket,
             created=int(parts[1] or 0), attached=parts[2] == "1",
@@ -257,13 +296,20 @@ def capture(
     *,
     lines: int = 5000,
     styled: bool = True,
+    history_only: bool = False,
 ) -> str:
     """Scrollback for a reattaching browser.
 
     This is what makes reattach show history instead of a blank screen until
     the next keystroke. ``-J`` rejoins wrapped lines; ``-e`` keeps colour.
+
+    ``history_only`` stops at the line above the visible frame. Attaching makes
+    tmux redraw that frame itself, so capturing it too would print the last
+    screenful twice — which reads as the CLI having repeated itself.
     """
     args = ["capture-pane", "-p", "-J", "-S", f"-{lines}", "-t", _pane_target(mux)]
+    if history_only:
+        args += ["-E", "-1"]
     if styled:
         args.insert(3, "-e")
     return _run(args, socket, timeout=TIMEOUT * 2)
