@@ -71,6 +71,38 @@ the same numbers `/healthz` already returns, and nobody has asked.
 
 ---
 
+## Computer use, and the half of it that is ours
+
+Raised 2026-08-19, from a thread where someone moving between CLIs said the
+one thing they still miss is **computer use**.
+
+**Not ours, and never will be.** Driving a screen needs a vision model, a
+click channel, and knowledge of whose tool schema is on the other end — all
+three repo rules at once, and the 24 MB with them. The CLIs already have it:
+Claude Code ships a browser extension, anything with MCP can load Playwright.
+CLIque is not going to re-run that race and would lose it.
+
+**Half of it is ours, though, and it is small.** What a terminal cannot do is
+show a picture. Paste already works in one direction — `Ctrl`/`Cmd`+`V` puts
+your screenshot in the session's directory and hands the agent the path. The
+reverse does not exist: when an agent writes a PNG — a browser screenshot, a
+rendered chart, a diff image — you have to leave the panel to look at it.
+
+So: **an artifact strip.** Images that appeared in a session's working
+directory, newest first, click to enlarge. Filesystem state only, so rule 1
+stays clean and no vendor has to be understood. It is the cheapest honest
+answer to "I want to see what it did".
+
+Open question before building — what counts as an artifact:
+
+- Watching the whole working directory is noisy in any repo full of assets.
+- A `.clique/` drop directory is precise, but something has to tell the agent
+  it exists.
+- Modified-since-session-start across a couple of conventional directories
+  needs nobody told anything, and will occasionally show you a favicon.
+
+---
+
 ## Elsewhere
 
 Operational and product work that is tracked but does not belong in the
