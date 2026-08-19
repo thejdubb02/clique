@@ -313,13 +313,37 @@ worktree *merging* — create and forget, never merge.
 Operational and product work that is tracked but does not belong in the
 ranked roadmap: monitoring, public-repo assets, the marketing site.
 
-## Trinity should look like the Matrix in every CLI
+## Open: how far can a theme skin a CLI, and should it?
 
-Raised 2026-08-19. Parked deliberately — foundation first.
+Raised 2026-08-19. **Shelved deliberately — foundation first.** Written down
+because it is a design decision with evidence attached, not a bug.
 
-Trinity is not "a green theme", it is meant to look like the Matrix, and that
-intent should survive whichever CLI is running in the pane. Right now it does
-not, and `tools/palette_probe.py` says exactly why. Measured on this box:
+Trinity is not "a green theme". It is meant to look like the Matrix, and that
+intent should survive whichever CLI is running in the pane. Today it does not,
+and the reason is measurable rather than mysterious.
+
+### The ladder that decides it
+
+How much say a theme gets is decided by the application, by how precisely it
+named the colour — least specific first:
+
+| What the CLI emits | What it means | Who owns it |
+|---|---|---|
+| nothing | no opinion | the theme, entirely |
+| the 16 ANSI colours | "the terminal's idea of red" | the theme |
+| greyscale, 232–255 | "a shade near the background" | **relative** — theme may re-tint, keeping each step's lightness (shipped in 0.43.0) |
+| the cube, 16–231 | an exact colour from a fixed grid | absolute — untouched today |
+| truecolor, `38;2;r;g;b` | an exact RGB | absolute, and **unreachable by anything** |
+
+Only the last row is a hard limit. The cube is a *policy*: overriding it would
+be vandalism on a theme like Nord, whose whole job is a specific palette, and
+is arguably the entire point for a theme like Trinity.
+
+### What is actually known
+
+`tools/palette_probe.py` measures this by starting a CLI and counting escape
+sequences. It can only measure CLIs installed on the machine it runs on, so
+**four of the sixteen in the catalogue are measured and twelve are not**:
 
 | CLI | 16 ANSI | greyscale | cube | truecolor | theme reaches |
 |---|---|---|---|---|---|
@@ -327,35 +351,32 @@ not, and `tools/palette_probe.py` says exactly why. Measured on this box:
 | grok | 0 | 99 | 10 | 0 | 91% |
 | claude | 0 | 10 | 9 | 0 | 53% |
 | gemini | 0 | 3 | 67 | 0 | **4%** |
+| aider · amazonq · cline · codex · copilot · crush · cursor · droid · goose · opencode · plandex · qwen | — | — | — | — | **unmeasured** |
 
-**Not one of them emits truecolor.** That is the finding that matters, because
-truecolor is the only mechanism nothing can remap — an exact RGB is exact.
-Every colour all four of these CLIs paint is reachable if a theme is willing to
-claim the cube. "Gemini cannot be skinned" is a policy, not a limit.
+**None of the four measured emits truecolor**, which is the finding that
+matters: every colour those four paint is reachable if a theme claims the cube.
+Whether that holds for the other twelve is exactly what is not known, and it is
+the thing that decides whether "a monochrome theme owns the whole palette" is a
+complete answer or a partial one. A single CLI that paints in truecolor puts a
+ceiling on this that no amount of palette work removes.
 
-**The ladder that decides this**, from least specific to most:
+### The shape of the answer, when it is built
 
-1. *No colour at all* — the theme owns it outright.
-2. *The 16 ANSI colours* — "the terminal's idea of red". The theme owns it.
-3. *Greyscale, 232–255* — "a shade near the background". A relative intention,
-   so a theme may re-tint it while keeping each step's lightness. Done in 0.43.0.
-4. *The cube, 16–231* — an exact colour from a fixed grid. Absolute.
-5. *Truecolor* — an exact RGB. Absolute.
+A theme may declare itself monochrome, claiming all 240 indices and mapping
+each through its own hue while keeping that index's lightness and relative
+saturation. Nothing per-CLI and nothing per-vendor — the transformation already
+written for the greyscale ramp, applied wider, and only for a theme that asked.
 
-Steps 4 and 5 are deliberately untouched, because an application asking for
-colour 82 wants *that* green. That is right for a theme like Nord or Gruvbox,
-whose job is a palette. It is wrong for Trinity, whose job is that everything is
-green — and Gemini's 71 cube references are the proof: a theme that reaches 4%
-of what a CLI paints has not been applied in any sense the user cares about.
+The cost, which is why it is opt-in: hue distinctions disappear. Red and blue at
+the same lightness become the same green, so errors stop being red. Contrast and
+emphasis survive; *which colour* does not. For the Matrix that is the point. For
+every other theme it is damage.
 
-**The shape of the answer**: a theme may declare itself *monochrome*, meaning it
-claims the whole 256 palette and maps every index through its own hue while
-keeping that index's lightness. Nothing per-CLI, nothing per-vendor — the same
-transformation already shipped for the greyscale ramp, applied to the cube as
-well, and only for a theme that has said it wants that.
+### What would move this forward
 
-Open questions before building it:
-- Does keeping lightness alone read as "the Matrix", or does it need the
-  contrast pushed as well? Cannot be judged without looking at it.
-- Truecolor is still untouchable this way. Worth measuring how many CLIs use it
-  before deciding whether that matters. `claude` did not probe cleanly.
+1. Run `python3 tools/palette_probe.py` on a box with more of the sixteen
+   installed. Twelve unknowns is too many to design against.
+2. Build the monochrome mode behind a theme flag and **look at it** — whether
+   keeping lightness alone reads as the Matrix, or whether contrast needs
+   pushing too, is not a question anyone can answer from a table.
+
