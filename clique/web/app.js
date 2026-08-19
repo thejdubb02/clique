@@ -677,8 +677,23 @@ function renderServices() {
 /* ------------------------------------------------------------------- sidebar */
 
 function renderTree() {
-  const query = $("#q").value.trim().toLowerCase();
   const tree = $("#tree");
+
+  /* The list holds still while someone is typing a name into it.
+   *
+   * This is rebuilt from scratch on every poll, three seconds apart, and an
+   * inline rename puts a live <input> inside it. Rebuilding removed that input
+   * mid-word — and removing a focused element fires `blur`, which is what
+   * commits the rename. So typing a name got chopped off and saved at a
+   * three-second cadence, which reads as the panel randomly deciding you were
+   * finished.
+   *
+   * Read from the DOM rather than kept as a flag: a flag can be left set by a
+   * path that threw, and the failure mode of that is a sidebar frozen forever.
+   * If the input is gone, rendering resumes on its own. */
+  if (tree.querySelector("input")) return;
+
+  const query = $("#q").value.trim().toLowerCase();
   tree.innerHTML = "";
 
   const matches = (s) =>
@@ -972,8 +987,18 @@ function renameInline(row, s) {
   input.focus();
   input.select();
 
+  /* Taking the input out of the DOM is what lets the sidebar redraw again —
+   * renderTree stands down while one is present. Doing it before the refresh
+   * rather than leaving it to the rebuild also means the rebuild cannot be the
+   * thing that fires `blur`. */
+  const close = () => {
+    input.onblur = null;
+    input.remove();
+  };
+
   const commit = async () => {
     const name = input.value.trim();
+    close();
     if (name && name !== s.name) {
       await api("api/sessions/" + s.id, {
         method: "PATCH", body: JSON.stringify({ name }),
@@ -983,8 +1008,8 @@ function renameInline(row, s) {
   };
   input.onblur = commit;
   input.onkeydown = (ev) => {
-    if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
-    if (ev.key === "Escape") { input.onblur = null; refresh(); }
+    if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+    if (ev.key === "Escape") { close(); refresh(); }
     ev.stopPropagation();
   };
   input.onclick = (ev) => ev.stopPropagation();

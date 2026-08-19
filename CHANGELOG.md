@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.38.0 — 2026-08-19 15:17 PDT
+
+**The overlapping text in menus is fixed, and it was not the renderer.** Two
+cursors, a choice repeated on the line below it, fragments of one line sitting
+inside another — reliably visible whenever a CLI drew a list to pick from.
+
+The cause was the order of two calls on attach. A session is created far wider
+than any browser — 236 columns against a typical 100 — and the window was
+resized to the browser's size *after* the terminal was attached. So tmux painted
+a complete frame at 236 columns into a terminal that wraps at 100, the CLI then
+received the resize and redrew, and the correct frame landed on top of the
+wreckage of the first one. The window is sized before anything is painted now,
+and the scrollback is captured at the width it will be shown at.
+
+Two suspects were ruled out with measurements before the real one was found: the
+Unicode 11 width tables agree with the C library tmux uses on all 26 characters
+these CLIs actually draw, wide ones included, and the pane width does not drift
+when a second client attaches. Neither was it.
+
+**Renaming a session no longer saves halfway through.** The sidebar is rebuilt
+on every poll and an inline rename puts a live text box inside it, so the
+rebuild removed the box mid-word — and removing a focused element fires the
+event that commits the rename. Typing a name got cut off and saved every three
+seconds. The list now holds still while a name is being typed into it.
+
 ## 0.37.0 — 2026-08-19 15:11 PDT
 
 **Restarting CLIque no longer kills every session.** This is the important one.

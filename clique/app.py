@@ -1343,9 +1343,27 @@ class Handler(BaseHTTPRequestHandler):
         bridge: PtyBridge | None = None
         viewer: str | None = None
         try:
-            # Scrollback first, then attach. History only — tmux redraws the
-            # visible frame itself on attach, and sending it twice reads as the
-            # CLI having repeated its last screen.
+            # Size the window before anything is drawn into it.
+            #
+            # This used to happen *after* the attach, and that is where the
+            # overlapping text came from. A session is created at 200x50 and a
+            # browser is rarely that; attaching first made tmux paint a whole
+            # frame at the old width, which the terminal wrapped at the new
+            # one, and the correct redraw then landed on top of the wreckage.
+            # An interactive menu was the reliable way to see it — two cursors,
+            # a duplicated choice, and fragments of one line inside another.
+            #
+            # The window is shared with every other client on it and its size
+            # is one number, so this also claims it for the browser that just
+            # opened rather than inheriting whatever the last tool left —
+            # otherwise an adopted session opens as a small pane in a sea of
+            # tmux dot-fill.
+            tmux.resize_window(session.mux, cols, rows, session.socket)
+
+            # Then scrollback, which is now captured at the width it will be
+            # displayed at, and then the attach. History only — tmux redraws
+            # the visible frame itself, and sending it twice reads as the CLI
+            # having repeated its last screen.
             try:
                 history = tmux.capture(session.mux, session.socket,
                                        history_only=True)
@@ -1365,11 +1383,6 @@ class Handler(BaseHTTPRequestHandler):
                 cols=cols, rows=rows,
             )
             bridge.start()
-            # The window is shared with every other client on it, and its size
-            # is one number. Claim it for the browser that just opened rather
-            # than inheriting whatever the last tool left — otherwise an
-            # adopted session opens as a small pane in a sea of tmux dot-fill.
-            tmux.resize_window(session.mux, cols, rows, session.socket)
 
             stop = threading.Event()
             threading.Thread(target=self._keepalive, args=(ws, stop),
