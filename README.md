@@ -10,19 +10,28 @@ running. Claude Code, Grok CLI or anything else is a block in
 **Live at https://example.invalid/clique** (tailnet only).
 Password is in Vaultwarden as *CLIque (devbox)*.
 
-## What works today (v0.1.0)
+## What works today (v0.9.1)
 
 | | |
 |---|---|
-| Sidebar | Folder tree, drag-drop between folders, double-click rename, right-click menu, search, collapse to a rail (`Ctrl`/`Cmd`+`B`) |
-| Tabs | Numbered, `Alt`+`1`–`9` to jump, close and per-tab menu, `+` to start a session |
-| Terminal | Live output, full scrollback on reattach, resize, auto-reconnect |
-| Input bar | Mode pill, prompt box, Run / Shell split, repeat stepper |
-| Stats | CPU, memory, connected terminals |
-| Sessions | Create with CLI type + directory + folder, kill with confirmation, adopt sessions from another tool |
+| **Command palette** | `Ctrl`/`Cmd`+`K` — fuzzy jump between sessions, most-recently-used first. `>` for commands, `@` for sessions, `~` for past conversations. `Ctrl`+`Shift`+`P` opens straight into commands. |
+| **History** | Every conversation your CLIs have kept, found from a location the registry declares, filed by the directory it belongs to, and resumable in one click. Repeated runs of the same scheduled agent fold into one row. |
+| Sidebar | Folder tree, drag-drop between folders, double-click rename, right-click menu, search, collapse to a rail (`Ctrl`/`Cmd`+`B`), resizable |
+| Tabs | Drag to reorder, `Alt`+`1`–`9` to jump, close (the session keeps running), per-tab menu |
+| Terminal | Live output, full scrollback on reattach, resize, auto-reconnect, themed to match the panel |
+| Markers | One mark per session: the CLI's own logo, carrying the status colour, pulsing while it works |
+| Themes | Nine presets including **Trinity**, light/dark/system, custom CSS in three slots, independent font sizes |
+| Input bar | Mode pill, prompt box, Run / Shell split, repeat stepper, snippets in both input paths |
+| Stats | CPU, memory, swap, disk, load, connected terminals, with an hour of history |
+| Sessions | Create with CLI + directory + folder, resume a past conversation, archive, kill with confirmation |
+| Adoption | Take over sessions started by another tool — CLI detected from the process tree, names and folders carried across. Safe to run twice; it repairs earlier runs |
+| Security | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md) |
+| Mobile | Installable as a PWA with a full icon set. The layout is not responsive yet |
 
-Not built, and deliberately: subagent visualisation, respawn controller, mobile
-layout, multi-host, Ralph loop. Voice input is still to come.
+Not built, and deliberately: subagent visualisation, respawn controller,
+multi-host, Ralph loop. What is planned, and what is deliberately refused, is
+in [ROADMAP.md](ROADMAP.md) — ranked by where five independent feature lists
+agreed without seeing each other's work.
 
 ## Why it is stdlib-only
 
