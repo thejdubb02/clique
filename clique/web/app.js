@@ -395,6 +395,7 @@ async function refresh() {
   renderStats();
   renderServices();
   renderVersion();
+  reclaimSize();
   // First load pulls history in so the sidebar is complete without anyone
   // having to open the palette to trigger it.
   if (!resumable) loadResumable().then(renderTree);
@@ -4335,6 +4336,33 @@ function wireResizer() {
     ev.preventDefault();
     refitAll();
   };
+}
+
+/* Take the pane's size back when something else has moved it.
+ *
+ * A tmux window has exactly one size, shared by every client attached to it.
+ * So a second browser, or a phone picking the session up, resizes this one's
+ * pane out from under it — and the result is not a subtle difference, it is a
+ * screen of tmux's dot-fill where the missing columns are.
+ *
+ * Nothing noticed, because a client only ever spoke up when *its own*
+ * terminal changed size. Being resized by someone else is exactly the case
+ * that produces no local change and therefore no message. The poll already
+ * knows what the window is; this compares it to what we are drawing and says
+ * so when they differ.
+ *
+ * Only the tab in front, and only when it really differs: a background tab is
+ * not being looked at, and two browsers both re-asserting every three seconds
+ * would fight forever rather than settle. */
+function reclaimSize() {
+  const entry = terms.get(activeId);
+  const s = session(activeId);
+  if (!entry || !s || !s.alive || !s.cols) return;
+  if (entry.term.cols === s.cols && entry.term.rows === s.rows) return;
+  if (!entry.ws || entry.ws.readyState !== 1) return;
+  entry.ws.send(JSON.stringify({
+    type: "resize", cols: entry.term.cols, rows: entry.term.rows,
+  }));
 }
 
 function refitAll() {

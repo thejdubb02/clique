@@ -64,6 +64,13 @@ directory when something is asking for you: the ring says a session is blocked,
 this says what on. Empty for every other session, and captured only for the
 handful that are not, cached against the pane's own activity clock.
 
+`cols` and `rows` are the **shared tmux window's** size, which is not
+necessarily what any one client is drawing at — every client attached to a
+session shares one size, so a second browser resizes the first one's pane. A
+client that finds these differ from its own terminal should say so; that is how
+a pane recovers from being resized by somebody else instead of sitting in
+tmux's dot-fill until something happens to jog it.
+
 Each session also carries `created`, `last_seen`, `order`, plus the live facts: `alive`, `attached`,
 `command`, `activity` (tmux's own clock) and `busy`.
 

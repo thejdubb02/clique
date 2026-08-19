@@ -21,6 +21,12 @@ its own, so nothing a user installs is affected:
 It authenticates by minting a session cookie with the server's own signing key
 rather than by typing a password, so it needs no secret and cannot be run
 against a panel that is not this machine's.
+
+**It never touches a session it did not create.** A tmux window has one size,
+so a second browser attaching to a session someone is working in fights them
+for it and the loser gets a screen padded out with dots. The first version of
+this opened whatever was in the sidebar and did exactly that to a live pane.
+It makes its own throwaway session now, and deletes it on the way out.
 """
 
 from __future__ import annotations
@@ -49,6 +55,46 @@ def check(label: str, cond: bool, detail: object = "") -> None:
         print(f"  FAIL {label} {detail}")
 
 
+def _api(path: str, method: str = "GET", body: dict | None = None) -> dict:
+    import json
+    import urllib.request
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(BASE + path, data=data, method=method)
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Authorization", "Bearer " + _token())
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.loads(response.read() or b"{}")
+
+
+_cached_token = ""
+
+
+def _token() -> str:
+    """A short-lived token of this tool's own, minted on the box."""
+    global _cached_token
+    if not _cached_token:
+        import subprocess
+        made = subprocess.run(
+            [sys.executable, "-m", "clique", "token", "create", "visual-check"],
+            capture_output=True, text=True,
+            cwd=str(Path(__file__).resolve().parents[1]))
+        _cached_token = next(
+            line.strip() for line in made.stdout.splitlines()
+            if line.strip().startswith("mxp_"))
+    return _cached_token
+
+
+def _scratch_session() -> str:
+    return _api("/api/sessions", "POST",
+                {"cli": "shell", "cwd": "/tmp", "name": "visual check"})["id"]
+
+
+def _remove_session(session_id: str) -> None:
+    import contextlib
+    with contextlib.suppress(Exception):
+        _api("/api/sessions/" + session_id, "DELETE")
+
+
 def main() -> int:
     from playwright.sync_api import sync_playwright
 
@@ -57,6 +103,10 @@ def main() -> int:
     # No password is typed and none is needed: this can only ever work against
     # the panel running on this machine, from this machine.
     auth = Auth(read_password(None), HOME / "secret")
+
+    # Its own session to look at, never anyone else's. Created before the page
+    # loads so it is in the first poll.
+    mine = _scratch_session()
 
     with sync_playwright() as play:
         browser = play.chromium.launch()
@@ -93,7 +143,7 @@ def main() -> int:
                 check(f"{name} drew its icon", bool(ibox) and ibox["width"] > 4, ibox)
 
         print("nothing is covering anything")
-        rows = page.locator(".session")
+        rows = page.locator(f'.session[data-id="{mine}"]')
         if rows.count():
             row = rows.first
             row.click(button="right")
@@ -112,7 +162,7 @@ def main() -> int:
             page.keyboard.press("Escape")
 
         print("the theme reached the terminal")
-        sessions = page.locator(".session")
+        sessions = page.locator(f'.session[data-id="{mine}"]')
         if sessions.count():
             sessions.first.click()
             page.wait_for_timeout(2500)
@@ -130,6 +180,7 @@ def main() -> int:
 
         browser.close()
 
+    _remove_session(mine)
     print(f"\nscreenshots in {SHOTS}")
     print(f"{passed} passed, {failed} failed")
     return 1 if failed else 0

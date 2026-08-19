@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.45.0 — 2026-08-19 16:27 PDT
+
+**A pane squashed by another client takes its size back.** A tmux window has
+exactly one size and every client attached shares it, so a second browser — or
+a phone picking the session up — resizes the first one's pane out from under it.
+The result is not subtle: tmux fills the columns the window no longer has with
+dots, and the terminal reads as broken.
+
+Nothing noticed, because a client only ever spoke up when *its own* terminal
+changed size, and being resized by somebody else is precisely the case that
+produces no local change. The poll now carries the window's real size, and a
+browser that finds it differs from what it is drawing says so — so the dot-fill
+clears within one poll instead of persisting until something happens to jog it.
+Only the tab in front, and only on a real difference: two browsers both
+re-asserting on a timer would fight rather than settle.
+
+**And the tool that found this was causing it.** `visual_check.py` opened
+whatever was in the sidebar, which meant a second browser attaching to sessions
+someone was working in — doing exactly the thing described above to a live
+pane. It makes its own throwaway session now and deletes it afterwards.
+
 ## 0.44.0 — 2026-08-19 16:10 PDT
 
 **A session that wants you says what for, in the row.** The ring told you a

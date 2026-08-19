@@ -237,6 +237,13 @@ class Panel:
                 "attached": bool(pane and pane.attached),
                 "command": pane.command if pane else None,
                 "activity": pane.activity if pane else 0,
+                # The pane's real size, so a browser can notice when it has
+                # drifted from what it is drawing. A tmux window has one size
+                # and every client attached to it shares that one — so a second
+                # browser, or a phone, resizes this one's pane out from under
+                # it, and until now nothing ever told it.
+                "cols": pane.width if pane else 0,
+                "rows": pane.height if pane else 0,
                 # Whether the pane produced output just now. The browser turns
                 # a busy->quiet transition into "this one finished", which is
                 # what drives tab flashing and the optional chime. Derived from

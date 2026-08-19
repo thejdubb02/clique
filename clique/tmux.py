@@ -55,6 +55,11 @@ _FIELDS = (
     # the session they show, and this is the only way to tell that a browser
     # watching through a viewer means the underlying session is being watched.
     "session_group",
+    # The window's size. Every client attached to a session shares one, so a
+    # second browser — or a phone — resizes this one's pane, and a client that
+    # is drawing at a different size gets a screen padded out with dots. This
+    # is what lets a browser notice.
+    "window_width", "window_height",
 )
 
 
@@ -76,6 +81,10 @@ class Pane:
     cwd: str
     command: str
     group: str = ""
+    #: The shared window's size, which is not necessarily what any one client
+    #: is drawing at.
+    width: int = 0
+    height: int = 0
 
     @property
     def ours(self) -> bool:
@@ -282,6 +291,7 @@ def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> lis
             activity=max(int(parts[4] or 0), int(parts[5] or 0)),
             pid=int(parts[6] or 0), cwd=parts[7], command=parts[8],
             group=parts[9],
+            width=int(parts[10] or 0), height=int(parts[11] or 0),
         ))
     return panes
 
