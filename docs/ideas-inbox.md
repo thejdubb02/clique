@@ -312,3 +312,44 @@ worktree *merging* — create and forget, never merge.
 
 Operational and product work that is tracked but does not belong in the
 ranked roadmap: monitoring, public-repo assets, the marketing site.
+
+## Trinity should look like the Matrix in every CLI
+
+Raised 2026-08-19. Parked deliberately — foundation first.
+
+Trinity is not "a green theme", it is meant to look like the Matrix, and that
+intent should survive whichever CLI is running in the pane. Right now it does
+not, and `tools/palette_probe.py` says exactly why. Measured on this box:
+
+| CLI | 16 ANSI | greyscale | cube | truecolor | theme reaches |
+|---|---|---|---|---|---|
+| shell | 0 | 0 | 0 | 0 | everything (paints nothing) |
+| grok | 0 | 93 | 10 | 0 | 90% |
+| gemini | 0 | 3 | 71 | 0 | **4%** |
+
+**The ladder that decides this**, from least specific to most:
+
+1. *No colour at all* — the theme owns it outright.
+2. *The 16 ANSI colours* — "the terminal's idea of red". The theme owns it.
+3. *Greyscale, 232–255* — "a shade near the background". A relative intention,
+   so a theme may re-tint it while keeping each step's lightness. Done in 0.43.0.
+4. *The cube, 16–231* — an exact colour from a fixed grid. Absolute.
+5. *Truecolor* — an exact RGB. Absolute.
+
+Steps 4 and 5 are deliberately untouched, because an application asking for
+colour 82 wants *that* green. That is right for a theme like Nord or Gruvbox,
+whose job is a palette. It is wrong for Trinity, whose job is that everything is
+green — and Gemini's 71 cube references are the proof: a theme that reaches 4%
+of what a CLI paints has not been applied in any sense the user cares about.
+
+**The shape of the answer**: a theme may declare itself *monochrome*, meaning it
+claims the whole 256 palette and maps every index through its own hue while
+keeping that index's lightness. Nothing per-CLI, nothing per-vendor — the same
+transformation already shipped for the greyscale ramp, applied to the cube as
+well, and only for a theme that has said it wants that.
+
+Open questions before building it:
+- Does keeping lightness alone read as "the Matrix", or does it need the
+  contrast pushed as well? Cannot be judged without looking at it.
+- Truecolor is still untouchable this way. Worth measuring how many CLIs use it
+  before deciding whether that matters. `claude` did not probe cleanly.
