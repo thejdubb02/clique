@@ -1122,7 +1122,11 @@ const LINK_RE = /\bhttps?:\/\/[^\s"'`<>]+/g;
 
 /* Trailing punctuation almost always belongs to the sentence, not the URL:
  * "see https://example.com/docs." and "(https://example.com)". Brackets are
- * only trimmed when unbalanced, so a Wikipedia URL ending in ")" survives. */
+ * only trimmed when unbalanced, so a Wikipedia URL ending in ")" survives.
+ *
+ * Checked against, in order: a URL ending a sentence, one wrapped in
+ * parentheses, /wiki/Foo_(bar), a query string with &, one followed by a
+ * comma, and javascript: and file:, which must not match at all. */
 function trimUrl(text) {
   let out = text;
   while (out.length > 1) {
@@ -1578,6 +1582,7 @@ const SHORTCUTS = [
     ["Click the paused badge", "Catch up and start following again"],
   ]],
   ["Working in a session", [
+    ["Click a link", "Opens it in a new tab. Ctrl/Cmd + click opens a new window"],
     ["Ctrl/Cmd + V", "With an image on the clipboard: saves it into the session’s folder and drops the path where you are typing"],
     ["Tab", "Expand a snippet — in the pane or the prompt box"],
     ["Shift + Tab", "Cycle the autonomy mode. The key is whatever that CLI declares, so it differs between them"],
