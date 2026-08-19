@@ -33,25 +33,15 @@ const terms = new Map();      // id -> { term, fit, ws, el, retry }
 let repeat = 1;
 /* Which of the view-groups are shut.
  *
- * Running, Ungrouped and Archived are views over the sessions, not folders —
- * there is no record on the server to store a flag against. So this lives in
- * localStorage, under the same rule as sidebar width: a real folder's state is
- * about the work and syncs, a view's state is about this screen and does not.
+ * Running, Ungrouped and Archived are views over the sessions, not folders, so
+ * there is no folder record to hold the flag. It goes in the server's settings
+ * instead — a real folder's collapsed state already syncs, and these being the
+ * exception meant the same sidebar looked different on the phone.
  *
  * Archived starts shut, because it is the one group whose whole point is being
- * out of the way. */
-const VIEWS_KEY = "clique.viewsCollapsed";
-let viewsCollapsed = readViewsCollapsed();
-
-function readViewsCollapsed() {
-  try {
-    const saved = localStorage.getItem(VIEWS_KEY);
-    if (saved === null) return new Set(["__archived"]);
-    return new Set(JSON.parse(saved).filter((id) => typeof id === "string"));
-  } catch (err) {
-    return new Set(["__archived"]);
-  }
-}
+ * out of the way. This value stands in until the first poll answers. */
+const VIEWS_KEY = "clique.viewsCollapsed";   // read once, to lift the old copy
+let viewsCollapsed = new Set(["__archived"]);
 /* Sessions that were producing output on the previous poll. A busy -> quiet
  * transition is what "this one finished" means here, which is why it needs a
  * memory of the last poll rather than just the current state. */
@@ -178,6 +168,71 @@ function statusColor(s) {
  * indistinguishable from broken. */
 let pollFailures = 0;
 
+/* The workspace — which sessions have a tab, in what order, which one is in
+ * front, and which view-groups are shut.
+ *
+ * It lives in the server's settings with everything else a person chose.
+ * Losing it is the expensive kind of loss: twelve panes reopened by hand is a
+ * morning, and closing a laptop should not cost that.
+ *
+ * Restored once, on the first poll, and deliberately not re-applied
+ * afterwards. Two panels open at once would otherwise fight, each poll
+ * dragging the other's tabs around mid-read. Last one to touch a tab wins the
+ * stored copy, which is the right answer for one person on two devices.
+ */
+let workspaceRestored = false;
+let workspaceTimer = null;
+let pendingWorkspace = null;
+
+function restoreWorkspace() {
+  workspaceRestored = true;
+  const saved = state.settings || {};
+  let tabs = Array.isArray(saved.open_tabs) ? saved.open_tabs : [];
+  let views = Array.isArray(saved.views_collapsed)
+    ? saved.views_collapsed : ["__archived"];
+
+  // One-time lift of what the browser was still holding, so nobody loses the
+  // tabs they had open on the day this changed. The local copies are removed
+  // as they are read: after this the server is the only record.
+  let lifted = false;
+  for (const [key, take] of [["clique.tabs", (v) => { tabs = v; }],
+                             [VIEWS_KEY, (v) => { views = v; }]]) {
+    const raw = localStorage.getItem(key);
+    if (raw === null) continue;
+    localStorage.removeItem(key);
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) { take(parsed); lifted = true; }
+    } catch (err) { /* unreadable: the server's copy is no worse */ }
+  }
+
+  viewsCollapsed = new Set(views.filter((id) => typeof id === "string"));
+  pendingWorkspace = { tabs, active: saved.active_tab || "", lifted };
+  // Nothing is written back here: `openTabs` is still empty at this point, and
+  // saving it now would erase the very list that was just lifted. The write
+  // happens once the tabs are actually open.
+}
+
+function saveWorkspace(now) {
+  clearTimeout(workspaceTimer);
+  const push = () => {
+    const body = {
+      open_tabs: [...openTabs],
+      active_tab: activeId || "",
+      views_collapsed: [...viewsCollapsed],
+    };
+    Object.assign(state.settings, body);
+    // Not saveSettings(): that repaints the tree, the tabs and every open
+    // terminal, and this fires on every step of a tab drag.
+    api("api/settings", { method: "PATCH", body: JSON.stringify(body) })
+      .catch(() => {});   // a lost workspace write is not worth interrupting for
+  };
+  // Debounced, because a drag is a dozen reorders; committed at once when the
+  // page is going away, which is the moment it actually matters.
+  if (now) return push();
+  workspaceTimer = setTimeout(push, 600);
+}
+
 async function refresh() {
   try {
     state = await api("api/state");
@@ -198,6 +253,7 @@ async function refresh() {
   // A session killed behind our back keeps its tab until the user closes it,
   // but must not keep a dead socket open.
   openTabs = openTabs.filter((id) => session(id));
+  if (!workspaceRestored) restoreWorkspace();   // before the first render
   applySettings();
   noticeFinished(state.sessions.filter((x) => openTabs.includes(x.id)));
   renderTree();
@@ -558,7 +614,7 @@ function toggleFolder(group) {
   if (!group.id.startsWith("f-")) {
     if (viewsCollapsed.has(group.id)) viewsCollapsed.delete(group.id);
     else viewsCollapsed.add(group.id);
-    localStorage.setItem(VIEWS_KEY, JSON.stringify([...viewsCollapsed]));
+    saveWorkspace();
     return renderTree();
   }
   api("api/folders/" + group.id, {
@@ -803,7 +859,7 @@ function moveTab(moved, target, after) {
   const at = openTabs.indexOf(target);
   if (at < 0) openTabs.push(moved);
   else openTabs.splice(after ? at + 1 : at, 0, moved);
-  localStorage.setItem("clique.tabs", JSON.stringify(openTabs));
+  saveWorkspace();
   renderTabs();
 }
 
@@ -1320,6 +1376,7 @@ function selectTab(id) {
   }
   renderTabs();
   renderTree();
+  saveWorkspace();
 }
 
 async function openSession(id) {
@@ -1340,6 +1397,7 @@ function closeTab(id, silent) {
   }
   openTabs = openTabs.filter((t) => t !== id);
   if (activeId === id) activeId = openTabs[openTabs.length - 1] || null;
+  saveWorkspace();
   if (!silent) {
     renderTabs(); renderTree(); selectTab(activeId);
     /* Closing a tab has always kept the session, and nothing ever said so —
@@ -2017,7 +2075,10 @@ function wire() {
   /* The laptop-lid case. A debounce that has not fired yet would otherwise be
    * lost exactly when someone most expects the box to still hold their words. */
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") saveDraft(true);
+    if (document.visibilityState === "hidden") {
+      saveDraft(true);
+      saveWorkspace(true);
+    }
   });
 
   $("#palQ").oninput = renderPalette;
@@ -2616,10 +2677,16 @@ wire();
 wireResizer();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
-refresh().then(() => {
-  // Re-open whatever was open last, so a reload is not a fresh start.
-  const saved = JSON.parse(localStorage.getItem("clique.tabs") || "[]");
-  for (const id of saved) if (session(id)) openSession(id);
+refresh().then(async () => {
+  // Re-open whatever was open last, so a reload is not a fresh start — and on
+  // a second device, so signing in there is not a fresh start either.
+  const want = pendingWorkspace || { tabs: [], active: "" };
+  await Promise.all(want.tabs.filter((id) => session(id)).map(openSession));
+  // Chosen last: every openSession above selects its own tab as it finishes,
+  // in whatever order the sockets came up.
+  if (want.active && openTabs.includes(want.active)) selectTab(want.active);
+  // Now that the tabs exist, commit: this is what persists a lifted copy, and
+  // what prunes tabs whose sessions are gone.
+  saveWorkspace(true);
 });
 setInterval(refresh, 3000);
-setInterval(() => localStorage.setItem("clique.tabs", JSON.stringify(openTabs)), 2000);

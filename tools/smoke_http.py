@@ -287,6 +287,26 @@ def main() -> int:
     status, state = call("/api/state")
     check("gone from state", not any(s["id"] == sid for s in state["sessions"]))
 
+    print("workspace")
+    _, before = call("/api/state")
+    kept = {k: before["settings"][k]
+            for k in ("open_tabs", "active_tab", "views_collapsed")}
+    status, saved = call("/api/settings", "PATCH", {
+        "open_tabs": ["a", "b", "a", "c"],     # the repeat must be dropped
+        "active_tab": "b",
+        "views_collapsed": ["__archived", "__running"],
+    })
+    check("stores the open tabs, in order, without repeats",
+          status == 200 and saved["open_tabs"] == ["a", "b", "c"],
+          saved.get("open_tabs"))
+    check("stores which tab was in front", saved["active_tab"] == "b")
+    check("stores the shut view-groups",
+          saved["views_collapsed"] == ["__archived", "__running"])
+    _, again = call("/api/state")
+    check("comes back on the next panel to load",
+          again["settings"]["open_tabs"] == ["a", "b", "c"])
+    call("/api/settings", "PATCH", kept)
+
     print("health")
     status, health = call("/healthz", anon=True)
     check("answers a monitor without a login", status == 200 and health["ok"], status)

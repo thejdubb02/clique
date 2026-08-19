@@ -58,9 +58,14 @@ that debt.
 ## Where state lives
 
 **Anything a person chose, chose once, or half-typed goes on the server.**
-Settings, snippets, themes, folders, names, modes, drafts — they sync, they
-survive a reload and a closed laptop, and they follow him to another device.
-Losing one is a bug, and `localStorage` is not storage for them.
+Settings, snippets, themes, folders, names, modes, drafts, and the workspace
+itself — which tabs are open, in what order, which one is in front, which
+view-groups are shut — they sync, they survive a reload and a closed laptop,
+and they follow him to another device. Losing one is a bug, and `localStorage`
+is not storage for them.
+
+Restore the workspace on the *first* poll only, never on later ones: two panels
+open at once would otherwise drag each other's tabs around mid-read.
 
 The only things that stay in the browser are the ones that are genuinely about
 *this screen in front of me*: sidebar width, sidebar shown or hidden. A phone
