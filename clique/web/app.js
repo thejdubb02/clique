@@ -178,41 +178,69 @@ async function refresh() {
   if (!resumable) loadResumable().then(renderTree);
 }
 
+/* Load as a colour, on a continuous ramp rather than three fixed steps.
+ *
+ * Deliberately *not* a theme token. Green-to-red is not decoration, it is the
+ * one colour convention that means the same thing to everyone, and a theme
+ * that recoloured it would be repainting the gauge rather than the panel.
+ * Saturation and lightness are picked to stay legible on both light and dark.
+ *
+ * The ramp bends at green -> amber rather than running straight to red,
+ * because most of the interesting range is the first 70%: a box at 40% and a
+ * box at 65% should not look the same shade of "fine".
+ */
+function pressureColor(percent) {
+  const at = Math.max(0, Math.min(Number(percent) || 0, 100));
+  // 140deg green -> 45deg amber over the first 70%, then amber -> 0deg red.
+  const hue = at <= 70 ? 140 - (at / 70) * 95 : 45 - ((at - 70) / 30) * 45;
+  const sat = 55 + (at / 100) * 25;
+  return `hsl(${hue.toFixed(0)} ${sat.toFixed(0)}% 52%)`;
+}
+
+function statDot(percent) {
+  return `<i class="dot" style="background:${pressureColor(percent)}"></i>`;
+}
+
 function renderStats() {
   const st = state.stats || {};
   const gb = (mb) => Math.round((mb || 0) / 1024 * 10) / 10;
 
-  $("#cpu").textContent = "cpu " + (st.cpu ?? 0) + "%";
-  $("#mem").textContent = "mem " + gb(st.mem?.used_mb) + "/" +
-                          Math.round((st.mem?.total_mb || 0) / 1024) + "G";
+  const cpu = st.cpu ?? 0;
+  const cpuEl = $("#cpu");
+  cpuEl.innerHTML = statDot(cpu) + "cpu " + cpu + "%";
+  cpuEl.title = `cpu ${cpu}%`;
+
+  const mem = st.mem || {};
+  const memEl = $("#mem");
+  memEl.innerHTML = statDot(mem.percent) + "mem " + gb(mem.used_mb) + "/" +
+                    Math.round((mem.total_mb || 0) / 1024) + "G";
+  memEl.title = `memory ${mem.percent ?? 0}% used`;
 
   // Load against core count, because "1.4" means nothing without knowing the
-  // box. Over 1.0 per core is a queue, and it turns amber.
+  // box. One per core is a full queue, so that is where the dot reaches red.
   const load = st.load || {};
   const loadEl = $("#load");
-  loadEl.textContent = "load " + (load.one ?? 0).toFixed(2);
+  loadEl.innerHTML = statDot((load.ratio || 0) * 100) + "load " + (load.one ?? 0).toFixed(2);
   loadEl.title = `${load.one} / ${load.five} / ${load.fifteen} over ${load.cores} cores`;
-  loadEl.classList.toggle("warn", (load.ratio || 0) > 1);
 
   // Disk is the quietest way to lose an afternoon here: everything starts
   // failing in ways that never mention disk.
   const disk = st.disk || {};
   const diskEl = $("#disk");
-  diskEl.textContent = "disk " + (disk.free_gb ?? 0) + "G free";
-  diskEl.classList.toggle("warn", (disk.percent || 0) > 90);
+  diskEl.innerHTML = statDot(disk.percent) + "disk " + (disk.free_gb ?? 0) + "G free";
+  diskEl.title = `disk ${disk.percent ?? 0}% used`;
 
   // Any swap in use means memory pressure already happened, so it only
-  // appears when there is something to say.
+  // appears when there is something to say — and it starts amber rather than
+  // green, because "a little swap" is not a healthy reading.
   const swap = st.swap || {};
   const swapEl = $("#swap");
   swapEl.hidden = !(swap.used_mb > 0);
-  swapEl.textContent = "swap " + gb(swap.used_mb) + "G";
-  swapEl.classList.toggle("warn", (swap.percent || 0) > 25);
+  swapEl.innerHTML = statDot(Math.max(swap.percent || 0, 70)) + "swap " + gb(swap.used_mb) + "G";
+  swapEl.title = `swap ${swap.percent ?? 0}% used — memory pressure has already happened`;
 
-  $("#clients").innerHTML = '<i class="dot"></i>' + (st.clients ?? 0);
+  $("#clients").innerHTML = '<i class="dot" style="background:var(--ok)"></i>' + (st.clients ?? 0);
 }
-
-/* ------------------------------------------------------------ stats history */
 
 function sparkline(samples, key, color, height) {
   if (samples.length < 2) return "";
@@ -293,16 +321,26 @@ function renderTree() {
     const head = document.createElement("div");
     head.className = "folder-head";
     head.dataset.folder = group.id;
+    // Only real folders can be edited. Running, Ungrouped and Archived are
+    // views over the sessions, not things with a name and a colour.
+    const editable = !group.pinned && group.id.startsWith("f-");
     head.innerHTML =
       `<span class="caret">${group.collapsed ? "▸" : "▾"}</span>` +
       `<i class="dot" style="background:${group.color}"></i>` +
       `<span class="name">${escapeHtml(group.name)}</span>` +
+      (editable ? `<button class="folder-edit" title="Rename, recolour or delete">✎</button>` : "") +
       `<span class="count">${shown.length}` +
       (historyCount(group) ? `<i class="from-history">+${historyCount(group)}</i>` : "") +
       `</span>`;
     head.onclick = () => toggleFolder(group);
-    if (!group.pinned && group.id.startsWith("f-")) {
+    if (editable) {
       head.oncontextmenu = (ev) => folderMenu(ev, group);
+      // Right-click still works and always did; nothing announced it. The
+      // pencil is the same menu with a way to find it.
+      head.querySelector(".folder-edit").onclick = (ev) => {
+        ev.stopPropagation();
+        folderMenu(ev, group);
+      };
     }
     wireDrop(head, group.id);
     tree.appendChild(head);
