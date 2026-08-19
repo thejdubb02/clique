@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.34.0 — 2026-08-19 14:40 PDT
+
+**Which one actually needs you — one answer, not twenty indicators.** The
+sidebar is honest and it does not scale: at twenty sessions, reading every ring
+and deciding is a job, and it is a job you do every few minutes. CLIque now
+ranks the same facts and names one. `Ctrl+K` puts it first among the commands
+whenever anything is blocked, and it is the top block on the empty pane, which
+is the screen you land on after being away.
+
+The order is error, then waiting, then unread — and among equals, whichever has
+been like that longest, because the one blocked for eleven minutes is costing
+more than the one blocked for ten seconds. A working session never appears; it
+does not need you, and listing it would teach you to ignore the list.
+
+It is a sort, not a model. Every fact in it already existed — the attention
+tiers, the activity clock, the unread mark — and nothing new is captured,
+polled or inferred to produce it.
+
+**Peek at a session without opening it.** Hover a row in the sidebar and the
+last few lines appear beside it; on a phone, long-press and choose "Peek at the
+last lines". The ring tells you a session is waiting, and this tells you what
+it is waiting *for* — which used to mean opening the tab, reading, and going
+back to what you were doing.
+
+Nothing is captured until you actually ask. There is no poller behind it, a
+sidebar of twenty sessions costs nothing until a pointer settles on a row, and
+the answer is cached against the pane's own activity clock so moving back and
+forth across a quiet sidebar is one capture rather than one a pass. Available
+to scripts as `GET /api/sessions/<id>/peek`.
+
+**Front-end logic is tested now.** `app.js` has no build step and no module
+system — the point — and that also meant its decisions had nowhere to be tested
+from. `tools/frontend_check.js` reads the file, cuts out a named region, and
+runs it against stubs. No jsdom, no bundler, no `package.json`. The ranking
+above ships with eight assertions covering what must never appear in it.
+
 ## 0.33.0 — 2026-08-19 14:32 PDT
 
 **Move a half-typed thought to the session it belongs in.** You are partway

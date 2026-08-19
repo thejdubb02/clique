@@ -245,6 +245,17 @@ def main() -> int:
             check(f"{name} parses", done.returncode == 0,
                   done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "")
 
+        # The decisions inside app.js, tested without a browser. See
+        # tools/frontend_check.js for why that is possible without a build.
+        done = subprocess.run([node, str(ROOT / "tools" / "frontend_check.js")],
+                              capture_output=True, text=True)
+        for line in done.stdout.splitlines():
+            if line.strip().startswith(("ok", "FAIL")):
+                print("  " + line.strip())
+        tally = done.stdout.strip().splitlines()[-1] if done.stdout.strip() else "no output"
+        check(f"front-end logic: {tally}", done.returncode == 0,
+              done.stderr.strip()[:200])
+
     print("icons")
     # The sprite is generated, and a hand-edit or a half-finished rename would
     # otherwise show up as an invisible button rather than a failure.

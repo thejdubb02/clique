@@ -117,6 +117,10 @@
             <div id="emptyClock" class="empty-clock"></div>
             <p id="emptyNow" class="empty-now"></p>
           </div>
+          <div id="emptyNeeds" class="empty-block needs" hidden>
+            <h3>Needs you</h3>
+            <div class="empty-list"></div>
+          </div>
           <div id="emptyBack" class="empty-block" hidden>
             <h3>Pick up where you left off</h3>
             <div class="empty-list"></div>
@@ -503,6 +507,10 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
     </footer>
   </div>
 </div>
+
+<!-- The last few lines of a session you are not looking at. Positioned in JS
+     beside whichever row asked for it. -->
+<div id="peek" hidden role="tooltip" aria-live="polite"></div>
 
 <div id="offline" hidden>Lost the panel. Retrying…</div>
 <div id="toast" hidden></div>

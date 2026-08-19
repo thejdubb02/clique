@@ -1015,10 +1015,174 @@ function showMenu(ev, items) {
 function sessionMenu(ev, s) {
   showMenu(ev, [
     ["Open", () => openSession(s.id)],
+    // Hover does this on a desktop; on touch there is no hover and long-press
+    // is already this menu, so this is how a phone gets the same answer.
+    ...(s.alive ? [["Peek at the last lines", () => peekAt(s.id, null)]] : []),
     ["Rename", () => renameSession(s)],
     [s.archived ? "Unarchive" : "Archive", () => setArchived(s, !s.archived)],
     [s.alive ? "Kill session" : "Delete session", () => killSession(s), true],
   ]);
+}
+
+/* Which one actually needs you — one answer, not twenty indicators.
+ *
+ * The sidebar is honest and it does not scale: at twenty sessions, "read every
+ * ring and decide" is a job, and it is a job you do every few minutes. This
+ * ranks the same facts and names one.
+ *
+ * A sort, not a model. Everything here already exists — the attention tiers,
+ * the activity clock, the unread mark, the age of each — and nothing is
+ * captured, polled or inferred to produce it. That is what keeps it honest:
+ * it cannot claim to know anything the sidebar does not already show you.
+ *
+ * The order, worst first:
+ *
+ *   error    — it stopped badly, and stopped is stopped
+ *   waiting  — it asked you something and is doing nothing until you answer
+ *   unread   — it produced output you have not seen and then went quiet
+ *
+ * A working session never appears. It does not need you; that is what working
+ * means, and putting it in this list would teach you to ignore the list.
+ *
+ * Ties break on how long it has been like that, because the one that has been
+ * blocked for eleven minutes is costing more than the one blocked for ten
+ * seconds. */
+const NEXT_RANK = { error: 3, waiting: 2, unread: 1 };
+
+function nextUp() {
+  const now = Date.now() / 1000;
+  const rows = [];
+  for (const s of state.sessions) {
+    if (!s.alive || s.archived) continue;
+    if (s.id === activeId && document.hasFocus()) continue;   // you are on it
+    const work = workState(s);
+    let kind = "";
+    if (work === "error") kind = "error";
+    else if (work === "waiting") kind = "waiting";
+    else if (work !== "working" && unread(s)) kind = "unread";
+    if (!kind) continue;
+    // Since the pane last said anything, which is when it started waiting.
+    const since = Math.max(0, Math.floor(now - (s.activity || now)));
+    rows.push({ s, kind, since });
+  }
+  rows.sort((a, b) => NEXT_RANK[b.kind] - NEXT_RANK[a.kind] || b.since - a.since);
+  return rows;
+}
+
+const NEXT_WORDS = {
+  error: "stopped on an error",
+  waiting: "waiting for you",
+  unread: "has output you have not seen",
+};
+
+/* Said as a sentence, because the point is to be read at a glance rather than
+ * decoded. "for 11m" only appears once it has been long enough to matter — on
+ * something that went quiet four seconds ago it is noise. */
+function nextLine(row) {
+  const where = row.s.project || row.s.cwd || "";
+  // The activity clock is already the epoch this wants, so `ago` says how long
+  // it has been quiet without anything having to convert a duration back.
+  const held = row.since >= 60 ? ` for ${ago(row.s.activity)}` : "";
+  return `${row.s.name} is ${NEXT_WORDS[row.kind]}${held}` +
+         (where ? ` — ${where}` : "");
+}
+
+/* The last few lines of a session you are not looking at.
+ *
+ * "Is that one waiting on me?" is the question this product exists to answer,
+ * and the status ring answers it in the abstract — working, waiting, idle. It
+ * does not say *what* it is waiting for, and finding that out means opening
+ * the tab, which changes what you are looking at and then changes it back.
+ *
+ * A pull, never a push. Nothing is captured until a pointer settles on a row
+ * and stays there, so a sidebar of twenty sessions costs nothing at all until
+ * it is asked. The server caches against the pane's activity clock, so moving
+ * back and forth over a quiet sidebar is one capture rather than one a pass.
+ */
+const PEEK_DELAY_MS = 450;      // long enough that crossing a row is not a request
+const PEEK_LINES = 8;
+
+let peekTimer = null;
+let peekId = null;
+const peekCache = new Map();    // `${id}:${activity}` -> lines
+
+async function peekAt(id, anchor) {
+  const s = session(id);
+  if (!s || !s.alive) return;
+  peekId = id;
+
+  const key = `${id}:${s.activity || 0}`;
+  let lines = peekCache.get(key);
+  if (!lines) {
+    try {
+      const got = await api(`api/sessions/${encodeURIComponent(id)}/peek?lines=${PEEK_LINES}`);
+      lines = got.lines || [];
+    } catch {
+      return;                   // a session can end mid-hover; say nothing
+    }
+    // Keyed by activity, so an entry can never be stale — but the keys
+    // accumulate, one per burst of output per session, in a panel that stays
+    // open for weeks.
+    peekCache.set(key, lines);
+    if (peekCache.size > 200) peekCache.delete(peekCache.keys().next().value);
+  }
+  if (peekId !== id) return;    // the pointer moved on while we were asking
+  showPeek(s, lines, anchor);
+}
+
+function showPeek(s, lines, anchor) {
+  const box = $("#peek");
+  box.textContent = "";
+
+  const head = document.createElement("div");
+  head.className = "peek-head";
+  head.textContent = s.name;
+  const pre = document.createElement("pre");
+  // textContent, always: this is the output of whatever is running in that
+  // pane, which is the least trusted string in the whole application.
+  pre.textContent = lines.length ? lines.join("\n") : "Nothing on the pane yet.";
+  box.append(head, pre);
+
+  box.hidden = false;
+  /* Beside the row it belongs to, and kept on screen. Measured after it is
+   * shown because an element with `hidden` has no height to measure. */
+  const rect = anchor ? anchor.getBoundingClientRect()
+                      : { top: 80, bottom: 80, right: 260 };
+  const height = box.offsetHeight;
+  const top = Math.max(8, Math.min(rect.top, window.innerHeight - height - 8));
+  box.style.top = top + "px";
+  box.style.left = Math.min(rect.right + 8, window.innerWidth - box.offsetWidth - 8) + "px";
+}
+
+function hidePeek() {
+  clearTimeout(peekTimer);
+  peekTimer = null;
+  peekId = null;
+  const box = $("#peek");
+  if (box) box.hidden = true;
+}
+
+/* Wired once, on the tree, for the same reason the long-press menu is: the
+ * sidebar is rebuilt every three seconds and per-row listeners would be churn
+ * for nothing.
+ *
+ * Only where there is a real pointer. On touch, `hover` fires on tap and would
+ * make every attempt to open a session flash a tooltip first. */
+function wirePeek() {
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  const tree = $("#tree");
+  tree.addEventListener("mouseover", (ev) => {
+    const row = ev.target.closest(".session:not(.history)");
+    if (!row || !row.dataset.id) return;
+    if (row.dataset.id === peekId) return;
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(() => peekAt(row.dataset.id, row), PEEK_DELAY_MS);
+  });
+  tree.addEventListener("mouseleave", hidePeek);
+  // Anything that moves the sidebar out from under the popover closes it,
+  // rather than leaving it pointing at a row that is no longer there.
+  tree.addEventListener("scroll", hidePeek, { passive: true });
+  addEventListener("keydown", (ev) => { if (ev.key === "Escape") hidePeek(); });
 }
 
 /* Long press, because touch has no right-click.
@@ -1475,6 +1639,20 @@ function renderEmpty() {
   if (wants.length) bits.push(`${wants.length} waiting for you`);
   $("#emptyNow").textContent = bits.join(" · ");
   $("#emptyNow").classList.toggle("wants", wants.length > 0);
+
+  /* What needs you, above what you were doing.
+   *
+   * This is the screen you land on after being away, so it is the one place
+   * the ranking is worth spending room on rather than a single line: coming
+   * back to three blocked agents and being told about one of them is a worse
+   * answer than being told about all three. */
+  fillEmptyList($("#emptyNeeds"), nextUp().slice(0, EMPTY_SESSIONS).map((row) => ({
+    marker: sessionMarker(row.s, "sidebar") + statusDot(row.s, "sidebar"),
+    title: row.s.name || row.s.cli_label || row.s.cli,
+    detail: NEXT_WORDS[row.kind] + (row.since >= 60 ? ` · ${ago(row.s.activity)}` : ""),
+    dead: false,
+    open: () => openSession(row.s.id),
+  })));
 
   // Most recently looked at first, and the ones that are still alive before
   // the ones that are not — "where was I" almost always means a live session.
@@ -3439,6 +3617,17 @@ function paletteCommands() {
     items.push({ kind: "command", title, detail, match: title + " " + (detail || ""),
                  icon: "", run, danger });
 
+  /* First among the commands when anything is blocked. "Which one needs me"
+   * is the question people open the palette to answer, and making them read
+   * past New Session and nine themes to reach the answer defeats it. */
+  const blocked = nextUp();
+  if (blocked.length) {
+    add(blocked.length === 1 ? "Go to the one that needs you"
+                             : `Go to what needs you first — ${blocked.length} blocked`,
+        nextLine(blocked[0]),
+        () => openSession(blocked[0].s.id));
+  }
+
   add("New session", "Start a CLI in a directory", openModal);
   add("New folder", "Group sessions in the sidebar", newFolder);
   add("Adopt sessions", "Take over tmux sessions CLIque did not start", adoptSessions);
@@ -3802,6 +3991,7 @@ function setSidebar(show) {
 wire();
 wireResizer();
 wireTouchMenus();
+wirePeek();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 refresh().then(async () => {

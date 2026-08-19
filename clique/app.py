@@ -548,6 +548,20 @@ MAX_LOGIN_BYTES = 8 * 1024
 #: an ioctl and in `tmux resize-window`.
 MAX_COLS, MAX_ROWS = 500, 300
 
+#: A peek is a glance, not a window. Enough lines to see a question and the
+#: line before it; not so many that a tooltip becomes a second terminal.
+PEEK_DEFAULT, PEEK_MIN, PEEK_MAX = 8, 2, 40
+
+#: How many panes keep a cached peek. Small on purpose — this is a convenience
+#: for the handful of rows a pointer actually crosses, not an index.
+PEEK_CACHE = 64
+
+#: mux -> ((mux, activity, lines), rows). Module level, because a request
+#: handler is built and thrown away per request and a cache on one would be a
+#: cache of exactly one lookup.
+_PEEKED: dict[str, tuple[tuple, list[str]]] = {}
+_PEEK_LOCK = threading.Lock()
+
 
 def _terminal_size(cols, rows) -> tuple[int, int]:
     """Clamp a client-supplied terminal size, tolerating rubbish."""
@@ -782,6 +796,8 @@ class Handler(BaseHTTPRequestHandler):
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()
                                    if p.mux not in known])
+            if path.startswith("/api/sessions/") and path.endswith("/peek"):
+                return self._peek(path.split("/")[3], query.get("lines") or "")
             if path.startswith("/api/sessions/") and path.endswith("/artifacts"):
                 return self._artifacts(path.split("/")[3])
             if path.startswith("/api/sessions/") and path.endswith("/artifact"):
@@ -791,6 +807,68 @@ class Handler(BaseHTTPRequestHandler):
             return self._static(path)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
+
+    def _peek(self, session_id: str, want: str) -> None:
+        """The last few lines of a pane, without opening it.
+
+        The question this answers is "is that one waiting on me", asked about a
+        session you are not looking at. Answering it today means opening the
+        tab, which changes what you are looking at — and then changes it back.
+
+        Deliberately a *pull*. Nothing captures a pane until somebody hovers
+        over a row and stays there, so a sidebar of twenty sessions costs
+        exactly nothing until it is asked a question. That is the same bargain
+        the attention ladder makes, and it is why neither of them shows up in
+        an idle panel's cost.
+
+        Colour is stripped rather than rendered. A peek is a glance at what the
+        text says; carrying ANSI across the wire would mean a second terminal
+        renderer in the panel for something that is eight lines in a tooltip.
+        """
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        try:
+            lines = max(PEEK_MIN, min(int(want), PEEK_MAX))
+        except (TypeError, ValueError):
+            lines = PEEK_DEFAULT
+
+        pane = self.panel.live().get(session.mux)
+        if pane is None:
+            return self._json({"lines": [], "alive": False, "activity": 0})
+
+        # Cached against the pane's own activity clock, exactly as the
+        # attention tier is: the entry is invalid the moment anything is
+        # printed and valid forever while nothing is. Hovering back and forth
+        # across a quiet sidebar is one capture, not one per pass.
+        activity = int(pane.activity or 0)
+        key = (session.mux, activity, lines)
+        with _PEEK_LOCK:
+            hit = _PEEKED.get(session.mux)
+            if hit and hit[0] == key:
+                return self._json({"lines": hit[1], "alive": True,
+                                   "activity": activity})
+
+        try:
+            text = tmux.capture(session.mux, session.socket,
+                                lines=lines, styled=False)
+        except (tmux.TmuxError, OSError):
+            return self._json({"lines": [], "alive": True, "activity": activity})
+
+        # A pane's bottom is usually blank — a prompt sitting above empty rows.
+        # Those are the lines a peek would otherwise spend showing nothing.
+        rows = [row.rstrip() for row in text.splitlines()]
+        while rows and not rows[-1]:
+            rows.pop()
+        rows = rows[-lines:]
+        with _PEEK_LOCK:
+            _PEEKED[session.mux] = (key, rows)
+            # Bounded, because a panel that runs for weeks creates and destroys
+            # sessions all day and every one of them would leave an entry.
+            if len(_PEEKED) > PEEK_CACHE:
+                for stale in list(_PEEKED)[:-PEEK_CACHE]:
+                    del _PEEKED[stale]
+        return self._json({"lines": rows, "alive": True, "activity": activity})
 
     def _static(self, path: str) -> None:
         name = "index.html" if path == "/" else path.lstrip("/")

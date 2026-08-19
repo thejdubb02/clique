@@ -191,6 +191,20 @@ Sessions in `/api/state` carry `signal`: `"waiting"`, `"error"` or `""`, from
 whichever tier could answer — this endpoint first, then the per-CLI patterns in
 `clis.toml` matched against a pane that has gone quiet, then nothing.
 
+### `GET /api/sessions/<id>/peek?lines=8`
+
+The last few lines of a pane, so "is that one waiting on me" can be answered
+without opening the tab and changing what you are looking at.
+
+```json
+{"lines": ["Do you want me to apply this? (y/n)"], "alive": true, "activity": 1787200000}
+```
+
+Colour is stripped and trailing blank lines are dropped. `lines` is clamped to
+2–40. Nothing captures a pane until this is called — there is no poller behind
+it — and the answer is cached against the pane's own activity clock, so
+repeated calls while nothing is printed cost one capture.
+
 ### `GET /api/sessions/<id>/artifacts`
 
 Images that appeared in the session's working directory **after the session
