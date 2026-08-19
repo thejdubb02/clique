@@ -37,6 +37,9 @@ If you run more than two coding agents at once, you already know the problem: te
 | **Workspace** | Open tabs, their order, the one in front, and which groups are collapsed live on the server. Sign in somewhere else and the panes are where you left them. |
 | **Unread** | A dot on anything that produced output while you were elsewhere, and a rule in the pane where you stopped reading. |
 | **Themes** | Nine presets, light / dark / system, custom CSS in three slots, independent font sizes. |
+| **API** | Every action in the panel is an HTTP call, with bearer tokens and read-only ones. Full reference in [API.md](API.md), kept honest by a drift check in the test suite. |
+| **Changelog** | Settings → Changelog: every release with the time it shipped, read from this repo's `CHANGELOG.md` so the two cannot disagree. |
+| **Monitoring** | `GET /healthz` answers without a login — point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |
 | **Installable** | PWA with a full icon set. (The layout is not mobile-optimised yet.) |
 
@@ -105,6 +108,7 @@ Neither suite is mocked. The failure modes worth catching — tmux quoting, a PT
 ```bash
 python3 tools/smoke.py                 # engine, against a real tmux server
 python3 tools/smoke_http.py            # server, over real HTTP + WebSocket
+python3 tools/api_drift.py             # API.md still covers every route and setting
 ruff check .
 ```
 

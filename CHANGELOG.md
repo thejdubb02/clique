@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.21.1 — 2026-08-19 10:50 PDT
+
+**`API.md` exists.** The settings sheet had been pointing at a full reference
+for several releases and there was no such file — the worst version of a
+documented API, because it claims a surface nobody can find.
+
+- Every route, every settings key, every field `PATCH` accepts, what a
+  read-only token is refused, and exactly what `/healthz` will and will not
+  tell a caller with no credential.
+- **`tools/api_drift.py` keeps it honest**, alongside the other suites: add a
+  route or a setting without writing it down and it fails. A reference
+  maintained by hand holds for about three releases; this one cannot quietly
+  fall behind.
+
+Nothing changed in the app. The rule behind it is in `CLAUDE.md` now — every
+action in the panel is an HTTP call, because a feature reachable only by
+clicking is a feature an agent driving CLIque cannot use.
+
 ## 0.21.0 — 2026-08-19 10:43 PDT
 
 **Your tabs are yours, not your browser's.**

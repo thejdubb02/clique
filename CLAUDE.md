@@ -15,6 +15,17 @@ Docs, each with one job — read the one that matches the question:
 | The full backlog, ops work included | the **CLIque** list in Nextcloud Tasks |
 | What shipped | `CHANGELOG.md` |
 
+## The API is the whole surface
+
+Every action in the panel is an HTTP call — there is nothing the UI can do that
+a script cannot. Keep it that way: a feature reachable only by clicking is a
+feature an agent driving CLIque cannot use.
+
+**A new route, settings key or PATCH-able field means a line in `API.md` in the
+same commit.** `tools/api_drift.py` fails otherwise, so this is not a thing to
+remember — but write the description properly, because the check only proves
+the name is present, not that the prose is any good.
+
 ## Releasing
 
 Bump `__version__`, write the `CHANGELOG.md` entry, then run
