@@ -704,3 +704,14 @@ a.give-value { color: var(--accent); }
    somewhere else is not a reversal anyone reaches in time. */
 .toast-do { margin-left: 10px; font-size: 11px; padding: 2px 9px;
             border-radius: 999px; }
+
+/* Unread — output arrived while you were elsewhere. A mark, not a flash: it is
+   still there an hour later, which is the whole point of it. */
+.session.unread .name::after, .tab.unread .label::after {
+  content: ""; display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent); margin-left: 6px;
+  vertical-align: middle;
+}
+/* The line across the pane marking where you stopped reading. */
+.since-line { border-bottom: 1px solid var(--accent); opacity: .55;
+              pointer-events: none; }
