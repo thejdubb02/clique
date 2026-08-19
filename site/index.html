@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLIque — your private clique of CLIs</title>
+<meta name="description" content="Folder-organised, CLI-agnostic coding sessions in a browser, kept alive in tmux. Self-hosted. Python 3.11+, tmux, nothing else.">
+<link rel="canonical" href="https://useclique.dev/">
+<meta name="theme-color" content="#0E1116">
+<link rel="icon" href="brand/mark.svg" type="image/svg+xml">
+<link rel="icon" href="brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+<meta property="og:title" content="CLIque — your private clique of CLIs">
+<meta property="og:description" content="A browser panel for every coding CLI on the box. Self-hosted. 24 MB. No framework.">
+<meta property="og:image" content="https://useclique.dev/brand/social-preview.png">
+<meta property="og:url" content="https://useclique.dev/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="site.css">
+
+<header>
+  <a class="word" href="/">
+    <img src="brand/mark.svg" width="22" height="22" alt="">
+    CLIque
+  </a>
+  <nav>
+    <a href="https://github.com/thejdubb02/clique">GitHub</a>
+    <a href="https://github.com/thejdubb02/clique/releases">Releases</a>
+    <a class="btn" href="https://github.com/thejdubb02/clique">Get the code</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="kicker">Self-hosted · MIT · Python 3.11+ · tmux</p>
+    <h1>Your private clique of CLIs.</h1>
+    <p class="lede">Folder-organised, CLI-agnostic coding sessions in a browser, kept alive in tmux. One panel for every agent on the box — Claude Code, Grok, Gemini, Codex, or anything you add in four lines of config.</p>
+    <p class="actions">
+      <a class="btn primary" href="https://github.com/thejdubb02/clique">Open the GitHub repo</a>
+      <a class="btn ghost" href="https://github.com/thejdubb02/clique#quick-start">Quick start</a>
+    </p>
+  </section>
+
+  <section>
+    <h2>A driver, not an IDE.</h2>
+    <p>CLIque does not parse a vendor’s protocol, impersonate a model, or reimplement the tools you already have. It keeps a private tmux server, puts every CLI session in a folder you can actually find, and gives you a browser to jump between them.</p>
+    <p>If you run more than two coding agents at once, you already know the problem: terminals everywhere, no idea which one is waiting on you, a conversation you cannot get back to. This is the panel for that.</p>
+    <p class="stat"><strong>24 MB resident.</strong> No framework, no <code>node_modules</code>, no build step. A PTY and the Python standard library.</p>
+  </section>
+
+  <section>
+    <h2>Run it on your box.</h2>
+    <p>There is no cloud product. You clone it, set a password, and it binds loopback. Put a tunnel in front if you want it from another machine — do not hang it on the public internet. Anyone who reaches the panel has a terminal as the user that started it.</p>
+    <pre id="install"><code>git clone https://github.com/thejdubb02/clique.git
+cd clique
+export CLIQUE_HOME="$HOME/.clique"
+python3 -m clique password
+python3 -m clique                 # http://127.0.0.1:3200</code></pre>
+    <p class="fine">Needs Python 3.11+ and tmux. Nothing else.</p>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
+    <dl>
+      <div><dt>Command palette</dt><dd><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>K</kbd> — sessions, commands, past conversations.</dd></div>
+      <div><dt>Folders</dt><dd>A tree. Drag-drop, rename, search, collapse to a rail.</dd></div>
+      <div><dt>Tabs that don’t kill</dt><dd>Closing a tab is not killing the session. tmux and the CLI keep running.</dd></div>
+      <div><dt>History</dt><dd>Every conversation your CLIs kept, filed by directory, one click to resume.</dd></div>
+      <div><dt>Workspace</dt><dd>Open tabs follow you to another device. Drafts too.</dd></div>
+      <div><dt>Status</dt><dd>A ring around the CLI’s own logo: working, waiting, idle. The logo is never recoloured.</dd></div>
+      <div><dt>API</dt><dd>Every action in the panel is an HTTP call. Bearer tokens, including read-only.</dd></div>
+      <div><dt>Security</dt><dd>scrypt password, Host and Origin checks, CSP nonces. See SECURITY.md on GitHub.</dd></div>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Adding a CLI is config, never code.</h2>
+<pre><code>[cli.grok]
+label   = "Grok CLI"
+command = "grok"
+args    = []
+color   = "#6f42c1"</code></pre>
+    <p>Reload the page. If adding one ever needs a code change, the design has failed.</p>
+  </section>
+
+  <section class="not">
+    <h2>Not built, on purpose.</h2>
+    <p>Subagent visualisation, a respawn controller, multi-host, a Ralph loop. Those need to know which vendor is talking. This product does not.</p>
+  </section>
+</main>
+
+<footer>
+  <p><a href="https://github.com/thejdubb02/clique">github.com/thejdubb02/clique</a> · MIT · Built by <a href="https://github.com/thejdubb02">Justin Willhite</a></p>
+  <p><a href="https://buymeacoffee.com/jdubb">Buy me a coffee</a> if it saved you an afternoon.</p>
+</footer>
