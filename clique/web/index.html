@@ -270,6 +270,31 @@
          but a CLI pausing to think looks the same as one that is done — raise
          the delay if it fires too eagerly.</p>
       <button type="button" id="testChime">Test the chime</button>
+
+      <h3>Reach me when the panel is shut</h3>
+      <label class="field">Webhook URL
+        <input type="url" id="setHookUrl" placeholder="https://ntfy.sh/your-topic"
+               autocomplete="off" spellcheck="false">
+      </label>
+      <p class="note">One URL, POSTed a small JSON body when a session starts
+         waiting, stops on an error, finishes, or dies. ntfy, Gotify, Discord,
+         Mattermost, Home Assistant and Uptime Kuma push monitors are all
+         “POST some JSON here”, so this one field reaches any of them — no app,
+         no account, no integration to configure.</p>
+      <label class="field">Shared secret <span class="dim">optional</span>
+        <input type="password" id="setHookSecret" autocomplete="off">
+      </label>
+      <p class="note">Signs each request as <code>X-CLIque-Signature</code> so
+         a receiver on the open internet can tell your panel from anyone
+         else’s.</p>
+      <label class="field">Panel address <span class="dim">optional</span>
+        <input type="url" id="setPanelUrl" placeholder="https://box.tail1234.ts.net/clique"
+               autocomplete="off" spellcheck="false">
+      </label>
+      <p class="note">Included in the notification so it can link back here.
+         Only you know this — behind a tunnel the server has no reliable idea
+         of its own public address.</p>
+      <button type="button" id="testHook">Send a test notification</button>
     </section>
 
     <section class="pane" data-pane="images" hidden>

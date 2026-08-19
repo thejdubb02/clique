@@ -10,6 +10,7 @@ Usage: python3 tools/smoke_http.py [base_url]
 from __future__ import annotations
 
 import base64
+import http.server
 import json
 import os
 import re
@@ -19,6 +20,7 @@ import ssl
 import struct
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -28,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import contextlib
 
+from clique import notify
 from clique.wsproto import OP_BINARY, OP_TEXT
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3200").rstrip("/")
@@ -328,6 +331,65 @@ def main() -> int:
     check("newest first", bool(newest) and newest["version"] == version, version)
     check("markdown came back as structure, not markup",
           bool(newest.get("blocks")) and "spans" in newest["blocks"][0])
+
+    print("webhook")
+    # A real receiver on a real socket. The failure modes worth catching here
+    # — a body that is not what a receiver expects, a signature computed over
+    # different bytes than were sent — do not exist against a mock.
+    caught: list[dict] = []
+
+    class Catcher(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            caught.append({
+                "body": json.loads(raw or b"{}"),
+                "signature": self.headers.get("X-CLIque-Signature", ""),
+                "raw": raw,
+            })
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    receiver = http.server.HTTPServer(("127.0.0.1", 0), Catcher)
+    threading.Thread(target=receiver.serve_forever, daemon=True).start()
+    hook = f"http://127.0.0.1:{receiver.server_address[1]}/hook"
+
+    status, saved = call("/api/settings", "PATCH",
+                         {"webhook_url": hook, "webhook_secret": "s3cret"})
+    check("stores a webhook URL", saved.get("webhook_url") == hook, saved.get("webhook_url"))
+    status, saved = call("/api/settings", "PATCH", {"webhook_url": "file:///etc/passwd"})
+    check("refuses a non-http scheme", saved.get("webhook_url") == "", saved.get("webhook_url"))
+    call("/api/settings", "PATCH", {"webhook_url": hook})
+
+    # Delivery is checked through the test button rather than by waiting for a
+    # real session to change state: the transitions themselves are a pure
+    # function and are exercised exhaustively in smoke.py, where they cost
+    # nothing. What only exists across a socket is this — the body, the
+    # headers, and a signature computed over the exact bytes that went out.
+    call("/api/settings", "PATCH", {"webhook_secret": "s3cret"})
+    status, _sent = call("/api/webhook/test", "POST", {})
+    check("the test button fires", status == 200, status)
+
+    deadline = time.time() + 10
+    while not caught and time.time() < deadline:
+        time.sleep(0.2)
+    check("and it arrives", bool(caught), "nothing arrived in 10s")
+    if caught:
+        first = caught[0]
+        check("the event says what happened", first["body"].get("event") == "test",
+              first["body"].get("event"))
+        check("body carries readable text", bool(first["body"].get("text")), first["body"])
+        check("signature is over the bytes actually sent",
+              first["signature"] == notify.sign(first["raw"], "s3cret"),
+              first["signature"][:24])
+
+    call("/api/settings", "PATCH", {"webhook_url": "", "webhook_secret": ""})
+    status, _none = call("/api/webhook/test", "POST", {})
+    check("refuses a test with no URL set", status == 400, status)
+    receiver.shutdown()
 
     print("attention")
     status, note = call("/api/sessions", "POST",

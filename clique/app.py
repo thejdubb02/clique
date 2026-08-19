@@ -33,6 +33,7 @@ from . import (
     attention,
     changelog,
     migrate,
+    notify,
     sysinfo,
     tmux,
     version_string,
@@ -104,6 +105,11 @@ class Panel:
         self.conversations = ConversationHistory(registry)
         #: Failed logins per client address, for throttling.
         self.failures: dict[str, list[float]] = {}
+        #: Watches for the transitions worth a notification. Only actually
+        #: runs while a webhook URL is set, so a panel nobody has configured
+        #: one on still costs nothing when idle.
+        self.watcher = notify.Watcher(self)
+        self.watcher.ensure()
         self.clients = 0
         self.allowed_hosts = {h.strip().lower() for h in
                               os.environ.get("CLIQUE_ALLOWED_HOSTS", "").split(",")
@@ -787,6 +793,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_input(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/paste"):
                 return self._paste_image(path.split("/")[3], body)
+            if path == "/api/webhook/test":
+                # Every webhook UI needs this and the reason is always the
+                # same: you paste a URL and you want to know it works now, not
+                # the next time something finishes at three in the morning.
+                settings = self.panel.store.settings
+                url = str(settings.get("webhook_url") or "")
+                if not url:
+                    return self._json({"error": "no webhook URL set"}, 400)
+                notify.post(url, str(settings.get("webhook_secret") or ""), {
+                    "event": "test",
+                    "at": int(time.time()),
+                    "session": {"id": "", "name": "Test", "cli": "", "cli_label": "",
+                                "folder": None, "cwd": ""},
+                    "text": "CLIque is wired up.",
+                    "url": str(settings.get("panel_url") or ""),
+                })
+                return self._json({"ok": True})
             if path.startswith("/api/sessions/") and path.endswith("/attention"):
                 return self._attention(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/seen"):
@@ -960,7 +983,12 @@ class Handler(BaseHTTPRequestHandler):
         parts = path.strip("/").split("/")
         try:
             if len(parts) == 2 and parts[1] == "settings":
-                return self._json(self.panel.store.update_settings(body))
+                updated = self.panel.store.update_settings(body)
+                # Setting a webhook URL starts the watcher; clearing it stops
+                # the thread rather than leaving it spinning over a URL that
+                # is no longer there.
+                self.panel.watcher.ensure()
+                return self._json(updated)
             if len(parts) == 3 and parts[1] == "sessions":
                 # Only fields the caller actually sent. `folder: null` is a
                 # real value (drag to Ungrouped), so "absent" and "null" have

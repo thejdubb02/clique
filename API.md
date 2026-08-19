@@ -140,6 +140,31 @@ The type is sniffed from the bytes rather than trusted from the name, the cap
 is 10 MB, and containment is checked after symlink resolution — the write can
 only ever land inside that directory.
 
+### `POST /api/webhook/test`
+
+Fires one `test` event at the configured webhook immediately. `400` if no URL
+is set. There to answer "did I paste that right" without waiting for something
+to finish at three in the morning.
+
+**The webhook body**, for all events:
+
+```json
+{"event": "waiting", "at": 1787167125,
+ "session": {"id": "...", "name": "api rewrite", "cli": "claude",
+             "cli_label": "Claude Code", "folder": "...", "cwd": "/srv/app"},
+ "text": "api rewrite is waiting for you",
+ "url": "https://box.ts.net/clique/?session=..."}
+```
+
+`event` is `waiting`, `error`, `finished`, `died` or `test`. Each fires on the
+edge — a session waiting for an hour is not news every ten seconds. With
+`webhook_secret` set, `X-CLIque-Signature: sha256=<hmac>` covers the exact
+bytes sent. One attempt, five second timeout, no retry: a dropped notification
+is superseded by the next change, and a retry queue means durable state.
+
+The watcher only runs while `webhook_url` is set, so a panel without one still
+costs nothing when idle.
+
 ### `POST /api/sessions/<id>/attention`
 
 ```json
@@ -251,6 +276,9 @@ front of you (sidebar width, sidebar shown or hidden).
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
 | `cli_tint` | bool | Colour the pane edge, active tab and prompt box with the active CLI's colour |
 | `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
+| `webhook_url` | url | Where to POST session events. `http`/`https` only; anything else is stored as `""` |
+| `webhook_secret` | string | Signs each request as `X-CLIque-Signature` |
+| `panel_url` | url | This panel's public address, included so a notification can link back |
 | `artifacts_show` | bool | List the images a session makes |
 | `artifact_dirs` | list | Where to look, relative to each session's cwd; `.` is the cwd itself. Absolute entries and `..` are dropped, max 12 |
 

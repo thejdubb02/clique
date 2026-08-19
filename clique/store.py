@@ -118,6 +118,19 @@ DEFAULT_SETTINGS = {
     #: person's palette is another person's invisible-on-their-theme.
     #: {"claude": "#d97757"}. An empty entry means "use the shipped one".
     "cli_colors": {},
+    #: One URL, POSTed a small JSON body when a session starts waiting, errors,
+    #: finishes or dies. One field rather than a list of services, because
+    #: ntfy, Gotify, Discord, Mattermost, Home Assistant and Uptime Kuma push
+    #: are all "POST some JSON here" — and adding the second integration is the
+    #: decision that creates a permanent "please add mine" queue.
+    "webhook_url": "",
+    #: Optional. Signs the exact bytes sent as X-CLIque-Signature, so a
+    #: receiver on the open internet can tell your panel from anyone else.
+    "webhook_secret": "",
+    #: Where this panel answers, so a notification can link back to it. Only
+    #: the person running it knows this — behind a tunnel the server has no
+    #: reliable idea of its own public address.
+    "panel_url": "",
     #: An agent that takes a screenshot has made something a terminal cannot
     #: show you. Off is a real preference — some working directories are full
     #: of images nobody wants a strip of — so it is a switch, not a rule.
@@ -410,6 +423,13 @@ class Store:
                     self.settings[key] = _clean_snippets(value)
                 elif key.startswith("css_"):
                     self.settings[key] = str(value or "")[:MAX_CSS_CHARS]
+                elif key == "webhook_url":
+                    value = str(value or "").strip()[:2048]
+                    # http(s) only. A file: or a gopher: here would be someone
+                    # using the notifier to make the server fetch something.
+                    self.settings[key] = value if value.startswith(("http://", "https://")) else ""
+                elif key in ("webhook_secret", "panel_url"):
+                    self.settings[key] = str(value or "").strip()[:2048]
                 elif key in ("theme", "appearance", "input_mode"):
                     self.settings[key] = str(value or "")[:64]
                 elif key == "notify_idle_seconds":

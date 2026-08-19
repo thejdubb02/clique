@@ -2136,6 +2136,13 @@ function openSettings() {
   $("#setStatusOnIcon").checked = !!s.status_on_icon;
   $("#setTabsMarkers").checked = s.markers_in_tabs !== false;
   $("#setSidebar").checked = s.markers_in_sidebar !== false;
+  // Not repainted while focused — a poll landing mid-edit would move the
+  // cursor in a field someone is pasting a URL into.
+  for (const [id, key] of [["#setHookUrl", "webhook_url"],
+                           ["#setHookSecret", "webhook_secret"],
+                           ["#setPanelUrl", "panel_url"]]) {
+    if (document.activeElement !== $(id)) $(id).value = s[key] || "";
+  }
   $("#setCliTint").checked = s.cli_tint !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
@@ -2325,6 +2332,19 @@ function wire() {
   $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
+  // On blur, not per keystroke: half a URL is not a setting, and the server
+  // would store every prefix on the way to the real one.
+  $("#setHookUrl").onblur = (ev) => saveSettings({ webhook_url: ev.target.value });
+  $("#setHookSecret").onblur = (ev) => saveSettings({ webhook_secret: ev.target.value });
+  $("#setPanelUrl").onblur = (ev) => saveSettings({ panel_url: ev.target.value });
+  $("#testHook").onclick = async () => {
+    try {
+      await api("api/webhook/test", { method: "POST", body: "{}" });
+      toast("Sent. If nothing arrives, the URL is the thing to check.");
+    } catch (err) {
+      toast("Could not send: " + err.message, true);
+    }
+  };
   $("#setCliTint").onchange = (ev) => saveSettings({ cli_tint: ev.target.checked });
   $("#setArtShow").onchange = (ev) => {
     saveSettings({ artifacts_show: ev.target.checked });

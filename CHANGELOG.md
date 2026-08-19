@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.27.0 — 2026-08-19 12:26 PDT
+
+**It can reach you with the panel shut.**
+
+An attention state you only see while looking at the panel is decoration. One
+field in Settings → Notifications takes a URL, and a small JSON body is POSTed
+there when a session starts waiting, stops on an error, finishes, or dies.
+
+One URL, not a list of services. ntfy, Gotify, Discord, Mattermost, Home
+Assistant and Uptime Kuma's push monitors are all "POST some JSON to this
+address", so a single field reaches every one of them with no app, no account,
+no SDK and no settings sheet full of logos. Adding the second integration is
+the decision that creates a permanent "please add mine" queue, so there is no
+first one.
+
+Not Web Push either: VAPID needs signing the standard library cannot do, which
+would cost a dependency — and ntfy's own app already delivers real push to a
+phone for free.
+
+Each event fires on the edge. A session that has been waiting an hour is not
+news every ten seconds, and a notifier that repeats itself is one you mute. An
+optional shared secret signs the exact bytes sent. One attempt, five second
+timeout, no retry queue — a dropped notification is superseded by the next
+change, and durable retries mean a database.
+
+**And a test button**, because every webhook UI needs one for the same reason:
+you paste a URL and want to know it works now, rather than the next time
+something finishes at three in the morning.
+
+The watcher only exists while a URL is set. With no webhook configured nothing
+runs, and an idle CLIque costs exactly what it did before.
+
 ## 0.26.0 — 2026-08-19 12:19 PDT
 
 **Waiting on you, and stopped on an error, are now different from idle.**

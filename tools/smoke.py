@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from clique import tmux
+from clique import notify, tmux
 from clique.registry import Registry, RegistryError
 
 SOCKET = "clique-smoke"
@@ -120,6 +120,28 @@ def main() -> int:
         check("rejects unknown CLI type", False)
     except RegistryError:
         check("rejects unknown CLI type", True)
+
+    print("notification edges")
+    # Pure function, so every case is worth asserting: what fires and what
+    # stays quiet is the difference between a notifier you keep and one you
+    # mute after a day.
+    edges = notify.Watcher._events
+    quiet = ("", False, True)
+    busy = ("", True, True)
+    waiting = ("waiting", False, True)
+    failed_ = ("error", False, True)
+    gone = ("", False, False)
+
+    check("working then quiet is 'finished'", edges(busy, quiet) == ["finished"])
+    check("quiet staying quiet says nothing", edges(quiet, quiet) == [])
+    check("becoming waiting says so", edges(quiet, waiting) == ["waiting"])
+    check("staying waiting says it once", edges(waiting, waiting) == [])
+    check("waiting outranks 'finished'", edges(busy, waiting) == ["waiting"])
+    check("an error is its own event", edges(busy, failed_) == ["error"])
+    check("waiting then error is news again", edges(waiting, failed_) == ["error"])
+    check("dying says only that", edges(busy, gone) == ["died"])
+    check("a dead session stays quiet", edges(gone, gone) == [])
+    check("going back to work says nothing", edges(waiting, busy) == [])
 
     print("teardown")
     tmux.kill(mux, SOCKET)

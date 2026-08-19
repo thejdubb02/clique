@@ -12,7 +12,7 @@
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/thejdubb02/clique/actions/workflows/tests.yml"><img src="https://github.com/thejdubb02/clique/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.26.0-A855F7?style=flat-square" alt="0.26.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.27.0-A855F7?style=flat-square" alt="0.27.0"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
   <a href="https://buymeacoffee.com/jdubb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
   <a href="#support-the-dev"><img src="https://img.shields.io/badge/Donate-BTC%20%7C%20SHIB%20%7C%20DOGE-5FA8F5?style=flat-square" alt="Donate"></a>
@@ -53,6 +53,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **Themes** | Nine presets, light / dark / system, custom CSS in three slots, independent font sizes. |
 | **API** | Every action in the panel is an HTTP call, with bearer tokens and read-only ones. Full reference in [API.md](API.md), kept honest by a drift check in the test suite. |
 | **Changelog** | Settings → Changelog: every release with the time it shipped, read from this repo's `CHANGELOG.md` so the two cannot disagree. |
+| **Told, not checked** | One webhook URL, POSTed when a session wants you, errors, finishes or dies. ntfy, Gotify, Discord, Mattermost and Uptime Kuma push all speak it. Real phone notifications, no app of ours. |
 | **Monitoring** | `GET /healthz` answers without a login — point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |
 | **Touch** | Long press a session for the menu right-click gives, with tap targets sized for a finger. |
