@@ -136,6 +136,11 @@ class Session:
     #: Out of the way, not gone. Archiving never touches the tmux session, so
     #: an archived session is still running and can be un-archived at any time.
     archived: bool = False
+    #: What is half-typed in the prompt box and not sent yet. On the server for
+    #: the same reason `last_seen` is: an unsent instruction is about the work,
+    #: not about the screen, so it survives a reload and follows you to another
+    #: device. Sidebar width is the counter-example and stays local.
+    draft: str = ""
 
 
 def new_id() -> str:

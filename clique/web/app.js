@@ -908,6 +908,43 @@ function toast(text, bad) {
   toast.timer = setTimeout(() => (el.hidden = true), 4000);
 }
 
+/* ----------------------------------------------------------------- drafts */
+
+/* A half-typed instruction is work, so it survives a tab switch, a reload and
+ * a closed laptop — which means it lives on the server, under the same rule
+ * that puts settings there and leaves sidebar width in the browser.
+ *
+ * Written on a debounce rather than per keystroke: thinking with the box open
+ * should not be a request per character. The local session object is updated
+ * at the same time, so the next poll does not arrive with a stale draft and
+ * overwrite what is being typed. */
+let draftTimer = null;
+let draftFor = null;          // whose draft is in the box right now
+
+function loadDraft(id) {
+  const box = $("#prompt");
+  const s = session(id);
+  box.value = (s && s.draft) || "";
+  box.style.height = "auto";
+  box.style.height = Math.min(box.scrollHeight, 140) + "px";
+  draftFor = id;
+}
+
+function saveDraft(now) {
+  const id = draftFor;
+  if (!id) return;
+  const text = $("#prompt").value;
+  const s = session(id);
+  if (s && (s.draft || "") === text) return;      // nothing actually moved
+  if (s) s.draft = text;
+  clearTimeout(draftTimer);
+  const send = () => api(`api/sessions/${id}`, {
+    method: "PATCH", body: JSON.stringify({ draft: text }),
+  }).catch(() => {});
+  if (now) send();
+  else draftTimer = setTimeout(send, 600);
+}
+
 /* ---------------------------------------------------------------- support */
 
 /* An address is money, so it is never truncated and never retyped: shown in
@@ -1102,9 +1139,11 @@ function renderFollow() {
 }
 
 function selectTab(id) {
+  if (draftFor && draftFor !== id) saveDraft(true);   // commit before reusing the box
   activeId = id;
   attention.delete(id);   // looking at it is the acknowledgement
   renderFollow();         // the badge belongs to the pane you switched to
+  loadDraft(id);
   markSeen(id);
   for (const [tid, entry] of terms) {
     entry.el.style.display = tid === id ? "block" : "none";
@@ -1326,6 +1365,7 @@ async function run(text) {
     }
   }
   $("#prompt").value = "";
+  saveDraft(true);   // sent, so there is no longer a draft
   setRepeat(1);
 }
 
@@ -1354,6 +1394,7 @@ async function runShell(text) {
     method: "POST", body: JSON.stringify({ text, enter: true }),
   });
   $("#prompt").value = "";
+  saveDraft(true);   // sent, so there is no longer a draft
 }
 
 function setRepeat(value) {
@@ -1792,7 +1833,14 @@ function wire() {
   $("#prompt").oninput = (ev) => {
     ev.target.style.height = "auto";
     ev.target.style.height = Math.min(ev.target.scrollHeight, 140) + "px";
+    saveDraft();
   };
+
+  /* The laptop-lid case. A debounce that has not fired yet would otherwise be
+   * lost exactly when someone most expects the box to still hold their words. */
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveDraft(true);
+  });
 
   $("#palQ").oninput = renderPalette;
   $("#palQ").onkeydown = (ev) => {

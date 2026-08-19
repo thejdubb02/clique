@@ -41,6 +41,10 @@ becoming a collection of buttons** as features accumulate.
 from a registry-declared location, labelled by its first prompt, searchable
 with `~` in the palette, and opened by resuming it in the right folder.
 
+**Per-session prompt drafts `[4/5]` — 0.17.0.** Half-typed instructions
+survive a tab switch, a reload and a closed laptop. On the server, so they
+follow you to another device — the rule set in 0.4.1, applied.
+
 **Scroll lock / follow mode `[3/5]` — 0.13.0.** Two lists ranked it #1
 outright. Scrolling up detaches the viewport; the bottom re-attaches; a badge
 carries how far behind the pane has fallen. The stream is never frozen, only
@@ -61,16 +65,9 @@ with per-response nonces · published on the tailnet under systemd.
 
 ---
 
-## Next four, in order
+## Next three, in order
 
-### 1. Per-session prompt drafts `[4/5]`
-Half-typed instructions survive a tab switch, a reload, and a closed laptop.
-Pure loss-prevention, fires dozens of times a day, and one list called it "the
-single cheapest high-frequency win". Under the sync rule established in 0.4.1
-this belongs **on the server**, not in localStorage: a draft is about the work.
-*Both · hours*
-
-### 2. Explicit attention states — waiting, error `[4/5]`
+### 1. Explicit attention states — waiting, error `[4/5]`
 Beyond busy/quiet: **working / waiting / needs attention / error / quiet**.
 "Which of my eighteen agents needs me?" is the question this product exists to
 answer. Partly built — the busy pulse and finished-flash landed in 0.2.0. What
@@ -78,12 +75,12 @@ is missing is *waiting-on-input* and *error*, which need output-pattern
 matching. Must degrade cleanly when a CLI is silent or non-standard.
 *Both · a day*
 
-### 3. Hover preview of the last few lines `[3/5]`
+### 2. Hover preview of the last few lines `[3/5]`
 On sidebar rows and on tabs. Glance without switching. Named the highest-value
 awareness win after the badge, and it costs hours.
 *Both · hours*
 
-### 4. Searchable prompt history `[4/5]`
+### 3. Searchable prompt history `[4/5]`
 Every prompt sent, per session and globally, fuzzy-searchable, one click to
 reuse or edit. The distinction one list drew is worth keeping: **snippets are
 for deliberate reuse; history is for accidental reuse.** They do not replace
