@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.36.0 — 2026-08-19 14:54 PDT
+
+**Text no longer smears when you have a selection.** Fragments of old lines
+were being left behind when a screen redrew underneath a live selection — an
+interactive menu being arrowed through was the reliable way to see it. Not a
+font problem and not a character-width problem: xterm's default DOM renderer
+draws elements per run of text, and those are the stale nodes. The canvas
+renderer, now vendored, repaints the whole cell grid each frame, so there is
+nothing left over to see.
+
+Canvas rather than WebGL deliberately. WebGL is faster and it wants a GPU
+context that a phone, a VM or a remote session can refuse or lose, and this
+panel is meant to open anywhere. If the file is missing or a 2d context is
+refused, the DOM renderer is still there — imperfect beats absent.
+
+**The directory picker is a picker.** It was a type-ahead list, and browsers
+filter those by whatever is already in the field — which is prefilled with the
+directory you are in, so it showed exactly one entry and looked like CLIque
+knew nothing. There is a real dropdown beside the field now, grouped into
+*Running now*, *Recent* and *From history*, showing everything regardless of
+what is typed. Type-ahead still works once you start typing somewhere new.
+
+**A path that is not there says so before you press Start.** It used to fall
+through to the server's error, which is correct and arrives after you have
+named the session, chosen a CLI and committed. It also has an explanation worth
+giving: the picker offers directories from past conversations, and a project
+that has since moved is still in that history.
+
 ## 0.35.0 — 2026-08-19 14:45 PDT
 
 **Stop typing paths from memory.** The working directory field in the new

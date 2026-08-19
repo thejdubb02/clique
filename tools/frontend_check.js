@@ -104,8 +104,8 @@ console.log("directories the panel already knows");
 
   let state;
   let resumable;
-  const $ = () => ({ textContent: "", appendChild() {} });
-  void $;
+  const shortPath = (p) => p;
+  void shortPath;
 
   eval(code);
 
@@ -120,7 +120,8 @@ console.log("directories the panel already knows");
   ]};
   resumable = [{ cwd: "/srv/history", updated: now }, { cwd: "/srv/live", updated: now }];
 
-  const dirs = knownDirs();
+  const dirs = knownDirs().map((d) => d.cwd);
+  const kindOf = (cwd) => (knownDirs().find((d) => d.cwd === cwd) || {}).kind;
   // A live session is where you are working, so it beats a more recent look at
   // something that has since stopped.
   check("a running directory outranks a recently-viewed dead one",
@@ -133,6 +134,15 @@ console.log("directories the panel already knows");
   check("but rank below anything with a session", dirs.indexOf("/srv/history") > 0, dirs.join(","));
   check("archived is not somewhere you are working", !dirs.includes("/srv/gone"));
   check("and an empty path is never offered", !dirs.includes(""));
+
+  // The groups the picker draws. A directory with a live session is "running
+  // now" whatever else it also is, which is why the kind travels with the
+  // winning score rather than being decided afterwards.
+  check("a live session is grouped as running", kindOf("/srv/live") === "running");
+  check("a stopped one as recent", kindOf("/srv/old") === "recent");
+  check("and one only history knows about as history",
+        kindOf("/srv/history") === "history");
+  check("a directory with both is running, not recent", kindOf("/srv/dupe") === "running");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

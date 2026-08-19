@@ -2505,6 +2505,34 @@ async function attach(id) {
   }
 
   term.open(host);
+
+  /* A real renderer, rather than the fallback one.
+   *
+   * xterm's default is the DOM renderer: one element per run of text, which
+   * is why a screen that redraws underneath a live selection — an interactive
+   * menu being arrowed through, say — can leave fragments of the old text
+   * behind. It is not a font problem and it is not a width problem; it is
+   * stale nodes. The canvas renderer repaints the whole cell grid every
+   * frame, so there is nothing left over to see.
+   *
+   * Canvas rather than WebGL, deliberately. WebGL is faster and it needs a GPU
+   * context that a phone, a VM or a remote session can refuse or lose, and
+   * this panel is meant to be opened from anywhere. Canvas has no such
+   * dependency and is still a full repaint.
+   *
+   * Loaded after `open` because it attaches to the element the terminal has
+   * just created, and guarded because it is vendored — if the file is missing
+   * or the browser refuses a 2d context, the DOM renderer is still there and
+   * a terminal that renders imperfectly beats no terminal at all.
+   */
+  if (window.CanvasAddon) {
+    try {
+      term.loadAddon(new CanvasAddon.CanvasAddon());
+    } catch (err) {
+      /* falls back to the DOM renderer on its own */
+    }
+  }
+
   fit.fit();
   wireLinks(term);
 
@@ -2773,7 +2801,22 @@ function checkWorkspace() {
     }
     // Still the directory we asked about? The field moves while we are away.
     if ($("#newForm").cwd.value.trim() !== cwd) return;
-    if (!look.exists) return;       // the server says so on submit, and better
+
+    /* A path that is not there is worth saying now rather than on submit.
+     *
+     * It used to fall through to the server's error, which is correct and
+     * arrives too late: you have already filled in the name, chosen the CLI
+     * and pressed Start. It also happens for a reason the panel can explain —
+     * the picker offers directories from past conversations, and a project
+     * that has since been moved or deleted is still in that history. */
+    box.classList.toggle("missing", !look.exists);
+    if (!look.exists) {
+      box.textContent = "There is no directory at that path" +
+        (knownDirs().some((d) => d.cwd === cwd)
+          ? " any more — it is remembered from an earlier session" : "");
+      box.hidden = false;
+      return;
+    }
 
     const said = [];
     if (look.sessions.length === 1) {
@@ -2818,11 +2861,14 @@ function checkWorkspace() {
  */
 const CWD_SUGGESTIONS = 24;
 
+const CWD_GROUPS = { running: "Running now", recent: "Recent", history: "From history" };
+
 function knownDirs() {
-  const rank = new Map();          // cwd -> score, highest wins
-  const note = (cwd, score) => {
+  const rank = new Map();          // cwd -> { score, kind }
+  const note = (cwd, score, kind) => {
     if (!cwd) return;
-    rank.set(cwd, Math.max(rank.get(cwd) || 0, score));
+    const had = rank.get(cwd);
+    if (!had || score > had.score) rank.set(cwd, { score, kind });
   };
 
   for (const s of state.sessions || []) {
@@ -2830,24 +2876,67 @@ function knownDirs() {
     // Alive outranks everything, then most recently looked at. last_seen is
     // seconds, so it is already the tiebreaker — it just needs to sit below
     // the alive bonus rather than swamping it.
-    note(s.cwd, (s.alive ? 4e9 : 0) + (s.last_seen || s.created || 0));
+    note(s.cwd, (s.alive ? 4e9 : 0) + (s.last_seen || s.created || 0),
+         s.alive ? "running" : "recent");
   }
-  for (const c of resumable || []) note(c.cwd, (c.updated || 0) / 2);
+  for (const c of resumable || []) note(c.cwd, (c.updated || 0) / 2, "history");
 
   return [...rank.entries()]
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].score - a[1].score)
     .slice(0, CWD_SUGGESTIONS)
-    .map(([cwd]) => cwd);
+    .map(([cwd, meta]) => ({ cwd, kind: meta.kind }));
 }
 
+/* Two controls for one field, and they are not the same control twice.
+ *
+ * The list is a `<select>` because a `<datalist>` alone could not do the job:
+ * a browser filters those by whatever is already in the input, and the input
+ * is prefilled with the directory you are in — so the suggestion list showed
+ * exactly one entry, the one you already had, and looked like the panel knew
+ * nothing. A select shows everything regardless of what is typed.
+ *
+ * The datalist stays anyway, because it earns its place at a different moment:
+ * once you start typing a path it is type-ahead over the same list, and it
+ * costs nothing when unused.
+ */
 function fillCwdList() {
+  const dirs = knownDirs();
+
   const list = $("#cwdList");
   list.textContent = "";
-  for (const cwd of knownDirs()) {
+  for (const { cwd } of dirs) {
     const option = document.createElement("option");
     option.value = cwd;
     list.appendChild(option);
   }
+
+  const pick = $("#cwdPick");
+  pick.textContent = "";
+  const head = document.createElement("option");
+  head.value = "";
+  head.textContent = dirs.length ? "Recent…" : "Nowhere yet";
+  pick.appendChild(head);
+
+  // Grouped, because "running now" and "somewhere you were in June" are
+  // different kinds of answer and a flat list of twenty paths makes you read
+  // all of them to find that out.
+  for (const [kind, label] of Object.entries(CWD_GROUPS)) {
+    const mine = dirs.filter((d) => d.kind === kind);
+    if (!mine.length) continue;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    for (const { cwd } of mine) {
+      const option = document.createElement("option");
+      option.value = cwd;
+      // Shortened for the list, full path as the value: a select as wide as
+      // the longest path anyone has ever worked in is not a usable control.
+      option.textContent = shortPath(cwd);
+      option.title = cwd;
+      group.appendChild(option);
+    }
+    pick.appendChild(group);
+  }
+  pick.disabled = !dirs.length;
 }
 
 function openModal() {
@@ -2883,7 +2972,14 @@ function openModal() {
   /* Where you are, then where you were, then the server's own home — never a
    * path baked into the page. "/root" lived here until now, which was the
    * machine this was written on rather than anybody else's default. */
-  form.cwd.value = current ? current.cwd : (knownDirs()[0] || state.home || "");
+  form.cwd.value = current ? current.cwd
+                          : ((knownDirs()[0] || {}).cwd || state.home || "");
+  $("#cwdPick").onchange = (ev) => {
+    if (!ev.target.value) return;
+    form.cwd.value = ev.target.value;
+    ev.target.selectedIndex = 0;   // back to "Recent…", so it reads as a picker
+    checkWorkspace();
+  };
   $("#modalErr").hidden = true;
   form.cwd.oninput = checkWorkspace;
   checkWorkspace();

@@ -160,8 +160,11 @@
     <label>Name <input name="name" placeholder="What is it for?" autocomplete="off"></label>
     <label>CLI <select name="cli"></select></label>
     <label>Working directory
-      <input name="cwd" list="cwdList" autocomplete="off" required
-             placeholder="Where should it run?">
+      <span class="cwd-row">
+        <input name="cwd" list="cwdList" autocomplete="off" required
+               placeholder="Where should it run?">
+        <select id="cwdPick" title="Directories CLIque already knows"></select>
+      </span>
     </label>
     <datalist id="cwdList"></datalist>
     <label>Folder <select name="folder"></select></label>
@@ -528,5 +531,6 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
 <script src="vendor/addon-unicode11.js"></script>
+<script src="vendor/addon-canvas.js"></script>
 <script src="app.js"></script>
 </html>
