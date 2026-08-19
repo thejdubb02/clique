@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.8.0 — 2026-08-19
+
+**Every past conversation, findable and resumable.** 266 of them on this box,
+discovered in under half a second.
+
+Switching tools should not cost anyone their history. Every CLI worth driving
+already writes its transcripts to disk, and the registry already knew the argv
+that resumes one — the only missing piece was finding them.
+
+- **Registry-driven, not a Claude branch.** A CLI declares where it keeps its
+  transcripts in `config/clis.toml`:
+
+      [cli.claude.history]
+      dir     = "~/.claude/projects"
+      layout  = "dashed-dir"
+      pattern = "*.jsonl"
+
+  Omit the block and the CLI simply has no history, which is the right answer
+  for `shell`.
+- **Labelled by the first thing you typed**, read from the head of the
+  transcript and nothing more. Understanding a conversation would be the
+  LLM-summary trap wearing a different hat; the first human turn is free and
+  is what you actually remember it by.
+- **`~` in the palette** searches them. They stay out of an empty `Ctrl`+`K`
+  on purpose — hundreds of old conversations would drown the twenty sessions
+  you actually switch between — and join the pool as soon as you type.
+- **Resuming is the same code path as starting.** The registry hands back the
+  resume argv instead of the launch argv, and the new session lands in the
+  folder its directory belongs to. Nothing in CLIque knows what resuming means
+  for any particular CLI.
+- Discovery is a directory walk plus a bounded read per file, cached, and runs
+  when asked rather than on the three-second poll.
+
+**Also:** a new session now files itself into the right folder automatically,
+the same way an adopted one does. It only did that for adopted sessions.
+
 ## 0.7.0 — 2026-08-19
 
 Four things found by actually looking at the running app rather than at the

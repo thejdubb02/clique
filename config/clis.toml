@@ -49,6 +49,14 @@ modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
 
+# Where Claude Code keeps its transcripts. One directory per project, named
+# after the working directory with every "/" and "." replaced by "-", and one
+# .jsonl per conversation whose stem is the id `--resume` wants.
+[cli.claude.history]
+dir     = "~/.claude/projects"
+layout  = "dashed-dir"
+pattern = "*.jsonl"
+
 [cli.gemini]
 label      = "Gemini CLI"
 command    = "gemini"

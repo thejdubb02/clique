@@ -113,6 +113,17 @@ class CliType:
     #: Filename in web/icons/. Drawn as a mask and tinted, so only the
     #: silhouette matters — a flat single-colour shape, not artwork.
     icon: str = ""
+    #: Where this CLI keeps its own conversation history, so past work can be
+    #: found and resumed. A table, not code:
+    #:
+    #:   [cli.claude.history]
+    #:   dir     = "~/.claude/projects"
+    #:   layout  = "dashed-dir"   # <dir>/<cwd with / and . as ->/<id>.jsonl
+    #:   pattern = "*.jsonl"
+    #:
+    #: Omit it and the CLI simply has no resumable history, which is the right
+    #: answer for `shell` and for anything whose transcripts we cannot find.
+    history: dict = field(default_factory=dict)
 
     @property
     def has_modes(self) -> bool:
@@ -224,7 +235,7 @@ def parse(data: dict) -> dict[str, CliType]:
             raise RegistryError(f"cli.{cli_id}: expected a table")
         unknown_keys = set(raw) - {
             "label", "command", "args", "resume", "color",
-            "modes", "mode_key", "mode_label", "icon",
+            "modes", "mode_key", "mode_label", "icon", "history",
         }
         if unknown_keys:
             raise RegistryError(
@@ -241,6 +252,7 @@ def parse(data: dict) -> dict[str, CliType]:
             mode_key=raw.get("mode_key", "S-Tab"),
             mode_label=raw.get("mode_label", "{mode} mode"),
             icon=raw.get("icon", ""),
+            history=dict(raw.get("history") or {}),
         )
         _validate(cli)
         types[cli_id] = cli

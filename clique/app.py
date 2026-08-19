@@ -28,6 +28,7 @@ from pathlib import Path
 
 from . import migrate, sysinfo, tmux, version_string
 from .auth import Auth, landing_page, login_page
+from .history import History as ConversationHistory
 from .registry import Registry, RegistryError
 from .registry import icon_is_full_colour as registry_icon_is_colour
 from .store import Session, Store, auto_folder, new_id
@@ -81,6 +82,11 @@ class Panel:
         self.registry = registry
         self.auth = auth
         self.tokens = tokens
+        #: Past conversations, discovered on demand and cached. Deliberately
+        #: NOT `self.history` — that name was already the cpu/memory series,
+        #: and taking it silently replaced the stats endpoint's backing object
+        #: with one that has no `series`.
+        self.conversations = ConversationHistory(registry)
         #: Failed logins per client address, for throttling.
         self.failures: dict[str, list[float]] = {}
         self.clients = 0
@@ -192,6 +198,10 @@ class Panel:
         cwd = body.get("cwd") or "/root"
         name = (body.get("name") or "").strip() or Path(cwd).name or cli_id
         mode = body.get("mode")
+        # Resuming a past conversation is the same code path as starting a new
+        # one, differing only in which argv the registry hands back. Nothing
+        # here knows what resuming means for any particular CLI.
+        prior = (body.get("cli_session_id") or "").strip() or None
 
         if not Path(cwd).is_dir():
             raise ValueError(f"working directory does not exist: {cwd}")
@@ -199,6 +209,7 @@ class Panel:
         session_id = new_id()
         argv = self.registry.launch_argv(
             cli_id, session_id=session_id, name=name, cwd=cwd, mode=mode,
+            cli_session_id=prior,
         )
         cli = self.registry.get(cli_id)
         if not cli.installed:
@@ -213,7 +224,8 @@ class Panel:
         session = self.store.add_session(Session(
             id=session_id, name=name, cli=cli_id, cwd=cwd, mux=mux,
             socket=tmux.SOCKET, mode=mode or cli.default_mode,
-            folder=body.get("folder"),
+            folder=body.get("folder") or auto_folder(cwd, self.store.folders),
+            cli_session_id=prior,
         ))
         return {"id": session.id}
 
@@ -504,6 +516,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/stats/history":
                 minutes = max(1, min(int(query.get("minutes") or 60), 180))
                 return self._json(self.panel.history.series(minutes))
+            if path == "/api/resumable":
+                return self._json(
+                    [c.as_dict() for c in self.panel.conversations.conversations()])
             if path == "/api/adoptable":
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()

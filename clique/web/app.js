@@ -1283,6 +1283,60 @@ let palItems = [];
 let palAt = 0;
 let palReturnTo = null;
 
+/* Past conversations, fetched once and reused. Deliberately not part of the
+ * three-second state poll: discovery is a few hundred file reads, and the
+ * answer only changes when a conversation ends. */
+let resumable = null;
+let resumableAt = 0;
+
+async function loadResumable(force) {
+  if (!force && resumable && Date.now() - resumableAt < 60000) return resumable;
+  try {
+    resumable = await api("api/resumable");
+    resumableAt = Date.now();
+  } catch (err) {
+    resumable = resumable || [];
+  }
+  return resumable;
+}
+
+/* Start a session that picks a past conversation back up.
+ *
+ * The same endpoint that starts a new one — the registry decides what
+ * resuming means for each CLI, and this knows nothing about any of them. */
+async function resumeConversation(entry) {
+  const created = await api("api/sessions", {
+    method: "POST",
+    body: JSON.stringify({
+      name: entry.label.slice(0, 48) || entry.project,
+      cli: entry.cli,
+      cwd: entry.cwd,
+      cli_session_id: entry.cli_session_id,
+    }),
+  });
+  await refresh();
+  openSession(created.id);
+}
+
+function resumeItems() {
+  const clis = new Map((state.clis || []).map((c) => [c.id, c]));
+  return (resumable || []).map((entry) => {
+    const cli = clis.get(entry.cli);
+    return {
+      kind: "resume",
+      title: entry.label || entry.project,
+      detail: entry.project + " · " + ago(entry.updated),
+      match: `${entry.label} ${entry.project} ${entry.cwd} ${cli ? cli.label : entry.cli}`,
+      icon: cli ? markerFor({ color: cli.color, icon: cli.icon,
+                              icon_full_color: cli.icon_full_color,
+                              label: cli.label, cli: cli.id },
+                             markerMode(cli.id) === "none" ? "color" : markerMode(cli.id)) : "",
+      tag: "resume",
+      run: () => resumeConversation(entry),
+    };
+  });
+}
+
 /* "The one I was just in" is a fact about the work, not about this screen, so
  * it is kept on the server with the rest of the settings and is the same
  * answer on the desktop and on the phone. The sidebar width is the
@@ -1392,6 +1446,8 @@ function paletteCommands() {
   add("Settings", "Themes, markers, snippets, notifications", openSettings);
   add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
   add("System history", "cpu and memory over the last hour", showHistory);
+  add("Resume a past conversation", "Every transcript your CLIs have kept",
+      () => openPalette("~"));
 
   if (current) {
     add("Rename session", current.name, () => renameSession(current));
@@ -1474,6 +1530,9 @@ async function copyText(text) {
 }
 
 function openPalette(prefill) {
+  // Warm the history in the background. By the time anyone has typed enough
+  // to want it, it is there; and if it never arrives, the palette still works.
+  loadResumable().then(() => { if (!$("#palette").hidden) renderPalette(); });
   palReturnTo = document.activeElement;
   $("#modal").hidden = true;
   $("#menu").hidden = true;
@@ -1496,12 +1555,18 @@ function closePalette() {
 
 function renderPalette() {
   const raw = $("#palQ").value;
-  const mode = raw[0] === ">" ? "command" : raw[0] === "@" ? "session" : "all";
+  const mode = raw[0] === ">" ? "command"
+             : raw[0] === "@" ? "session"
+             : raw[0] === "~" ? "resume" : "all";
   const query = (mode === "all" ? raw : raw.slice(1)).trim().toLowerCase();
 
   let pool = [];
   if (mode !== "command") pool = pool.concat(paletteSessions());
   if (mode !== "session") pool = pool.concat(paletteCommands());
+  /* Hundreds of past conversations would drown the twenty things you actually
+   * switch between, so they join the pool only once you have typed something
+   * — or when you have asked for them by name with "~". */
+  if (mode === "resume" || (mode === "all" && query)) pool = pool.concat(resumeItems());
 
   const shown = [];
   for (const item of pool) {
