@@ -37,6 +37,10 @@ ordered most-recently-used, `>` for commands, `@` for sessions, `Ctrl`+`Shift`+`
 straight into commands. One list gave the real reason: **it stops the UI
 becoming a collection of buttons** as features accumulate.
 
+**Resumable conversation history.** Every transcript a CLI has kept, found
+from a registry-declared location, labelled by its first prompt, searchable
+with `~` in the palette, and opened by resuming it in the right folder.
+
 Also done: session engine on its own tmux server · CLI registry with
 auto-detection · folder tree with drag-drop, rename, search, archive, colours ·
 numbered tabs · live terminal with scrollback across reattach · per-CLI icons
