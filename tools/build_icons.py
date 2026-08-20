@@ -66,6 +66,7 @@ ICONS: dict[str, str] = {
     "settings": "settings, and a session's own settings",
     "download": "adopt a session another tool started",
     "arrow-down-to-line": "following output, or not",
+    "pause": "output is paused, not following",
     "pencil": "rename, recolour or delete a folder",
     "image": "images this session made",
     "keyboard": "keyboard shortcuts",

@@ -276,11 +276,13 @@ function statusDot(s, where) {
   const on = where === "tabs" ? state.settings.markers_in_tabs
                               : state.settings.markers_in_sidebar;
   if (on !== false && statusOnIcon(s)) return "";
-  // Same five states as the ring: with no marker to carry them, the dot is
-  // what is left, and it should not be saying something different.
+  // Same five states as the ring, and the same ring: a filled dot cannot
+  // spin, so wrapping it is how the sidebar speaks the same language as
+  // the tab when the logo is turned off.
   const work = workState(s);
-  return `<i class="dot" data-work="${work}" role="img"` +
-         ` aria-label="${WORK_WORDS[work]}" title="${WORK_WORDS[work]}"></i>`;
+  return `<span class="cli-status" data-work="${work}" role="img"` +
+         ` aria-label="${WORK_WORDS[work]}" title="${WORK_WORDS[work]}">` +
+         `<i class="dot" data-work="${work}"></i></span>`;
 }
 
 /* Said out loud, for a tooltip and for a screen reader. A ring that only means
@@ -340,10 +342,12 @@ function restoreWorkspace() {
   }
 
   viewsCollapsed = new Set(views.filter((id) => typeof id === "string"));
-  pendingWorkspace = { tabs, active: saved.active_tab || "", lifted };
-  // Nothing is written back here: `openTabs` is still empty at this point, and
-  // saving it now would erase the very list that was just lifted. The write
-  // happens once the tabs are actually open.
+  const live = tabs.filter((id) => typeof id === "string" && session(id));
+  pendingWorkspace = { tabs: live, active: saved.active_tab || "", lifted };
+  /* The strip can list them before any socket is open. Saving is still
+   * deferred: openTabs is now filled so the first paint shows the tabs,
+   * but a write here would race the attach of the active one. */
+  openTabs = live;
 }
 
 function saveWorkspace(now) {
@@ -428,21 +432,6 @@ const PRESSURE = [[90, "critical"], [75, "high"], [50, "busy"], [0, "calm"]];
 function pressureLevel(percent) {
   const at = Math.max(0, Math.min(Number(percent) || 0, 100));
   return (PRESSURE.find(([floor]) => at >= floor) || [0, "calm"])[1];
-}
-
-function statDot(percent) {
-  const level = pressureLevel(percent);
-  return `<i class="dot stat" data-level="${level}" aria-hidden="true"></i>`;
-}
-
-/* The label in front of a reading.
- *
- * Upper case because CPU, MEM, SWAP and DISK are acronyms and lower case was
- * simply wrong on them; LOAD joins in so the row does not read as three
- * shouted words and one whispered one. The *values* keep their own case —
- * "138.1G free" is a sentence, not a label. */
-function key(word) {
-  return `<b class="k">${word}</b> `;
 }
 
 /* The version, and whether there is something new behind it.
@@ -531,45 +520,63 @@ function saveWorkspaceSetting(patch) {
     .catch(() => {});
 }
 
+function paintStat(id, percent, value, title) {
+  const el = $("#" + id);
+  if (!el) return;
+  const dot = el.querySelector(".dot");
+  const slot = el.querySelector(".v");
+  if (dot && !dot.style.background) dot.dataset.level = pressureLevel(percent);
+  if (slot) slot.textContent = value;
+  if (title) el.title = title;
+}
+
 function renderStats() {
   const st = state.stats || {};
-  const gb = (mb) => Math.round((mb || 0) / 1024 * 10) / 10;
+  const gb = (mb) => (Math.round((mb || 0) / 1024 * 10) / 10).toFixed(1);
 
   const cpu = st.cpu ?? 0;
-  const cpuEl = $("#cpu");
-  cpuEl.innerHTML = statDot(cpu) + key("CPU") + cpu + "%";
-  cpuEl.title = `cpu ${cpu}%`;
+  paintStat("cpu", cpu, Number(cpu).toFixed(1) + "%", `cpu ${cpu}%`);
 
   const mem = st.mem || {};
-  const memEl = $("#mem");
-  memEl.innerHTML = statDot(mem.percent) + key("MEM") + gb(mem.used_mb) + "/" +
-                    Math.round((mem.total_mb || 0) / 1024) + "G";
-  memEl.title = `memory ${mem.percent ?? 0}% used`;
+  const totalG = Math.round((mem.total_mb || 0) / 1024);
+  paintStat("mem", mem.percent,
+            gb(mem.used_mb) + "/" + totalG + "G",
+            `memory ${mem.percent ?? 0}% used`);
 
-  // Load against core count, because "1.4" means nothing without knowing the
-  // box. One per core is a full queue, so that is where the dot reaches red.
   const load = st.load || {};
-  const loadEl = $("#load");
-  loadEl.innerHTML = statDot((load.ratio || 0) * 100) + key("LOAD") + (load.one ?? 0).toFixed(2);
-  loadEl.title = `${load.one} / ${load.five} / ${load.fifteen} over ${load.cores} cores`;
+  paintStat("load", (load.ratio || 0) * 100,
+            Number(load.one ?? 0).toFixed(2),
+            `${load.one} / ${load.five} / ${load.fifteen} over ${load.cores} cores`);
 
-  // Disk is the quietest way to lose an afternoon here: everything starts
-  // failing in ways that never mention disk.
   const disk = st.disk || {};
-  const diskEl = $("#disk");
-  diskEl.innerHTML = statDot(disk.percent) + key("DISK") + (disk.free_gb ?? 0) + "G free";
-  diskEl.title = `disk ${disk.percent ?? 0}% used`;
+  paintStat("disk", disk.percent,
+            Number(disk.free_gb ?? 0).toFixed(1) + "G free",
+            `disk ${disk.percent ?? 0}% used`);
 
-  // Any swap in use means memory pressure already happened, so it only
-  // appears when there is something to say — and it starts amber rather than
-  // green, because "a little swap" is not a healthy reading.
+  // Any swap in use means memory pressure already happened. The column stays
+  // even at zero, so it appearing does not shove the tabs sideways.
   const swap = st.swap || {};
   const swapEl = $("#swap");
-  swapEl.hidden = !(swap.used_mb > 0);
-  swapEl.innerHTML = statDot(Math.max(swap.percent || 0, 70)) + key("SWAP") + gb(swap.used_mb) + "G";
-  swapEl.title = `swap ${swap.percent ?? 0}% used — memory pressure has already happened`;
+  if (swapEl) {
+    swapEl.classList.toggle("is-off", !(swap.used_mb > 0));
+    paintStat("swap", Math.max(swap.percent || 0, 70),
+              gb(swap.used_mb) + "G",
+              `swap ${swap.percent ?? 0}% used — memory pressure has already happened`);
+  }
 
-  $("#clients").innerHTML = '<i class="dot" style="background:var(--ok)"></i>' + (st.clients ?? 0);
+  const n = st.clients ?? 0;
+  const tabs = openTabs.length;
+  let why;
+  if (!n && !tabs) {
+    why = "No live views. Each open tab becomes one once it is hooked up.";
+  } else if (n === tabs) {
+    why = `${n} live view${n === 1 ? "" : "s"} — one per open tab in this window.`;
+  } else if (n > tabs) {
+    why = `${n} live views. This window has ${tabs} tab${tabs === 1 ? "" : "s"}; extras are another window or a phone.`;
+  } else {
+    why = `${n} live view${n === 1 ? "" : "s"} of ${tabs} tabs — the rest are still hooking up.`;
+  }
+  paintStat("clients", 0, String(n), why);
 }
 
 function sparkline(samples, key, color, height) {
@@ -677,6 +684,39 @@ function renderServices() {
 
 /* ------------------------------------------------------------------- sidebar */
 
+function treeFingerprint() {
+  /* What the sidebar actually shows. Ages bucket through ago(), so a
+   * session that is "3m" old does not rebuild the list every poll — only
+   * when it ticks over to "4m", or when a ring, name, or folder changes. */
+  const query = ($("#q") && $("#q").value.trim().toLowerCase()) || "";
+  const s = state.settings || {};
+  const sess = (state.sessions || []).map((x) => [
+    x.id, x.name, x.folder || "", x.archived ? 1 : 0, x.alive ? 1 : 0,
+    workState(x), unread(x) ? 1 : 0, attention.has(x.id) ? 1 : 0,
+    x.signal || "", x.saying || "", x.cli || "", x.cwd || "",
+    ago(x.created), x.cli_session_id || "",
+  ].join("\x1f")).join("\x1e");
+  const folders = (state.folders || []).map((f) =>
+    [f.id, f.name, f.color, f.collapsed ? 1 : 0].join("\x1f")).join("\x1e");
+  const hist = (resumable || []).map((c) => [
+    c.cli_session_id || "", c.label, c.cwd, c.folder || "",
+    ago(c.updated), c.repeats || 1, c.cli || "",
+  ].join("\x1f")).join("\x1e");
+  return [
+    query, activeId || "",
+    [...viewsCollapsed].sort().join(","),
+    openTabs.join(","),
+    [...historyOpen].sort().join(","),
+    s.history_in_sidebar, s.history_days, s.font_panel,
+    JSON.stringify(s.markers || {}),
+    JSON.stringify(s.cli_colors || {}),
+    folders, sess, hist,
+  ].join("\x1d");
+}
+
+let treeFp = "";
+let tabsFp = "";
+
 function renderTree() {
   const tree = $("#tree");
 
@@ -693,6 +733,11 @@ function renderTree() {
    * path that threw, and the failure mode of that is a sidebar frozen forever.
    * If the input is gone, rendering resumes on its own. */
   if (tree.querySelector("input")) return;
+
+  const fp = treeFingerprint();
+  if (fp === treeFp && tree.childElementCount) return;
+  treeFp = fp;
+  const scroll = tree.scrollTop;
 
   const query = $("#q").value.trim().toLowerCase();
   tree.innerHTML = "";
@@ -800,6 +845,7 @@ function renderTree() {
     button.onclick = () => openSession(s.id);
     dots.appendChild(button);
   }
+  tree.scrollTop = scroll;
 }
 
 /* Recent enough to be worth a row.
@@ -1081,6 +1127,7 @@ function showMenu(ev, items) {
     menu.appendChild(button);
   }
   menu.hidden = false;
+  menu.style.setProperty("--menu-origin", "top left");
   menu.style.left = Math.min(ev.clientX, innerWidth - 170) + "px";
   menu.style.top = Math.min(ev.clientY, innerHeight - menu.offsetHeight - 8) + "px";
 }
@@ -1178,8 +1225,9 @@ function nextLine(row) {
  * because of the gear; sidebar rows had nothing, so half the app was missing
  * on the device most likely to be checking on a session from the sofa.
  *
- * Delegated to the tree rather than bound per row: the sidebar is rebuilt on
- * every poll, and three listeners per session every three seconds is churn for
+ * Folder heads and history rows now get the same press. Delegated to the
+ * tree rather than bound per row: the sidebar is rebuilt when its contents
+ * change, and three listeners per session every three seconds is churn for
  * nothing.
  */
 const LONG_PRESS_MS = 500;
@@ -1193,23 +1241,32 @@ function wireTouchMenus() {
 
   const cancel = () => { clearTimeout(timer); timer = null; from = null; };
 
+  const pressTarget = (node) => {
+    const head = node.closest(".folder-head");
+    if (head && head.querySelector(".folder-edit")) return head;
+    return node.closest(".session");
+  };
+
   tree.addEventListener("touchstart", (ev) => {
     cancel();
     if (ev.touches.length !== 1) return;        // a pinch is not a press
-    const row = ev.target.closest(".session");
+    const row = pressTarget(ev.target);
     if (!row) return;
     const touch = ev.touches[0];
-    from = { x: touch.clientX, y: touch.clientY, id: row.dataset.id };
+    from = { x: touch.clientX, y: touch.clientY, el: row };
     fired = false;
     timer = setTimeout(() => {
       timer = null;
-      const s = session(from && from.id);
-      if (!s) return;
+      const el = from && from.el;
+      if (!el) return;
       fired = true;
       // The one moment a buzz is right: nothing has moved on screen yet, and
       // without it a press that has landed feels identical to one that has not.
       if (navigator.vibrate) navigator.vibrate(12);
-      sessionMenu({ clientX: from.x, clientY: from.y, preventDefault() {} }, s);
+      el.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true, cancelable: true,
+        clientX: from.x, clientY: from.y,
+      }));
     }, LONG_PRESS_MS);
   }, { passive: true });
 
@@ -1257,6 +1314,7 @@ function colorPicker(ev, folder) {
   }
   menu.appendChild(grid);
   menu.hidden = false;
+  menu.style.setProperty("--menu-origin", "top left");
   menu.style.left = Math.min(ev.clientX, innerWidth - 190) + "px";
   menu.style.top = Math.min(ev.clientY, innerHeight - 110) + "px";
 }
@@ -1343,13 +1401,34 @@ async function killSession(s) {
 
 /* ---------------------------------------------------------------------- tabs */
 
+function tabsFingerprint() {
+  return openTabs.map((id) => {
+    const s = session(id);
+    if (!s) return id;
+    return [
+      id, s.name, s.alive ? 1 : 0, workState(s),
+      unread(s) ? 1 : 0, attention.has(id) ? 1 : 0,
+      s.cwd || "", s.signal || "", s.cli || "",
+    ].join("\x1f");
+  }).join("\x1e") + "\x1d" + (activeId || "");
+}
+
 function renderTabs() {
   const bar = $("#tabs");
+  const fp = tabsFingerprint();
+  if (fp === tabsFp && bar.childElementCount) {
+    applyCliTint();
+    packTabs();
+    renderInputBar();
+    return;
+  }
+  tabsFp = fp;
   bar.innerHTML = "";
   openTabs.forEach((id, index) => {
     const s = session(id);
     if (!s) return;
     const tab = document.createElement("div");
+    tab.dataset.id = id;
     tab.className = "tab" + (id === activeId ? " active" : "") +
       (s.busy ? " busy" : "") + (unread(s) ? " unread" : "") +
       (attention.has(id) ? " attention" : "");
@@ -1374,7 +1453,7 @@ function renderTabs() {
       `<span class="label">${escapeHtml(s.name)}</span>` +
       `<button class="gear" title="Session settings">${icon("settings")}</button>` +
       `<button class="x" title="Close tab (session keeps running)">${icon("x")}</button>`;
-    tab.onclick = () => selectTab(id);
+    tab.onclick = () => openSession(id);
     tab.querySelector(".x").onclick = (ev) => { ev.stopPropagation(); closeTab(id); };
     tab.querySelector(".gear").onclick = (ev) => { ev.stopPropagation(); sessionMenu(ev, s); };
 
@@ -1413,7 +1492,136 @@ function renderTabs() {
 
     bar.appendChild(tab);
   });
+  applyCliTint();
+  packTabs();
   renderInputBar();
+}
+
+/* Keep every tab on screen, or behind a control that is itself on screen.
+ *
+ * The standing rule: overflow wraps or is visible, never behind a scrollbar
+ * that is itself hidden. A strip of twenty sessions that ran off the right
+ * edge — with no way to see that one of them was waiting — is that failure.
+ *
+ * Names shrink first (flex). What still will not fit is hidden from the
+ * right, except the tab you are looking at, which always stays. Those land
+ * in #tabOverflow, which wears the same working/waiting/error ring so a
+ * session that needs you is not gone, just one click further. */
+function packTabs() {
+  const bar = $("#tabs");
+  const btn = $("#tabOverflow");
+  if (!bar || !btn) return;
+  const tabs = [...bar.querySelectorAll(".tab")];
+  tabs.forEach((tab) => { tab.hidden = false; });
+  btn.hidden = true;
+  if (!tabs.length || bar.clientWidth < 8) {
+    paintOverflowButton([]);
+    return;
+  }
+  if (bar.scrollWidth <= bar.clientWidth + 1) {
+    paintOverflowButton([]);
+    return;
+  }
+
+  btn.hidden = false;
+  const activeIdx = tabs.findIndex((tab) => tab.dataset.id === activeId);
+  while (bar.scrollWidth > bar.clientWidth + 1) {
+    let hide = -1;
+    for (let i = tabs.length - 1; i >= 0; i--) {
+      if (i === activeIdx || tabs[i].hidden) continue;
+      hide = i;
+      break;
+    }
+    if (hide < 0) break;
+    tabs[hide].hidden = true;
+  }
+  paintOverflowButton(tabs.filter((tab) => tab.hidden).map((tab) => tab.dataset.id));
+}
+
+function paintOverflowButton(ids) {
+  const btn = $("#tabOverflow");
+  if (!btn) return;
+  const rows = ids.map((id) => session(id)).filter(Boolean);
+  btn.hidden = !rows.length;
+  if (!rows.length) {
+    btn.dataset.work = "idle";
+    btn.classList.remove("attention", "unread");
+    return;
+  }
+  const count = rows.length;
+  btn.title = count === 1 ? "1 more tab" : `${count} more tabs`;
+  btn.setAttribute("aria-label", btn.title);
+  const n = btn.querySelector(".n");
+  if (n) n.textContent = String(count);
+
+  const states = rows.map((s) => workState(s));
+  let work = "idle";
+  if (states.includes("error")) work = "error";
+  else if (states.includes("waiting") || rows.some((s) => attention.has(s.id))) work = "waiting";
+  else if (states.includes("working")) work = "working";
+  btn.dataset.work = work;
+  const ring = btn.querySelector(".cli-status");
+  if (ring) ring.setAttribute("data-work", work);
+  btn.classList.toggle("attention", rows.some((s) => attention.has(s.id)));
+  btn.classList.toggle("unread", rows.some((s) => unread(s)));
+}
+
+function overflowRank(s) {
+  const work = workState(s);
+  if (work === "error") return 0;
+  if (work === "waiting" || attention.has(s.id)) return 1;
+  if (work === "working") return 2;
+  if (unread(s)) return 3;
+  return 4;
+}
+
+function openOverflowMenu(ev) {
+  const btn = $("#tabOverflow");
+  const menu = $("#menu");
+  const hidden = [...$("#tabs").querySelectorAll(".tab")]
+    .filter((tab) => tab.hidden)
+    .map((tab) => session(tab.dataset.id))
+    .filter(Boolean)
+    .sort((a, b) => overflowRank(a) - overflowRank(b) ||
+                    openTabs.indexOf(a.id) - openTabs.indexOf(b.id));
+  menu.innerHTML = "";
+  menu.dataset.kind = "tab-overflow";
+  if (!hidden.length) {
+    menu.hidden = true;
+    return;
+  }
+  for (const s of hidden) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "tab-more-item" +
+      (unread(s) ? " unread" : "") +
+      (attention.has(s.id) ? " attention" : "");
+    const mark = document.createElement("span");
+    mark.className = "empty-mark";
+    mark.innerHTML = (statusDot(s, "tabs") || "") + sessionMarker(s, "tabs");
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = s.name;
+    const why = document.createElement("span");
+    why.className = "why";
+    const work = workState(s);
+    why.textContent = work === "idle" && unread(s)
+      ? "new output"
+      : (WORK_WORDS[work] || "");
+    row.append(mark, name, why);
+    row.onclick = () => {
+      menu.hidden = true;
+      openSession(s.id);
+    };
+    menu.append(row);
+  }
+  menu.hidden = false;
+  const box = (ev.currentTarget || btn).getBoundingClientRect();
+  const width = Math.max(menu.offsetWidth, 220);
+  menu.style.minWidth = "220px";
+  menu.style.setProperty("--menu-origin", "top right");
+  menu.style.left = Math.min(box.left, innerWidth - width - 8) + "px";
+  menu.style.top = Math.min(box.bottom + 4, innerHeight - menu.offsetHeight - 8) + "px";
 }
 
 /* Put `moved` next to `target`. Removing first and finding the index second
@@ -2350,7 +2558,6 @@ function renderFollow() {
       : "Paused — click to follow again";
   }
   const lock = $("#lock");
-  lock.textContent = paused ? "\u23f8" : "\u21e3";
   lock.classList.toggle("on", paused);
   lock.title = paused
     ? "Paused — the view is not following output (Ctrl+Shift+L)"
@@ -2399,11 +2606,15 @@ function selectTab(id) {
   showDeparture(id);
   markSeen(id);
   for (const [tid, entry] of terms) {
-    entry.el.style.display = tid === id ? "block" : "none";
+    const on = tid === id;
+    entry.el.style.visibility = on ? "visible" : "hidden";
+    entry.el.style.pointerEvents = on ? "auto" : "none";
+    entry.el.style.zIndex = on ? "1" : "0";
   }
   const entry = terms.get(id);
   if (entry) {
-    entry.fit.fit();
+    try { entry.fit.fit(); } catch (err) { /* not laid out yet */ }
+    try { entry.term.refresh(0, entry.term.rows - 1); } catch (err) { /* same */ }
     entry.term.focus();
   }
   renderTabs();
@@ -2415,6 +2626,32 @@ async function openSession(id) {
   if (!openTabs.includes(id)) openTabs.push(id);
   if (!terms.has(id)) await attach(id);
   selectTab(id);
+}
+
+/* Warm the other open tabs after the one in front is up.
+ *
+ * The first click used to wait on a new PTY, a socket, and a tmux viewer —
+ * a second of empty pane. The strip already listed them; this just hooks
+ * the live view in the background so switching is a show, not a hook-up.
+ *
+ * False restores click-to-attach (0.48). Hidden tabs connect at the
+ * window's current size and stay passive until selected, so they cannot
+ * steal the pane you are looking at. */
+const WARM_BACKGROUND_TABS = true;
+const attaching = new Map();   // id -> in-flight attach
+let warmTimer = null;
+
+function warmOpenTabs() {
+  if (!WARM_BACKGROUND_TABS) return;
+  clearTimeout(warmTimer);
+  const next = openTabs.find((id) => {
+    const s = session(id);
+    return s && s.alive && !terms.has(id) && !attaching.has(id);
+  });
+  if (!next) return;
+  warmTimer = setTimeout(() => {
+    attach(next).catch(() => {}).finally(warmOpenTabs);
+  }, 350);
 }
 
 function closeTab(id, silent) {
@@ -2431,7 +2668,16 @@ function closeTab(id, silent) {
   if (activeId === id) activeId = openTabs[openTabs.length - 1] || null;
   saveWorkspace();
   if (!silent) {
-    renderTabs(); renderTree(); selectTab(activeId);
+    /* A tab that was only in the strip — never attached — has to attach
+     * when it becomes the one in front. selectTab would paint the chrome
+     * and leave the pane empty. */
+    if (activeId) {
+      if (terms.has(activeId)) selectTab(activeId);
+      else openSession(activeId);
+    } else {
+      renderTabs();
+      renderTree();
+    }
     /* Closing a tab has always kept the session, and nothing ever said so —
      * which made the ✕ read as destructive and had people killing sessions
      * they only meant to put down. Saying it, and offering the other choice
@@ -2492,18 +2738,46 @@ function wsUrl(id, cols, rows) {
   const url = new URL("ws", document.baseURI);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.search = `?id=${encodeURIComponent(id)}&cols=${cols}&rows=${rows}`;
+  // A tab that is not in front must not claim the shared window's size.
+  if (id !== activeId) url.searchParams.set("passive", "1");
   return url.toString();
 }
 
+function attachSize(id) {
+  /* Match the shared window, not this browser's pane. A hidden terminal
+   * that reports 0x0 or the local viewport would resize every warmed
+   * session the moment it connected — the two-window fight again. */
+  const s = session(id);
+  if (s && s.cols && s.rows) return { cols: s.cols, rows: s.rows };
+  const front = activeId && terms.get(activeId);
+  if (front) return { cols: front.term.cols, rows: front.term.rows };
+  return { cols: 120, rows: 32 };
+}
+
 async function attach(id) {
+  if (terms.has(id)) return;
+  if (attaching.has(id)) return attaching.get(id);
+  const work = attachNow(id).finally(() => attaching.delete(id));
+  attaching.set(id, work);
+  return work;
+}
+
+async function attachNow(id) {
+  const size = attachSize(id);
+  const front = id === activeId;
   const host = document.createElement("div");
-  host.style.cssText = "position:absolute;inset:0;padding:6px 8px;";
+  host.style.cssText = "position:absolute;inset:0;padding:6px 8px;" +
+    (front
+      ? "visibility:visible;pointer-events:auto;z-index:1"
+      : "visibility:hidden;pointer-events:none;z-index:0");
   $("#terminal").appendChild(host);
 
   // Built with the theme already on, not with the built-in dark and a repaint
   // on the next poll: under a light theme that was a black pane flashing up
   // for a moment every time a session opened.
   const term = new Terminal({
+    cols: size.cols,
+    rows: size.rows,
     fontSize: state.settings.font_terminal || 13,
     fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
     theme: termTheme(currentTheme()),
@@ -2560,7 +2834,12 @@ async function attach(id) {
     }
   }
 
-  fit.fit();
+  // A hidden tab must not measure the pane and then claim that size. The
+  // constructor already matched the shared window, which is what history
+  // will arrive at. Fitting waits until the tab is in front.
+  if (front) {
+    try { fit.fit(); } catch (err) { /* not visible yet */ }
+  }
   wireLinks(term);
 
   /* The pane owns the keyboard — deliberately, and that is why tabs are
@@ -2639,6 +2918,13 @@ async function attach(id) {
                   follow: true, behind: 0, pinned: 0, baseline: 0, attempt: 0,
                   note: null };
   terms.set(id, entry);
+  if (!openTabs.includes(id)) {
+    entry.closing = true;
+    term.dispose();
+    host.remove();
+    terms.delete(id);
+    return;
+  }
 
   /* Scrolling up detaches the viewport; arriving back at the bottom
    * re-attaches it. Our own corrections set `pinning`, so they are never
@@ -2734,6 +3020,7 @@ async function attach(id) {
     send(data);
   });
   term.onResize(({ cols, rows }) => {
+    if (id !== activeId) return;   // a hidden tab must not resize the window
     if (entry.ws && entry.ws.readyState === 1) {
       entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
     }
@@ -3740,6 +4027,15 @@ function wire() {
   $("#cancel").onclick = () => ($("#modal").hidden = true);
   $("#collapse").onclick = () => setSidebar(false);
   $("#expand").onclick = () => setSidebar(true);
+  $("#tabOverflow").onclick = (ev) => {
+    ev.stopPropagation();
+    const menu = $("#menu");
+    if (!menu.hidden && menu.dataset.kind === "tab-overflow") {
+      menu.hidden = true;
+      return;
+    }
+    openOverflowMenu(ev);
+  };
 
   $("#newFolder").onclick = newFolder;
   $("#adopt").onclick = adoptSessions;
@@ -3899,7 +4195,7 @@ function wire() {
     // Alt+1..9 rather than plain digits: the terminal owns the keyboard.
     if (ev.altKey && ev.key >= "1" && ev.key <= "9") {
       const target = openTabs[Number(ev.key) - 1];
-      if (target) { ev.preventDefault(); selectTab(target); }
+      if (target) { ev.preventDefault(); openSession(target); }
     }
     if (ev.key === "Escape") {
       // Guarded: closing the palette hands focus back, and doing that when it
@@ -3915,7 +4211,12 @@ function wire() {
     }
   };
 
-  addEventListener("resize", refitAll);
+  addEventListener("resize", () => { packTabs(); refitAll(); });
+  if (typeof ResizeObserver === "function") {
+    const packOnSize = new ResizeObserver(() => packTabs());
+    packOnSize.observe($("#tabs"));
+    packOnSize.observe($("#tabbar"));
+  }
 }
 
 /* --------------------------------------------------------- command palette */
@@ -4410,6 +4711,7 @@ function wireResizer() {
       handle.onpointermove = null;
       handle.onpointerup = null;
       setSidebarWidth(e.clientX, true);
+      packTabs();
       refitAll();
     };
 
@@ -4419,7 +4721,7 @@ function wireResizer() {
 
   // Double-click the handle to go back to the default, the same way a window
   // manager treats a double-clicked edge.
-  handle.ondblclick = () => { setSidebarWidth(SIDEBAR_DEFAULT, true); refitAll(); };
+  handle.ondblclick = () => { setSidebarWidth(SIDEBAR_DEFAULT, true); packTabs(); refitAll(); };
 
   // Keyboard, because a drag handle that only takes a mouse is not a control.
   handle.onkeydown = (ev) => {
@@ -4430,6 +4732,7 @@ function wireResizer() {
     else if (ev.key === "ArrowRight") setSidebarWidth(current + step, true);
     else return;
     ev.preventDefault();
+    packTabs();
     refitAll();
   };
 }
@@ -4475,7 +4778,7 @@ function setSidebar(show) {
   // Re-apply the stored width on the way back in, so collapsing and expanding
   // returns the sidebar you had rather than the default one.
   if (show) setSidebarWidth(storedSidebarWidth(), false);
-  setTimeout(refitAll, 0);
+  setTimeout(() => { packTabs(); refitAll(); }, 0);
 }
 
 /* Carry the browser's own state across the rename, once.
@@ -4505,10 +4808,23 @@ refresh().then(async () => {
   // Re-open whatever was open last, so a reload is not a fresh start — and on
   // a second device, so signing in there is not a fresh start either.
   const want = pendingWorkspace || { tabs: [], active: "" };
-  await Promise.all(want.tabs.filter((id) => session(id)).map(openSession));
-  // Chosen last: every openSession above selects its own tab as it finishes,
-  // in whatever order the sockets came up.
-  if (want.active && openTabs.includes(want.active)) selectTab(want.active);
+  /* Tabs in the strip, a socket only for the one in front.
+   *
+   * Attaching every saved tab on load meant a reload opened a PTY for
+   * each of them — and two browsers then fought over the pane size.
+   * The strip still lists them all; the first click (or Alt+1–9) is
+   * what attaches a background one. */
+  openTabs = want.tabs.filter((id) => session(id));
+  const pick = (want.active && openTabs.includes(want.active))
+    ? want.active
+    : openTabs[0];
+  if (pick) {
+    await openSession(pick);
+    // After the front one is hooked up, not in the same breath: a pile of
+    // PTYs at once is how the box used to hitch on reload.
+    setTimeout(warmOpenTabs, 500);
+  }
+  else saveWorkspace();
 
   /* Arriving from a notification.
    *

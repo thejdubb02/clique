@@ -1370,7 +1370,13 @@ class Handler(BaseHTTPRequestHandler):
             # opened rather than inheriting whatever the last tool left —
             # otherwise an adopted session opens as a small pane in a sea of
             # tmux dot-fill.
-            tmux.resize_window(session.mux, cols, rows, session.socket)
+            #
+            # `passive=1` is a background viewer: same size as the window
+            # already is, and it must not become the thing that resizes it.
+            # A hidden tab warming up in a second window used to steal the
+            # pane the first window was looking at.
+            if query.get("passive") not in {"1", "true", "yes"}:
+                tmux.resize_window(session.mux, cols, rows, session.socket)
 
             # Then scrollback, which is now captured at the width it will be
             # displayed at, and then the attach. History only — tmux redraws

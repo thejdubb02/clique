@@ -39,15 +39,16 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **Command palette** | `Ctrl`/`Cmd`+`K`: fuzzy jump between sessions, most-recently-used first. `>` commands, `@` sessions, `~` past conversations. |
 | **History** | Every conversation your CLIs have kept, filed by directory, resumable in one click. Repeated runs of the same scheduled agent fold into one row. |
 | **Folders** | A tree. Drag-drop, double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). |
-| **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Closing a tab is not killing the session. tmux and the CLI keep running. |
+| **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Names shrink first; what still will not fit lands in **N more**, wearing the same working / waiting ring. Closing a tab is not killing the session. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. |
 | **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. |
 | **Scroll lock** | Scroll up and the view detaches from the stream. A badge says how far behind you are; the bottom, the lock, or `Ctrl`/`Cmd`+`Shift`+`L` catches you up. |
 | **Paste a screenshot** | `Ctrl`/`Cmd`+`V` saves the image into the session's own directory and drops the path where you were typing. Nothing is sent until you press enter. |
 | **See what it made** | An agent writes a screenshot into the session's directory and a count appears in the tab bar. Grid, full size, and the path back into your prompt in one click. |
 | **Prompt drafts** | A half-typed instruction survives a tab switch, a reload, and a closed laptop. Per session, on the server, so it follows you to another device. |
-| **Workspace** | Open tabs, their order, the one in front, and which groups are collapsed live on the server. Sign in somewhere else and the panes are where you left them. |
+| **Workspace** | Open tabs, their order, the one in front, and which groups are collapsed live on the server. A reload attaches the tab you are looking at, then warms the rest in the background without resizing the pane. Sign in somewhere else and the strip is where you left it. |
 | **Status** | A ring around the CLI's own logo: an arc turning means working, a steady pulse means finished and waiting for you, idle draws nothing. The logo is never recoloured. |
+| **The box** | CPU, memory, disk and **VIEWS** in the bottom bar. Views is live connections on the box, not open tabs — hover if the number looks high; extras are another window or a phone. |
 | **Waiting on you** | Three tiers: tmux's clock, regexes you declare per CLI, and a `POST .../attention` a session fires from your own hook. Nothing here knows which vendor is talking. |
 | **Unread** | A dot on anything that produced output while you were elsewhere, and a rule in the pane where you stopped reading. |
 | **Which CLI** | The pane edge, the active tab and the prompt box carry the CLI's colour, so switching tabs tells you where you are typing. Colours editable per CLI. |

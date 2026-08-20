@@ -190,13 +190,29 @@ def _run(panel) -> int:
         # not load leaves a button that is present, clickable and empty.
         for sel, name in [("#newFolder", "new folder"), ("#settingsBtn", "settings"),
                           ("#collapse", "hide sidebar"), ("#newTab", "new session"),
-                          ("#keysBtn", "shortcuts")]:
+                          ("#lock", "follow output"), ("#keysBtn", "shortcuts")]:
             box = page.locator(sel).bounding_box()
             check(f"{name} has a size", bool(box) and box["width"] > 6 and box["height"] > 6, box)
-            icon = page.locator(f"{sel} .ico")
+            icon = page.locator(f"{sel} .ico").first
             if icon.count():
                 ibox = icon.bounding_box()
                 check(f"{name} drew its icon", bool(ibox) and ibox["width"] > 4, ibox)
+        pause = page.locator("#lock .ico-pause")
+        if pause.count():
+            check("pause glyph stays hidden while following",
+                  pause.bounding_box() is None)
+
+        keys_box = page.locator("#keysBtn").bounding_box()
+        tab_box = page.locator("#tabbar").bounding_box()
+        if keys_box and tab_box:
+            check("shortcuts sit in the bottom bar, not the tab strip",
+                  keys_box["y"] > tab_box["y"] + tab_box["height"] - 1,
+                  keys_box)
+        stats_box = page.locator("#stats").bounding_box()
+        if stats_box and tab_box:
+            check("stats sit in the bottom bar, not the tab strip",
+                  stats_box["y"] > tab_box["y"] + tab_box["height"] - 1,
+                  stats_box)
 
         print("nothing is covering anything")
         rows = page.locator(f'.session[data-id="{mine}"]')
@@ -217,6 +233,22 @@ def _run(panel) -> int:
                 check("and the menu is what a click would land on", on_top)
             page.keyboard.press("Escape")
 
+        print("stats hold still")
+        page.wait_for_timeout(200)
+        before = page.evaluate(
+            "() => document.querySelector('#stats').getBoundingClientRect().width")
+        page.evaluate(
+            """() => {
+              const mem = document.querySelector('#mem .v');
+              const cpu = document.querySelector('#cpu .v');
+              if (mem) mem.textContent = '0.1/8G';
+              if (cpu) cpu.textContent = '100.0%';
+            }""")
+        after = page.evaluate(
+            "() => document.querySelector('#stats').getBoundingClientRect().width")
+        check("changing a reading does not resize the stats",
+              abs(before - after) < 1, {"before": before, "after": after})
+
         print("the theme reached the terminal")
         sessions = page.locator(f'.session[data-id="{mine}"]')
         if sessions.count():
@@ -227,6 +259,78 @@ def _run(panel) -> int:
                 "() => { const s = document.querySelector('.xterm-screen, .xterm');"
                 " return s ? getComputedStyle(s).backgroundColor : ''; }")
             print(f"       terminal background: {painted or '(none set)'}")
+
+        print("tabs that do not fit")
+        names = [
+            "Duchamp Events Dev", "CLIque Code Review", "Whatbox IPTV Dev",
+            "WSG Platform Gen", "Sentinel Dev", "Duchamp Room Rates",
+            "Meridian Nightly", "Daily Deck Writer", "Prowler Scan",
+            "Inbox Agent", "Dealophant Shop",
+        ]
+        extra: list[str] = []
+        try:
+            for name in names:
+                extra.append(_api("/api/sessions", "POST",
+                                  {"cli": "shell", "cwd": "/tmp", "name": name})["id"])
+            page.wait_for_timeout(3500)
+            page.evaluate(
+                """(ids) => { openTabs = ids; activeId = ids[0]; renderTabs(); }""",
+                extra)
+            page.wait_for_timeout(250)
+            page.locator("#tabbar").screenshot(path=str(SHOTS / "tab-overflow.png"))
+            clipped = page.evaluate(
+                """() => {
+                  const bar = document.querySelector("#tabbar");
+                  const edge = bar.getBoundingClientRect().right;
+                  return [...document.querySelectorAll("#tabs .tab")]
+                    .filter((t) => !t.hidden)
+                    .filter((t) => t.getBoundingClientRect().right > edge + 1)
+                    .map((t) => t.textContent.trim());
+                }""")
+            check("no visible tab is clipped by the bar", clipped == [], clipped)
+            more = page.locator("#tabOverflow")
+            check("the overflow control is on screen", more.is_visible())
+            more_box = more.bounding_box()
+            bar_box = page.locator("#tabbar").bounding_box()
+            if more_box and bar_box:
+                check(
+                    "and it sits inside the bar",
+                    more_box["x"] + more_box["width"] <= bar_box["x"] + bar_box["width"] + 1,
+                    more_box,
+                )
+            more.click()
+            page.wait_for_timeout(200)
+            check("clicking it lists the rest", page.locator("#menu .tab-more-item").count() > 0)
+            page.keyboard.press("Escape")
+            contrast = page.evaluate(
+                """() => {
+                  const active = document.querySelector(".tab.active");
+                  const other = document.querySelector(".tab:not(.active)");
+                  if (!active || !other) return { ok: false, why: "need two tabs" };
+                  const a = getComputedStyle(active);
+                  const b = getComputedStyle(other);
+                  const al = getComputedStyle(active.querySelector(".label"));
+                  const bl = getComputedStyle(other.querySelector(".label"));
+                  return {
+                    ok: true,
+                    activeBg: a.backgroundColor,
+                    otherBg: b.backgroundColor,
+                    activeWeight: Number(al.fontWeight),
+                    otherWeight: Number(bl.fontWeight),
+                    activeColor: a.color,
+                    otherColor: b.color,
+                  };
+                }""")
+            check("active tab is heavier than its neighbours",
+                  contrast.get("ok") and contrast["activeWeight"] >= 600
+                  and contrast["activeWeight"] > contrast["otherWeight"],
+                  contrast)
+            check("active tab is not the same colour as an idle one",
+                  contrast.get("ok") and contrast["activeColor"] != contrast["otherColor"],
+                  contrast)
+        finally:
+            for sid in extra:
+                _remove_session(sid)
 
         page.screenshot(path=str(SHOTS / "panel.png"), full_page=False)
         page.locator("#settingsBtn").click()

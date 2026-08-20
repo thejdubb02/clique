@@ -19,9 +19,12 @@ delivered. Several items were visible over Justin's shoulder and look real:
 - history discovery re-reads ~160 KB per transcript on a 30-second all-or-
   nothing cache — a per-file cache on (path, mtime, size) instead
 - `notify.post` starts a thread per event, unbounded
-- opening the workspace attaches every tab at once, rather than the active one
 - the bearer/cookie check re-verifies several times per request
 - CSP `connect-src` allows any `ws:`/`wss:` where `'self'` would do
+
+Workspace attach from that list shipped in 0.48–0.49: the front tab first,
+then the rest in the background, passive so a hidden tab cannot steal the
+pane size.
 
 Work through it, agree or disagree with each item on the evidence, and say
 which. Do not take it at face value — two of today's three "reviews" contained

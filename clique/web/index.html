@@ -51,6 +51,8 @@
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /></symbol>
   <!-- following output, or not -->
   <symbol id="i-arrow-down-to-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3" /><path d="m6 11 6 6 6-6" /><path d="M19 21H5" /></symbol>
+  <!-- output is paused, not following -->
+  <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="3" width="5" height="18" rx="1" /><rect x="5" y="3" width="5" height="18" rx="1" /></symbol>
   <!-- rename, recolour or delete a folder -->
   <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /><path d="m15 5 4 4" /></symbol>
   <!-- images this session made -->
@@ -87,18 +89,16 @@
   <main>
     <div id="tabbar">
       <div id="tabs"></div>
+      <button id="tabOverflow" class="tab-more" hidden aria-haspopup="menu"
+              title="More tabs">
+        <span class="cli-status" data-work="idle">
+          <svg class="ico" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+        </span>
+        <span class="n"></span>
+      </button>
       <button id="newTab" class="tab-add" title="New session"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
-      <button id="lock" class="tab-add" title="Following output — scroll up, or press Ctrl+Shift+L, to pause"><svg class="ico" aria-hidden="true"><use href="#i-arrow-down-to-line"/></svg></button>
-      <button id="keysBtn" class="tab-add" title="Keyboard shortcuts (Ctrl+Shift+/)"><svg class="ico" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
+      <button id="lock" class="tab-add" title="Following output — scroll up, or press Ctrl+Shift+L, to pause"><svg class="ico ico-follow" aria-hidden="true"><use href="#i-arrow-down-to-line"/></svg><svg class="ico ico-pause" aria-hidden="true"><use href="#i-pause"/></svg></button>
       <button id="artBtn" class="tab-add" title="Images this session made" hidden></button>
-      <div id="stats" title="Click for the last hour">
-        <span id="cpu">cpu —</span>
-        <span id="mem">mem —</span>
-        <span id="swap" hidden></span>
-        <span id="disk">disk —</span>
-        <span id="load">load —</span>
-        <span id="clients" title="Connected terminals"><i class="dot"></i>0</span>
-      </div>
     </div>
 
     <div id="history" hidden></div>
@@ -150,6 +150,20 @@
         <button id="run" class="primary">Run</button>
         <button id="runShell" title="Run in a shell session for this directory">Shell</button>
       </div>
+    </div>
+
+    <div id="statusbar">
+      <div id="stats" title="Click for the last hour">
+        <span id="cpu" class="stat"><i class="dot stat" aria-hidden="true"></i><b class="k">CPU</b><span class="v">—.–%</span></span>
+        <span id="mem" class="stat"><i class="dot stat" aria-hidden="true"></i><b class="k">MEM</b><span class="v">—.—/—G</span></span>
+        <span id="swap" class="stat is-off"><i class="dot stat" aria-hidden="true"></i><b class="k">SWAP</b><span class="v">—.–G</span></span>
+        <span id="disk" class="stat"><i class="dot stat" aria-hidden="true"></i><b class="k">DISK</b><span class="v">—.–G free</span></span>
+        <span id="load" class="stat"><i class="dot stat" aria-hidden="true"></i><b class="k">LOAD</b><span class="v">-.--</span></span>
+        <span id="clients" class="stat" title="Live views — one per open tab, plus any other window or phone"><i class="dot" style="background:var(--ok)"></i><b class="k">VIEWS</b><span class="v">0</span></span>
+      </div>
+      <button id="keysBtn" class="hdr-btn" title="Keyboard shortcuts (Ctrl+Shift+/)">
+        <svg class="ico" aria-hidden="true"><use href="#i-keyboard"/></svg>
+      </button>
     </div>
   </main>
 </div>

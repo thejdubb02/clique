@@ -429,10 +429,15 @@ front of you (sidebar width, sidebar shown or hidden).
 
 ## Terminals
 
-`GET /ws?session=<id>&cols=<n>&rows=<n>` upgrades to a WebSocket carrying the
+`GET /ws?id=<id>&cols=<n>&rows=<n>` upgrades to a WebSocket carrying the
 pane. Text frames are keystrokes; JSON control frames handle `resize` and
 running a command. The handshake enforces `Origin`, because a WebSocket is not
 subject to CORS and `SameSite=Lax` does not cover it.
+
+`passive=1` attaches a viewer without resizing the shared tmux window. Used
+when a tab is warming in the background so a hidden pane cannot steal the
+size of the one you are looking at. The first `resize` from the tab you
+actually switch to is what claims the window.
 
 The PTY is created on connect and destroyed on disconnect — no viewer, no
 process. **Closing the socket does not stop the session**; that is the whole

@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.49.1 — 2026-08-20 12:26 PDT
+
+**The view count says what it is.** The number next to the green dot is live
+views on the box, not open tabs — so 11 with 6 tabs means a second window
+or a phone is still connected. Hover spells that out in the count you
+actually have.
+
+## 0.49.0 — 2026-08-20 12:14 PDT
+
+**Switching tabs is a show, not a hook-up.** After a reload the other tabs
+used to sit as names until you clicked one, then wait a second while a
+terminal, a socket and a tmux viewer spun up. They now warm in the
+background once the one in front is up, so the first click already has
+the pane. Hidden tabs connect at the window's current size and do not
+resize the one you are looking at.
+
+If it feels worse than the wait, it comes out.
+
+## 0.48.0 — 2026-08-20 11:26 PDT
+
+**The sidebar no longer jumps every three seconds.** The list was being
+redrawn on every poll, so a long sidebar snapped back to the top and a
+folder you had just opened slammed shut under your finger. It now only
+rebuilds when something actually changed — a ring, a name, a new
+session — and it keeps its place in the list.
+
+**A reload no longer attaches every tab.** Opening the panel used to
+spin up a live view for each saved tab, which is why a second window
+fought the first for the pane size. The strip still shows them all; only
+the one you are looking at is attached. Clicking a background tab, or
+Alt+1–9, is what opens it.
+
+**On a phone, the controls are actually there.** Close and settings on a
+tab, and the pencil on a folder, used to appear only on hover — which a
+finger does not have. They stay visible. A long press on a folder or a
+past conversation opens the same menu a right-click does.
+
+**And the follow button keeps its icon.** Pausing used to replace the
+arrow with a text glyph that wiped the drawing out. It now swaps to a
+pause mark in the same set.
+
+**Light theme text that was too faint is readable.** The muted colour
+failed the contrast bar on the light grey panel; it is darker now.
+
+Settings, the new-session dialog, menus and toasts ease in. The command
+palette does not — that one is opened all day from the keyboard.
+
+## 0.47.0 — 2026-08-20 09:07 PDT
+
+**Tabs that do not fit stay reachable.** A strip of a dozen sessions ran off
+the right edge, behind a scrollbar that was itself hidden, so a session that
+was waiting or finished was simply gone. Names shrink first. What still will
+not fit lands in a **N more** control on the strip — always on screen, wearing
+the same working / waiting / error ring the tabs themselves wear — and a click
+lists every hidden tab, the ones that need you first.
+
+**And the one you are in is obvious.** It was a two-pixel tint on top of a
+chip that looked like every other chip. It now sits as the top of the pane —
+same fill, a thicker bar in the CLI's colour, the name in weight — and a
+session flashing for attention no longer paints itself like the current tab.
+
+**The ring spins only while a session is working.** When it finishes and
+needs you, the arc stops and the ring pulses — same motion on the sidebar
+as on the tab, which the scrolling list had been clipping. Idle still
+draws nothing.
+
+**The stats no longer shove the tabs.** Readings are fixed-width tabular
+numbers, so a decimal appearing or swap dropping to zero does not walk the
+strip sideways. They live in a status bar at the bottom now, with the
+keyboard shortcuts on the right — the top strip is for sessions.
+
 ## 0.46.0 — 2026-08-19 16:54 PDT
 
 **Ctrl+V pastes.** It did nothing at all before — xterm treats Ctrl+V as a

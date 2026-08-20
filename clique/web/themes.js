@@ -38,7 +38,7 @@ window.CLIQUE_THEMES = {
   light: {
     label: "clique light", base: "light",
     panel: { bg: "#ffffff", panel: "#f3f3f3", row: "#e8e8e8", sel: "#cfe6ff",
-             field: "#ffffff", fg: "#24292f", dim: "#6e7781", line: "#d8dee4",
+             field: "#ffffff", fg: "#24292f", dim: "#57606a", line: "#d8dee4",
              accent: "#0969da" },
     term: { background: "#ffffff", foreground: "#24292f", cursor: "#24292f",
             selectionBackground: "#b6d7ff",

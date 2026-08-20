@@ -31,6 +31,7 @@
   --scrim: #000000aa;
   --shadow: #00000088;
   --sidebar-w: 252px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   font-synthesis: none;
 }
 
@@ -45,13 +46,14 @@
 body {
   margin: 0;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg);
   color: var(--fg);
   font: 13px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 
-#shell { display: flex; height: 100vh; }
+#shell { display: flex; height: 100vh; height: 100dvh; }
 
 /* ------------------------------------------------------------------ sidebar */
 
@@ -83,9 +85,8 @@ body {
 
 .hdr-btn {
   background: none; border: 0; color: var(--dim); cursor: pointer;
-  padding: 3px 6px; border-radius: 3px; font-size: 13px; line-height: 1;
+  padding: 6px 8px; border-radius: 3px; font-size: 13px; line-height: 1;
 }
-.hdr-btn:hover { background: var(--row); color: var(--fg); }
 
 .search { padding: 8px; }
 .search input {
@@ -103,7 +104,6 @@ body {
   font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
   color: var(--dim); user-select: none;
 }
-.folder-head:hover { background: var(--row); }
 .folder-head.drop { background: var(--sel); color: var(--fg); }
 /* A session row lit up as a drop target — the same treatment a folder header
    gets, because it is the same gesture landing somewhere else. */
@@ -123,12 +123,10 @@ body {
    whether or not it is showing, so the count does not jump sideways as the
    pointer moves down the tree. */
 .folder-head .folder-edit {
-  flex: 0 0 auto; background: none; border: 0; padding: 0 2px; cursor: pointer;
+  flex: 0 0 auto; background: none; border: 0; padding: 4px 6px; cursor: pointer;
   color: var(--dim); font: inherit; font-size: 11px; line-height: 1;
-  opacity: 0; visibility: hidden; transition: opacity .12s ease;
+  opacity: .75; visibility: visible; transition: opacity .12s ease;
 }
-.folder-head:hover .folder-edit { opacity: .75; visibility: visible; }
-.folder-head .folder-edit:hover { opacity: 1; color: var(--fg); }
 .folder-head .folder-edit:focus-visible {
   opacity: 1; visibility: visible; outline: 1px solid var(--accent); border-radius: 3px;
 }
@@ -138,8 +136,8 @@ body {
 .session {
   display: flex; align-items: center; gap: 7px;
   padding: 4px 10px 4px 22px; cursor: pointer; user-select: none;
+  overflow: visible;
 }
-.session:hover { background: var(--row); }
 /* The session you are looking at. A background alone was too quiet against a
    dark theme — this is the one row in a list of thirty that has to be findable
    without reading, so it also takes the active CLI's colour down its edge,
@@ -179,7 +177,7 @@ body {
   content: ""; position: absolute; top: 0; bottom: 0; left: -3px; width: 7px;
   cursor: col-resize;
 }
-#resizer:hover::after, #resizer.dragging::after,
+#resizer.dragging::after,
 #resizer:focus-visible::after { background: var(--accent); opacity: .55; }
 #resizer:focus { outline: none; }
 
@@ -201,7 +199,6 @@ body.resizing #termwrap { pointer-events: none; }
   background: none; border: 0; padding: 2px 0; cursor: pointer;
   overflow: visible;
 }
-.rail-dot:hover { background: var(--row); border-radius: 4px; }
 
 /* ------------------------------------------------------------------ tab bar */
 
@@ -211,37 +208,108 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
   display: flex; align-items: stretch; gap: 0;
   background: var(--panel); border-bottom: 1px solid var(--line);
   height: 35px; flex: 0 0 35px;
+  min-width: 0; overflow: hidden;
 }
-#tabs { display: flex; overflow-x: auto; scrollbar-width: none; }
-#tabs::-webkit-scrollbar { display: none; }
+/* The strip takes leftover space and never scrolls. A hidden scrollbar is how
+   the last tabs disappeared: they were still "there", just unreachable.
+   Tabs shrink to fit; what still will not fit goes behind #tabOverflow. */
+#tabs {
+  display: flex; flex: 1 1 auto; min-width: 0; overflow: hidden;
+  align-items: stretch;
+}
 
 .tab {
   display: flex; align-items: center; gap: 6px;
-  padding: 0 8px 0 10px; max-width: 220px; cursor: pointer;
+  padding: 0 8px 0 10px; cursor: pointer;
+  flex: 1 1 12rem; min-width: 9rem; max-width: 220px;
   border-right: 1px solid var(--line); color: var(--dim); white-space: nowrap;
 }
-.tab:hover { background: var(--row); }
-/* The active tab's top edge is the CLI's colour, falling back to the theme
-   accent when the tint is off or nothing is open. */
-.tab.active { background: var(--bg); color: var(--fg);
-              box-shadow: inset 0 2px 0 var(--cli, var(--accent)); }
-.tab .num { font-size: 10px; opacity: .6; }
-.tab .label { overflow: hidden; text-overflow: ellipsis; }
+@media (hover: hover) and (pointer: fine) {
+  .tab:hover { background: var(--row); }
+  .tab:hover .x, .tab:hover .gear { opacity: .7; }
+  .tab .x:hover, .tab .gear:hover { opacity: 1; }
+}
+/* The tab you are looking at is the top of the pane, not another chip in
+   the strip. Same fill as the terminal, a CLI-coloured bar along the top,
+   and the tabbar rule painted over so the two join. Weight on the name,
+   because colour-alone is the thing a crowded strip swallows. */
+.tab.active {
+  background: var(--bg); color: var(--fg);
+  min-width: 10.5rem; z-index: 1;
+  box-shadow: inset 0 3px 0 var(--cli, var(--accent)), 0 1px 0 var(--bg);
+}
+.tab.active .label { font-weight: 600; }
+.tab.active .num { opacity: 1; font-weight: 600; color: var(--fg); }
+.tab .num { font-size: 10px; opacity: .6; flex: 0 0 auto; }
+.tab .cli-status, .tab .dot, .tab .cli-icon, .tab .cli-img,
+.tab .cli-chip, .tab .cli-letter { flex-shrink: 0; }
+.tab .label { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto; }
 .tab .x, .tab .gear { opacity: 0; padding: 0 2px; border: 0; background: none;
-                      color: inherit; cursor: pointer; font-size: 12px; line-height: 1; }
-.tab:hover .x, .tab:hover .gear, .tab.active .x, .tab.active .gear { opacity: .7; }
-.tab .x:hover, .tab .gear:hover { opacity: 1; }
+                      color: inherit; cursor: pointer; font-size: 12px; line-height: 1;
+                      flex: 0 0 auto; }
+.tab.active .x, .tab.active .gear { opacity: .7; }
 
 .tab-add { background: none; border: 0; color: var(--dim); cursor: pointer;
-           padding: 0 12px; font-size: 15px; }
-.tab-add:hover { background: var(--row); color: var(--fg); }
+           padding: 0 12px; font-size: 15px; flex: 0 0 auto; }
 
-#stats { margin-left: auto; display: flex; align-items: center; gap: 12px;
-         padding: 0 12px; font-size: 11px; color: var(--dim); }
+/* Tabs that will not fit. Always visible when it has something to say — the
+   count, and the same status ring the tabs themselves wear, so a session that
+   is working or waiting is not lost behind the edge of the window. */
+.tab-more {
+  display: flex; align-items: center; gap: 5px;
+  background: none; border: 0; border-right: 1px solid var(--line);
+  color: var(--dim); cursor: pointer; padding: 0 10px;
+  flex: 0 0 auto; font: inherit; font-size: 11px;
+}
+.tab-more[hidden] { display: none; }
+.tab-more .n { font-variant-numeric: tabular-nums; font-weight: 600; }
+@media (hover: hover) and (pointer: fine) {
+  .tab-more:hover { background: var(--row); color: var(--fg); }
+}
+.tab-more.attention { background: var(--sel); color: var(--fg); }
+.tab-more.unread .n::after {
+  content: ""; display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent); margin-left: 5px;
+  vertical-align: middle;
+}
+
+.tab-more-item {
+  display: flex; align-items: center; gap: 8px;
+}
+.tab-more-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tab-more-item .why { font-size: 11px; color: var(--dim); flex: 0 0 auto; }
+
+#statusbar {
+  display: flex; align-items: center; gap: 8px;
+  height: 28px; flex: 0 0 28px; min-width: 0;
+  padding: 0 6px 0 12px;
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+#statusbar #keysBtn { margin-left: auto; height: 100%; padding: 0 8px; }
+
+#stats { display: flex; align-items: center; gap: 12px;
+         font-size: 11px; color: var(--dim);
+         flex: 0 1 auto; min-width: 0; overflow: hidden;
+         font-variant-numeric: tabular-nums; }
+#stats .stat {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  white-space: nowrap; flex: 0 0 auto;
+}
+#stats .v { display: inline-block; font-variant-numeric: tabular-nums; }
+#cpu .v { min-width: 6ch; text-align: right; }
+#mem .v { min-width: 8ch; text-align: right; }
+#swap .v { min-width: 5ch; text-align: right; }
+#disk .v { min-width: 11ch; }
+#load .v { min-width: 5ch; text-align: right; }
+#clients .v { min-width: 2ch; text-align: right; }
+#clients { cursor: help; }
+/* Swap keeps its column even at zero, so it appearing does not shove the
+   tabs. Hidden-as-invisible, not hidden-as-gone. */
+#swap.is-off { visibility: hidden; }
 /* Each stat carries its own dot, coloured by that stat's own pressure and set
    inline from renderStats. No default background here: an unset dot would show
    a stale colour for the moment before the first poll lands. */
-#stats .dot { margin-right: 4px; vertical-align: baseline;
+#stats .dot { flex: 0 0 auto; vertical-align: baseline;
               transition: background .6s linear; }
 
 /* ----------------------------------------------------------------- terminal */
@@ -277,7 +345,6 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
   color: var(--fg); font: inherit; text-align: left; cursor: pointer;
   transition: background .12s ease;
 }
-.empty-row:hover { background: var(--row); }
 .empty-row.dead .empty-title { color: var(--dim); }
 .empty-mark { display: inline-flex; justify-content: center; }
 .empty-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -300,7 +367,6 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
   border-radius: 999px; padding: 4px 11px; font-size: 11px; cursor: pointer;
   white-space: nowrap; flex: 0 0 auto;
 }
-.pill:hover { border-color: var(--warn); }
 
 #prompt {
   flex: 1; resize: none; max-height: 140px; font: inherit;
@@ -313,7 +379,6 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
            font-size: 12px; flex: 0 0 auto; }
 .stepper button { background: var(--field); border: 0; color: var(--fg);
                   width: 22px; height: 26px; border-radius: 3px; cursor: pointer; }
-.stepper button:hover { background: var(--row); }
 .stepper span { min-width: 14px; text-align: center; }
 
 .runsplit { display: flex; flex: 0 0 auto; }
@@ -322,14 +387,18 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
 .runsplit button:first-child { border-radius: 4px 0 0 4px; }
 .runsplit button:last-child { border-radius: 0 4px 4px 0; border-left: 1px solid var(--line); }
 button.primary { background: var(--accent); color: var(--on-accent); }
-button.primary:hover { filter: brightness(1.1); }
 
 /* -------------------------------------------------------------------- modal */
 
 #modal { position: fixed; inset: 0; background: var(--scrim); display: grid;
-         place-items: center; z-index: 40; }
+         place-items: center; z-index: 40;
+         opacity: 1; transition: opacity 200ms var(--ease-out); }
+@starting-style { #modal { opacity: 0; } }
 #modal form { width: min(420px, 92vw); background: var(--panel);
-              border: 1px solid var(--line); border-radius: 6px; padding: 18px; }
+              border: 1px solid var(--line); border-radius: 6px; padding: 18px;
+              opacity: 1; transform: scale(1);
+              transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out); }
+@starting-style { #modal form { opacity: 0; transform: scale(0.97); } }
 #modal h2 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
 #modal label { display: block; margin-bottom: 10px; font-size: 12px; color: var(--dim); }
 #modal input, #modal select {
@@ -353,11 +422,14 @@ button.primary:hover { filter: brightness(1.1); }
 /* Confirmation that a paste landed, and where. Without it the only feedback is
    a path appearing, which is easy to miss and impossible to interpret if it
    did not. */
-#toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+#toast { position: fixed; left: 50%; bottom: 18px;
+         transform: translateX(-50%) scale(1); opacity: 1;
          z-index: 70; padding: 7px 14px; border-radius: 999px; max-width: 70vw;
          background: var(--panel); color: var(--fg); font-size: 12px;
          border: 1px solid var(--line); box-shadow: 0 6px 20px var(--shadow);
-         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+         transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
+@starting-style { #toast { opacity: 0; transform: translateX(-50%) scale(0.97); } }
 #toast.bad { background: var(--err); color: #fff; border-color: transparent; }
 
 /* An app with no sidebar and no explanation is indistinguishable from a broken
@@ -373,7 +445,6 @@ button.primary:hover { filter: brightness(1.1); }
    than a running session — this answers "where did I leave that", and must
    never compete with "what is happening now". */
 .session.history { opacity: .62; }
-.session.history:hover { opacity: 1; background: var(--row); }
 .session.history .name { font-weight: 400; }
 .session.history .pal-icon { flex: 0 0 16px; display: flex; align-items: center;
                              justify-content: center; }
@@ -387,7 +458,6 @@ button.primary:hover { filter: brightness(1.1); }
 
 .history-more { padding: 4px 10px 6px 34px; font-size: 11px; color: var(--dim);
                 cursor: pointer; }
-.history-more:hover { color: var(--fg); text-decoration: underline; }
 
 /* ------------------------------------------------------------ command palette */
 
@@ -454,13 +524,15 @@ button.primary:hover { filter: brightness(1.1); }
 
 #menu { position: fixed; z-index: 50; background: var(--panel);
         border: 1px solid var(--line); border-radius: 4px; padding: 4px 0;
-        min-width: 150px; box-shadow: 0 6px 20px var(--shadow); }
+        min-width: 150px; box-shadow: 0 6px 20px var(--shadow);
+        opacity: 1; transform: scale(1);
+        transform-origin: var(--menu-origin, top left);
+        transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
+@starting-style { #menu { opacity: 0; transform: scale(0.97); } }
 #menu button { display: block; width: 100%; text-align: left; background: none;
                border: 0; color: var(--fg); font: inherit; padding: 6px 14px;
                cursor: pointer; }
-#menu button:hover { background: var(--accent); color: var(--on-accent); }
 #menu button.danger { color: var(--err); }
-#menu button.danger:hover { background: var(--err); color: var(--on-accent); }
 
 /* --------------------------------------------------------------- CLI markers */
 
@@ -492,38 +564,44 @@ button.primary:hover { filter: brightness(1.1); }
    Three drawn states and one that draws nothing. Idle is the common case — most
    sessions are fine most of the time — and twenty indicators all saying "fine"
    is twenty things to look past on the way to the one that isn't. */
-.cli-status { position: relative; display: inline-flex; flex: 0 0 auto; }
+.cli-status {
+  position: relative; display: inline-flex; flex: 0 0 auto;
+  padding: 3px; overflow: visible;
+}
+/* Padding, not a negative inset: the ring used to paint outside the icon
+   and the sidebar's scrolling tree clipped it, so a working session in the
+   list sat still while the same session's tab spun. Inside the box, both
+   places draw the same mark. */
 .cli-status::after {
-  content: ""; position: absolute; inset: -3px; border-radius: 50%;
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
   border: 1.5px solid transparent; pointer-events: none;
 }
 
-/* Working: an arc going round. Rotation is the only property here that
-   animates, it is composited, and it is the one shape the eye already reads as
-   "in progress" without a legend. */
+/* Working: the arc turns. Waiting: the arc stops and the ring pulses.
+   Those are the only two motions, and they never share a state. */
 .cli-status[data-work="working"]::after {
   border-top-color: var(--accent); border-right-color: var(--accent);
   animation: cli-spin 1s linear infinite;
 }
-/* Finished and not looked at — the state the whole sidebar exists to surface,
-   so it is the only one that is both solid and moving. */
 .cli-status[data-work="waiting"]::after {
-  border-color: var(--warn); animation: cli-nudge 1.8s ease-in-out infinite;
+  border-color: var(--warn); animation: cli-pulse 1.8s ease-in-out infinite;
 }
-/* Stopped: no ring at all, and the mark itself goes quiet. Nothing is
-   happening, and the row should look like nothing is happening. */
+.cli-status[data-work="error"]::after {
+  border-color: var(--critical); animation: cli-pulse 1.4s ease-in-out infinite;
+}
 .cli-status[data-work="stopped"] { filter: grayscale(1); opacity: .45; }
 
 @keyframes cli-spin { to { transform: rotate(360deg); } }
+@keyframes cli-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes cli-nudge { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
-/* The dot, where a marker is turned off, speaks the same five words. */
-.dot[data-work="working"] { background: var(--accent);
-                            animation: cli-nudge 1.2s ease-in-out infinite; }
-.dot[data-work="waiting"] { background: var(--warn);
-                            animation: cli-nudge 1.8s ease-in-out infinite; }
+/* The fill of a dot is colour, not motion. The ring around it (when this
+   dot is wrapped in .cli-status) is what spins or pulses. */
+.dot[data-work="working"] { background: var(--accent); }
+.dot[data-work="waiting"] { background: var(--warn); }
 .dot[data-work="idle"]    { background: var(--dim); opacity: .5; }
 .dot[data-work="stopped"] { background: var(--dead); }
+.dot[data-work="error"]   { background: var(--critical); }
 .cli-letter {
   width: 13px; height: 13px; flex: 0 0 13px; display: inline-grid; place-items: center;
   border: 1px solid; border-radius: 3px; font-size: 9px; font-weight: 600;
@@ -533,7 +611,9 @@ button.primary:hover { filter: brightness(1.1); }
 /* ------------------------------------------------------------------ settings */
 
 #settings { position: fixed; inset: 0; background: var(--scrim); display: grid;
-            place-items: center; z-index: 45; }
+            place-items: center; z-index: 45;
+            opacity: 1; transition: opacity 200ms var(--ease-out); }
+@starting-style { #settings { opacity: 0; } }
 /* Fixed box, scrolling inside.
  *
  * The dialog used to size itself to whichever tab was open, so every tab
@@ -550,7 +630,10 @@ button.primary:hover { filter: brightness(1.1); }
   flex-direction: column;
   background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 18px;
+  opacity: 1; transform: scale(1);
+  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
 }
+@starting-style { #settings .sheet { opacity: 0; transform: scale(0.97); } }
 #settings .panes {
   flex: 1;
   min-height: 0;              /* without this a flex child refuses to shrink */
@@ -583,7 +666,6 @@ button.primary:hover { filter: brightness(1.1); }
   padding: 0 6px;
   border-radius: 3px;
 }
-.cli-row:hover { background: var(--row); }
 .cli-row .preview { display: grid; place-items: center; }
 .cli-row .label {
   display: flex; align-items: baseline; gap: 6px;
@@ -616,12 +698,11 @@ button.primary:hover { filter: brightness(1.1); }
 .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 8px; }
 .swatch { width: 20px; height: 20px; border-radius: 4px; border: 2px solid transparent;
           cursor: pointer; padding: 0; }
-.swatch:hover { border-color: var(--fg); }
 .swatch.on { border-color: var(--fg); }
 
 /* ------------------------------------------------- font size, applied live */
 
-#sidebar, #tabbar, #inputbar { font-size: var(--font-panel, 13px); }
+#sidebar, #tabbar, #inputbar, #statusbar { font-size: var(--font-panel, 13px); }
 .brand-mark { flex: 0 0 auto; opacity: .9; }
 
 /* ------------------------------------------------ working / wants-attention */
@@ -631,8 +712,10 @@ button.primary:hover { filter: brightness(1.1); }
    the ring says it without taking anything away. */
 
 /* Finished while you were looking elsewhere. Stays until the tab is opened,
-   because a flash you missed is the same as no flash at all. */
-.tab.attention { background: var(--sel); color: var(--fg); }
+   because a flash you missed is the same as no flash at all. The bottom bar
+   is the signal — filling the tab with the selection colour made a waiting
+   session look more current than the one you were actually in. */
+.tab.attention { color: var(--fg); }
 .tab.attention .label { font-weight: 600; }
 .tab.attention::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -645,7 +728,7 @@ button.primary:hover { filter: brightness(1.1); }
 /* Reduced motion keeps every state distinguishable — the arc still points to
    working, the ring still points to waiting. Only the movement stops. */
 @media (prefers-reduced-motion: reduce) {
-  .cli-status::after, .dot[data-work], .tab.attention::after { animation: none; }
+  .cli-status::after, .tab.attention::after { animation: none; }
 }
 
 /* ------------------------------------------------------------ stats history */
@@ -680,7 +763,6 @@ button.primary:hover { filter: brightness(1.1); }
   color: var(--fg); border-radius: 5px; padding: 2px 8px;
   font: inherit; font-size: 11px; cursor: pointer;
 }
-.svc-link:hover { border-color: var(--accent); }
 
 /* On a phone the sentence is what matters and the provider's own wording is
  * the first thing that can go. */
@@ -720,7 +802,6 @@ button.primary:hover { filter: brightness(1.1); }
   background: none; border: 0; color: var(--dim); font: inherit; cursor: pointer;
   padding: 7px 10px; border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
-#settings .tabs button:hover { color: var(--fg); }
 #settings .tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
 
 #settings .field { display: block; margin-bottom: 12px; font-size: 12px; color: var(--dim); }
@@ -757,7 +838,6 @@ button.primary:hover { filter: brightness(1.1); }
                         font-size: 12px; resize: vertical; }
 .snippet-row .danger { background: none; border: 0; color: var(--err);
                        cursor: pointer; font: inherit; padding: 5px 6px; }
-.snippet-row .danger:hover { text-decoration: underline; }
 
 
 /* Scrollbars inside the sheet, made to match rather than announce themselves. */
@@ -767,7 +847,6 @@ button.primary:hover { filter: brightness(1.1); }
   background: var(--line); border-radius: 5px;
   border: 3px solid var(--panel);   /* inset, so the thumb reads as a hairline */
 }
-#settings .panes::-webkit-scrollbar-thumb:hover { background: var(--dim); }
 #settings .panes { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 
 /* The last element in a pane should not sit flush against the scroll edge. */
@@ -776,8 +855,11 @@ button.primary:hover { filter: brightness(1.1); }
 /* Scroll lock. The badge sits over the terminal rather than up in the chrome:
    a detached pane looks exactly like a dead one, and the correction has to be
    where the eye already is. */
-#lock { font-size: 12px; }
+#lock { font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
 #lock.on { background: var(--accent); color: #fff; border-color: transparent; }
+#lock .ico-pause { display: none; }
+#lock.on .ico-follow { display: none; }
+#lock.on .ico-pause { display: block; }
 /* The directory field and its picker. The picker is sized to its own content
    rather than sharing the width, because the field is the thing being filled
    in and the list is how you fill it. */
@@ -800,7 +882,6 @@ button.primary:hover { filter: brightness(1.1); }
   font-size: 11px; cursor: pointer;
   border: 1px solid var(--err); background: none; color: var(--fg);
 }
-.heads-make:hover { background: var(--err); color: var(--on-accent); }
 .heads-make:disabled { opacity: .5; cursor: default; }
 
 .heads-up.missing {
@@ -825,7 +906,6 @@ button.primary:hover { filter: brightness(1.1); }
   align-self: center; cursor: grab; color: var(--dim);
   border: 1px solid var(--line); border-radius: 3px; padding: 4px 5px;
 }
-.draft-move:hover { color: var(--fg); border-color: var(--accent); }
 .draft-move:active { cursor: grabbing; }
 
 /* Icons.
@@ -888,16 +968,20 @@ button > .ico:only-child { vertical-align: baseline; }
           border: 1px solid var(--accent); box-shadow: 0 4px 14px var(--shadow);
           max-width: 60%; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; }
-#follow:hover { background: var(--accent); color: #fff; border-color: transparent; }
 
 /* The shortcut reference. One list, built from the same table the bindings are
    described by, so a binding cannot ship without appearing here. */
 #keys { position: fixed; inset: 0; background: var(--scrim); display: grid;
-        place-items: center; z-index: 80; }
+        place-items: center; z-index: 80;
+        opacity: 1; transition: opacity 200ms var(--ease-out); }
+@starting-style { #keys { opacity: 0; } }
 #keys .sheet { width: min(560px, 94vw); max-height: 84vh; overflow: auto;
                background: var(--panel); border: 1px solid var(--line);
                border-radius: 10px; padding: 18px 20px;
-               box-shadow: 0 10px 40px var(--shadow); }
+               box-shadow: 0 10px 40px var(--shadow);
+               opacity: 1; transform: scale(1);
+               transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out); }
+@starting-style { #keys .sheet { opacity: 0; transform: scale(0.97); } }
 #keys h2 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
 #keys h3 { margin: 16px 0 8px; font-size: 11px; font-weight: 600;
            text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
@@ -955,7 +1039,6 @@ a.give-value { color: var(--accent); }
 .clog-day:first-child { margin-top: 0; }
 .clog-entry { border-left: 2px solid var(--line); padding: 0 0 14px 12px;
               margin-left: 3px; }
-.clog-entry:hover { border-left-color: var(--accent); }
 .clog-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
              margin-bottom: 4px; }
 .clog-ver { font-weight: 600; font-size: 13px; color: var(--fg); }
@@ -975,7 +1058,7 @@ a.give-value { color: var(--accent); }
 /* Touch. A long press on a session row opens the menu that right-click opens,
    so the platform's own callout and text-selection have to get out of the way
    — otherwise the browser offers "Copy" over the top of ours. */
-.session { -webkit-touch-callout: none; }
+.session, .folder-head { -webkit-touch-callout: none; }
 .session .meta, .session .age { -webkit-user-select: none; user-select: none; }
 
 /* A finger is not a mouse pointer. Menu rows get a real tap target on any
@@ -983,6 +1066,8 @@ a.give-value { color: var(--accent); }
 @media (pointer: coarse) {
   #menu { min-width: 200px; }
   #menu button { padding: 11px 16px; }
+  .tab .x, .tab .gear { opacity: .7; }
+  .hdr-btn { min-width: 32px; min-height: 32px; padding: 8px; }
 }
 
 /* ------------------------------------------------------------- artifacts */
@@ -1011,7 +1096,6 @@ a.give-value { color: var(--accent); }
    so nothing is competing for the eye and the transition is never repeated
    often enough to become noise. */
 .art-cell { transition: border-color .12s ease, color .12s ease; }
-.art-cell:hover { border-color: var(--accent); color: var(--fg); }
 .art-cell img { width: 100%; height: 104px; object-fit: cover;
                 border-radius: 4px; background: var(--bg); display: block; }
 .art-cell span { font-size: 11px; overflow: hidden; text-overflow: ellipsis;
@@ -1039,7 +1123,6 @@ a.give-value { color: var(--accent); }
    the app, and something that leaves should look like it does. */
 .about-links { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; }
 .about-links a { color: var(--accent); font-size: 12px; text-decoration: none; }
-.about-links a:hover { text-decoration: underline; }
 
 /* -------------------------------------------------- which CLI am I in again */
 
@@ -1068,7 +1151,6 @@ a.give-value { color: var(--accent); }
   background: none; border: 0; color: var(--dim); cursor: pointer;
   font-size: 13px; line-height: 1; padding: 2px;
 }
-.cli-reset:hover { color: var(--fg); }
 .cli-reset[hidden] { display: none; }
 
 @media (pointer: coarse) {
@@ -1092,14 +1174,8 @@ a.give-value { color: var(--accent); }
                                    box-shadow: 0 0 0 2px color-mix(in srgb, var(--critical) 40%, transparent);
                                    animation: cli-nudge 1s ease-in-out infinite; }
 
-/* A session that stopped on an error. The loudest thing the ring vocabulary
-   has, because it is the only state where nothing is going to happen next. */
-.cli-status[data-work="error"]::after {
-  border-color: var(--critical);
-  animation: cli-nudge 1.4s ease-in-out infinite;
-}
-.dot[data-work="error"] { background: var(--critical);
-                          animation: cli-nudge 1.4s ease-in-out infinite; }
+/* error ring lives with the other work states above, so working/waiting/error
+   cannot drift into three different motions. */
 
 @media (prefers-reduced-motion: reduce) {
   .dot.stat[data-level="critical"] { animation: none; }
@@ -1109,6 +1185,9 @@ a.give-value { color: var(--accent); }
    uppercase words does not read as one long one. */
 #stats .k { font-weight: 600; color: var(--dim); letter-spacing: .05em;
             font-size: .92em; }
+@media (max-width: 800px) {
+  #stats .k { display: none; }
+}
 
 /* The version in the corner, and the dot that says the notes are worth a look.
    Styled as text, not a button: it is a link to a document, and dressing it
@@ -1117,7 +1196,6 @@ a.give-value { color: var(--accent); }
   background: none; border: 0; padding: 0; font: inherit; color: inherit;
   cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
 }
-.version-link:hover { color: var(--fg); text-decoration: underline; }
 .version-new {
   width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
   flex: 0 0 6px;
@@ -1132,6 +1210,68 @@ a.give-value { color: var(--accent); }
   color: var(--fg); font-size: 12px; text-decoration: none;
   transition: border-color .12s ease, color .12s ease;
 }
-.star-btn:hover { border-color: var(--warn); color: var(--warn); }
 .star-glyph { color: var(--warn); font-size: 14px; line-height: 1; }
 @media (prefers-reduced-motion: reduce) { .star-btn { transition: none; } }
+
+/* Hover is a mouse thing. A tap leaves :hover stuck on, which is how a
+   folder pencil, a tab close, and a row highlight used to linger after the
+   finger lifted. Fine pointer + real hover only. */
+@media (hover: hover) and (pointer: fine) {
+  .hdr-btn:hover { background: var(--row); color: var(--fg); }
+  .folder-head:hover { background: var(--row); }
+  .folder-head .folder-edit { opacity: 0; visibility: hidden; }
+  .folder-head:hover .folder-edit { opacity: .75; visibility: visible; }
+  .folder-head .folder-edit:hover { opacity: 1; color: var(--fg); }
+  .session:hover { background: var(--row); }
+  #resizer:hover::after { background: var(--accent); opacity: .55; }
+  .rail-dot:hover { background: var(--row); border-radius: 4px; }
+  .tab-add:hover { background: var(--row); color: var(--fg); }
+  #menu button.tab-more-item:hover .why { color: inherit; }
+  .empty-row:hover { background: var(--row); }
+  .pill:hover { border-color: var(--warn); }
+  .stepper button:hover { background: var(--row); }
+  button.primary:hover { filter: brightness(1.1); }
+  .session.history:hover { opacity: 1; background: var(--row); }
+  .history-more:hover { color: var(--fg); text-decoration: underline; }
+  #menu button:hover { background: var(--accent); color: var(--on-accent); }
+  #menu button.danger:hover { background: var(--err); color: var(--on-accent); }
+  .cli-row:hover { background: var(--row); }
+  .swatch:hover { border-color: var(--fg); }
+  .svc-link:hover { border-color: var(--accent); }
+  #settings .tabs button:hover { color: var(--fg); }
+  .snippet-row .danger:hover { text-decoration: underline; }
+  #settings .panes::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+  .heads-make:hover { background: var(--err); color: var(--on-accent); }
+  .draft-move:hover { color: var(--fg); border-color: var(--accent); }
+  #follow:hover { background: var(--accent); color: #fff; border-color: transparent; }
+  .clog-entry:hover { border-left-color: var(--accent); }
+  .art-cell:hover { border-color: var(--accent); color: var(--fg); }
+  .about-links a:hover { text-decoration: underline; }
+  .cli-reset:hover { color: var(--fg); }
+  .version-link:hover { color: var(--fg); text-decoration: underline; }
+  .star-btn:hover { border-color: var(--warn); color: var(--warn); }
+}
+
+/* Press: the interface heard you. Colour-only hover is gated above; this is
+   a real press on a finger too. */
+button { transition: transform 120ms var(--ease-out); }
+button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: no-preference) {
+  button:active:not(:disabled) { transform: scale(0.97); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #modal, #settings, #keys, #menu,
+  #modal form, #settings .sheet, #keys .sheet {
+    transition: opacity 160ms ease;
+    transform: none;
+  }
+  #toast {
+    transition: opacity 160ms ease;
+    transform: translateX(-50%);
+  }
+  @starting-style {
+    #modal form, #settings .sheet, #keys .sheet, #menu { transform: none; }
+    #toast { transform: translateX(-50%); }
+  }
+}
