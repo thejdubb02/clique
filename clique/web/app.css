@@ -419,6 +419,23 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 .tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
 .tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 
+/* Sidebar reorder. A line on the edge the row will land against — the same
+   language as the tab strip, turned sideways. The whole-row fill is still
+   "file this session in this folder", a different meaning. */
+.folder-head.dragging, .session.dragging { opacity: .45; }
+.folder-head.drop-before, .session.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.folder-head.drop-after, .session.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.session.active.drop-before {
+  box-shadow: inset 3px 0 0 var(--active-edge, var(--accent)), inset 0 2px 0 var(--accent);
+}
+.session.active.drop-after {
+  box-shadow: inset 3px 0 0 var(--active-edge, var(--accent)), inset 0 -2px 0 var(--accent);
+}
+
 /* Confirmation that a paste landed, and where. Without it the only feedback is
    a path appearing, which is easy to miss and impossible to interpret if it
    did not. */
@@ -696,8 +713,10 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 /* -------------------------------------------------------- folder colour picker */
 
 .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 8px; }
-.swatch { width: 20px; height: 20px; border-radius: 4px; border: 2px solid transparent;
-          cursor: pointer; padding: 0; }
+#menu .swatch {
+  width: 20px; height: 20px; padding: 0; display: block;
+  border-radius: 4px; border: 2px solid transparent; cursor: pointer;
+}
 .swatch.on { border-color: var(--fg); }
 
 /* ------------------------------------------------- font size, applied live */

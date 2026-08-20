@@ -1022,7 +1022,12 @@ class Handler(BaseHTTPRequestHandler):
                 # should be able to see what it created without a second GET.
                 return self._json(dataclasses.asdict(folder), 201)
             if path == "/api/reorder":
-                self.panel.store.reorder_sessions(body.get("sessions") or [])
+                sessions = body.get("sessions") or []
+                folders = body.get("folders") or []
+                if sessions:
+                    self.panel.store.reorder_sessions(sessions)
+                if folders:
+                    self.panel.store.reorder_folders(folders)
                 return self._json({"ok": True})
             if path.startswith("/api/sessions/") and path.endswith("/send"):
                 return self._send_input(path.split("/")[3], body)

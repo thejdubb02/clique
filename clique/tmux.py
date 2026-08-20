@@ -167,8 +167,12 @@ def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -
         # our own tab bar, so tmux's status line is duplicate chrome.
         ";", "set-option", "-g", "status", "off",
         ";", "set-option", "-g", "bell-action", "none",
-        # Size to the most recent client, not the smallest. Without this, a
-        # phone attaching to a session squeezes the same session on a desktop.
+        # Size to the client that last spoke, not the smallest. A phone must
+        # not permanently squeeze the desktop; the desktop must still be able
+        # to shrink the pane to itself when it is the one being looked at —
+        # otherwise a full-screen CLI's prompt sits off the bottom of the
+        # window. The browser only asserts size while this window is focused,
+        # so the two sides no longer fight on a timer.
         ";", "set-option", "-g", "window-size", "latest",
     ]
     # A server that is still shutting down from a previous run answers
@@ -227,10 +231,9 @@ def create_viewer(target: str, socket: str | None = SOCKET) -> str:
 
     It does **not** give it an independent size, and an earlier version of this
     docstring claimed it did. A window is shared by every session in the group,
-    so tmux has exactly one size for it, decided by `window-size`. Two clients
-    of different sizes means one of them sees the pane padded out with dots.
-    That is why `resize_window` exists and why the browser calls it on every
-    resize: whoever is actually being looked at should win.
+    so tmux has exactly one size for it, decided by `window-size`. The browser
+    that is focused claims that size; an unfocused one stays quiet so they
+    do not fight.
     """
     name = f"{VIEW_PREFIX}{uuid.uuid4().hex[:6]}"
     _run(["new-session", "-d", "-t", _session_target(target), "-s", name], socket)
@@ -239,16 +242,11 @@ def create_viewer(target: str, socket: str | None = SOCKET) -> str:
 
 
 def resize_window(mux: str, cols: int, rows: int, socket: str | None = SOCKET) -> None:
-    """Set the shared window's size, so the browser is not shown a padded pane.
+    """Set the shared window's size to this client's, so a full-screen CLI
+    keeps its prompt on screen and a larger client is not padded with dots.
 
-    `window-size latest` sizes a window to the most recently *active* client,
-    and a browser that has resized but not yet typed is not active. With
-    another tool still attached to an adopted session, that leaves the browser
-    rendering tmux's dot-fill over most of the viewport.
-
-    So the size is set explicitly rather than inferred. This does resize the
-    other client's view — which is the correct trade for a tool whose whole
-    job is to be the thing you are looking at.
+    Callers must only do this while this window is the one being looked at.
+    An unfocused browser that also asserted would steal the size back.
     """
     with contextlib.suppress(TmuxError, OSError):
         _run(["resize-window", "-t", _session_target(mux),

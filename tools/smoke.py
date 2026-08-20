@@ -223,7 +223,7 @@ def main() -> int:
     # only ever asks about a CLI you actually have running, and it says
     # nothing at all when everyone is up.
     class _Store:
-        settings: ClassVar[dict] = {"service_status": True}
+        settings: ClassVar[dict] = {"service_status": True, "open_tabs": ["s1"]}
         sessions: ClassVar[list] = []
 
     class _Panel:
@@ -231,12 +231,16 @@ def main() -> int:
         registry = reg
 
     svc = services.Services(_Panel())
-    _Store.sessions = [SimpleNamespace(cli="claude"),
-                       SimpleNamespace(cli="shell")]
+    _Store.sessions = [SimpleNamespace(cli="claude", id="s1"),
+                       SimpleNamespace(cli="shell", id="s2")]
     asked = sorted(svc.wanted())
-    check("asks only about CLIs with a session open", asked == ["claude"], asked)
+    check("asks only about CLIs with a tab open", asked == ["claude"], asked)
     check("and never about one with no feed", "shell" not in asked, asked)
 
+    _Store.settings = {"service_status": True, "open_tabs": []}
+    check("a session with no tab is not asked about", svc.wanted() == {}, svc.wanted())
+
+    _Store.settings = {"service_status": True, "open_tabs": ["s1"]}
     _Store.sessions = []
     check("an idle panel asks nothing at all", svc.wanted() == {}, svc.wanted())
 

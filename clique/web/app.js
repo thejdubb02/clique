@@ -29,6 +29,14 @@ const api = async (path, opts = {}) => {
 let state = { folders: [], sessions: [], clis: [], stats: {}, settings: {} };
 let openTabs = [];            // session ids, in tab order
 let activeId = null;
+const SESSION_DRAG = "text/clique-session";
+const FOLDER_DRAG = "text/clique-folder";
+let sidebarDragged = false;   // a drag is not a click; the next click is swallowed
+function markSidebarDrag() {
+  sidebarDragged = true;
+  clearTimeout(markSidebarDrag.timer);
+  markSidebarDrag.timer = setTimeout(() => { sidebarDragged = false; }, 400);
+}
 const terms = new Map();      // id -> { term, fit, ws, el, retry }
 let repeat = 1;
 /* Which of the view-groups are shut.
@@ -806,12 +814,26 @@ function renderTree() {
       `<span class="caret">${icon(group.collapsed ? "chevron-right" : "chevron-down")}</span>` +
       `<i class="dot" style="background:${cssColor(group.color)}"></i>` +
       `<span class="name">${escapeHtml(group.name)}</span>` +
-      (editable ? `<button class="folder-edit" title="Rename, recolour or delete">${icon("pencil")}</button>` : "") +
+      (editable ? `<button class="folder-edit" title="Rename, recolor or delete">${icon("pencil")}</button>` : "") +
       `<span class="count">${shown.length}` +
       (historyCount(group) ? `<i class="from-history">+${historyCount(group)}</i>` : "") +
       `</span>`;
-    head.onclick = () => toggleFolder(group);
+    head.onclick = () => {
+      if (sidebarDragged) { sidebarDragged = false; return; }
+      toggleFolder(group);
+    };
     if (editable) {
+      head.draggable = true;
+      head.ondragstart = (ev) => {
+        markSidebarDrag();
+        ev.dataTransfer.setData(FOLDER_DRAG, group.id);
+        ev.dataTransfer.effectAllowed = "move";
+        head.classList.add("dragging");
+      };
+      head.ondragend = () => {
+        head.classList.remove("dragging");
+        clearTreeDrops();
+      };
       head.oncontextmenu = (ev) => folderMenu(ev, group);
       // Right-click still works and always did; nothing announced it. The
       // pencil is the same menu with a way to find it.
@@ -1016,37 +1038,143 @@ function sessionRow(s) {
    * of prose landing in that handler would try to move a folder to a session
    * that does not exist. Two meanings, two types, no guessing. */
   row.addEventListener("dragover", (ev) => {
-    if (!ev.dataTransfer.types.includes(DRAFT_TYPE) || s.id === draftFor) return;
+    if (ev.dataTransfer.types.includes(DRAFT_TYPE) && s.id !== draftFor) {
+      ev.preventDefault();
+      row.classList.add("drop");
+      return;
+    }
+    if (!(ev.dataTransfer.types.includes(SESSION_DRAG)
+          || ev.dataTransfer.types.includes("text/plain"))) return;
     ev.preventDefault();
-    row.classList.add("drop");
+    const box = row.getBoundingClientRect();
+    const after = ev.clientY > box.top + box.height / 2;
+    row.classList.toggle("drop-before", !after);
+    row.classList.toggle("drop-after", after);
   });
-  row.addEventListener("dragleave", () => row.classList.remove("drop"));
+  row.addEventListener("dragleave", () =>
+    row.classList.remove("drop", "drop-before", "drop-after"));
   row.addEventListener("drop", (ev) => {
-    if (!ev.dataTransfer.types.includes(DRAFT_TYPE)) return;
+    if (ev.dataTransfer.types.includes(DRAFT_TYPE)) {
+      ev.preventDefault();
+      row.classList.remove("drop");
+      moveDraft(s.id);
+      return;
+    }
+    const moved = ev.dataTransfer.getData(SESSION_DRAG);
+    if (!moved || moved === s.id) return;
     ev.preventDefault();
-    row.classList.remove("drop");
-    moveDraft(s.id);
+    row.classList.remove("drop-before", "drop-after");
+    const box = row.getBoundingClientRect();
+    const after = ev.clientY > box.top + box.height / 2;
+    moveSession(moved, s.id, after);
   });
 
-  row.onclick = () => openSession(s.id);
+  row.onclick = () => {
+    if (sidebarDragged) { sidebarDragged = false; return; }
+    openSession(s.id);
+  };
   row.ondblclick = (ev) => { ev.stopPropagation(); renameInline(row, s); };
   row.oncontextmenu = (ev) => sessionMenu(ev, s);
   row.ondragstart = (ev) => {
+    markSidebarDrag();
+    ev.dataTransfer.setData(SESSION_DRAG, s.id);
     ev.dataTransfer.setData("text/plain", s.id);
+    ev.dataTransfer.effectAllowed = "move";
     row.classList.add("dragging");
   };
-  row.ondragend = () => row.classList.remove("dragging");
+  row.ondragend = () => {
+    row.classList.remove("dragging");
+    clearTreeDrops();
+  };
   return row;
 }
 
+function clearTreeDrops() {
+  const tree = $("#tree");
+  if (!tree) return;
+  for (const el of tree.querySelectorAll(".drop, .drop-before, .drop-after, .dragging")) {
+    el.classList.remove("drop", "drop-before", "drop-after", "dragging");
+  }
+}
+
+function placeInList(ids, moved, target, after) {
+  const next = ids.filter((id) => id !== moved);
+  const at = next.indexOf(target);
+  if (at < 0) next.push(moved);
+  else next.splice(after ? at + 1 : at, 0, moved);
+  return next;
+}
+
+function moveSession(moved, target, after) {
+  /* Same splice as the tab strip: remove first, then find the target, or a
+   * move downwards lands one slot off and feels like the drop ignored you. */
+  const src = session(moved);
+  const dst = session(target);
+  if (src && dst) src.folder = dst.folder || null;
+  const ids = placeInList(state.sessions.map((s) => s.id), moved, target, after);
+  const rank = Object.fromEntries(ids.map((id, i) => [id, i]));
+  state.sessions.sort((a, b) => (rank[a.id] ?? 99) - (rank[b.id] ?? 99));
+  renderTree();
+  /* Filing into the target's folder is a different fact from order, and the
+   * reorder endpoint does not touch folder. Do both; the list already shows
+   * the destination. */
+  const file = (src && dst)
+    ? api("api/sessions/" + moved, {
+        method: "PATCH", body: JSON.stringify({ folder: dst.folder || null }),
+      })
+    : Promise.resolve();
+  file.then(() => api("api/reorder", {
+    method: "POST", body: JSON.stringify({ sessions: ids }),
+  })).catch(() => refresh());
+}
+
+function moveFolder(moved, target, after) {
+  const ids = placeInList(
+    (state.folders || []).map((f) => f.id), moved, target, after);
+  const rank = Object.fromEntries(ids.map((id, i) => [id, i]));
+  state.folders.sort((a, b) => (rank[a.id] ?? 99) - (rank[b.id] ?? 99));
+  for (const folder of state.folders) folder.order = rank[folder.id] ?? folder.order;
+  renderTree();
+  api("api/reorder", {
+    method: "POST", body: JSON.stringify({ folders: ids }),
+  }).catch(() => refresh());
+}
+
 function wireDrop(el, folderId) {
-  el.ondragover = (ev) => { ev.preventDefault(); el.classList.add("drop"); };
-  el.ondragleave = () => el.classList.remove("drop");
+  el.ondragover = (ev) => {
+    if (ev.dataTransfer.types.includes(FOLDER_DRAG) && folderId.startsWith("f-")) {
+      ev.preventDefault();
+      const box = el.getBoundingClientRect();
+      const after = ev.clientY > box.top + box.height / 2;
+      el.classList.toggle("drop-before", !after);
+      el.classList.toggle("drop-after", after);
+      el.classList.remove("drop");
+      return;
+    }
+    if (ev.dataTransfer.types.includes(SESSION_DRAG)
+        || ev.dataTransfer.types.includes("text/plain")) {
+      ev.preventDefault();
+      el.classList.add("drop");
+      el.classList.remove("drop-before", "drop-after");
+    }
+  };
+  el.ondragleave = () =>
+    el.classList.remove("drop", "drop-before", "drop-after");
   el.ondrop = async (ev) => {
+    el.classList.remove("drop", "drop-before", "drop-after");
+    if (ev.dataTransfer.types.includes(FOLDER_DRAG) && folderId.startsWith("f-")) {
+      const moved = ev.dataTransfer.getData(FOLDER_DRAG);
+      if (!moved || moved === folderId) return;
+      ev.preventDefault();
+      const box = el.getBoundingClientRect();
+      const after = ev.clientY > box.top + box.height / 2;
+      moveFolder(moved, folderId, after);
+      return;
+    }
+    const id = ev.dataTransfer.getData(SESSION_DRAG)
+            || ev.dataTransfer.getData("text/plain");
+    if (!id || id.startsWith("f-")) return;
     ev.preventDefault();
-    el.classList.remove("drop");
-    const id = ev.dataTransfer.getData("text/plain");
-    if (!id) return;
     const folder = folderId.startsWith("__") ? null : folderId;
     await api("api/sessions/" + id, {
       method: "PATCH", body: JSON.stringify({ folder }),
@@ -1123,7 +1251,14 @@ function showMenu(ev, items) {
     const button = document.createElement("button");
     button.textContent = label;
     if (danger) button.className = "danger";
-    button.onclick = () => { menu.hidden = true; fn(); };
+    button.onclick = (click) => {
+      // Stop the document-level closer: this click's target is this button,
+      // and some items (Change color) rebuild the menu, which would make
+      // contains() fail and hide the picker the moment it appeared.
+      click.stopPropagation();
+      menu.hidden = true;
+      fn();
+    };
     menu.appendChild(button);
   }
   menu.hidden = false;
@@ -1290,8 +1425,12 @@ function wireTouchMenus() {
   tree.addEventListener("touchcancel", cancel, { passive: true });
 }
 
-const PALETTE = ["#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
-                 "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2"];
+const PALETTE = [
+  "#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
+  "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2",
+  "#c4500a", "#8250df", "#1a7f37", "#0550ae", "#bf3989", "#9a6700",
+  "#cf222e", "#0969da", "#bc4c00", "#5a32a3", "#087f5b", "#364fc7",
+];
 
 function colorPicker(ev, folder) {
   const menu = $("#menu");
@@ -1315,14 +1454,14 @@ function colorPicker(ev, folder) {
   menu.appendChild(grid);
   menu.hidden = false;
   menu.style.setProperty("--menu-origin", "top left");
-  menu.style.left = Math.min(ev.clientX, innerWidth - 190) + "px";
-  menu.style.top = Math.min(ev.clientY, innerHeight - 110) + "px";
+  menu.style.left = Math.min(ev.clientX, innerWidth - menu.offsetWidth - 8) + "px";
+  menu.style.top = Math.min(ev.clientY, innerHeight - menu.offsetHeight - 8) + "px";
 }
 
 function folderMenu(ev, folder) {
   ev.stopPropagation();
   showMenu(ev, [
-    ["Change colour", () => colorPicker(ev, folder)],
+    ["Change color", () => colorPicker(ev, folder)],
     ["Rename folder", async () => {
       const name = prompt("Folder name", folder.name);
       if (name) {
@@ -1783,7 +1922,7 @@ const TIPS = [
   "Alt + 1 to 9 switches tabs. The pane owns every other key, on purpose.",
   "A ring turning means working. A steady pulse means it is waiting for you.",
   "Adding a CLI is four lines in clis.toml and a reload. No restart, no code.",
-  "Drag sessions between folders, or double-click a folder to rename it.",
+  "Drag folders and sessions in the sidebar to rearrange them — the same gesture as the tab strip.",
   "Snippets are for deliberate reuse. Set them up in Settings → Snippets.",
   "Set a webhook in Settings → Notifications and your phone finds out when a session needs you.",
   "Ctrl/Cmd + B collapses the sidebar to a rail, markers and all.",
@@ -3021,6 +3160,7 @@ async function attachNow(id) {
   });
   term.onResize(({ cols, rows }) => {
     if (id !== activeId) return;   // a hidden tab must not resize the window
+    if (document.hidden || !document.hasFocus()) return;
     if (entry.ws && entry.ws.readyState === 1) {
       entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
     }
@@ -4161,8 +4301,12 @@ function wire() {
   }, true);
 
   document.onclick = (ev) => {
-    if (!$("#menu").contains(ev.target)) $("#menu").hidden = true;
+    const menu = $("#menu");
+    if (!menu.hidden && !menu.contains(ev.target)) menu.hidden = true;
   };
+  // Clicks inside the menu must not count as "outside" after a rebuild
+  // (the colour picker replaces the buttons that opened it).
+  $("#menu").addEventListener("click", (ev) => ev.stopPropagation());
 
   document.onkeydown = (ev) => {
     const key = ev.key.toLowerCase();
@@ -4750,10 +4894,12 @@ function wireResizer() {
  * knows what the window is; this compares it to what we are drawing and says
  * so when they differ.
  *
- * Only the tab in front, and only when it really differs: a background tab is
- * not being looked at, and two browsers both re-asserting every three seconds
- * would fight forever rather than settle. */
+ * Only the tab in front, and only while this window is focused. Growing
+ * forever left a full-screen CLI's prompt hanging off the bottom; shrinking
+ * on a timer let a second window punch dots into this one. Matching this
+ * pane, only while you are looking at it, is the size that holds. */
 function reclaimSize() {
+  if (document.hidden || !document.hasFocus()) return;
   const entry = terms.get(activeId);
   const s = session(activeId);
   if (!entry || !s || !s.alive || !s.cols) return;
@@ -4857,4 +5003,11 @@ setInterval(pollArtifacts, ART_POLL_MS);
 // the resolution it displays, so a minute is what it costs.
 setInterval(() => { if (!activeId && !document.hidden) renderClock(); }, 20000);
 // Coming back to the tab should not mean waiting out the interval.
-addEventListener("visibilitychange", () => { if (!document.hidden) pollArtifacts(); });
+addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    pollArtifacts();
+    refitAll();
+    reclaimSize();
+  }
+});
+addEventListener("focus", () => { refitAll(); reclaimSize(); });

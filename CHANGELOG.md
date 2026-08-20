@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.50.3 — 2026-08-20 13:44 PDT
+
+**Change color on a folder actually stays open.** Clicking it rebuilt the
+menu into the swatch grid, and the same click was then treated as "outside
+the menu" and closed it. The picker stays up until you pick a color. It
+says Color, and there are twenty-four to pick from.
+
+## 0.50.2 — 2026-08-20 13:37 PDT
+
+**Grok's prompt sits in the window again.** Making the largest view always
+win left the pane bigger than this window, so a full-screen CLI drew its
+input off the bottom. This window now takes the size that fits *it*, but
+only while you are looking at it — an unfocused one stays quiet, which is
+what stopped the dotted fight from coming back.
+
+## 0.50.1 — 2026-08-20 13:33 PDT
+
+**The dotted pane stays gone.** Those dots are tmux filling space a smaller
+window stole — a second CLIque tab, or the phone. Each side kept asserting
+its own size, so a fix that grew the pane back lost the next time the
+smaller one spoke. The largest view now wins. A smaller one cannot punch
+a hole in this one.
+
+## 0.50.0 — 2026-08-20 13:29 PDT
+
+**The sidebar rearranges like the tab strip.** You could already drop a
+session onto a folder to file it. Folders themselves sat still, and sessions
+inside one could not be put in an order. Drag a folder or a session and a
+line marks where it will land — same gesture as the tabs. Dropping a
+session onto another in a different folder files it there too.
+
+## 0.49.2 — 2026-08-20 13:23 PDT
+
+**The outage banner follows the tabs you have open.** It already only
+spoke up when a provider was actually down, and never for a CLI with no
+feed. It was still asking about every session in the sidebar, so a Claude
+session you closed last week could put Claude's outage on the bar. Now it
+is the open tabs: close Grok, Grok is not asked about.
+
+Grok and Gemini still have no banner. They do not publish the same status
+feed Claude, Codex, Copilot and Cursor do, and inventing a scraper for
+them would be a number that goes wrong silently.
+
 ## 0.49.1 — 2026-08-20 12:26 PDT
 
 **The view count says what it is.** The number next to the green dot is live

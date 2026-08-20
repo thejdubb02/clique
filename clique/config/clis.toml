@@ -147,6 +147,12 @@ icon    = "grok.svg"
 
 own_input = true
 
+# No `status` block: xAI's page (status.x.ai) is not Atlassian Statuspage —
+# there is no `/api/v2/status.json`. A second parser just for Grok would be
+# the first vendor scraper, and the day they change the HTML the banner
+# would lie. When they publish the same two-field feed Claude uses, this
+# is two lines.
+
 # Grok keeps one append-only log per project rather than a transcript per
 # conversation: the directory name is the working directory percent-encoded,
 # and every line carries the session id, the prompt and when it was sent.

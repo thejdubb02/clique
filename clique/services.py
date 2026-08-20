@@ -17,10 +17,11 @@ to be added, the design in `CLAUDE.md` has failed.
 launch command. Adding one is two lines of TOML by anybody, including for a
 CLI we have never heard of.
 
-**Only what is running.** A feed is fetched for a CLI that has a live session
-right now — not for the sixteen in the catalogue, and not at all when nothing
-is open. An idle panel makes no requests, which is the same promise the
-webhook watcher makes.
+**Only what is on screen.** A feed is fetched for a CLI that has a tab open
+right now — not for the sixteen in the catalogue, not for a session sitting
+in the sidebar with no tab, and not at all when nothing is open. Close the
+Grok tabs and Grok is not asked about. An idle panel makes no requests, which
+is the same promise the webhook watcher makes.
 
 This reads a public status page over HTTPS. It sends no identifier, no session
 name and no query string, and it is one setting away from never running. It is
@@ -153,13 +154,17 @@ class Services:
     # ---------------------------------------------------------------- feeds
 
     def wanted(self) -> dict[str, object]:
-        """CLI types with a feed and at least one live session right now."""
+        """CLI types with a feed and at least one open tab right now."""
         try:
             types = self.panel.registry.types()
         except Exception:  # noqa: BLE001 — a broken clis.toml is reported elsewhere
             return {}
-        live = {s.cli for s in self.panel.store.sessions if s.cli}
-        return {k: v for k, v in types.items() if v.status and k in live}
+        open_ids = set(self.panel.store.settings.get("open_tabs") or [])
+        in_use = {
+            s.cli for s in self.panel.store.sessions
+            if s.cli and getattr(s, "id", None) in open_ids
+        }
+        return {k: v for k, v in types.items() if v.status and k in in_use}
 
     def tick(self) -> None:
         wanted = self.wanted()

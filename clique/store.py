@@ -51,8 +51,12 @@ DEFAULT_FOLDERS = [
     {"id": "f-personal", "name": "Personal", "color": "#2d7d46", "match": []},
 ]
 
-PALETTE = ["#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
-           "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2"]
+PALETTE = [
+    "#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
+    "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2",
+    "#c4500a", "#8250df", "#1a7f37", "#0550ae", "#bf3989", "#9a6700",
+    "#cf222e", "#0969da", "#bc4c00", "#5a32a3", "#087f5b", "#364fc7",
+]
 
 #: How a CLI is marked in the tab bar and sidebar.
 #:
@@ -470,6 +474,15 @@ class Store:
             for session in self.sessions:
                 session.order = rank.get(session.id, len(rank) + session.order)
             self.sessions.sort(key=lambda s: s.order)
+            self._write()
+
+    def reorder_folders(self, ordered_ids: list[str]) -> None:
+        """Apply a drag-and-drop ordering. Unlisted folders keep their tail."""
+        with self._lock:
+            rank = {fid: i for i, fid in enumerate(ordered_ids)}
+            for folder in self.folders:
+                folder.order = rank.get(folder.id, len(rank) + folder.order)
+            self.folders.sort(key=lambda f: f.order)
             self._write()
 
     # --------------------------------------------------------------- settings

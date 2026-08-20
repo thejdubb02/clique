@@ -323,8 +323,11 @@ earlier runs rather than duplicating them.
 
 ### `POST /api/reorder`
 
+The sidebar's drag-and-drop. Either list, or both. Unlisted items keep their
+place at the tail. Order is what `/api/state` returns.
+
 ```json
-{"sessions": ["id1", "id2", "id3"]}
+{"sessions": ["id1", "id2", "id3"], "folders": ["f-aaaa", "f-bbbb"]}
 ```
 
 ## Folders

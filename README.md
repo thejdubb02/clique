@@ -38,7 +38,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 |---|---|
 | **Command palette** | `Ctrl`/`Cmd`+`K`: fuzzy jump between sessions, most-recently-used first. `>` commands, `@` sessions, `~` past conversations. |
 | **History** | Every conversation your CLIs have kept, filed by directory, resumable in one click. Repeated runs of the same scheduled agent fold into one row. |
-| **Folders** | A tree. Drag-drop, double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). |
+| **Folders** | A tree. Drag to reorder folders and sessions, or drop a session on a folder to file it. Double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). |
 | **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Names shrink first; what still will not fit lands in **N more**, wearing the same working / waiting ring. Closing a tab is not killing the session. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. |
 | **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. |
