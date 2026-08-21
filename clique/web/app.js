@@ -491,17 +491,27 @@ function pressureLevel(percent) {
 
 /* The version, and whether there is something new behind it.
  *
- * A changelog nobody opens is a file, not a feature. This is the smallest
- * honest nudge: the version in the corner grows a dot when the running
- * release is not the one whose notes were last read, and clicking it goes
- * straight to them.
+ * A changelog nobody opens is a file, not a feature. The smallest honest
+ * nudge is a mark on the bottom bar when the running release is not the
+ * one whose notes were last read. Clicking it goes straight to them.
  *
  * Seeded rather than assumed: the first panel to load stamps whatever is
  * running, so a fresh install does not arrive already claiming to have news.
- * The dot then only ever means "you upgraded since you last looked". */
+ * The mark then only ever means "you upgraded since you last looked". */
 function baseVersion(text) {
   return String(text || "").split("+")[0];   // drop the +build suffix
 }
+
+function changelogHasNews(running, seen) {
+  const ver = baseVersion(running);
+  seen = String(seen || "");
+  return Boolean(ver && seen && ver !== seen);
+}
+
+/* How many releases the settings sheet itself holds. The rest lives in the
+ * repo file — a panel that starts in a quarter of a second should not try
+ * to be the archive. */
+const CLOG_SHOW = 5;
 
 /* The version this page's scripts came from.
  *
@@ -545,16 +555,18 @@ function renderVersion() {
   label.type = "button";
   label.className = "version-link";
   label.textContent = "v" + state.version;
-  const fresh = Boolean(running && seen && running !== seen);
-  label.title = fresh ? `Updated to ${running} — see what changed`
-                      : "What changed in this release";
-  if (fresh) {
-    const dot = document.createElement("i");
-    dot.className = "version-new";
-    label.prepend(dot);
-  }
+  label.title = "What changed in this release";
   label.onclick = () => showChangelog(running);
   el.append(label);
+  paintWhatsNew();
+}
+
+function paintWhatsNew() {
+  const chip = $("#whatsNew");
+  if (!chip) return;
+  const running = baseVersion(state.version);
+  const fresh = changelogHasNews(running, state.settings.changelog_seen);
+  chip.hidden = !fresh;
 }
 
 function showChangelog(running) {
@@ -562,6 +574,7 @@ function showChangelog(running) {
   const button = document.querySelector('#setTabs button[data-pane="changelog"]');
   if (button) button.click();
   if (running) saveWorkspaceSetting({ changelog_seen: running });
+  paintWhatsNew();
 }
 
 /* A settings write that must not repaint the world.
@@ -2143,6 +2156,78 @@ function fillEmptyList(block, rows) {
  * sheet and drops the path where you are already typing. */
 const LINK_RE = /\bhttps?:\/\/[^\s"'`<>]+/g;
 
+/* A URL that wraps is still one URL. xterm only asks about one row at a
+ * time, so without this a login link split at column 80 is two dead halves. */
+function paneLineWrapped(term, row0) {
+  try {
+    const line = term.buffer.active.getLine(row0);
+    if (line && typeof line.isWrapped === "boolean") return line.isWrapped;
+  } catch (err) { /* older buffer */ }
+  return false;
+}
+
+function paneWrapParts(term, lineNumber) {
+  const buf = term.buffer.active;
+  let start = lineNumber - 1;
+  while (start > 0 && paneLineWrapped(term, start)) start--;
+  const parts = [];
+  let y = start;
+  while (y < buf.length) {
+    const line = buf.getLine(y);
+    if (!line) break;
+    if (y > start && !paneLineWrapped(term, y)) break;
+    parts.push({ y: y + 1, text: line.translateToString(true) });
+    y++;
+  }
+  if (!parts.length) {
+    const line = buf.getLine(lineNumber - 1);
+    parts.push({ y: lineNumber, text: line ? line.translateToString(true) : "" });
+  }
+  return parts;
+}
+
+function paneRowsText(parts) {
+  return parts.map((p) => p.text).join("");
+}
+
+function paneUrlSegments(parts, start, length) {
+  const end = start + length;
+  let offset = 0;
+  const segs = [];
+  for (const part of parts) {
+    const a = Math.max(start, offset);
+    const b = Math.min(end, offset + part.text.length);
+    if (b > a) {
+      segs.push({ y: part.y, x0: a - offset + 1, x1: b - offset });
+    }
+    offset += part.text.length;
+  }
+  return segs;
+}
+
+function urlNeedsLocalCallback(url) {
+  try {
+    const redir = new URL(url).searchParams.get("redirect_uri") || "";
+    return /localhost|127\.0\.0\.1/i.test(redir);
+  } catch (err) {
+    return /redirect_uri=http%3A%2F%2Flocalhost/i.test(url)
+      || /redirect_uri=http:\/\/localhost/i.test(url);
+  }
+}
+
+function paneHostIsRemote(hostname) {
+  const h = String(hostname || (typeof location !== "undefined" && location.hostname) || "")
+    .toLowerCase();
+  return Boolean(h) && h !== "localhost" && h !== "127.0.0.1" && h !== "[::1]";
+}
+
+function tidyCopiedLink(text) {
+  if (!text || text.indexOf("\n") < 0) return text;
+  const joined = text.replace(/\s+/g, "");
+  if (/^https?:\/\//i.test(joined)) return joined;
+  return text;
+}
+
 /* Paths a CLI prints: absolute, ~/ , ./ ../, or a relative path with a slash
  * and a file extension. Bare words and host/path URLs without a scheme are
  * not matches — those are how you click `example.com/foo` by accident. */
@@ -2195,39 +2280,65 @@ function openLink(url, newWindow) {
   window.open(url, "_blank", how);
 }
 
+function sendPaneKey(sessionId, key) {
+  const entry = terms.get(sessionId || activeId);
+  if (!entry || !entry.ws || entry.ws.readyState !== 1) return false;
+  entry.ws.send(JSON.stringify({ type: "key", key: key }));
+  return true;
+}
+
+function handlePaneUrl(url, event, sessionId) {
+  /* A CLI on this box that asks the *browser* to come back to localhost is
+   * asking the laptop. That callback never arrives. Device-code is the
+   * flow these tools already ship for a remote pane — Esc, then 2, is
+   * Codex's menu; the same Esc cancels a stuck browser wait for others. */
+  if (paneHostIsRemote() && urlNeedsLocalCallback(url)) {
+    sendPaneKey(sessionId, "Escape");
+    setTimeout(() => sendPaneKey(sessionId, "2"), 500);
+    toast("That login cannot come back to this box. A device code should appear — open that short link.");
+    return;
+  }
+  openLink(url, event && (event.ctrlKey || event.metaKey));
+}
+
 function wireLinks(term, sessionId) {
   if (!term.registerLinkProvider) return;   // older core: links simply stay text
   term.registerLinkProvider({
     provideLinks(lineNumber, callback) {
       const line = term.buffer.active.getLine(lineNumber - 1);
       if (!line) return callback(undefined);
-      const text = line.translateToString(true);
+      const parts = paneWrapParts(term, lineNumber);
+      const text = paneRowsText(parts);
       const links = [];
       LINK_RE.lastIndex = 0;
       let match;
       while ((match = LINK_RE.exec(text)) !== null) {
         const url = trimUrl(match[0]);
         if (!url) continue;
-        links.push({
-          // xterm columns are 1-based and the end is inclusive.
-          range: { start: { x: match.index + 1, y: lineNumber },
-                   end: { x: match.index + url.length, y: lineNumber } },
-          text: url,
-          decorations: { underline: true, pointerCursor: true },
-          activate(event, uri) {
-            // A plain click opens a tab; Ctrl (Cmd on a Mac) opens a window.
-            openLink(uri, event.ctrlKey || event.metaKey);
-          },
-        });
+        const segs = paneUrlSegments(parts, match.index, url.length);
+        for (const seg of segs) {
+          if (seg.y !== lineNumber) continue;
+          links.push({
+            // xterm columns are 1-based and the end is inclusive.
+            range: { start: { x: seg.x0, y: seg.y },
+                     end: { x: seg.x1, y: seg.y } },
+            text: url,
+            decorations: { underline: true, pointerCursor: true },
+            activate(event, uri) {
+              handlePaneUrl(uri, event, sessionId);
+            },
+          });
+        }
       }
+      const own = line.translateToString(true);
       PATH_RE.lastIndex = 0;
-      while ((match = PATH_RE.exec(text)) !== null) {
+      while ((match = PATH_RE.exec(own)) !== null) {
         const raw = trimPath(match[1]);
         if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
-        const at = pathRange(text, match, raw);
+        const at = pathRange(own, match, raw);
         // A URL's path is not a file path. The character before an http(s)
         // match is `:`; skip anything sitting on that.
-        if (at.start > 1 && text[at.start - 2] === ":") continue;
+        if (at.start > 1 && own[at.start - 2] === ":") continue;
         links.push({
           range: { start: { x: at.start, y: lineNumber },
                    end: { x: at.end, y: lineNumber } },
@@ -2705,6 +2816,9 @@ function renderChangelog(entries) {
     host.textContent = "No CHANGELOG.md on this install.";
     return;
   }
+  // The sheet holds the last few. The rest is the file on GitHub — a
+  // panel that starts in a quarter of a second is not an archive.
+  entries = entries.slice(0, CLOG_SHOW);
   // One heading per day, rather than the same date stamped on ten entries:
   // on a busy day the date is noise and only the time carries information.
   const running = (state.version || "").split("+")[0];
@@ -4434,6 +4548,7 @@ function wire() {
   $("#q").oninput = renderTree;
   $("#newTab").onclick = openModal;
   $("#settingsBtn").onclick = openSettings;
+  $("#whatsNew").onclick = () => showChangelog(baseVersion(state.version));
   $("#settingsDone").onclick = () => ($("#settings").hidden = true);
 
   // Tabbed panes: siloed so the sheet stays readable as options grow.
@@ -5014,6 +5129,8 @@ function paletteCommands() {
   add("New folder", "Group sessions in the sidebar", newFolder);
   add("Adopt sessions", "Take over tmux sessions CLIque did not start", adoptSessions);
   add("Settings", "Themes, markers, snippets, notifications", openSettings);
+  add("What's new", "This release, in Settings",
+      () => showChangelog(baseVersion(state.version)));
   add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
   add("Full screen", "The pane, not the browser. Ctrl+Shift+F", toggleFullscreen);
   if (installPrompt) {
@@ -5131,7 +5248,7 @@ function paneSelection() {
 }
 
 function copyPaneSelection(keepHighlight) {
-  const picked = paneSelection();
+  const picked = tidyCopiedLink(paneSelection());
   if (!picked || !picked.trim()) return false;
   const entry = terms.get(activeId);
   copyText(picked).then(() => {

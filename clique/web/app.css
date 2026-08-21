@@ -310,6 +310,16 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 }
 #statusbar #keysBtn { margin-left: auto; height: 100%; padding: 0 8px; }
 
+/* Only on the bar when there is something to read. Instant, not a pulse:
+   tab switching does not animate and this is in the same family. */
+.whats-new {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  height: 100%; padding: 0 8px; margin: 0;
+  background: none; border: 0; font: inherit; font-size: 11px;
+  color: var(--fg); cursor: pointer; white-space: nowrap;
+}
+.whats-new[hidden] { display: none; }
+
 /* Terminal size, live. Rightmost on the bar so it is where a window's
    own size control would sit. The number is the setting, not a guess. */
 #fontSize {
@@ -1153,6 +1163,7 @@ a.give-value { color: var(--accent); }
                  color: var(--fg); }
 .clog-entry code { font-size: 11px; padding: 1px 4px; border-radius: 3px;
                    background: var(--field); }
+.clog-more { color: var(--accent); text-decoration: none; }
 
 /* Touch. A long press on a session row opens the menu that right-click opens,
    so the platform's own callout and text-selection have to get out of the way
@@ -1375,6 +1386,8 @@ a.give-value { color: var(--accent); }
   .about-links a:hover { text-decoration: underline; }
   .cli-reset:hover { color: var(--fg); }
   .version-link:hover { color: var(--fg); text-decoration: underline; }
+  .whats-new:hover { color: var(--accent); }
+  .clog-more:hover { text-decoration: underline; }
   .star-btn:hover { border-color: var(--warn); color: var(--warn); }
 }
 

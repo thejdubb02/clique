@@ -169,6 +169,37 @@ console.log("paths a pane printed");
         paths("https://example.com/docs/foo.md").length === 0);
 }
 
+console.log("a login link that wrapped is still one link");
+{
+  const code = region("function paneRowsText", "function openLink");
+  const {
+    paneRowsText, paneUrlSegments, urlNeedsLocalCallback,
+    paneHostIsRemote, tidyCopiedLink,
+  } = new Function(code +
+    "; return { paneRowsText, paneUrlSegments, urlNeedsLocalCallback, paneHostIsRemote, tidyCopiedLink };")();
+  const parts = [
+    { y: 8, text: "https://auth.openai.com/oauth/authorize?foo=1&code_challeng" },
+    { y: 9, text: "e_method=S256&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback" },
+  ];
+  const joined = paneRowsText(parts);
+  check("the two halves join without a gap",
+        joined.indexOf("code_challenge_method") > 0);
+  const segs = paneUrlSegments(parts, 0, joined.length);
+  check("each row keeps its own slice",
+        segs.length === 2 && segs[0].y === 8 && segs[1].y === 9, segs);
+  check("a localhost callback is a remote-box login",
+        urlNeedsLocalCallback(joined));
+  check("a device-code page is not",
+        !urlNeedsLocalCallback("https://auth.openai.com/codex/device"));
+  check("opening this panel on the box itself is local",
+        !paneHostIsRemote("127.0.0.1") && !paneHostIsRemote("localhost"));
+  check("opening it over the tailnet is remote",
+        paneHostIsRemote("box.tail1234.ts.net"));
+  check("copying a wrapped URL drops the line break",
+        tidyCopiedLink("https://auth.openai.com/codex/device\n/extra")
+          === "https://auth.openai.com/codex/device/extra");
+}
+
 console.log("things that sit on top of other things");
 {
   // A preview that outranks a menu is a menu nobody can use — and it fails
@@ -301,6 +332,24 @@ console.log("zoom a boxed pane instead of wrapping it");
   const capped = paneQueueOut(["aaaaaaaa"], "bbbb", 8);
   check("and an 8k flood cannot pile up forever",
         capped.join("").length <= 8 && capped.join("").endsWith("bbbb"));
+}
+
+console.log("what's new");
+{
+  const code = region("function baseVersion", "let loadedVersion");
+  const {
+    baseVersion, changelogHasNews, CLOG_SHOW,
+  } = new Function(code +
+    "; return { baseVersion, changelogHasNews, CLOG_SHOW };")();
+  check("the sheet holds five releases", CLOG_SHOW === 5);
+  check("a build suffix is not a new release",
+        baseVersion("0.50.24+abc") === "0.50.24");
+  check("an unread upgrade is news",
+        changelogHasNews("0.50.24", "0.50.23"));
+  check("the same version is not",
+        !changelogHasNews("0.50.24", "0.50.24"));
+  check("and neither is a first look, before anything is stamped",
+        !changelogHasNews("0.50.24", ""));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

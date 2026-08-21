@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.50.25 — 2026-08-21 09:39 PDT
+
+**A login link that wraps is still one link.** Codex (and anything else)
+prints a URL that used to split across lines, so a click only got the
+first half. The pane now joins those lines. If the login tries to come
+back to localhost on this box while you are on another machine, clicking
+it backs out of that flow — pick **Sign in with Device Code**, which is
+the one that actually works from here.
+
+## 0.50.24 — 2026-08-21 09:30 PDT
+
+**What's new sits on the bottom bar.** After an upgrade, a mark appears
+next to the stats. Click it and you are in Settings → Changelog. The
+sheet itself holds the last five releases; the rest is a link to the
+file on GitHub. Opening the notes clears the mark.
+
 ## 0.50.23 — 2026-08-20 21:08 PDT
 
 **Restarting the panel now updates tmux's own settings.** tmux is supposed

@@ -109,7 +109,8 @@ guessed from the process tree. Already-known sessions are filtered out.
 
 Release notes parsed out of `CHANGELOG.md`: `version`, `date`, `time`, `zone`,
 and `blocks` of spans. Structure rather than markup, so nothing has to render
-someone else's HTML.
+someone else's HTML. The settings sheet shows the newest five and links to
+the file on GitHub for the rest; this endpoint still returns the lot.
 
 ### `GET /healthz`
 

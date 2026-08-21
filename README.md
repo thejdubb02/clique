@@ -41,7 +41,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **Folders** | A tree. Drag to reorder folders and sessions, or drop a session on a folder to file it. Double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). Each row names the git branch it is on, and how many files have changed. |
 | **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Names shrink first; what still will not fit lands in **N more**, wearing the same working / waiting ring. Closing a tab is not killing the session. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. Drag to copy, even when the CLI wants the mouse. `Ctrl`/`Cmd`+`C` copies a selection and interrupts when there isn't one; `Ctrl`/`Cmd`+`Shift`+`C` copies the screen. |
-| **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. A file path opens a read-only look — copy it, or drop it into the prompt. |
+| **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. A URL that wrapped onto the next line is still one link. A file path opens a read-only look — copy it, or drop it into the prompt. |
 | **Scroll lock** | Scroll up and the view detaches from the stream. A badge says how far behind you are; the bottom, the lock, or `Ctrl`/`Cmd`+`Shift`+`L` catches you up. |
 | **Paste a screenshot** | `Ctrl`/`Cmd`+`V` saves the image into the session's own directory and drops the path where you were typing. Nothing is sent until you press enter. |
 | **See what it made** | An agent writes a screenshot into the session's directory and a count appears in the tab bar. Grid, full size, and the path back into your prompt in one click. |
@@ -54,7 +54,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **Which CLI** | The pane edge, the active tab and the prompt box carry the CLI's colour, so switching tabs tells you where you are typing. Colours editable per CLI. |
 | **Themes** | Nine presets, light / dark / system, custom CSS in three slots, independent font sizes, a monospace picker that falls back on every OS. |
 | **API** | Every action in the panel is an HTTP call, with bearer tokens and read-only ones. Full reference in [API.md](API.md), kept honest by a drift check in the test suite. |
-| **Changelog** | Settings → Changelog: every release with the time it shipped, read from this repo's `CHANGELOG.md` so the two cannot disagree. |
+| **Changelog** | Settings → Changelog: the last few releases, with a link to the rest on GitHub. After an upgrade, **What's new** sits on the bottom bar and goes straight there. |
 | **Told, not checked** | One webhook URL, POSTed when a session wants you, errors, finishes or dies. ntfy, Gotify, Discord, Mattermost and Uptime Kuma push all speak it. Real phone notifications, no app of ours. |
 | **Monitoring** | `GET /healthz` answers without a login. Point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |

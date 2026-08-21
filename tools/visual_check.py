@@ -445,27 +445,32 @@ def _run(panel) -> int:
             page.evaluate(
                 "() => { const e = terms.get(activeId); "
                 "if (e && e.term) e.term.clearSelection(); }")
-            page.wait_for_timeout(100)
+            page.wait_for_timeout(150)
             page.mouse.click(boxed_box["x"] + 40, boxed_box["y"] + 12)
-            page.wait_for_timeout(400)
-            after_click = page.evaluate(
-                """() => {
-                  const e = terms.get(activeId);
-                  if (!e || !e.term) return '';
-                  const buf = e.term.buffer.active;
-                  const lines = [];
-                  for (let i = 0; i < Math.min(6, e.term.rows); i++) {
-                    const line = buf.getLine(buf.viewportY + i);
-                    lines.push(line ? line.translateToString(true) : '');
-                  }
-                  return lines.join('\\n');
-                }""")
-            check("a click still reaches the boxed CLI",
-                  "clicked" in after_click.lower(), after_click[:120])
+            try:
+                page.wait_for_function(
+                    """() => {
+                      const e = terms.get(activeId);
+                      if (!e || !e.term) return false;
+                      const buf = e.term.buffer.active;
+                      for (let i = 0; i < Math.min(8, e.term.rows); i++) {
+                        const line = buf.getLine(buf.viewportY + i);
+                        const text = line ? line.translateToString(true) : '';
+                        if (/clicked/i.test(text)) return true;
+                      }
+                      return false;
+                    }""",
+                    timeout=2500)
+                clicked_ok = True
+                after_click = "clicked"
+            except Exception as err:  # noqa: BLE001 — the check names what failed
+                clicked_ok = False
+                after_click = str(err)
+            check("a click still reaches the boxed CLI", clicked_ok, after_click)
             print("zooming a boxed pane instead of wrapping it")
             before_cols = page.evaluate(
                 "() => { const e = terms.get(activeId); return e && e.term ? e.term.cols : 0; }")
-            page.set_viewport_size({"width": 960, "height": 640})
+            page.set_viewport_size({"width": 1200, "height": 720})
             page.wait_for_timeout(700)
             zoomed = page.evaluate(
                 """() => {
@@ -583,8 +588,34 @@ def _run(panel) -> int:
         sample.unlink(missing_ok=True)
 
         page.screenshot(path=str(SHOTS / "panel.png"), full_page=False)
-        page.locator("#settingsBtn").click()
-        page.wait_for_timeout(600)
+
+        print("what's new")
+        check("the mark is off until there is something to read",
+              page.locator("#whatsNew").is_hidden())
+        page.evaluate(
+            "() => { state.settings.changelog_seen = '0.1.0'; renderVersion(); }")
+        page.wait_for_timeout(150)
+        check("an unread release lights the bottom bar",
+              page.locator("#whatsNew").is_visible())
+        page.locator("#whatsNew").click()
+        page.wait_for_timeout(800)
+        check("clicking it opens the notes",
+              page.locator("#settings").is_visible()
+              and page.locator('.pane[data-pane="changelog"]:not([hidden])').count() > 0)
+        check("and the mark goes out once they have been opened",
+              page.locator("#whatsNew").is_hidden())
+        articles = page.locator("#changelog .clog-entry")
+        try:
+            page.wait_for_selector("#changelog .clog-entry", timeout=4000)
+        except Exception as err:  # noqa: BLE001 — the checks below name what failed
+            print(f"       changelog did not draw: {err}")
+        check("the sheet holds the last few releases",
+              articles.count() == 5, articles.count())
+        more = page.locator("a.clog-more")
+        href = more.get_attribute("href") if more.count() else ""
+        check("and the rest is a link to the file on GitHub",
+              more.is_visible() and "CHANGELOG.md" in (href or ""), href)
+        page.screenshot(path=str(SHOTS / "changelog.png"))
         page.screenshot(path=str(SHOTS / "settings.png"))
         check("settings opens", page.locator("#settings").is_visible())
 

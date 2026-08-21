@@ -167,6 +167,10 @@
         <span id="load" class="stat"><i class="dot stat" aria-hidden="true"></i><b class="k">LOAD</b><span class="v">-.--</span></span>
         <span id="clients" class="stat" title="Live views — one per open tab, plus any other window or phone"><i class="dot" style="background:var(--ok)"></i><b class="k">VIEWS</b><span class="v">0</span></span>
       </div>
+      <button type="button" id="whatsNew" class="whats-new" hidden
+              title="What changed in this release">
+        <i class="version-new" aria-hidden="true"></i> What's new
+      </button>
       <button id="keysBtn" class="hdr-btn" title="Keyboard shortcuts (Ctrl+Shift+/)">
         <svg class="ico" aria-hidden="true"><use href="#i-keyboard"/></svg>
       </button>
@@ -520,9 +524,12 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
     </section>
 
     <section class="pane" data-pane="changelog" hidden>
-      <p class="note">Every release, newest first, in the time zone the work
-         happened in. Read from the same <code>CHANGELOG.md</code> the repo
-         ships, so it cannot drift.</p>
+      <p class="note">The last few releases, newest first, in the time zone
+         the work happened in. Read from the same <code>CHANGELOG.md</code>
+         the repo ships, so it cannot drift.
+         <a class="clog-more" href="https://github.com/thejdubb02/clique/blob/main/CHANGELOG.md"
+            target="_blank" rel="noopener noreferrer">Read the rest on GitHub</a>
+      </p>
       <div id="changelog" class="clog"></div>
     </section>
 
