@@ -5167,6 +5167,8 @@ function paletteCommands() {
     add("Copy working directory", current.cwd, () => copyText(current.cwd));
     add("Copy what's on screen", "The visible pane, not the scrollback",
         () => { copyPaneSelection() || copyPaneVisible(); });
+    add("Copy the last 50 lines", "The recent output, scrollback and all — no dragging",
+        () => copyPaneLast(50));
     add("Focus the terminal", current.name, focusTerminal);
     add(following(current.id) ? "Scroll lock — stop following output"
                               : "Follow output again",
@@ -5305,10 +5307,35 @@ function paneVisibleText() {
   return lines.join("\n").replace(/\s+$/, "");
 }
 
+/* The last N lines the pane holds, scrollback and all, ending at the cursor —
+ * the "without dragging" half of copy. paneVisibleText is only the viewport;
+ * this reaches past it to what just happened, wherever the view is parked. No
+ * notion of a "reply": CLIque does not read the CLI's output, so a count of
+ * lines is the honest unit. Trailing blank rows are dropped. */
+function paneLastLines(n) {
+  const entry = terms.get(activeId);
+  if (!entry || !entry.term) return "";
+  const buf = entry.term.buffer.active;
+  const end = buf.baseY + buf.cursorY;      // the last row written to
+  const lines = [];
+  for (let y = end; y >= 0 && lines.length < n; y--) {
+    const line = buf.getLine(y);
+    lines.unshift(line ? line.translateToString(true) : "");
+  }
+  return lines.join("\n").replace(/\s+$/, "");
+}
+
 function copyPaneVisible() {
   const picked = paneVisibleText();
   if (!picked || !picked.trim()) return false;
   copyText(picked).then(() => toast("Copied the screen"));
+  return true;
+}
+
+function copyPaneLast(n) {
+  const picked = paneLastLines(n);
+  if (!picked || !picked.trim()) { toast("Nothing there to copy yet"); return false; }
+  copyText(picked).then(() => toast(`Copied the last ${picked.split("\n").length} lines`));
   return true;
 }
 

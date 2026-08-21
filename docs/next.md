@@ -24,19 +24,16 @@ Hours each. These are the ones that pay off every hour in the panel.
 
 ## Next — awareness
 
-3. **Copy last output / last N lines.** Selection and the visible screen
-   already copy (0.50.17–0.50.21). This is the leftover: last reply, last N
-   lines, without dragging.
-4. **Pin / favourite** sessions, above recency.
-5. **Session status line:** elapsed, last activity, process state.
+3. **Pin / favourite** sessions, above recency.
+4. **Session status line:** elapsed, last activity, process state.
 
 ## Then — bigger slices
 
-6. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
+5. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
     gap between the README and the panel.
-7. **Session templates:** CLI + directory + starter prompt + name pattern.
-8. **An agent-facing skill.** The API exists; nothing tells an agent so.
-9. **Per-session CPU/memory,** to catch one agent starving the box.
+6. **Session templates:** CLI + directory + starter prompt + name pattern.
+7. **An agent-facing skill.** The API exists; nothing tells an agent so.
+8. **Per-session CPU/memory,** to catch one agent starving the box.
 
 ## Hygiene, not a feature
 

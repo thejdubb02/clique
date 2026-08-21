@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.29 — 2026-08-21 15:08 PDT
+
+**Copy the last lines without dragging across them.** Selection and the
+visible screen already copied; the palette now carries "Copy the last 50
+lines" — the recent output, scrollback and all, ending where the pane last
+wrote, wherever the view is parked. It counts lines rather than guessing
+where a reply began: CLIque does not read what the CLI said, so a fixed
+window is the honest unit.
+
 ## 0.50.28 — 2026-08-21 15:05 PDT
 
 **Switching to a tab lands you in the prompt box; Escape hands the pane
