@@ -17,23 +17,21 @@ Until that lands, nobody else can install this.
 
 Hours each. These are the ones that pay off every hour in the panel.
 
-1. **Searchable prompt history.** Every prompt sent, per session and globally,
-   fuzzy, one click to reuse. Snippets stay for the ones you meant to keep.
-2. **Land on the last prompt when a session opens.** You currently land
+1. **Land on the last prompt when a session opens.** You currently land
    wherever the stream left you.
 
 ## Next — awareness
 
-3. **Pin / favourite** sessions, above recency.
-4. **Session status line:** elapsed, last activity, process state.
+2. **Pin / favourite** sessions, above recency.
+3. **Session status line:** elapsed, last activity, process state.
 
 ## Then — bigger slices
 
-5. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
+4. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
     gap between the README and the panel.
-6. **Session templates:** CLI + directory + starter prompt + name pattern.
-7. **An agent-facing skill.** The API exists; nothing tells an agent so.
-8. **Per-session CPU/memory,** to catch one agent starving the box.
+5. **Session templates:** CLI + directory + starter prompt + name pattern.
+6. **An agent-facing skill.** The API exists; nothing tells an agent so.
+7. **Per-session CPU/memory,** to catch one agent starving the box.
 
 ## Hygiene, not a feature
 

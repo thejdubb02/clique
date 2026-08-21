@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.31 — 2026-08-21 16:49 PDT
+
+**Search everything you have typed, and send it again.** The command palette
+has a prompt mode — the "Reuse a past prompt" command, or a `"` to open
+straight into it — that fuzzy-searches every prompt you have sent, per project
+and across all of them, newest first. Click one and it drops into the box to
+edit or send; a terminal-mode CLI gets it in its own input, no newline. Nothing
+is logged twice: the prompts come from the CLIs' own history — a prompt-log read
+whole, a transcript from a bounded tail, so a thirty-megabyte one is never
+walked.
+
 ## 0.50.30 — 2026-08-21 16:34 PDT
 
 **Changing the terminal font now resizes the CLI to match.** The bottom-right

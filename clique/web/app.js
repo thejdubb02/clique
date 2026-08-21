@@ -2928,6 +2928,7 @@ const SHORTCUTS = [
     ["@", "Sessions"],
     ["&gt;", "Commands"],
     ["~", "Past conversations, resumable in one click"],
+    ['"', "Past prompts, to reuse one in the box"],
   ]],
   ["Reading a pane", [
     ["Scroll up", "Detaches the view, so arriving output cannot drag it away"],
@@ -4998,6 +4999,23 @@ async function loadResumable(force) {
   return resumable;
 }
 
+/* Prompts you have already sent, for the palette's prompt search. Fetched the
+ * first time it is asked for and cached a minute — the same deal resumable
+ * gets, and off the three-second poll for the same reason. */
+let promptHistory = null;
+let promptHistoryAt = 0;
+
+async function loadPrompts(force) {
+  if (!force && promptHistory && Date.now() - promptHistoryAt < 60000) return promptHistory;
+  try {
+    promptHistory = await api("api/prompts");
+    promptHistoryAt = Date.now();
+  } catch (err) {
+    promptHistory = promptHistory || [];
+  }
+  return promptHistory;
+}
+
 /* Start a session that picks a past conversation back up.
  *
  * The same endpoint that starts a new one — the registry decides what
@@ -5033,6 +5051,48 @@ function resumeItems() {
       run: () => resumeConversation(entry),
     };
   });
+}
+
+function promptItems() {
+  const clis = new Map((state.clis || []).map((c) => [c.id, c]));
+  return (promptHistory || []).map((entry) => {
+    const cli = clis.get(entry.cli);
+    const oneLine = entry.text.replace(/\s+/g, " ").trim();
+    return {
+      kind: "prompt",
+      title: oneLine.length > 100 ? oneLine.slice(0, 100) + "\u2026" : oneLine,
+      detail: entry.project + " \u00b7 " + ago(entry.when),
+      match: `${entry.text} ${entry.project} ${cli ? cli.label : entry.cli}`,
+      icon: cli ? markerFor({ color: cliColor(cli.id, cli.color), icon: cli.icon,
+                              icon_full_color: cli.icon_full_color,
+                              label: cli.label, cli: cli.id },
+                             markerMode(cli.id) === "none" ? "color" : markerMode(cli.id)) : "",
+      tag: "prompt",
+      run: () => reusePrompt(entry),
+    };
+  });
+}
+
+/* One click on a past prompt drops it back where you would type it, to send or
+ * edit — never sent for you. In panel mode that is the box; a terminal-mode CLI
+ * owns its own input, so it goes into the pane without a newline for you to
+ * read and send there. */
+async function reusePrompt(entry) {
+  if (promptWanted()) {
+    const box = $("#prompt");
+    box.value = entry.text;
+    growPrompt(box);
+    saveDraft(true);
+    box.focus();
+    try { box.setSelectionRange(box.value.length, box.value.length); } catch (err) { /* ok */ }
+  } else if (activeId) {
+    try {
+      await api(`api/sessions/${activeId}/send`, {
+        method: "POST", body: JSON.stringify({ text: entry.text, enter: false }),
+      });
+    } catch (err) { toast(String(err.message || err), true); return; }
+    focusTerminal();
+  }
 }
 
 /* "The one I was just in" is a fact about the work, not about this screen, so
@@ -5164,6 +5224,8 @@ function paletteCommands() {
   add("System history", "cpu and memory over the last hour", showHistory);
   add("Resume a past conversation", "Every transcript your CLIs have kept",
       () => openPalette("~"));
+  add("Reuse a past prompt", "Search everything you have typed, drop it in the box",
+      () => openPalette('"'));
 
   if (current) {
     add("Rename session", current.name, () => renameSession(current));
@@ -5633,17 +5695,25 @@ function renderPalette() {
   const mode = palPick ? "session"
              : raw[0] === ">" ? "command"
              : raw[0] === "@" ? "session"
+             : raw[0] === '"' ? "prompt"
              : raw[0] === "~" ? "resume" : "all";
   // The prefix characters are only stripped when the user actually typed one.
   // In pick mode the list is already narrowed and there is no ">" or "@" in
   // front of what they typed, so slicing would eat their first keystroke.
   const query = (mode === "all" || palPick ? raw : raw.slice(1)).trim().toLowerCase();
 
+  // Prompt history is fetched the first time it is asked for, then the palette
+  // re-renders once it lands — the same lazy fetch resumable makes.
+  if (mode === "prompt" && promptHistory === null) {
+    loadPrompts().then(() => { if (!$("#palette").hidden) renderPalette(); });
+  }
+
   let pool = [];
-  if (mode !== "command") pool = pool.concat(paletteSessions());
+  if (mode !== "command" && mode !== "prompt") pool = pool.concat(paletteSessions());
   // Nothing is moved to where it already is.
   if (palPick) pool = pool.filter((item) => item.id !== activeId);
-  if (mode !== "session") pool = pool.concat(paletteCommands());
+  if (mode !== "session" && mode !== "prompt") pool = pool.concat(paletteCommands());
+  if (mode === "prompt") pool = pool.concat(promptItems());
   /* Hundreds of past conversations would drown the twenty things you actually
    * switch between, so they join the pool only once you have typed something
    * — or when you have asked for them by name with "~". */

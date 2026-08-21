@@ -39,6 +39,15 @@ MAX_LABEL = 72
 #: only changes when someone finishes a conversation.
 CACHE_SECONDS = 30
 
+#: Prompt search reads more than the sidebar's label discovery does, so it is
+#: bounded harder and cached the same. A transcript is never walked whole (the
+#: module's standing bargain): the reusable prompts are the recent ones, so only
+#: a tail of each recent transcript is read. A prompt-log CLI is already a
+#: per-prompt file and is read whole.
+PROMPT_LIMIT = 400
+PROMPT_TRANSCRIPTS_MAX = 60
+PROMPT_TAIL_BYTES = 64_000
+
 
 @dataclass(frozen=True)
 class Conversation:
@@ -188,6 +197,36 @@ def _text_of(message) -> str:
     return raw[:MAX_LABEL].strip()
 
 
+def _prompt_text(message) -> str:
+    """The full text of a user turn, for reuse rather than a label.
+
+    Unlike ``_text_of`` this does not truncate — a prompt you want to send again
+    is wanted whole — and it drops the turns that were never typed: tool results
+    (no text part), interrupt markers, and the system-injected envelopes a turn
+    can open with.
+    """
+    if isinstance(message, str):
+        raw = message
+    elif isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            raw = content
+        elif isinstance(content, list):
+            raw = "\n".join(
+                part.get("text", "")
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        else:
+            return ""
+    else:
+        return ""
+    raw = raw.strip()
+    if not raw or raw.startswith(("Caveat:", "[Request interrupted", "<")):
+        return ""
+    return raw
+
+
 class History:
     """Discovery across every CLI whose registry block declares a history."""
 
@@ -196,6 +235,9 @@ class History:
         self._lock = threading.Lock()
         self._cache: list[Conversation] = []
         self._at = 0.0
+        self._plock = threading.Lock()
+        self._pcache: list[dict] | None = None
+        self._pat = 0.0
 
     def conversations(self, force: bool = False) -> list[Conversation]:
         with self._lock:
@@ -303,4 +345,139 @@ class History:
                     size=0,
                     branch="",
                 ))
+        return out
+
+    # -------------------------------------------------------------- prompts
+
+    def prompts(self, limit: int = PROMPT_LIMIT, force: bool = False) -> list[dict]:
+        """Individual prompts across every CLI that keeps a history, newest first.
+
+        ``conversations`` is the session view — one row per transcript, labelled
+        by its opening line. This is the finer grain the palette's prompt search
+        reuses: every prompt worth sending again, deduplicated by text so the
+        list is not fifty rows of "yes", capped so a search stays fast.
+        """
+        with self._plock:
+            if (not force and self._pcache is not None
+                    and time.time() - self._pat < CACHE_SECONDS):
+                return self._pcache[:limit]
+            rows: list[dict] = []
+            for cli_id, cli in self.registry.types().items():
+                if cli.history:
+                    rows.extend(self._prompts_for_cli(cli_id, cli.history))
+            rows.sort(key=lambda r: r["when"], reverse=True)
+            seen: set[str] = set()
+            deduped: list[dict] = []
+            for row in rows:
+                if row["text"] in seen:
+                    continue
+                seen.add(row["text"])
+                deduped.append(row)
+                if len(deduped) >= PROMPT_LIMIT:
+                    break
+            self._pcache, self._pat = deduped, time.time()
+            return deduped[:limit]
+
+    def _prompts_for_cli(self, cli_id: str, spec: dict) -> list[dict]:
+        root = Path(str(spec.get("dir", ""))).expanduser()
+        if not root.is_dir():
+            return []
+        layout = spec.get("layout")
+        if layout == "prompt-log":
+            return self._prompts_from_log(cli_id, spec, root)
+        if layout == "dashed-dir":
+            return self._prompts_from_transcripts(cli_id, spec, root)
+        return []
+
+    def _prompt_row(self, cli_id, cwd, text, when, session) -> dict:
+        return {
+            "cli": cli_id,
+            "cwd": cwd,
+            "project": Path(cwd).name or cwd,
+            "text": text,
+            "when": when,
+            "cli_session_id": session,
+        }
+
+    def _prompts_from_log(self, cli_id: str, spec: dict, root: Path) -> list[dict]:
+        """Grok's shape: one append-only file per project, a line per prompt —
+        already this grain, so read whole and cheaply."""
+        name = str(spec.get("file") or "prompt_history.jsonl")
+        out: list[dict] = []
+        for project_dir in root.iterdir():
+            if not project_dir.is_dir():
+                continue
+            log = project_dir / name
+            if not log.is_file():
+                continue
+            cwd = urllib.parse.unquote(project_dir.name)
+            try:
+                with log.open(encoding="utf-8", errors="replace") as handle:
+                    for line in handle:
+                        try:
+                            row = json.loads(line)
+                        except ValueError:
+                            continue
+                        prompt = str(row.get("prompt") or "").strip()
+                        if not prompt or row.get("is_bash"):
+                            continue
+                        out.append(self._prompt_row(
+                            cli_id, cwd, prompt,
+                            _epoch(str(row.get("timestamp") or "")),
+                            str(row.get("session_id") or "")))
+            except OSError:
+                continue
+        return out
+
+    def _prompts_from_transcripts(self, cli_id: str, spec: dict, root: Path) -> list[dict]:
+        """A transcript can be thirty megabytes, so it is never walked whole. The
+        reusable prompts are the recent ones, so a bounded tail of each recent
+        transcript is read and its user turns kept. A tail's first line is
+        usually half a record and is dropped."""
+        pattern = str(spec.get("pattern") or "*.jsonl")
+        files: list[tuple[float, Path, str]] = []
+        for project_dir in root.iterdir():
+            if not project_dir.is_dir():
+                continue
+            decoded = _decode_dashed(project_dir.name)
+            for transcript in project_dir.glob(pattern):
+                try:
+                    stat = transcript.stat()
+                except OSError:
+                    continue
+                if stat.st_size < 512:
+                    continue
+                files.append((stat.st_mtime, transcript, decoded))
+        files.sort(reverse=True)
+        out: list[dict] = []
+        for mtime, transcript, decoded in files[:PROMPT_TRANSCRIPTS_MAX]:
+            try:
+                with transcript.open("rb") as fh:
+                    fh.seek(0, 2)
+                    size = fh.tell()
+                    fh.seek(max(0, size - PROMPT_TAIL_BYTES))
+                    chunk = fh.read()
+            except OSError:
+                continue
+            lines = chunk.split(b"\n")
+            if len(lines) > 1:
+                lines = lines[1:]
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if (not isinstance(record, dict) or record.get("type") != "user"
+                        or record.get("isSidechain")):
+                    continue
+                text = _prompt_text(record.get("message"))
+                if not text:
+                    continue
+                cwd = str(record.get("cwd") or "") or decoded
+                out.append(self._prompt_row(
+                    cli_id, cwd, text,
+                    _epoch(str(record.get("timestamp") or "")) or mtime,
+                    transcript.stem))
         return out

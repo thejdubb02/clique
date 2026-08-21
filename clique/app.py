@@ -879,6 +879,16 @@ class Handler(BaseHTTPRequestHandler):
                     row["folder"] = auto_folder(conv.cwd, folders)
                     out.append(row)
                 return self._json(out)
+            if path == "/api/prompts":
+                # Individual prompts, newest first, for the palette's prompt
+                # search. Read from each CLI's own history — nothing is logged
+                # twice — and bounded: a tail of each recent transcript, not the
+                # whole thing. See clique/history.py.
+                try:
+                    limit = max(1, min(int(query.get("limit") or 400), 400))
+                except (TypeError, ValueError):
+                    limit = 400
+                return self._json(self.panel.conversations.prompts(limit=limit))
             if path == "/api/changelog":
                 # Parsed from the same CHANGELOG.md the repo ships, so the
                 # release notes in the app cannot drift from the ones on disk.

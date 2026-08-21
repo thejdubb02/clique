@@ -100,6 +100,14 @@ Every past conversation CLIque can find on disk, with the folder it belongs to
 already worked out. Feed a row's `cli_session_id` to `POST /api/sessions` to
 resume it.
 
+### `GET /api/prompts?limit=400`
+
+Individual prompts you have sent, newest first and deduplicated by text, for the
+command palette's prompt search. Read from each CLI's own history — a prompt-log
+CLI whole, a transcript CLI from a bounded tail — never logged a second time by
+CLIque. Each row carries `cli`, `cwd`, `project`, `text` (the full prompt, to
+reuse), `when`, and `cli_session_id`. `limit` is capped at 400.
+
 ### `GET /api/adoptable`
 
 tmux sessions started by another tool that CLIque could take over, with the CLI
