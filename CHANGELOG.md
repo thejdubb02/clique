@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.28 — 2026-08-21 15:05 PDT
+
+**Switching to a tab lands you in the prompt box; Escape hands the pane
+back.** A switch used to drop the cursor into the terminal, so typing a
+prompt meant clicking the box first. Now the box takes focus on a switch,
+ready for the next prompt — and Escape from the box moves focus to the pane,
+to scroll it or type into the CLI's own input. Terminal-mode CLIs, which own
+their input, keep the pane focused as before, and a phone is left alone so
+the on-screen keyboard does not spring up on every tab.
+
 ## 0.50.27 — 2026-08-21 14:56 PDT
 
 **Hover a row or tab and the tooltip shows the last few lines.** A status

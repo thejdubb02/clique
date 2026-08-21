@@ -3144,6 +3144,7 @@ function selectTab(id) {
   renderTabs();
   renderTree();
   saveWorkspace();
+  landFocus();
 }
 
 async function openSession(id) {
@@ -3170,6 +3171,7 @@ async function openSession(id) {
     await attach(id);
     showActivePane();
   }
+  landFocus();
 }
 
 /* Warm the other open tabs after the one in front is up.
@@ -4730,6 +4732,10 @@ function wire() {
   $("#modePill").onclick = () => cycleMode(session(activeId), false);
 
   $("#prompt").onkeydown = (ev) => {
+    // Escape leaves the box for the pane — scroll it, or type into the CLI's
+    // own input. Stopped here so the global Escape does not also fire and start
+    // closing menus that were not open.
+    if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); focusTerminal(); return; }
     if (ev.key === "Tab" && expandInBox(ev.target)) { ev.preventDefault(); return; }
     if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); run(ev.target.value); }
   };
@@ -5216,6 +5222,20 @@ function closeAllTabs() {
 function focusTerminal() {
   const entry = terms.get(activeId);
   if (entry) entry.term.focus();
+}
+
+/* Smart focus: after a switch, land in the prompt box so a new prompt is one
+ * keystroke away, with Escape to hand focus back to the pane (see its keydown).
+ *
+ * Only when the box is the input surface — a terminal-mode CLI owns its own
+ * input, so the pane keeps the focus there. And only on a pointer device: on a
+ * phone, focusing a textarea throws the on-screen keyboard up on every switch,
+ * so touch keeps whatever focus it had. showActivePane still handles the pane
+ * on attach and reconnect; this only overrides it for a switch you asked for. */
+function landFocus() {
+  if (!activeId || !promptWanted()) return;
+  if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  $("#prompt").focus();
 }
 
 function insertSnippet(sn) {
