@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.27 — 2026-08-21 14:56 PDT
+
+**Hover a row or tab and the tooltip shows the last few lines.** A status
+ring tells you a session changed; it does not tell you what it said. Rest on
+the row — in the sidebar or on the tab bar — and the native tooltip now
+carries the last few content lines of the pane, captured only when you stop
+there, so a quiet sidebar still costs nothing. No popup: the browser draws
+the tooltip, which is why it cannot cover a menu or eat a click. Touch, which
+has no hover, keeps its long-press menu.
+
 ## 0.50.26 — 2026-08-21 14:34 PDT
 
 **Stopping a busy session now says what you would interrupt.** Kill asked a

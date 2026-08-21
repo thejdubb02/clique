@@ -5932,9 +5932,65 @@ function setSidebar(show) {
   localStorage.setItem("clique.migrated", "1");
 })();
 
+/* Hover a row or tab, rest a beat, and the native tooltip carries the last
+ * few lines the pane said — an answer without opening it. It pulls the peek
+ * endpoint lazily: nothing captures a pane until a pointer stops on its row,
+ * so a quiet sidebar of twenty still costs nothing, the same bargain the
+ * attention ladder makes. No popup on purpose — the earlier one was dropped
+ * for being a thing to summon and place, and the browser's own tooltip is
+ * neither. Touch has no hover, so the long-press menu stays its way in. */
+const PEEK_HOVER_MS = 350;          // a deliberate rest, not a pass-through
+const PEEK_TTL_MS = 4000;           // a fetched peek is good for a few seconds
+const peekTitles = new Map();       // id -> { at, title }
+let peekTimer = null;
+let peekRow = null;
+
+async function peekInto(el) {
+  const id = el.dataset.id;
+  const s = session(id);
+  if (!s || !s.alive) return;       // a dead pane has nothing to glance at
+  const cached = peekTitles.get(id);
+  if (!cached || Date.now() - cached.at >= PEEK_TTL_MS) {
+    let data;
+    try { data = await api(`api/sessions/${id}/peek?lines=8`); }
+    catch { return; }               // a failed glance leaves the plain tooltip
+    const lines = (data && data.lines) || [];
+    if (!lines.length) return;
+    const head = s.cwd || s.name;
+    peekTitles.set(id, { at: Date.now(), title: `${head}\n\n${lines.join("\n")}` });
+  }
+  const entry = peekTitles.get(id);
+  if (entry && peekRow === el) el.title = entry.title;   // still resting on it
+}
+
+/* Delegated, because both containers are rebuilt every poll: a listener per
+ * row would be churn for nothing, the same reason the touch menus are. */
+function wirePeekTooltips() {
+  for (const sel of ["#tree", "#tabs"]) {
+    const root = $(sel);
+    if (!root) continue;
+    root.addEventListener("mouseover", (ev) => {
+      const el = ev.target.closest(".session, .tab");
+      if (!el || el === peekRow) return;    // already resting on this one
+      peekRow = el;
+      clearTimeout(peekTimer);
+      peekTimer = setTimeout(() => { if (peekRow === el) peekInto(el); }, PEEK_HOVER_MS);
+    });
+    root.addEventListener("mouseout", (ev) => {
+      const el = ev.target.closest(".session, .tab");
+      // Crossing between a row's own children is not leaving the row.
+      if (el === peekRow && !el.contains(ev.relatedTarget)) {
+        clearTimeout(peekTimer);
+        peekRow = null;
+      }
+    });
+  }
+}
+
 wire();
 wireResizer();
 wireTouchMenus();
+wirePeekTooltips();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 bootWorkspace();
