@@ -9,6 +9,40 @@ in passing is not lost and does not quietly become a priority either.
 
 ---
 
+## Usage stats, and an opt-in anonymous share
+
+Raised 2026-08-21. Two products, not one: **your own nerd dashboard** (always
+local), and **optional anonymous rollups** to us so the product is not steered
+by one box.
+
+The rule is the same as the rest of CLIque: **counts and clocks, never the
+words.** No prompt text, no pane contents, no paths, no names. The site
+currently says "no telemetry" — that claim has to become "nothing leaves
+unless you turn it on", with a preview of the last packet.
+
+**Interesting and honest** (tmux + the panel, no vendor API):
+
+- Sessions started / still alive / killed; tmux lifetime vs time anyone was
+  looking
+- Peak concurrent agents; hour-of-day and day-of-week
+- Mix of CLIs actually used, not just installed
+- Prompts sent (count and length buckets, not the text)
+- Time working / waiting-on-you / idle — we already classify this
+- Times it asked, times it errored, how long until you answered
+- Image pastes, artifacts made, paths glanced
+- Phone vs desktop, version, OS — so we know what to keep supporting
+
+**Share:** off by default. Checkbox with the exact JSON shown first. Random
+install id created on opt-in, rotatable, deleted when they turn it off.
+Daily rollup POST over HTTPS, not a stream of events. Self-hosters and paid
+users use the same packet; our ingest is a boring authenticated endpoint with
+its own key, budget, and a monitor.
+
+Refused: prompt/pane text, raw cwd, keystroke logs, anything that needs to
+know which AI vendor is talking.
+
+---
+
 ## Borrowed from the VS Code / terminal ecosystem
 
 Raised 2026-08-19. The observation behind it is sound: the extensions people

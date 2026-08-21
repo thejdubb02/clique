@@ -5,6 +5,10 @@ things that break here — cookies, the WebSocket handshake, frame masking, a PT
 that never gets its first byte — only exist across a socket.
 
 Usage: python3 tools/smoke_http.py [base_url]
+
+With no URL it starts its own panel — own port, own state, own tmux
+socket — so it cannot touch a panel someone is working in. Pass a URL
+only when you mean to talk to that panel.
 """
 
 from __future__ import annotations
@@ -34,13 +38,24 @@ import contextlib
 from clique import notify, tmux
 from clique.wsproto import OP_BINARY, OP_TEXT
 
-BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3200").rstrip("/")
+ROOT = Path(__file__).resolve().parents[1]
+OWN_PORT = 3298
+OWN_SOCKET = "clique-http-smoke"
+OWN_HOME = Path("/tmp/clique-http-smoke-home")
+OWN_PASSWORD = "http-smoke-check"  # noqa: S105 — throwaway panel on loopback, seconds
+
+#: Set in ``main`` before any request. Empty until then so a missing setup
+#: cannot silently talk to the live panel on 3200.
+BASE = ""
+PASSWORD = ""
+SOCKET = OWN_SOCKET
+TEST_ENV: dict[str, str] = {}
 
 #: The password on disk is an scrypt hash and cannot be reversed, which is the
 #: point. So the suite authenticates with a throwaway API token it mints and
 #: revokes around the run — which also exercises the path an agent uses.
-#: Set CLIQUE_TEST_PASSWORD to additionally cover the login form.
-PASSWORD = os.environ.get("CLIQUE_TEST_PASSWORD", "")
+#: When this suite starts its own panel it always covers the login form.
+#: Against an existing panel, set CLIQUE_TEST_PASSWORD to cover it.
 
 passed = failed = 0
 cookie = ""
@@ -198,13 +213,16 @@ class Client:
             self.sock.close()
 
 
+def _cli(args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-m", "clique", *args],
+        capture_output=True, text=True, cwd=str(ROOT), env=TEST_ENV)
+
+
 def mint_token() -> None:
     """A throwaway token for the run, revoked in teardown."""
     global bearer, token_id
-    result = subprocess.run(
-        [sys.executable, "-m", "clique", "token", "create", "smoke-test"],
-        capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]),
-    )
+    result = _cli(["token", "create", "smoke-test"])
     for line in result.stdout.splitlines():
         if line.strip().startswith("mxp_"):
             bearer = line.strip()
@@ -214,14 +232,69 @@ def mint_token() -> None:
 
 def revoke_token() -> None:
     if token_id:
-        subprocess.run(
-            [sys.executable, "-m", "clique", "token", "revoke", token_id],
-            capture_output=True, text=True,
-            cwd=str(Path(__file__).resolve().parents[1]),
-        )
+        _cli(["token", "revoke", token_id])
+
+
+def _own_panel() -> subprocess.Popen:
+    """A throwaway panel on its own socket, so nothing here can reach a live one."""
+    shutil.rmtree(OWN_HOME, ignore_errors=True)
+    OWN_HOME.mkdir(parents=True)
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "clique",
+         "--host", "127.0.0.1", "--port", str(OWN_PORT),
+         "--password", OWN_PASSWORD,
+         "--state", str(OWN_HOME / "state.json")],
+        cwd=str(ROOT), env=TEST_ENV,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(80):
+        try:
+            urllib.request.urlopen(BASE + "/healthz", timeout=2).read()
+            return proc
+        except (urllib.error.URLError, OSError):
+            time.sleep(0.25)
+    proc.kill()
+    raise SystemExit(f"the check's own panel never came up on {OWN_PORT}")
 
 
 def main() -> int:
+    global BASE, PASSWORD, SOCKET, TEST_ENV
+    panel = None
+    explicit = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else ""
+    live = {"http://127.0.0.1:3200", "http://localhost:3200"}
+    if explicit in live and os.environ.get("CLIQUE_TEST_LIVE") != "1":
+        print("refusing the live panel — this suite starts its own so it "
+              "cannot take over a window you are using. pass a different "
+              "url, or set CLIQUE_TEST_LIVE=1 if you mean it.",
+              file=sys.stderr)
+        return 2
+    try:
+        if explicit:
+            BASE = explicit
+            SOCKET = os.environ.get("CLIQUE_TMUX_SOCKET") or "clique"
+            PASSWORD = os.environ.get("CLIQUE_TEST_PASSWORD", "")
+            TEST_ENV = dict(os.environ)
+        else:
+            BASE = f"http://127.0.0.1:{OWN_PORT}"
+            SOCKET = OWN_SOCKET
+            PASSWORD = OWN_PASSWORD
+            TEST_ENV = dict(os.environ,
+                            CLIQUE_HOME=str(OWN_HOME),
+                            CLIQUE_TMUX_SOCKET=OWN_SOCKET)
+            panel = _own_panel()
+        return _run()
+    finally:
+        revoke_token()
+        if panel is not None:
+            panel.terminate()
+            try:
+                panel.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                panel.kill()
+            tmux._run(["kill-server"], SOCKET, check=False)
+            shutil.rmtree(OWN_HOME, ignore_errors=True)
+
+
+def _run() -> int:
     print("auth")
     status, _ = call("/api/state", anon=True)
     check("API refuses anonymous callers", status == 401, status)
@@ -354,14 +427,14 @@ def main() -> int:
     made_s = call("/api/sessions", "POST",
                   {"cli": "shell", "cwd": "/tmp", "name": "size-order"})[1]
     time.sleep(0.8)
-    mux = next((p.mux for p in tmux.list_sessions("clique")
+    mux = next((p.mux for p in tmux.list_sessions(SOCKET)
                 if p.ours and made_s["id"][:8] in p.mux), "")
     check("a session to size", bool(mux), made_s)
     if mux:
         def pane_width():
             try:
                 return int(tmux._run(["display-message", "-p", "-t", f"={mux}:",
-                                      "#{pane_width}"], "clique").strip())
+                                      "#{pane_width}"], SOCKET).strip())
             except (tmux.TmuxError, ValueError):
                 return -1
 
@@ -376,6 +449,23 @@ def main() -> int:
         time.sleep(0.6)
         check("and it is not resized again underneath that output",
               pane_width() == 100, pane_width())
+        # A hidden reconnect used to shrink the window anyway: tmux sizes to
+        # the latest client, and skipping resize-window left the viewer's PTY
+        # as that client.
+        quiet = BASE.replace("https://", "wss://").replace("http://", "ws://") + \
+            f"/ws?id={made_s['id']}&cols=40&rows=10&passive=1"
+        background = Client(quiet, cookie, bearer)
+        background.drain(1.5)
+        time.sleep(0.4)
+        check("a passive attach does not shrink the pane",
+              pane_width() == 100, pane_width())
+        tmux.resize_window(mux, 5, 5, SOCKET)
+        check("a collapsed size is ignored", pane_width() == 100, pane_width())
+        size_opt = tmux._run(["show-window-options", "-t", mux, "window-size"],
+                             SOCKET)
+        check("the window does not autoscale from attach",
+              "manual" in size_opt, size_opt.strip())
+        background.close()
         watcher.close()
     call("/api/sessions/" + made_s["id"], "DELETE")
 
@@ -437,10 +527,7 @@ def main() -> int:
     # The bypass this exists to stop: every write route is scoped, and the
     # WebSocket was not — so a token issued read-only could open a terminal
     # and type into it, which is every permission the scope exists to withhold.
-    made = subprocess.run(
-        [sys.executable, "-m", "clique", "token", "create", "smoke-readonly",
-         "--read-only"],
-        capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]))
+    made = _cli(["token", "create", "smoke-readonly", "--read-only"])
     ro_token = ro_id = ""
     for line in made.stdout.splitlines():
         if line.strip().startswith("mxp_"):
@@ -485,8 +572,7 @@ def main() -> int:
         with contextlib.suppress(OSError):
             leftover.unlink()
 
-    subprocess.run([sys.executable, "-m", "clique", "token", "revoke", ro_id],
-                   capture_output=True, cwd=str(Path(__file__).resolve().parents[1]))
+    _cli(["token", "revoke", ro_id])
 
     print("detach vs kill")
     status, state = call("/api/state")
@@ -604,6 +690,9 @@ def main() -> int:
                         {"cli": "shell", "cwd": "/tmp", "name": "smoke-attention"})
     att_id = note.get("id", "")
     check("session for the attention checks", status == 201 and bool(att_id), note)
+    # The first prompt ticks tmux's activity clock (whole seconds). Wait for
+    # it to land so setting a signal is not immediately stale.
+    time.sleep(1.2)
 
     status, said = call(f"/api/sessions/{att_id}/attention", "POST", {"state": "waiting"})
     check("a session can say it is waiting",
@@ -633,6 +722,26 @@ def main() -> int:
           row.get("signal") == "", row.get("signal"))
 
     call(f"/api/sessions/{att_id}", "DELETE")
+
+    print("stop keeps the row")
+    status, note = call("/api/sessions", "POST",
+                        {"cli": "shell", "cwd": "/tmp", "name": "smoke-keep"})
+    keep_id = note.get("id", "")
+    check("session to stop", status == 201 and bool(keep_id), note)
+    status, stopped = call(f"/api/sessions/{keep_id}/kill", "POST", {})
+    check("kill returns the id", status == 200 and stopped.get("id") == keep_id, stopped)
+    _, state = call("/api/state")
+    row = next((x for x in state["sessions"] if x["id"] == keep_id), None)
+    check("and the session is still in the list", bool(row), row)
+    check("but it is not running", bool(row) and not row.get("alive"), row)
+    status, _again = call(f"/api/sessions/{keep_id}/start", "POST", {})
+    check("start brings it back", status == 200, status)
+    _, state = call("/api/state")
+    row = next((x for x in state["sessions"] if x["id"] == keep_id), {})
+    check("and it is running again", bool(row.get("alive")), row)
+    status, _dup = call(f"/api/sessions/{keep_id}/start", "POST", {})
+    check("starting one that is already up is refused", status == 400, status)
+    call(f"/api/sessions/{keep_id}", "DELETE")
 
     print("clock zone")
     status, saved = call("/api/settings", "PATCH", {"clock_zone": "Europe/Lisbon"})
@@ -717,6 +826,76 @@ def main() -> int:
         (art_dir / "notes.txt").unlink()
         art_dir.rmdir()
 
+    print("clickable files")
+    file_dir = Path("/tmp") / f"clique-file-{secrets.token_hex(4)}"
+    file_dir.mkdir()
+    (file_dir / "readme.md").write_text("# hi\n", encoding="utf-8")
+    (file_dir / "shot.png").write_bytes(png)
+    (file_dir / "sub").mkdir()
+    status, file_session = call("/api/sessions", "POST",
+                                {"cli": "shell", "cwd": str(file_dir),
+                                 "name": "smoke-file"})
+    file_id = file_session.get("id", "")
+    check("session for the file checks", status == 201 and bool(file_id), file_session)
+    q = urllib.parse.quote
+    status, info = call(f"/api/sessions/{file_id}/file?path=readme.md")
+    check("reads a relative file",
+          status == 200 and info.get("kind") == "text" and info.get("text") == "# hi\n",
+          info)
+    status, info = call(f"/api/sessions/{file_id}/file?path=readme.md:12")
+    check("strips a :line suffix",
+          status == 200 and info.get("kind") == "text", info)
+    status, info = call(f"/api/sessions/{file_id}/file?path=shot.png")
+    check("describes an image without dumping it",
+          status == 200 and info.get("kind") == "image" and not info.get("text"),
+          info)
+    status, kind, body = fetch_raw(
+        f"/api/sessions/{file_id}/file?path={q('shot.png')}&raw=1")
+    check("serves the image itself on raw=1", status == 200 and body == png, status)
+    check("typed from its bytes", kind == "image/png", kind)
+    status, info = call(f"/api/sessions/{file_id}/file?path=nope.md")
+    check("missing is missing, not an error",
+          status == 200 and info.get("kind") == "missing", info)
+    status, info = call(f"/api/sessions/{file_id}/file?path=sub")
+    check("a directory is a directory",
+          status == 200 and info.get("kind") == "dir", info)
+    status, info = call("/api/sessions/no-such/file?path=x")
+    check("unknown session is 404", status == 404, info)
+    call(f"/api/sessions/{file_id}", "DELETE")
+    with contextlib.suppress(OSError):
+        (file_dir / "readme.md").unlink()
+        (file_dir / "shot.png").unlink()
+        (file_dir / "sub").rmdir()
+        file_dir.rmdir()
+
+    print("git on the row")
+    git_dir = Path("/tmp") / f"clique-git-{secrets.token_hex(4)}"
+    git_dir.mkdir()
+    subprocess.run(["git", "init"], cwd=git_dir, check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(git_dir), "symbolic-ref", "HEAD",
+                    "refs/heads/visual"], check=True, capture_output=True)
+    (git_dir / "a.txt").write_text("x\n", encoding="utf-8")
+    status, git_session = call("/api/sessions", "POST",
+                               {"cli": "shell", "cwd": str(git_dir),
+                                "name": "smoke-git"})
+    git_id = git_session.get("id", "")
+    check("session for the git checks", status == 201 and bool(git_id), git_session)
+    got = {}
+    for _ in range(25):
+        _, listing = call("/api/state")
+        got = next((s for s in listing.get("sessions", []) if s["id"] == git_id), {})
+        if got.get("branch") == "visual":
+            break
+        time.sleep(0.15)
+    check("the session names the branch", got.get("branch") == "visual", got)
+    check("and counts the untracked file", got.get("dirty") == 1, got)
+    status, look = call("/api/workspace?cwd=" + urllib.parse.quote(str(git_dir)))
+    check("the new-session look agrees",
+          status == 200 and look.get("branch") == "visual" and look.get("dirty") == 1,
+          look)
+    call(f"/api/sessions/{git_id}", "DELETE")
+    shutil.rmtree(git_dir, ignore_errors=True)
+
     print("static")
     req = urllib.request.Request(BASE + "/app.js")
     req.add_header("Cookie", cookie)
@@ -753,7 +932,6 @@ def main() -> int:
     check("still refuses anonymous callers", status == 401, status)
 
     print(f"\n{passed} passed, {failed} failed")
-    revoke_token()
     return 1 if failed else 0
 
 

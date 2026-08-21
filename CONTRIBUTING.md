@@ -16,7 +16,7 @@ A new route, settings key, or PATCH-able field means a line in [`API.md`](API.md
 
 ## Tests
 
-Not mocked. They talk to a real tmux server and real HTTP.
+Not mocked. They talk to a real tmux server and real HTTP. They start their own panel, so they cannot take over one you are using.
 
 ```bash
 python3 tools/smoke.py

@@ -30,22 +30,4 @@ jobs:
       - name: site copy
         run: python3 tools/site_i18n.py --check
       - name: server
-        env:
-          CLIQUE_HOME: ${{ runner.temp }}/clique-home
-        run: |
-          set -euo pipefail
-          mkdir -p "$CLIQUE_HOME"
-          python3 -m clique password 'ci-smoke-password'
-          python3 -m clique --host 127.0.0.1 --port 3200 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-          i=0
-          until curl -fsS http://127.0.0.1:3200/healthz; do
-            i=$((i + 1))
-            if [ "$i" -gt 50 ]; then
-              echo "server did not start"
-              exit 1
-            fi
-            sleep 0.2
-          done
-          python3 tools/smoke_http.py
+        run: python3 tools/smoke_http.py

@@ -33,10 +33,13 @@ from . import (
     artifacts,
     attention,
     changelog,
+    files,
+    gitinfo,
     migrate,
     notify,
     services,
     sysinfo,
+    termstrip,
     tmux,
     version_string,
     working,
@@ -205,9 +208,12 @@ class Panel:
         for session in sorted(self.store.sessions, key=lambda s: s.order):
             pane = panes.get(session.mux)
             cli = self.registry.types().get(session.cli)
-            # Computed once: it decides both what the row shows and whether a
-            # capture is worth doing for it.
+            # Busy first: `_signal` asks working.settled(), which reads the
+            # clock `_since` that busy() stamps. A permission prompt that
+            # blinks looks like work until that stamp is in place.
+            busy = bool(pane and working.busy(pane, session.socket, now))
             signal = self._signal(session, pane, cli)
+            git = gitinfo.of(session.cwd)
             out.append({
                 "id": session.id,
                 "name": session.name,
@@ -222,6 +228,12 @@ class Panel:
                 "own_input": bool(cli and cli.own_input),
                 "cwd": session.cwd,
                 "project": Path(session.cwd).name or session.cwd,
+                # Git, when this directory is a repo. Cached and filled in
+                # the background so a slow `status` cannot stall the poll.
+                # Empty / zero where there is no repo, no git, or we have
+                # not asked yet.
+                "branch": git["branch"],
+                "dirty": git["dirty"],
                 "folder": session.folder,
                 "mode": session.mode,
                 "modes": list(cli.modes) if cli else [],
@@ -253,7 +265,7 @@ class Panel:
                 # waits ticks it forever. See clique/working.py — the clock
                 # still decides cheaply, and content decides when the clock
                 # has been saying yes for a while.
-                "busy": bool(pane and working.busy(pane, session.socket, now)),
+                "busy": busy,
                 # What it last said — but only for a session that is actually
                 # asking for a person. Working sessions change it every
                 # moment, and idle-and-read ones are not asking anything, so
@@ -278,21 +290,21 @@ class Panel:
            quiet. A guess, and a good one, and only as good as the config.
         3. Nothing. Most sessions, most of the time.
 
-        A busy pane never reaches tier 2: a session producing output is not
-        waiting on anyone, and capturing it would cost a subprocess per poll
-        to learn that.
+        A pane in a real output burst never reaches tier 2: capturing it
+        would cost a subprocess per poll to learn it is not waiting. A pane
+        that has been "busy" past SETTLE is the other case — an animated
+        prompt ticks the clock forever, and that *is* a question.
         """
         if not pane:
             return ""
         if session.signal and pane.activity <= session.signal_at:
             return session.signal
-        if (time.time() - pane.activity) < 2:
+        if not working.settled(pane):
             return ""
-        if not cli:
-            return ""
+        waiting = cli.waiting_patterns if cli else []
+        errors = cli.error_patterns if cli else []
         return attention.detect(session.mux, pane.activity,
-                                cli.waiting_patterns, cli.error_patterns,
-                                session.socket)
+                                waiting, errors, session.socket)
 
     def state(self) -> dict:
         return {
@@ -417,6 +429,7 @@ class Panel:
                 created=float(pane.created), adopted=True,
             ))
             added.append(session.name)
+            tmux.lock_size(session.mux, session.socket)
         return {"adopted": added, "updated": updated}
 
     def _reconcile(self, session: Session, pane, cwd: str, names: dict) -> bool:
@@ -454,13 +467,61 @@ class Panel:
         self.store.update_session(session.id, **changes)
         return True
 
+    def stop_session(self, session_id: str) -> dict:
+        """Stop the process. The record stays, so it can be started again."""
+        session = self.store.session(session_id)
+        if not session:
+            raise KeyError(session_id)
+        if tmux.exists(session.mux, session.socket):
+            tmux.kill(session.mux, session.socket, force=session.adopted)
+        return {"id": session.id, "alive": False}
+
+    def start_session(self, session_id: str) -> dict:
+        """Start a stopped session again. Same id, name, folder, directory.
+
+        When the CLI was first launched with our session id (Claude's
+        ``--session-id``), that is also the resume key. Other CLIs resume
+        only if we already stored ``cli_session_id``. A shell has nothing
+        to resume — it starts again in the same place.
+        """
+        session = self.store.session(session_id)
+        if not session:
+            raise KeyError(session_id)
+        if tmux.exists(session.mux, session.socket):
+            raise ValueError("session is already running")
+        if not Path(session.cwd).is_dir():
+            raise ValueError(f"working directory does not exist: {session.cwd}")
+        cli = self.registry.get(session.cli)
+        if not cli.installed:
+            raise ValueError(
+                f"{cli.label}: '{cli.command}' is not installed on this box")
+        prior = session.cli_session_id
+        if not prior and cli.resume:
+            # Only treat our id as theirs if the first launch handed it over.
+            tokens = " ".join(cli.args)
+            if "{id}" in tokens or "{uuid}" in tokens:
+                prior = session.id
+        argv = self.registry.launch_argv(
+            session.cli, session_id=session.id, name=session.name,
+            cwd=session.cwd, mode=session.mode, cli_session_id=prior,
+        )
+        tmux.bootstrap()
+        tmux.create(session.mux, session.cwd, argv, socket=session.socket, env={
+            "CLIQUE": "1",
+            "CLIQUE_SESSION": session.id,
+        })
+        if prior and not session.cli_session_id:
+            self.store.update_session(session.id, cli_session_id=prior)
+        return {"id": session.id}
+
     def delete_session(self, session_id: str) -> dict:
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
         # Adopted sessions do not carry our name prefix, so the engine's guard
         # would refuse them. Deleting one is explicit, which is what force means.
-        tmux.kill(session.mux, session.socket, force=session.adopted)
+        if tmux.exists(session.mux, session.socket):
+            tmux.kill(session.mux, session.socket, force=session.adopted)
         self.store.remove_session(session_id)
         return {"deleted": session_id}
 
@@ -657,6 +718,7 @@ class Handler(BaseHTTPRequestHandler):
             f"default-src 'self'; script-src {script_src}; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; "
+            "worker-src 'self'; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
         )
         for key, value in (extra or {}).items():
@@ -838,6 +900,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._artifacts(path.split("/")[3])
             if path.startswith("/api/sessions/") and path.endswith("/artifact"):
                 return self._artifact(path.split("/")[3], query.get("rel") or "")
+            if path.startswith("/api/sessions/") and path.endswith("/file"):
+                if query.get("raw") in {"1", "true", "yes"}:
+                    return self._file_raw(path.split("/")[3], query.get("path") or "")
+                return self._file(path.split("/")[3], query.get("path") or "")
             if path.startswith("/api"):
                 return self._json({"error": "not found"}, 404)
             return self._static(path)
@@ -1052,12 +1118,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if path.startswith("/api/sessions/") and path.endswith("/attention"):
                 return self._attention(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/kill"):
+                return self._json(self.panel.stop_session(path.split("/")[3]))
+            if path.startswith("/api/sessions/") and path.endswith("/start"):
+                return self._json(self.panel.start_session(path.split("/")[3]))
             if path.startswith("/api/sessions/") and path.endswith("/seen"):
                 found = self.panel.store.touch_session(path.split("/")[3])
                 if not found:
                     return self._json({"error": "no such session"}, 404)
                 return self._json({"ok": True, "last_seen": found.last_seen})
             return self._json({"error": "not found"}, 404)
+        except KeyError:
+            return self._json({"error": "no such session"}, 404)
         except (ValueError, RegistryError, tmux.TmuxError) as exc:
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001
@@ -1092,6 +1164,37 @@ class Handler(BaseHTTPRequestHandler):
             signal_at=float(pane.activity if pane else 0),
         )
         return self._json({"ok": True, "signal": updated.signal if updated else ""})
+
+    def _file(self, session_id: str, asked: str) -> None:
+        """Read-only glance at a path the pane printed.
+
+        Relative to the session's working directory, or absolute / ``~/``.
+        Text is capped; images are described here and served by `_file_raw`.
+        """
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        return self._json(files.inspect(session.cwd, asked))
+
+    def _file_raw(self, session_id: str, asked: str) -> None:
+        """The bytes of an image the pane pointed at."""
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        info = files.inspect(session.cwd, asked)
+        if info["kind"] != "image" or not info["path"]:
+            return self._json({"error": "not an image"}, 415)
+        target = Path(info["path"])
+        try:
+            if target.stat().st_size > MAX_PASTE_BYTES:
+                return self._json({"error": "image too large"}, 413)
+            raw = target.read_bytes()
+        except OSError:
+            return self._json({"error": "could not read it"}, 404)
+        kind = IMAGE_TYPES.get(image_extension(raw))
+        if not kind:
+            return self._json({"error": "not an image this understands"}, 415)
+        return self._send(200, raw, kind, {"Cache-Control": "no-store"})
 
     def _artifacts(self, session_id: str) -> None:
         """What this session's working directory has to show.
@@ -1380,18 +1483,41 @@ class Handler(BaseHTTPRequestHandler):
             # already is, and it must not become the thing that resizes it.
             # A hidden tab warming up in a second window used to steal the
             # pane the first window was looking at.
+            #
+            # The window's size is `manual`, so attaching a PTY cannot move
+            # it — only `resize-window` can. We still skip that call for a
+            # passive viewer, and still birth the PTY at the window's
+            # current size so this client is not drawing a different grid
+            # than the one tmux is painting.
             if query.get("passive") not in {"1", "true", "yes"}:
                 tmux.resize_window(session.mux, cols, rows, session.socket)
+            else:
+                pane = self.panel.live().get(session.mux)
+                if pane and pane.width >= 2 and pane.height >= 2:
+                    cols, rows = pane.width, pane.height
 
             # Then scrollback, which is now captured at the width it will be
             # displayed at, and then the attach. History only — tmux redraws
             # the visible frame itself, and sending it twice reads as the CLI
             # having repeated its last screen.
+            cli = self.panel.registry.types().get(session.cli)
+            # Boxed CLIs turn mouse tracking on. Hidden from the browser so
+            # drag-select still works; a click we encode ourselves still
+            # reaches the program in tmux.
+            filt = termstrip.boxed_stream() if (cli and cli.own_input) else None
+
+            def outbound(data: bytes, _filt=filt) -> None:
+                if _filt is not None:
+                    data = _filt.feed(data)
+                    if not data:
+                        return
+                ws.send(data)
+
             try:
                 history = tmux.capture(session.mux, session.socket,
                                        history_only=True)
                 if history.strip():
-                    ws.send(history.replace("\n", "\r\n").encode())
+                    outbound(history.replace("\n", "\r\n").encode())
             except tmux.TmuxError:
                 pass  # a session that died between the check and here
 
@@ -1401,7 +1527,7 @@ class Handler(BaseHTTPRequestHandler):
             viewer = tmux.create_viewer(session.mux, session.socket)
             bridge = PtyBridge(
                 tmux.attach_argv(viewer, session.socket),
-                on_output=ws.send,
+                on_output=outbound,
                 on_exit=ws.close,
                 cols=cols, rows=rows,
             )
@@ -1453,10 +1579,13 @@ class Handler(BaseHTTPRequestHandler):
             cols, rows = _terminal_size(message.get("cols"), message.get("rows"))
             bridge.resize(cols, rows)
             # The PTY resize only tells tmux how big *this client* is. The
-            # window is shared with anything else attached, so it also has to
-            # be told, or the browser gets a small pane padded out with dots.
+            # window is `manual` and shared, so it also has to be told, or
+            # the browser gets a small pane padded out with dots.
             # A read-only viewer does not get to resize what others are
             # looking at — its own view, yes; the shared window, no.
+            # Tiny sizes are a collapsed or hidden tab measuring itself,
+            # not a phone — those still clear 20x8. Applying them is how
+            # a background reconnect left a screen of dots.
             if may_write:
                 tmux.resize_window(session.mux, cols, rows, session.socket)
         elif not may_write:

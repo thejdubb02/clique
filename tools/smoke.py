@@ -8,6 +8,7 @@ tmux is actually running.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from clique import notify, services, tmux, working
+from clique import attention, files, gitinfo, notify, services, termstrip, tmux, working
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
 
@@ -46,6 +47,57 @@ def main() -> int:
 
     tmux._run(["kill-server"], SOCKET, check=False)
 
+    print("isolation")
+    # A test that shares the live socket or the live state file is how a
+    # /tmp shell lands on the tab someone is looking at. These two are the
+    # whole wall; if either fails, the rest of the suite is not safe to run.
+    stripped = {k: v for k, v in os.environ.items() if k != "CLIQUE_TMUX_SOCKET"}
+    default_socket = subprocess.run(
+        [sys.executable, "-c", "from clique import tmux; print(tmux.SOCKET)"],
+        capture_output=True, text=True, cwd=str(ROOT), env=stripped)
+    check("the engine defaults to its own socket",
+          default_socket.stdout.strip() == "clique", default_socket.stdout)
+    named = subprocess.run(
+        [sys.executable, "-c", "from clique import tmux; print(tmux.SOCKET)"],
+        capture_output=True, text=True, cwd=str(ROOT),
+        env={**os.environ, "CLIQUE_TMUX_SOCKET": "clique-env-check"})
+    check("CLIQUE_TMUX_SOCKET is how a test gets a different one",
+          named.stdout.strip() == "clique-env-check", named.stdout)
+    sandbox = "/tmp/clique-state-home-test"
+    state_out = subprocess.run(
+        [sys.executable, "-c",
+         "from clique.__main__ import default_state_path; print(default_state_path())"],
+        capture_output=True, text=True, cwd=str(ROOT),
+        env={**os.environ, "CLIQUE_HOME": sandbox})
+    check("a test home does not inherit the live state file",
+          state_out.stdout.strip() == sandbox + "/state.json",
+          state_out.stdout.strip() or state_out.stderr[-200:])
+
+    print("boxed CLIs do not steal the mouse from the browser")
+    filt = termstrip.boxed_stream()
+    check("plain text is untouched",
+          filt.feed(b"hello") == b"hello")
+    check("mouse tracking on is hidden",
+          filt.feed(b"\x1b[?1000h\x1b[?1006hhi") == b"hi")
+    check("mouse tracking off is hidden too",
+          filt.feed(b"\x1b[?1000lbye") == b"bye")
+    check("bracketed paste stays when mixed with mouse",
+          filt.feed(b"\x1b[?1000;2004h") == b"\x1b[?2004h")
+    check("colour is not a mouse code",
+          filt.feed(b"\x1b[31mred") == b"\x1b[31mred")
+    split = termstrip.boxed_stream()
+    check("a split sequence is held", split.feed(b"\x1b[?100") == b"")
+    check("and dropped once it completes", split.feed(b"0hOK") == b"OK")
+    check("the alt screen switch is hidden",
+          filt.feed(b"\x1b[?1049hview") == b"view")
+    check("wiping scrollback is hidden",
+          filt.feed(b"\x1b[3Jkeep") == b"keep")
+    check("a visible clear still happens",
+          filt.feed(b"\x1b[2J") == b"\x1b[2J")
+    passthrough = termstrip.StreamFilter()
+    check("a shell keeps mouse tracking",
+          passthrough.feed(b"\x1b[?1000h") == b"\x1b[?1000h")
+
     print("registry")
     # The same file the app resolves to, asked for the same way. Naming the
     # path here by hand is what let it rot when the catalogue moved into the
@@ -71,9 +123,86 @@ def main() -> int:
     check("resolve() returns None for a binary that is not here",
           absent.resolve() is None and not absent.installed)
 
+    print("files")
+    # A click on a printed path is a filesystem read, so these are real files
+    # in a throwaway directory, not mocks.
+    import tempfile
+    png = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00"
+        b"\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc``"
+        b"\x00\x00\x00\x04\x00\x01\xf6\x178U\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    tmp = Path(tempfile.mkdtemp(prefix="clique-files-"))
+    (tmp / "note.md").write_text("hello\n", encoding="utf-8")
+    (tmp / "shot.png").write_bytes(png)
+    (tmp / "bin.dat").write_bytes(b"\x00\x01\x02")
+    (tmp / "sub").mkdir()
+    (tmp / "big.txt").write_bytes(b"x" * (files.TEXT_CAP + 8))
+    check("strips a compiler suffix", files.clean("src/app.js:42:7") == "src/app.js")
+    check("strips trailing punctuation", files.clean("docs/foo.md.") == "docs/foo.md")
+    text = files.inspect(str(tmp), "note.md")
+    check("reads a relative text file",
+          text["kind"] == "text" and text["text"] == "hello\n", text)
+    check("and a :line suffix still finds it",
+          files.inspect(str(tmp), "note.md:12")["kind"] == "text")
+    check("an image is an image from its bytes",
+          files.inspect(str(tmp), "shot.png")["kind"] == "image")
+    check("a nul in the first block is binary",
+          files.inspect(str(tmp), "bin.dat")["kind"] == "binary")
+    check("a directory is a directory",
+          files.inspect(str(tmp), "sub")["kind"] == "dir")
+    check("missing stays missing, not an error",
+          files.inspect(str(tmp), "nope.md")["kind"] == "missing")
+    climbed = files.inspect(str(tmp / "sub"), "../note.md")
+    check(".. is resolved, not refused",
+          climbed["kind"] == "text" and climbed["text"] == "hello\n", climbed)
+    big = files.inspect(str(tmp), "big.txt")
+    check("caps the text it will dump in a browser",
+          big["truncated"] and len(big["text"]) == files.TEXT_CAP, big["size"])
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    print("gitinfo")
+    import tempfile
+    gitinfo.clear()
+    plain = Path(tempfile.mkdtemp(prefix="clique-git-plain-"))
+    check("a directory that is not a repo says nothing",
+          gitinfo.probe(str(plain))["branch"] == ""
+          and gitinfo.probe(str(plain))["dirty"] == 0)
+    repo = Path(tempfile.mkdtemp(prefix="clique-git-repo-"))
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "symbolic-ref", "HEAD",
+                    "refs/heads/visual"], check=True, capture_output=True)
+    info = gitinfo.probe(str(repo))
+    check("an empty repo still has a branch", info["branch"] == "visual", info)
+    check("and is clean", info["dirty"] == 0, info)
+    (repo / "a.txt").write_text("x\n", encoding="utf-8")
+    info = gitinfo.probe(str(repo))
+    check("an untracked file is dirty", info["dirty"] == 1, info)
+    gitinfo.clear()
+    started = time.time()
+    gitinfo.of(str(repo))
+    check("the sidebar read returns without waiting on git",
+          time.time() - started < 0.25)
+    got = {"branch": "", "dirty": 0}
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        got = gitinfo.of(str(repo))
+        if got["branch"] == "visual":
+            break
+        time.sleep(0.05)
+    check("and the next read has the branch",
+          got["branch"] == "visual" and got["dirty"] == 1, got)
+    shutil.rmtree(plain, ignore_errors=True)
+    shutil.rmtree(repo, ignore_errors=True)
+
     print("engine")
     tmux.bootstrap(SOCKET, history_limit=9000)
     check("server bootstraps", tmux.list_sessions(SOCKET) == [])
+    tmux._run(["set-option", "-g", "history-limit", "2000"], SOCKET)
+    tmux.bootstrap(SOCKET, history_limit=9000)
+    again = tmux._run(["show-options", "-g", "history-limit"], SOCKET)
+    check("a second bootstrap updates global options",
+          "9000" in again, again.strip())
 
     sid = "1234abcd-0000-0000-0000-000000000000"
     mux = tmux.mux_name(sid)
@@ -82,6 +211,14 @@ def main() -> int:
     tmux.create(mux, "/tmp", ["bash", "--norc", "-i"], socket=SOCKET,
                 env={"CLIQUE": "1", "CLIQUE_SESSION": sid})
     check("session exists", tmux.exists(mux, SOCKET))
+    size_opt = tmux._run(["show-window-options", "-t", mux, "window-size"], SOCKET)
+    check("the window does not autoscale from attach",
+          "manual" in size_opt, size_opt.strip())
+    tmux._run(["set-window-option", "-t", mux, "window-size", "latest"], SOCKET)
+    tmux.bootstrap(SOCKET, history_limit=9000)
+    relocked = tmux._run(["show-window-options", "-t", mux, "window-size"], SOCKET)
+    check("a restart relocks windows born before the option",
+          "manual" in relocked, relocked.strip())
 
     panes = tmux.list_sessions(SOCKET)
     check("lists one session", len(panes) == 1, panes)
@@ -218,6 +355,22 @@ def main() -> int:
     for name in ("sm-still", "sm-moving"):
         tmux.kill(name, SOCKET)
 
+    print("generic question prompts")
+    # These have to fire for a CLI with no [attention] table — that is how
+    # Codex, Cursor, Gemini and the rest surface a permission prompt without
+    # CLIque knowing anything about those vendors.
+    check("(y/n) is a question",
+          attention.verdict_text("Allow this command (y/n)", [], []) == "waiting")
+    check("a short question-mark line is",
+          attention.verdict_text("Do you want to continue?", [], []) == "waiting")
+    check("a numbered choice is",
+          attention.verdict_text("  ❯ 1. Allow\n    2. Deny", [], []) == "waiting")  # noqa: RUF001
+    check("a traceback is an error, not a question",
+          attention.verdict_text("Traceback (most recent call last):\n  File",
+                                 [], []) == "error")
+    check("ordinary output is neither",
+          attention.verdict_text("wrote 12 files\nrunning tests", [], []) == "")
+
     print("service status")
     # The two things that make this feature honest rather than a widget: it
     # only ever asks about a CLI you actually have running, and it says
@@ -320,7 +473,7 @@ def main() -> int:
 
     page = (ROOT / "clique" / "web" / "index.html").read_text()
     script = (ROOT / "clique" / "web" / "app.js").read_text()
-    used = set(re.findall(r'href="#i-([a-z-]+)"', page + script))
+    used = set(re.findall(r'href="#i-([a-z0-9-]+)"', page + script))
     # Names inside an icon() call, including the ternary in the folder caret —
     # pull the whole argument list, then every quoted string out of it.
     # Only the first argument — the icon name. The second is a CSS class, and
@@ -328,7 +481,7 @@ def main() -> int:
     # contributes nothing.
     for call in re.findall(r"icon\(([^)]*)\)", script):
         used |= set(re.findall(r"""['"]([a-z-]+)['"]""", call.split(",")[0]))
-    have = set(re.findall(r'<symbol id="i-([a-z-]+)"', page))
+    have = set(re.findall(r'<symbol id="i-([a-z0-9-]+)"', page))
     check("every icon drawn has a symbol behind it", used <= have, sorted(used - have))
 
     # The whole reason these are inline SVG rather than an image or a font: a

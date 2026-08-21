@@ -47,6 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from clique import tmux
 from clique.auth import COOKIE_NAME, Auth
 
 #: Its own everything. The port is not 3200 and the home is not ~/.clique on
@@ -98,7 +99,8 @@ def _token() -> str:
         made = subprocess.run(
             [sys.executable, "-m", "clique", "token", "create", "visual-check"],
             capture_output=True, text=True,
-            env=dict(os.environ, CLIQUE_HOME=str(SANDBOX)),
+            env=dict(os.environ, CLIQUE_HOME=str(SANDBOX),
+                     CLIQUE_TMUX_SOCKET=SOCKET),
             cwd=str(Path(__file__).resolve().parents[1]))
         _cached_token = next(
             line.strip() for line in made.stdout.splitlines()
@@ -107,8 +109,14 @@ def _token() -> str:
 
 
 def _scratch_session() -> str:
+    repo = SANDBOX / "work"
+    repo.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "symbolic-ref", "HEAD",
+                    "refs/heads/visual"], check=True, capture_output=True)
+    (repo / "note.md").write_text("hello from a click\n", encoding="utf-8")
     return _api("/api/sessions", "POST",
-                {"cli": "shell", "cwd": "/tmp", "name": "visual check"})["id"]
+                {"cli": "shell", "cwd": str(repo), "name": "visual check"})["id"]
 
 
 def _remove_session(session_id: str) -> None:
@@ -129,22 +137,46 @@ def main() -> int:
             panel.wait(timeout=10)
         except subprocess.TimeoutExpired:
             panel.kill()
+        tmux._run(["kill-server"], SOCKET, check=False)
         shutil.rmtree(SANDBOX, ignore_errors=True)
 
 
-def _own_panel() -> subprocess.Popen:
-    """A second CLIque, with its own state, so nothing here can reach a live one.
+def _sandbox_catalogue() -> None:
+    """The real catalogue plus a boxed stand-in, so copy/click can be seen.
 
-    An empty state directory is the load-bearing part: the panel restores its
-    workspace on the first poll, and a workspace with no tabs in it cannot
-    attach to a session somebody is working in.
+    Claude, Grok and Gemini all turn mouse tracking on and draw their own
+    prompt. This is that shape without opening a paid CLI in the check.
+    """
+    root = Path(__file__).resolve().parents[1]
+    packaged = root / "clique" / "config" / "clis.toml"
+    fake = root / "tools" / "fake_boxed_cli.py"
+    body = packaged.read_text(encoding="utf-8")
+    body += (
+        "\n[cli.boxed]\n"
+        'label      = "Boxed"\n'
+        f'command    = {sys.executable!r}\n'
+        f'args       = [{str(fake)!r}]\n'
+        'color      = "#6b7280"\n'
+        "own_input  = true\n"
+    )
+    (SANDBOX / "clis.toml").write_text(body, encoding="utf-8")
+
+
+def _own_panel() -> subprocess.Popen:
+    """A second CLIque, with its own state and tmux socket.
+
+    Own home, own ``--state``, own ``CLIQUE_TMUX_SOCKET``. Missing any one
+    of those is how a check used to attach to the pane someone was using.
     """
     shutil.rmtree(SANDBOX, ignore_errors=True)
     SANDBOX.mkdir(parents=True)
-    env = dict(os.environ, CLIQUE_HOME=str(SANDBOX))
+    _sandbox_catalogue()
+    env = dict(os.environ, CLIQUE_HOME=str(SANDBOX),
+               CLIQUE_TMUX_SOCKET=SOCKET)
     proc = subprocess.Popen(
         [sys.executable, "-m", "clique", "--host", "127.0.0.1",
-         "--port", str(PORT), "--password", PASSWORD],
+         "--port", str(PORT), "--password", PASSWORD,
+         "--state", str(SANDBOX / "state.json")],
         cwd=str(Path(__file__).resolve().parents[1]), env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(80):
@@ -166,7 +198,9 @@ def _run(panel) -> int:
 
     with sync_playwright() as play:
         browser = play.chromium.launch()
-        context = browser.new_context(viewport={"width": 1400, "height": 900})
+        context = browser.new_context(
+            viewport={"width": 1400, "height": 900},
+            permissions=["clipboard-read", "clipboard-write"])
         context.add_cookies([{
             "name": COOKIE_NAME, "value": auth.issue(),
             "domain": "127.0.0.1", "path": "/",
@@ -184,13 +218,46 @@ def _run(panel) -> int:
         check("it is the panel, not the login form", page.locator("#tabbar").is_visible())
         check("nothing threw on the way up", not problems, problems[:2])
         check("the sidebar drew", page.locator("#tree").is_visible())
+        mark = page.locator(".sidebar-mark")
+        check("the sidebar mark is in the panel", mark.count() == 1)
+        mark_box = mark.bounding_box()
+        check("and it is large",
+              bool(mark_box) and mark_box["width"] >= 100 and mark_box["height"] >= 100,
+              mark_box)
+        if mark_box:
+            hit = page.evaluate(
+                """([x, y]) => {
+                  const e = document.elementFromPoint(x, y);
+                  return !!(e && e.closest('.sidebar-mark'));
+                }""",
+                [mark_box["x"] + mark_box["width"] / 2,
+                 mark_box["y"] + mark_box["height"] / 2])
+            check("the mark does not steal a click", hit is False, hit)
+
+        print("git on the row")
+        row = page.locator(f'.session[data-id="{mine}"]')
+        try:
+            page.wait_for_function(
+                """(id) => {
+                  const el = document.querySelector('.session[data-id="' + id + '"]');
+                  return !!(el && /visual/.test(el.innerText) && /changed/.test(el.innerText));
+                }""",
+                arg=mine, timeout=8000)
+        except Exception as err:  # noqa: BLE001 — the checks below name what failed
+            print(f"       git row did not settle: {err}")
+        shown = row.inner_text() if row.count() else ""
+        check("the row names the branch", "visual" in shown, shown)
+        check("and it says the folder is dirty", "changed" in shown, shown)
+        page.locator("#sidebar").screenshot(path=str(SHOTS / "sidebar.png"))
 
         print("controls are actually visible")
         # Icon-only buttons are the ones that fail silently: an icon that did
         # not load leaves a button that is present, clickable and empty.
         for sel, name in [("#newFolder", "new folder"), ("#settingsBtn", "settings"),
                           ("#collapse", "hide sidebar"), ("#newTab", "new session"),
-                          ("#lock", "follow output"), ("#keysBtn", "shortcuts")]:
+                          ("#lock", "follow output"), ("#keysBtn", "shortcuts"),
+                          ("#fullScr", "full screen"),
+                          ("#fontMinus", "smaller type"), ("#fontPlus", "larger type")]:
             box = page.locator(sel).bounding_box()
             check(f"{name} has a size", bool(box) and box["width"] > 6 and box["height"] > 6, box)
             icon = page.locator(f"{sel} .ico").first
@@ -213,6 +280,15 @@ def _run(panel) -> int:
             check("stats sit in the bottom bar, not the tab strip",
                   stats_box["y"] > tab_box["y"] + tab_box["height"] - 1,
                   stats_box)
+        font_box = page.locator("#fontSize").bounding_box()
+        if font_box and keys_box:
+            check("font size sits in the bottom-right, past the shortcuts",
+                  font_box["x"] > keys_box["x"] + keys_box["width"] - 1,
+                  font_box)
+        size_label = page.locator("#fontSizeVal").inner_text()
+        check("the stepper shows a size",
+              size_label.strip().isdigit() and 9 <= int(size_label.strip()) <= 28,
+              size_label)
 
         print("nothing is covering anything")
         rows = page.locator(f'.session[data-id="{mine}"]')
@@ -259,6 +335,165 @@ def _run(panel) -> int:
                 "() => { const s = document.querySelector('.xterm-screen, .xterm');"
                 " return s ? getComputedStyle(s).backgroundColor : ''; }")
             print(f"       terminal background: {painted or '(none set)'}")
+
+        print("copy from the pane")
+        # A shell has no mouse tracking, so a drag is a selection. The chip
+        # and the clipboard are how we know it actually landed.
+        term = page.locator("#terminal .xterm").first
+        box = term.bounding_box() if term.count() else None
+        check("the pane has a size to drag across",
+              bool(box) and box["width"] > 80, box)
+        if box:
+            page.mouse.click(box["x"] + 24, box["y"] + 24)
+            page.wait_for_timeout(150)
+            page.mouse.move(box["x"] + 12, box["y"] + 10)
+            page.mouse.down()
+            page.mouse.move(box["x"] + min(box["width"] - 12, 420),
+                            box["y"] + min(box["height"] - 12, 36),
+                            steps=10)
+            page.mouse.up()
+            page.wait_for_timeout(400)
+            check("a drag shows the copy button",
+                  page.locator("#copySel").is_visible())
+            try:
+                taken = page.evaluate("() => navigator.clipboard.readText()")
+            except Exception as err:  # noqa: BLE001 — the check names the failure
+                taken = str(err)
+            check("and the selection is on the clipboard",
+                  isinstance(taken, str) and len(taken.strip()) > 0,
+                  (taken[:80] if isinstance(taken, str) else taken))
+            # Same pane, with the CLI listening for clicks — the case that
+            # used to swallow the drag so there was nothing to copy.
+            _api("/api/sessions/" + mine + "/send", "POST",
+                 {"text": "printf '\\033[?1000h\\033[?1002h\\033[?1006h'", "enter": True})
+            page.wait_for_timeout(500)
+            tracking = page.evaluate(
+                "() => !!document.querySelector('.xterm.enable-mouse-events')")
+            check("the pane is now eating mouse events", tracking)
+            page.mouse.click(box["x"] + 8, box["y"] + box["height"] / 2)
+            page.wait_for_timeout(150)
+            page.mouse.move(box["x"] + 12, box["y"] + 10)
+            page.mouse.down()
+            page.mouse.move(box["x"] + min(box["width"] - 12, 420),
+                            box["y"] + min(box["height"] - 12, 36),
+                            steps=10)
+            page.mouse.up()
+            page.wait_for_timeout(400)
+            check("a drag still selects while the CLI is eating clicks",
+                  page.locator("#copySel").is_visible())
+
+        print("copy from a boxed CLI")
+        # The CLIs people actually copy from turn mouse tracking on. The
+        # panel hides that from the browser, a drag is a native selection,
+        # and a click is still delivered as SGR.
+        boxed = _api("/api/sessions", "POST",
+                     {"cli": "boxed", "cwd": "/tmp", "name": "boxed copy"})["id"]
+        page.wait_for_timeout(400)
+        page.evaluate("(id) => openSession(id)", boxed)
+        try:
+            page.wait_for_function(
+                """() => {
+                  const e = terms.get(activeId);
+                  if (!e || !e.term) return false;
+                  const line = e.term.buffer.active.getLine(e.term.buffer.active.viewportY);
+                  const text = line ? line.translateToString(true) : '';
+                  return text.includes('BOXED-COPY-LINE');
+                }""",
+                timeout=8000)
+        except Exception as err:  # noqa: BLE001 — the checks below name what failed
+            print(f"       boxed pane did not draw: {err}")
+        boxed_host = page.locator("#terminal .xterm").first
+        boxed_box = boxed_host.bounding_box() if boxed_host.count() else None
+        tracking = page.evaluate(
+            """() => {
+              const e = terms.get(activeId);
+              return !!(e && e.term && e.term.element &&
+                e.term.element.classList.contains('enable-mouse-events'));
+            }""")
+        check("a boxed CLI does not put the browser in mouse mode", not tracking)
+        pane_text = page.evaluate(
+            """() => {
+              const e = terms.get(activeId);
+              if (!e || !e.term) return '';
+              const buf = e.term.buffer.active;
+              const lines = [];
+              for (let i = 0; i < e.term.rows; i++) {
+                const line = buf.getLine(buf.viewportY + i);
+                lines.push(line ? line.translateToString(true) : '');
+              }
+              return lines.join('\\n');
+            }""")
+        check("the boxed stand-in actually drew",
+              "BOXED-COPY-LINE" in pane_text, pane_text[:120])
+        if boxed_box:
+            page.mouse.move(boxed_box["x"] + 12, boxed_box["y"] + 10)
+            page.mouse.down()
+            page.mouse.move(boxed_box["x"] + min(boxed_box["width"] - 12, 360),
+                            boxed_box["y"] + 18, steps=8)
+            page.mouse.up()
+            page.wait_for_timeout(400)
+            check("a drag on a boxed pane shows the copy button",
+                  page.locator("#copySel").is_visible())
+            try:
+                taken = page.evaluate("() => navigator.clipboard.readText()")
+            except Exception as err:  # noqa: BLE001 — the check names the failure
+                taken = str(err)
+            check("and copied the boxed line",
+                  isinstance(taken, str) and "COPY-LINE" in taken.upper(),
+                  (taken[:80] if isinstance(taken, str) else taken))
+            page.screenshot(path=str(SHOTS / "boxed-copy.png"))
+            page.evaluate(
+                "() => { const e = terms.get(activeId); "
+                "if (e && e.term) e.term.clearSelection(); }")
+            page.wait_for_timeout(100)
+            page.mouse.click(boxed_box["x"] + 40, boxed_box["y"] + 12)
+            page.wait_for_timeout(400)
+            after_click = page.evaluate(
+                """() => {
+                  const e = terms.get(activeId);
+                  if (!e || !e.term) return '';
+                  const buf = e.term.buffer.active;
+                  const lines = [];
+                  for (let i = 0; i < Math.min(6, e.term.rows); i++) {
+                    const line = buf.getLine(buf.viewportY + i);
+                    lines.push(line ? line.translateToString(true) : '');
+                  }
+                  return lines.join('\\n');
+                }""")
+            check("a click still reaches the boxed CLI",
+                  "clicked" in after_click.lower(), after_click[:120])
+            print("zooming a boxed pane instead of wrapping it")
+            before_cols = page.evaluate(
+                "() => { const e = terms.get(activeId); return e && e.term ? e.term.cols : 0; }")
+            page.set_viewport_size({"width": 960, "height": 640})
+            page.wait_for_timeout(700)
+            zoomed = page.evaluate(
+                """() => {
+                  const e = terms.get(activeId);
+                  if (!e || !e.term || !e.term.element) return {};
+                  const buf = e.term.buffer.active;
+                  const line = buf.getLine(buf.viewportY);
+                  return {
+                    cols: e.term.cols,
+                    transform: e.term.element.style.transform || "",
+                    text: line ? line.translateToString(true) : ""
+                  };
+                }""")
+            check("the grid did not get narrower",
+                  isinstance(zoomed, dict) and zoomed.get("cols") == before_cols,
+                  (zoomed, before_cols))
+            check("the pane zoomed to fit instead",
+                  isinstance(zoomed, dict) and "scale(" in (zoomed.get("transform") or ""),
+                  zoomed)
+            check("and the boxed line did not wrap",
+                  isinstance(zoomed, dict) and "BOXED-COPY-LINE" in (zoomed.get("text") or ""),
+                  zoomed)
+            page.screenshot(path=str(SHOTS / "boxed-zoom.png"))
+            page.set_viewport_size({"width": 1400, "height": 900})
+            page.wait_for_timeout(400)
+        _remove_session(boxed)
+        page.evaluate("(id) => openSession(id)", mine)
+        page.wait_for_timeout(400)
 
         print("tabs that do not fit")
         names = [
@@ -331,6 +566,21 @@ def _run(panel) -> int:
         finally:
             for sid in extra:
                 _remove_session(sid)
+
+        print("a path you can look at")
+        sample = Path("/tmp/clique-visual-file.md")
+        sample.write_text("# Hello from a click\n\nNot an editor.\n", encoding="utf-8")
+        page.evaluate(
+            "(id) => openFileSheet(id, '/tmp/clique-visual-file.md')", mine)
+        page.wait_for_timeout(500)
+        check("the file sheet opens", page.locator("#file").is_visible())
+        shown = page.locator("#fileText").inner_text()
+        check("and it shows the text", "Hello from a click" in shown, shown[:80])
+        page.locator("#file").screenshot(path=str(SHOTS / "file-sheet.png"))
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        check("escape closes it", page.locator("#file").is_hidden())
+        sample.unlink(missing_ok=True)
 
         page.screenshot(path=str(SHOTS / "panel.png"), full_page=False)
         page.locator("#settingsBtn").click()

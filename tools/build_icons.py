@@ -70,6 +70,8 @@ ICONS: dict[str, str] = {
     "pencil": "rename, recolour or delete a folder",
     "image": "images this session made",
     "keyboard": "keyboard shortcuts",
+    "maximize-2": "full screen",
+    "minimize-2": "leave full screen",
 }
 
 _BODY = re.compile(r"<svg[^>]*>(?P<body>.*)</svg>", re.S)
@@ -127,7 +129,7 @@ def main() -> int:
         # page names no others. Whether the path data still matches upstream
         # is a question for the day someone deliberately regenerates.
         block = page.split(START, 1)[1].split(END, 1)[0]
-        have = set(re.findall(r'<symbol id="i-([a-z-]+)"', block))
+        have = set(re.findall(r'<symbol id="i-([a-z0-9-]+)"', block))
         want = set(ICONS)
         if have != want:
             for name in sorted(want - have):

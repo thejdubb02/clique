@@ -20,6 +20,7 @@ explicitly forced, because the same box is running work we did not create.
 from __future__ import annotations
 
 import contextlib
+import os
 import shutil
 import subprocess
 import time
@@ -27,7 +28,8 @@ import uuid
 from dataclasses import dataclass
 
 #: Our own tmux server. Codeman and anything hand-rolled use the default one.
-SOCKET = "clique"
+#: Tests set ``CLIQUE_TMUX_SOCKET`` so they cannot see or resize a live pane.
+SOCKET = os.environ.get("CLIQUE_TMUX_SOCKET") or "clique"
 
 #: Session names we created. Codeman uses ``codeman-``.
 PREFIX = "sm-"
@@ -148,44 +150,84 @@ def _run(
     return proc.stdout
 
 
-def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -> None:
-    """Start our server and set the options new panes inherit.
+def _global_options(history_limit: int) -> list[str]:
+    """Server-wide options. Applied on first start and on every panel restart.
 
-    Two things make this one invocation rather than several. tmux defaults to
-    ``exit-empty on``, so a server with no sessions dies the instant it starts
-    and separate calls would each find nothing running. And a pane takes its
-    history-limit at creation time, so the option has to be in place before the
-    first session or scrollback silently caps at tmux's default 2000 lines.
+    The tmux server outlives the panel (KillMode=process), so a new history
+    length or size rule has to be written onto an already-running server, not
+    only onto a fresh one.
     """
-    args = [
-        "start-server",
+    return [
         # Keep the server alive with no sessions, so these options survive
         # killing the last one and a reattach does not race a cold server.
-        ";", "set-option", "-g", "exit-empty", "off",
+        "set-option", "-g", "exit-empty", "off",
         ";", "set-option", "-g", "history-limit", str(history_limit),
         # A CLI's bell should not steal focus in a browser tab, and we render
         # our own tab bar, so tmux's status line is duplicate chrome.
         ";", "set-option", "-g", "status", "off",
         ";", "set-option", "-g", "bell-action", "none",
-        # Size to the client that last spoke, not the smallest. A phone must
-        # not permanently squeeze the desktop; the desktop must still be able
-        # to shrink the pane to itself when it is the one being looked at —
-        # otherwise a full-screen CLI's prompt sits off the bottom of the
-        # window. The browser only asserts size while this window is focused,
-        # so the two sides no longer fight on a timer.
+        # Global `latest` is a tmux 3.4 constraint: `window-size manual` on
+        # the server makes `new-session -d` crash it ("server exited
+        # unexpectedly") because a detached session has no client to size
+        # from. Each window is then locked to `manual` in `lock_size` —
+        # attaching a viewer cannot move it; only `resize-window` can.
         ";", "set-option", "-g", "window-size", "latest",
     ]
+
+
+def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -> None:
+    """Start our server and set the options new panes inherit.
+
+    Two things make the first invocation a single chain. tmux defaults to
+    ``exit-empty on``, so a server with no sessions dies the instant it starts
+    and a following call would find nothing running. And a pane takes its
+    history-limit at creation time, so the option has to be in place before the
+    first session or scrollback silently caps at tmux's default 2000 lines.
+
+    A panel restart leaves that server running, so the same options are then
+    applied again on their own. That is how a bumped history-limit actually
+    takes effect without killing sessions.
+    """
+    options = _global_options(history_limit)
     # A server that is still shutting down from a previous run answers
     # "server exited unexpectedly" once, then comes up clean. Retrying beats
     # making every caller handle a restart race they did not cause.
     for attempt in range(3):
         try:
-            _run(args, socket)
-            return
+            _run(["start-server", ";", *options], socket)
+            break
         except TmuxError as exc:
             if attempt == 2 or "exited unexpectedly" not in str(exc):
                 raise
             time.sleep(0.25)
+    # Write the options again as their own call. The chain above is for a
+    # cold server (exit-empty would otherwise kill it between commands). This
+    # one is for a server that outlived the panel: a restart must be able to
+    # bump history-limit without taking the sessions down.
+    with contextlib.suppress(TmuxError, OSError):
+        _run(options, socket)
+    lock_existing(socket)
+
+
+def lock_size(mux: str, socket: str | None = SOCKET) -> None:
+    """Stop this window following whoever last attached.
+
+    Global `window-size` stays `latest` so creating a detached session does
+    not crash tmux. Per window it is `manual`: a hidden tab reconnecting
+    cannot punch dots into the pane you are looking at.
+    """
+    with contextlib.suppress(TmuxError, OSError):
+        _run(["set-window-option", "-t", _session_target(mux),
+              "window-size", "manual"], socket)
+
+
+def lock_existing(socket: str | None = SOCKET) -> None:
+    """Lock every real session on this socket, including ones born before
+    this option existed."""
+    for pane in list_sessions(socket, prefix=PREFIX):
+        if pane.mux.startswith(VIEW_PREFIX):
+            continue
+        lock_size(pane.mux, socket)
 
 
 def sweep_viewers(
@@ -231,10 +273,12 @@ def create_viewer(target: str, socket: str | None = SOCKET) -> str:
 
     It does **not** give it an independent size, and an earlier version of this
     docstring claimed it did. A window is shared by every session in the group,
-    so tmux has exactly one size for it, decided by `window-size`. The browser
-    that is focused claims that size; an unfocused one stays quiet so they
+    so tmux has exactly one size for it. That size is locked to `manual` on
+    the window: attaching a viewer does not change it. The browser that is
+    focused calls `resize-window`; an unfocused one stays quiet so they
     do not fight.
     """
+    lock_size(target, socket)
     name = f"{VIEW_PREFIX}{uuid.uuid4().hex[:6]}"
     _run(["new-session", "-d", "-t", _session_target(target), "-s", name], socket)
     _no_status(name, socket)
@@ -247,10 +291,16 @@ def resize_window(mux: str, cols: int, rows: int, socket: str | None = SOCKET) -
 
     Callers must only do this while this window is the one being looked at.
     An unfocused browser that also asserted would steal the size back.
+
+    Sizes below 20x8 are a collapsed or hidden tab measuring itself, not a
+    real window. Applying them is how a background reconnect left dots.
     """
+    cols, rows = int(cols), int(rows)
+    if cols < 20 or rows < 8:
+        return
     with contextlib.suppress(TmuxError, OSError):
         _run(["resize-window", "-t", _session_target(mux),
-              "-x", str(max(cols, 2)), "-y", str(max(rows, 2))], socket)
+              "-x", str(cols), "-y", str(rows)], socket)
 
 
 def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> list[Pane]:
@@ -365,6 +415,7 @@ def create(
     args += argv
     _run(args, socket)
     _no_status(mux, socket)
+    lock_size(mux, socket)
 
 
 def _no_status(mux: str, socket: str | None) -> None:

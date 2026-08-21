@@ -20,9 +20,10 @@ what it always did.
 
 from __future__ import annotations
 
-import subprocess
 import time
 from pathlib import Path
+
+from . import gitinfo
 
 #: Files whose age still counts as "somebody is working in here right now".
 #: Long enough to catch an agent that paused to think, short enough that
@@ -38,26 +39,6 @@ SCAN_LIMIT = 400
 SKIP = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv",
                   ".mypy_cache", ".ruff_cache", "dist", "build", ".next",
                   "target", ".tox"})
-
-TIMEOUT = 3
-
-
-def _git(cwd: Path, *args: str) -> str | None:
-    """A git command in `cwd`, or None if git cannot answer.
-
-    Optional by design: no repo, no git installed, or a repo so large the
-    command times out all mean the same thing here — this part of the answer
-    is unavailable, and the rest is still worth having.
-    """
-    try:
-        done = subprocess.run(                       # noqa: S603 — argv list, no shell
-            ["git", "-C", str(cwd), *args],          # noqa: S607 — git from PATH, as documented
-            capture_output=True, text=True, timeout=TIMEOUT, check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return done.stdout if done.returncode == 0 else None
-
 
 def touched(cwd: Path, since: float) -> int:
     """How many files under `cwd` were written after `since`.
@@ -216,11 +197,9 @@ def look(cwd: str, sessions) -> dict:
             out["sessions"].append({"id": session.id, "name": session.name,
                                     "cli": session.cli})
 
-    status = _git(path, "status", "--porcelain")
-    if status is not None:
-        out["dirty"] = len([line for line in status.splitlines() if line.strip()])
-        branch = _git(path, "rev-parse", "--abbrev-ref", "HEAD")
-        out["branch"] = (branch or "").strip()
+    info = gitinfo.probe(str(path))
+    out["dirty"] = info["dirty"]
+    out["branch"] = info["branch"]
 
     out["touched"] = touched(path, time.time() - RECENT)
     return out

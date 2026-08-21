@@ -66,6 +66,11 @@ PALETTE = [
 #: branding, and hiding it would cost information rather than decoration.
 MARKER_MODES = ("both", "icon", "color", "none")
 
+#: Monospace stacks the pane is allowed to ask for. Each id maps to a CSS
+#: fallback chain in the browser, so a font missing on this OS still lines
+#: up instead of going proportional. Unknown ids are dropped, not stored.
+FONT_FAMILIES = ("system", "menlo", "consolas", "ubuntu", "courier")
+
 DEFAULT_SETTINGS = {
     "marker_default": "both",
     "marker_by_cli": {},
@@ -87,6 +92,10 @@ DEFAULT_SETTINGS = {
     #: sidebar is scanned, the terminal is read.
     "font_panel": 13,
     "font_terminal": 13,
+    #: Which monospace stack the pane uses. Ids, not CSS: the browser maps
+    #: them to a fallback chain that exists on Windows, Mac and Linux, so a
+    #: font that is not installed still lines up instead of going proportional.
+    "font_family": "system",
     #: Ctrl+K opens the command palette, which means the pane never sees that
     #: key — and Ctrl+K is readline's kill-to-end-of-line. Anyone who uses it
     #: there can hand it back; the palette stays reachable on Ctrl+Shift+P,
@@ -558,6 +567,10 @@ class Store:
                 elif key == "notify_idle_seconds":
                     with contextlib.suppress(TypeError, ValueError):
                         self.settings[key] = max(2, min(int(value), 120))
+                elif key == "font_family":
+                    name = str(value or "").strip().lower()
+                    if name in FONT_FAMILIES:
+                        self.settings[key] = name
                 elif key.startswith("font_"):
                     # Clamped rather than rejected: a bad number here should
                     # not be able to make the UI unreadable and unfixable.

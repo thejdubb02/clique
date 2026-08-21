@@ -1,5 +1,169 @@
 # Changelog
 
+## 0.50.23 — 2026-08-20 21:08 PDT
+
+**Restarting the panel now updates tmux's own settings.** tmux is supposed
+to outlive the panel, so a new history length used to stay stuck at
+whatever it was when tmux first started. Existing windows also get their
+size lock put back, so an old session cannot start autosizing again.
+
+## 0.50.22 — 2026-08-20 21:05 PDT
+
+**Shrinking the window no longer stacks Gemini's box on itself.** Claude,
+Grok and Gemini were being told the pane got narrower, so they wrapped
+their old chrome into extra copies. The pane now zooms to fit instead —
+same conversation, whole thing still on screen. A phone still resizes
+for real, because zooming that far would make the type too small.
+
+**Switching tabs no longer blanks the pane.** Hidden terminals stay
+painted, just not in front, so Chrome cannot throw the picture away.
+
+**Keys typed while it says Reconnecting… land when it is back**, instead
+of vanishing.
+
+## 0.50.21 — 2026-08-20 19:00 PDT
+
+**Copy from a Claude, Grok, or Gemini pane works like selecting on a page.**
+Those CLIs were telling the browser “the mouse is mine,” so a drag never
+became a selection. The browser no longer hears that. A click still goes
+to the CLI. After you copy, the highlight clears so the next Ctrl+C is
+interrupt. Ctrl+Shift+C copies whatever is on the screen if nothing is
+selected. The command palette can do that too.
+
+## 0.50.20 — 2026-08-20 18:35 PDT
+
+**Drag across the pane to copy.** A CLI that is listening for clicks used
+to swallow the drag, so there was nothing to copy — and on a Mac there
+was no modifier that would get it back. A drag is a selection now, and
+letting go puts it on the clipboard. A click still goes to the CLI.
+Ctrl+C and the Copy button still work.
+
+## 0.50.19 — 2026-08-20 18:24 PDT
+
+**Opening a smoke test can no longer take over the window you are in.**
+The checks used to talk to this panel and the same tmux server, so a
+`/tmp` shell could land on the tab you were looking at. They now run
+on their own panel, their own state, and their own tmux socket, and
+they cannot see this one.
+
+## 0.50.18 — 2026-08-20 18:13 PDT
+
+**Its own window, no browser around it.** Install as an app — from
+Settings → About, the command palette, or the browser’s own Install.
+Full screen is the button next to the shortcuts, or Ctrl/Shift+F.
+Not Electron: the panel is still 24 MB, and a restart still does not
+kill your sessions.
+
+## 0.50.17 — 2026-08-20 18:07 PDT
+
+**Select text in the pane and Ctrl/Cmd+C copies it.** Every CLI, every
+tab. With nothing selected, Ctrl+C still interrupts. A Copy button
+appears while something is selected, so a phone can do it too.
+Right-click on a selection copies. A pane redraw no longer throws the
+selection away the moment you go to copy it.
+
+## 0.50.16 — 2026-08-20 18:01 PDT
+
+**The pane you are looking at stays the pane you are looking at.** A
+tab warming in the background used to refit this one and leave it
+blank — Chrome had thrown the hidden canvas away, and a same-size
+fit did nothing. Coming back, or switching tabs, now redraws it.
+A full refresh should no longer be the fix.
+
+## 0.50.15 — 2026-08-20 17:52 PDT
+
+**The pane keeps the size of the window you are looking at.** tmux no
+longer resizes itself when a background tab reconnects, a second window
+opens, or the panel restarts while you are elsewhere. Coming back fills
+it. A collapsed measure cannot shrink it to a screen of dots.
+
+## 0.50.14 — 2026-08-20 17:21 PDT
+
+**Each row names the git branch it is on.** And how many files have
+changed, when that is not zero. The folder tree was already many repos
+and said so nowhere. A directory that is not a repo looks the way it
+always did.
+
+## 0.50.13 — 2026-08-20 17:01 PDT
+
+**Coming back fills the pane again.** A restart — or a tab reconnecting
+in the background — could leave tmux smaller than this window. Coming
+back kept the dots, because the panel thought the sizes already matched.
+It now takes this window’s size as soon as you look, and a background
+reconnect no longer shrinks the one you had.
+
+## 0.50.12 — 2026-08-20 16:42 PDT
+
+**A path in the pane is a click.** Same as a URL: click it to look,
+copy it, or drop it into the prompt. Read-only — this is not an
+editor. Ctrl/Cmd+click skips the look and drops the path where you
+are typing.
+
+## 0.50.11 — 2026-08-20 16:26 PDT
+
+**The tabs you left are the tabs you get.** Opening the panel at home
+used to save an empty strip over the one from work — the first load
+had not finished reading yet, and a closing window often killed the
+save. It now waits until the workspace is actually back, and a closing
+window uses a request that survives the tab dying.
+
+## 0.50.10 — 2026-08-20 16:13 PDT
+
+**Folders stay folders when you open the panel on another computer.** A
+session you had filed was being pulled up into Running whenever it had
+no tab open, so a fresh browser looked like nothing was organised. The
+filing was saved. The tree was hiding it. Running is only the unfiled
+inbox now.
+
+## 0.50.9 — 2026-08-20 14:52 PDT
+
+**Killing a session no longer deletes it from the folder.** It stops the
+CLI and leaves the row. Click it to start again — Claude and anything
+else launched with our session id come back with their own conversation.
+A shell starts again in the same place. Remove it from the sidebar is a
+separate choice, on a session that is already stopped.
+
+## 0.50.8 — 2026-08-20 14:47 PDT
+
+**Pick a terminal font, and change its size from the bottom-right.** Five
+monospace stacks that exist on Windows, Mac and Linux — a missing font
+falls back instead of going proportional. `+` and `−` next to the
+shortcuts change the size live. Both live on the server, so a reload and
+another device keep them.
+
+## 0.50.7 — 2026-08-20 14:24 PDT
+
+**The spinner only turns while something is actually working.** A CLI sitting
+on a question used to keep spinning, because the prompt still blinked and
+that looked like output. That is not work — work is paused, waiting on you.
+
+Three marks, three facts:
+
+- **spinning** — it is working
+- **slow pulse** — it finished, and you have not opened that tab
+- **two knocks** — it is asking a question (y/n, Do you want, a numbered
+  choice). The same marks work for every CLI, not just Claude and Grok.
+
+## 0.50.6 — 2026-08-20 14:17 PDT
+
+**Coming back to the tab grows the pane again.** Leaving CLIque in a
+background browser tab let something else shrink the window. Coming back
+kept the dots — the page was not counted as focused yet, so it stayed
+quiet. It now takes the size that fits this window as soon as you look
+at it.
+
+## 0.50.5 — 2026-08-20 14:13 PDT
+
+**Clicking a tab no longer flashes someone else's pane.** A tab that had
+not warmed yet kept showing the one you were on until its terminal caught
+up — and if you clicked away in that wait, the late one stole the screen
+back. The tab you click is the one you see, immediately.
+
+## 0.50.4 — 2026-08-20 14:07 PDT
+
+**A faint CLIque mark sits at the bottom of the left panel.** Large, quiet,
+just branding. It does not take clicks, and the list still scrolls over it.
+
 ## 0.50.3 — 2026-08-20 13:44 PDT
 
 **Change color on a folder actually stays open.** Clicking it rebuilt the

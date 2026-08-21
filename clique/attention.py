@@ -8,9 +8,11 @@ Three tiers, each optional, each falling back to the one below:
 
 1. **The activity clock.** Shipped, works for any CLI, and only ever says
    working or quiet.
-2. **Patterns over the pane.** Regexes declared per CLI in ``clis.toml``,
-   matched against the last lines of the pane once it goes quiet. A CLI with
-   no patterns simply skips this tier.
+2. **Patterns over the pane.** Generic question marks first (y/n, Do you
+   want, a numbered choice), then extra regexes declared per CLI in
+   ``clis.toml``. Matched against the last lines of a pane that has gone
+   quiet, or one that has been "busy" long enough to be an animated prompt.
+   A CLI with no table of its own still gets the generic ones.
 3. **The session says so itself.** ``POST /api/sessions/<id>/attention`` —
    wired by the user to whatever hook their own CLI already offers. Exact
    where the tier above is a guess.
@@ -38,6 +40,36 @@ from . import tmux
 #: the pane; scanning further finds the *previous* prompt and reports a
 #: question that has already been answered.
 LINES = 40
+
+#: Waiting patterns only search this many *content* lines at the bottom.
+#: Errors may sit higher (a traceback); a question is the last thing drawn.
+WAITING_TAIL = 12
+
+#: What almost every CLI draws when it wants a person. Applied to every
+#: session, including ones with no ``[cli.*.attention]`` table — that is
+#: how a Codex or Cursor permission prompt surfaces without CLIque knowing
+#: anything about those vendors. Per-CLI patterns in clis.toml *add* to
+#: this list; they do not replace it.
+DEFAULT_WAITING = [
+    r"\(y/n\)",
+    r"\[[Yy]/[Nn]\]",
+    r"\[[Yy]/[Nn]/[Aa]\]",
+    r"\(yes/no\)",
+    r"Do you want",
+    r"Would you like",
+    r"Press Enter to continue",
+    r"Esc to cancel",
+    r"Don.t ask me again",
+    r"❯\s*\d+\.",  # noqa: RUF001 — Claude/Gemini draw this, not ASCII >
+    r"(?i)allow (this|command|action)",
+    r"^.{8,80}\?\s*$",
+]
+
+DEFAULT_ERROR = [
+    r"^Error:",
+    r"command not found",
+    r"Traceback \(most recent call last\)",
+]
 
 #: Compiled patterns, keyed by the strings they came from, so a hot-reloaded
 #: clis.toml does not mean recompiling on every poll.
@@ -150,15 +182,34 @@ def _patterns(raw: list[str]) -> list[re.Pattern]:
     return got
 
 
+def verdict_text(text: str, waiting: list[str], errors: list[str]) -> str:
+    """"waiting", "error" or "" from pane text. Errors win.
+
+    Waiting is matched only against the last few content lines — a question
+    is the last thing on the pane, and scanning further finds the previous
+    one. Errors may sit higher (a traceback), so they search the whole tail.
+    """
+    waiting = [*DEFAULT_WAITING, *(str(x) for x in (waiting or []))]
+    errors = [*DEFAULT_ERROR, *(str(x) for x in (errors or []))]
+    tail = "\n".join(text.splitlines()[-LINES:])
+    if any(p.search(tail) for p in _patterns(errors)):
+        return "error"
+    recent = "\n".join(content_lines(tail)[-WAITING_TAIL:])
+    if any(p.search(recent) for p in _patterns(waiting)):
+        return "waiting"
+    return ""
+
+
 def detect(mux: str, activity: int, waiting: list[str], errors: list[str],
            socket: str | None = tmux.SOCKET) -> str:
     """"waiting", "error" or "" for a quiet pane. Cached against `activity`.
 
     Errors win over waiting: a CLI that failed and then offered a prompt is
     reporting the failure, and that is the more useful of the two to surface.
+
+    Generic question marks (y/n, Do you want, a numbered choice) apply to
+    every CLI. Per-CLI patterns from clis.toml add to that list.
     """
-    if not waiting and not errors:
-        return ""
     with _lock:
         cached = _seen.get(mux)
         if cached and cached[0] == activity:
@@ -169,12 +220,7 @@ def detect(mux: str, activity: int, waiting: list[str], errors: list[str],
         text = tmux.capture(mux, socket, lines=LINES, styled=False)
     except tmux.TmuxError:
         return ""
-    tail = "\n".join(text.splitlines()[-LINES:])
-    verdict = ""
-    if any(p.search(tail) for p in _patterns(errors)):
-        verdict = "error"
-    elif any(p.search(tail) for p in _patterns(waiting)):
-        verdict = "waiting"
+    verdict = verdict_text(text, waiting, errors)
     with _lock:
         _seen[mux] = (activity, verdict)
         # Unbounded growth would be a leak in a process that runs for weeks.

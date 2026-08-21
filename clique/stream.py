@@ -146,8 +146,10 @@ class PtyBridge:
     def resize(self, cols: int, rows: int) -> None:
         """Tell the PTY its new size; tmux picks it up via SIGWINCH.
 
-        tmux sizes a session to its smallest attached client, so this is what
-        stops one small window squeezing every other viewer's terminal.
+        The shared window is not resized from here. Window size is `manual`
+        and only `resize-window` from the focused browser moves it — a PTY
+        ioctl used to become the latest size and punch dots into the other
+        window.
         """
         if self.fd is None:
             return

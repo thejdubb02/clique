@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -22,6 +23,34 @@ HOME = Path(os.environ.get("CLIQUE_HOME", str(Path.home() / ".clique")))
 #: one — outside it, a wheel would carry the code and none of the config, and
 #: `pip install clique` would start with no CLIs at all.
 PACKAGED_CONFIG = Path(__file__).resolve().parent / "config" / "clis.toml"
+
+
+def default_state_path() -> Path:
+    """Where the panel writes folders, drafts, and the workspace.
+
+    ``$CLIQUE_HOME/state.json`` is the documented place. A checkout used to
+    write ``data/state.json`` next to the code — lost on ``pip install``, and
+    the file a test with its own ``$CLIQUE_HOME`` would still hit if this
+    default stayed there. One-time copy from the old path, only when this
+    really is the user's home: a sandbox home must start empty or the test
+    loads the live sidebar.
+    """
+    target = HOME / "state.json"
+    if target.exists():
+        return target
+    legacy = ROOT / "data" / "state.json"
+    try:
+        same_home = HOME.resolve() == (Path.home() / ".clique").resolve()
+    except OSError:
+        same_home = False
+    if same_home and legacy.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(legacy, target)
+        legacy_bak = ROOT / "data" / "state.json.bak"
+        target_bak = HOME / "state.json.bak"
+        if legacy_bak.exists() and not target_bak.exists():
+            shutil.copy2(legacy_bak, target_bak)
+    return target
 
 
 def config_path(explicit: str | None) -> Path:
@@ -145,7 +174,8 @@ def main(argv: list[str] | None = None) -> int:
     # Resolved by config_path, not defaulted here, so `--config` staying unset
     # is distinguishable from someone passing the packaged path explicitly.
     parser.add_argument("--config", default=None)
-    parser.add_argument("--state", default=str(ROOT / "data" / "state.json"))
+    parser.add_argument("--state", default=None,
+                        help="defaults to $CLIQUE_HOME/state.json")
     parser.add_argument("--version", action="version", version=version_string())
 
     # Token management is a CLI job, not an API one: an endpoint that mints
@@ -188,7 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    panel = Panel(Store(Path(args.state)), registry, auth, TokenStore(HOME / "tokens.json"))
+    state = Path(args.state) if args.state else default_state_path()
+    panel = Panel(Store(state), registry, auth, TokenStore(HOME / "tokens.json"))
     try:
         serve(args.host, args.port, panel)
     except KeyboardInterrupt:

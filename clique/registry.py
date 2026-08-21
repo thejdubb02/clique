@@ -159,7 +159,8 @@ class CliType:
     #: Config, not code — which is the whole point. CLIque never learns what a
     #: vendor's prompt looks like; someone writes it down here, and can fix it
     #: the day the vendor changes it without waiting for a release. Omit the
-    #: table and the session simply falls back to the activity clock.
+    #: table and the session still gets the generic prompts (y/n, Do you want,
+    #: a numbered choice) that every CLI tends to draw.
     attention: dict = field(default_factory=dict)
 
     @property

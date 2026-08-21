@@ -78,16 +78,13 @@ modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
 
-# How this CLI says it is stuck, as regexes matched against the last 40 lines
-# of the pane once it has gone quiet. Match one and the session's ring says
-# "waiting for you" instead of just "idle" — which is the difference between a
-# panel you have to check and one that tells you.
+# Extra regexes on top of the generic question marks every CLI already gets
+# (y/n, Do you want, a numbered choice). Match one and the session's ring
+# says "needs an answer" instead of spinning or sitting idle.
 #
-# These are deliberately generic: they are the prompts almost every CLI shows,
-# not a transcription of any one vendor's wording. Tune them to what you
-# actually see. That is the whole design — CLIque never learns what a vendor's
-# prompt looks like, you write it down here, and you can fix it the day it
-# changes without waiting for a release.
+# Tune them to what you actually see. That is the whole design — CLIque never
+# learns what a vendor's prompt looks like, you write it down here, and you
+# can fix it the day it changes without waiting for a release.
 #
 # For something exact rather than guessed, skip patterns entirely and have the
 # CLI tell CLIque directly:

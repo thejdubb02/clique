@@ -50,7 +50,7 @@ console.log("what needs you first");
   const workState = (s) => {
     if (!s.alive) return "stopped";
     if (s.signal === "error") return "error";
-    if (s.signal === "waiting") return "waiting";
+    if (s.signal === "waiting") return "asking";
     if (s.busy) return "working";
     return "idle";
   };
@@ -145,6 +145,30 @@ console.log("directories the panel already knows");
   check("a directory with both is running, not recent", kindOf("/srv/dupe") === "running");
 }
 
+console.log("paths a pane printed");
+{
+  const code = region("const LINK_RE", "function openLink");
+  // const in eval is trapped in the eval; a Function returns the bindings.
+  const { PATH_RE, trimPath } = new Function(code + "; return { PATH_RE, trimPath };")();
+  check("strips a compiler suffix", trimPath("src/app.js:42:7") === "src/app.js");
+  check("strips a trailing period", trimPath("docs/foo.md.") === "docs/foo.md");
+  const paths = (text) => {
+    const out = [];
+    PATH_RE.lastIndex = 0;
+    let match;
+    while ((match = PATH_RE.exec(text)) !== null) out.push(trimPath(match[1]));
+    return out;
+  };
+  check("an absolute path", paths("see /tmp/foo.md")[0] === "/tmp/foo.md");
+  check("a home path", paths("open ~/src/app.js")[0] === "~/src/app.js");
+  check("a relative path with a slash and an extension",
+        paths("wrote docs/foo.md")[0] === "docs/foo.md");
+  check("dot-slash", paths("./src/app.js")[0] === "./src/app.js");
+  check("a bare word is not a path", paths("hello world").length === 0);
+  check("and a URL is not a path",
+        paths("https://example.com/docs/foo.md").length === 0);
+}
+
 console.log("things that sit on top of other things");
 {
   // A preview that outranks a menu is a menu nobody can use — and it fails
@@ -160,8 +184,10 @@ console.log("things that sit on top of other things");
   const menu = layerOf("#menu");
   const palette = layerOf("#palette");
   const follow = layerOf("#follow");
+  const file = layerOf("#file");
   check("the palette sits above the context menu", palette > menu, `${palette} vs ${menu}`);
   check("and the menu above the pane's own controls", menu > follow, `${menu} vs ${follow}`);
+  check("the file sheet sits above the palette", file > palette, `${file} vs ${palette}`);
 }
 
 console.log("tinted greys keep their contrast");
@@ -203,6 +229,78 @@ console.log("tinted greys keep their contrast");
 
   const plain = global.window.CLIQUE_THEMES[""];
   check("a theme that did not ask keeps the standard ramp", !plain.tint_greys);
+}
+
+console.log("copy from a pane that is eating the mouse");
+{
+  const clickCode = region("function paneAtLiveScreen", "const PANE_DRAG_PX");
+  const {
+    paneAtLiveScreen, paneSgrClick, paneGridCell,
+  } = new Function(clickCode +
+    "; return { paneAtLiveScreen, paneSgrClick, paneGridCell };")();
+  check("a click at the live screen is a click",
+        paneAtLiveScreen({ buffer: { active: { viewportY: 10, baseY: 10 } } }));
+  check("a click on older scrollback is not",
+        !paneAtLiveScreen({ buffer: { active: { viewportY: 2, baseY: 10 } } }));
+  check("the click report is SGR press then release",
+        paneSgrClick(12, 4) === "\x1b[<0;12;4M\x1b[<0;12;4m");
+  const cell = paneGridCell(
+    { element: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 40 }) },
+      cols: 10, rows: 4 },
+    50, 10);
+  check("a click in the middle maps to a 1-based cell",
+        cell.col === 6 && cell.row === 2, cell);
+
+  const code = region("const PANE_DRAG_PX", "function wirePaneClipboard");
+  const {
+    paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse,
+  } = new Function(code +
+    "; return { paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse };")();
+  const click = { button: 0, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false };
+  check("a Mac uses Option, not Shift, to force a select",
+        paneForceSelectMods("MacIntel").altKey && !paneForceSelectMods("MacIntel").shiftKey);
+  check("everything else uses Shift",
+        paneForceSelectMods("Linux x86_64").shiftKey && !paneForceSelectMods("Linux x86_64").altKey);
+  check("five pixels is a drag", paneDragFarEnough(0, 0, 5, 0));
+  check("four is not", !paneDragFarEnough(0, 0, 3, 3));
+  check("a drag is stolen when the CLI is eating the mouse",
+        paneShouldStealMouse(click, true, true));
+  check("a click with a modifier is left alone",
+        !paneShouldStealMouse({ ...click, shiftKey: true }, true, true));
+  check("and so is Ctrl-click, which drops a path",
+        !paneShouldStealMouse({ ...click, ctrlKey: true }, true, true));
+  check("a phone is not stolen from — the Copy chip is the way",
+        !paneShouldStealMouse(click, true, false));
+  check("and a shell with no mouse tracking selects on its own",
+        !paneShouldStealMouse(click, false, true));
+  check("a touch-synthesised mouse is left alone",
+        !paneShouldStealMouse({ ...click, sourceCapabilities: { firesTouchEvents: true } },
+                              true, true));
+}
+
+console.log("zoom a boxed pane instead of wrapping it");
+{
+  const code = region("const PANE_ZOOM_MIN", "function paneForceSelectMods");
+  const {
+    paneZoomScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN,
+  } = new Function(code +
+    "; return { paneZoomScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN };")();
+  check("room to spare is no zoom",
+        paneZoomScale(800, 400, 80, 24, 8, 16) === 1);
+  check("half the width zooms to half",
+        Math.abs(paneZoomScale(320, 400, 80, 24, 8, 16) - 0.5) < 0.01);
+  check("a boxed CLI at half size zooms",
+        paneShouldZoom(true, 0.5));
+  check("a shell never zooms",
+        !paneShouldZoom(false, 0.5));
+  check("a phone-sized shrink still resizes for real",
+        !paneShouldZoom(true, PANE_ZOOM_MIN - 0.01));
+  const held = paneQueueOut([], "hi", 8);
+  check("keys typed while reconnecting are kept",
+        held.join("") === "hi");
+  const capped = paneQueueOut(["aaaaaaaa"], "bbbb", 8);
+  check("and an 8k flood cannot pile up forever",
+        capped.join("").length <= 8 && capped.join("").endsWith("bbbb"));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -1,67 +1,63 @@
 # The working order
 
-What to build next and in what order. Short-lived by design: when something
-here ships it moves to the CHANGELOG and drops off this page.
+What to build next and in what order. Short-lived: shipped work moves to
+the CHANGELOG and drops off this page.
 
-- **Why** a thing is ranked where it is: [ROADMAP.md](../ROADMAP.md), which is
-  ordered by where five independent feature lists agreed without seeing each
-  other's work.
-- **Not committed to anything**: [ideas-inbox.md](ideas-inbox.md).
+Ranked for Justin's actual use (many agents, two machines) against
+[ROADMAP.md](../ROADMAP.md). Not a commitment dump: [ideas-inbox.md](ideas-inbox.md).
 
 ---
 
-## First thing next session
+## Blocked on Justin
 
-**Read `docs/audit-2026-08-19.md`.** A 383-line code review Grok produced
-against this codebase, and the only thing asked for today that was not
-delivered. Several items were visible over Justin's shoulder and look real:
+**PyPI / `uvx clique-panel`.** The package is built. Needs his publish token.
+Until that lands, nobody else can install this.
 
-- history discovery re-reads ~160 KB per transcript on a 30-second all-or-
-  nothing cache — a per-file cache on (path, mtime, size) instead
-- `notify.post` starts a thread per event, unbounded
-- the bearer/cookie check re-verifies several times per request
-- CSP `connect-src` allows any `ws:`/`wss:` where `'self'` would do
+## Now — daily drive
 
-Workspace attach from that list shipped in 0.48–0.49: the front tab first,
-then the rest in the background, passive so a hidden tab cannot steal the
-pane size.
+Hours each. These are the ones that pay off every hour in the panel.
 
-Work through it, agree or disagree with each item on the evidence, and say
-which. Do not take it at face value — two of today's three "reviews" contained
-confident claims that measurement disproved.
+1. **Hover / long-press the last few lines.** Turns a ring from a colour into
+   an answer without switching tabs. Touch needs the long-press. Shares the
+   capture attention already pays for.
+2. **Searchable prompt history.** Every prompt sent, per session and globally,
+   fuzzy, one click to reuse. Snippets stay for the ones you meant to keep.
+3. **Confirm before killing a session that is working or has a draft.**
+   Stopping is easy now; losing a paragraph should not be.
+4. **Land on the last prompt when a session opens.** You currently land
+   wherever the stream left you.
 
-## Then, in order
+## Next — awareness
 
-1. **`uvx clique` / PyPI.** Still the top of the roadmap and still blocked on
-   Justin's token. `clique-panel` is unclaimed; the import package is still
-   top-level `clique`, which collides with an unrelated library on PyPI. Nobody
-   can install this yet, and everything else only pays off for someone who can.
-2. **Clickable file paths in the pane.** URLs are already clickable; a path
-   like `docs/audit-2026-08-19.md` is not, and it is exactly the thing you want
-   to act on. Asked for directly on 2026-08-19. Copy it, drop it in the prompt,
-   or view it — a read-only viewer for text is the same category as the image
-   viewer that already exists, so it does not cross into being an editor.
-   Codeman's `attach <path>` is the push half of the same idea; see the private
-   notes.
-3. **An agent-facing skill.** The whole API exists and nothing tells an agent
-   so. Small, entirely ours to write, probably the best value-per-hour left.
-4. **Mobile layout.** Still the largest gap between what the README promises
-   and what the panel does.
-5. **A long-uptime memory number.** Never measured, because the service was
-   restarted dozens of times today. The panel has been left alone since
-   0.46.0 — read it before restarting anything.
+5. **Copy last output / last N lines.** Selection and the visible screen
+   already copy (0.50.17–0.50.21). This is the leftover: last reply, last N
+   lines, without dragging.
+6. **Smart focus:** prompt box on tab switch, Esc back to the terminal.
+7. **Pin / favourite** sessions, above recency.
+8. **Session status line:** elapsed, last activity, process state.
 
-## Shelved, with the reasoning written down
+## Then — bigger slices
 
-- **Theming across all sixteen CLIs** — [ideas-inbox.md](ideas-inbox.md). Four
-  measured, twelve unknown, and one CLI painting in truecolor would cap the
-  whole idea. Needs `tools/palette_probe.py` run on a box with more installed.
-- **Trinity as the Matrix** — the same entry. Wants a monochrome theme mode
-  that claims the whole 256-colour palette, and eyes on the result.
+9. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
+    gap between the README and the panel.
+10. **Session templates:** CLI + directory + starter prompt + name pattern.
+11. **An agent-facing skill.** The API exists; nothing tells an agent so.
+12. **Per-session CPU/memory,** to catch one agent starving the box.
 
-## A standing note
+## Hygiene, not a feature
 
-Run `~/.cache/clique-visual/bin/python tools/visual_check.py` after any change
-under `web/`, and **open the screenshots**. Four of the bugs found on
-2026-08-19 were visual, three were self-inflicted, and the whole suite stayed
-green through every one of them.
+- **`docs/audit-2026-08-19.md`.** Still unread as a pass. Do not take it at
+  face value. History cache, unbounded notify threads, CSP `connect-src`.
+- **Long-uptime memory.** Read RSS after a quiet stretch, before the next
+  restart.
+
+## Not on this list
+
+Error Lens inside the terminal, Todo Tree of agent output, GitLens blame,
+Power Mode, minimaps, LLM session summaries, broadcast-to-many-sessions,
+a built-in diff editor. Driver, not an IDE.
+
+## Standing
+
+`~/.cache/clique-visual/bin/python tools/visual_check.py` after any `web/`
+change, and **open the screenshots**.

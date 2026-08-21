@@ -74,6 +74,12 @@ tmux's dot-fill until something happens to jog it.
 Each session also carries `created`, `last_seen`, `order`, plus the live facts: `alive`, `attached`,
 `command`, `activity` (tmux's own clock) and `busy`.
 
+`branch` and `dirty` come from git in that session's working directory —
+the branch name, and how many paths `status --porcelain` reports. Cached
+per repo for a few seconds so the poll does not pay for git every time.
+`""` and `0` where there is no repo, no git, or git has not answered yet.
+This is not a git UI: it is the sentence the folder tree was missing.
+
 `busy` starts from the activity clock — output within the last two seconds —
 but does not end there. A redraw counts as output, so a CLI that animates while
 it waits ticks the clock forever and would sit permanently on "working". Once a
@@ -137,10 +143,23 @@ Fields: `name`, `folder` (`null` means Ungrouped), `mode`, `archived`, `draft`.
 Only the fields you send are touched — absent and `null` are different, so a
 rename cannot silently unfile a session.
 
+### `POST /api/sessions/<id>/kill`
+
+Stops the process. The record stays in its folder, stopped. Start it again
+with `/start`. Closing a tab does not come here.
+
+### `POST /api/sessions/<id>/start`
+
+Starts a stopped session again — same id, name, folder and directory. When
+the CLI was first launched with our session id, that is also the resume key
+(Claude's `--session-id`). A shell has nothing to resume; it starts again
+in the same place. Already running is a `400`.
+
 ### `DELETE /api/sessions/<id>`
 
-Kills the tmux session and forgets it. This is the destructive one; closing a
-tab in the UI does not come here.
+Forgets the record, and stops the process if it is still running. This is
+the destructive one. The UI only offers it on a session that is already
+stopped.
 
 ### `POST /api/sessions/<id>/send`
 
@@ -284,6 +303,24 @@ until this is called — there is no poller behind it — and the answer is cach
 against the pane's own activity clock, so repeated calls while nothing is
 printed cost one capture.
 
+### `GET /api/sessions/<id>/file?path=<path>`
+
+Read-only glance at a path the pane printed. Relative paths are against the
+session's working directory; absolute paths and `~/` are allowed because
+anyone who can reach the panel already has a shell as this user.
+
+```json
+{"asked": "docs/foo.md", "path": "/srv/app/docs/foo.md", "name": "foo.md",
+ "kind": "text", "size": 1204, "text": "# Foo\n", "truncated": false}
+```
+
+`kind` is `text`, `image`, `binary`, `dir` or `missing`. Text is capped;
+`truncated` is true when there is more. `?raw=1` on an image returns the
+bytes, typed from magic, same as an artifact.
+
+A compiler-style suffix (`foo.py:12` or `foo.py:12:4`) is stripped. This is
+not an editor.
+
 ### `GET /api/sessions/<id>/artifacts`
 
 Images that appeared in the session's working directory **after the session
@@ -405,7 +442,8 @@ front of you (sidebar width, sidebar shown or hidden).
 | `theme` | string | Preset id from `web/themes.js`; `""` is the built-in |
 | `appearance` | `"dark"` \| `"light"` \| `"system"` | Base used when no preset is chosen |
 | `font_panel` | 9–28 | Sidebar and chrome |
-| `font_terminal` | 9–28 | The pane, read at a different distance |
+| `font_terminal` | 9–28 | The pane, read at a different distance. Also the `+`/`−` stepper in the bottom-right |
+| `font_family` | `"system"` \| `"menlo"` \| `"consolas"` \| `"ubuntu"` \| `"courier"` | Monospace stack for the pane. Each id is a fallback chain that exists on Windows, Mac and Linux, so a missing font still lines up. Unknown ids are dropped |
 | `palette_hotkey` | bool | Whether `Ctrl`+`K` opens the palette or is handed to the pane |
 | `history_in_sidebar` | bool | Past conversations listed under live sessions. **Off by default** — a month of work is several hundred of them, and at that ratio the sidebar stops showing what is running. The palette still searches all of it |
 | `history_days` | int | How far back the sidebar goes when the above is on. Default 14. Does not limit the palette |
@@ -437,10 +475,12 @@ pane. Text frames are keystrokes; JSON control frames handle `resize` and
 running a command. The handshake enforces `Origin`, because a WebSocket is not
 subject to CORS and `SameSite=Lax` does not cover it.
 
-`passive=1` attaches a viewer without resizing the shared tmux window. Used
-when a tab is warming in the background so a hidden pane cannot steal the
-size of the one you are looking at. The first `resize` from the tab you
-actually switch to is what claims the window.
+`passive=1` attaches a viewer without resizing the shared tmux window, and
+sizes its PTY to the window that is already there. Each window is locked
+to `manual` size — attaching a client cannot move it, only an explicit
+`resize` from a focused pane. Used when a tab is warming in the
+background, or reconnecting while hidden. A `resize` below 20x8 is
+ignored; that is a collapsed tab measuring itself, not a real window.
 
 The PTY is created on connect and destroyed on disconnect — no viewer, no
 process. **Closing the socket does not stop the session**; that is the whole

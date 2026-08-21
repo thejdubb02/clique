@@ -59,11 +59,16 @@
   <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol>
   <!-- keyboard shortcuts -->
   <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8h.01" /><path d="M12 12h.01" /><path d="M14 8h.01" /><path d="M16 12h.01" /><path d="M18 8h.01" /><path d="M6 8h.01" /><path d="M7 16h10" /><path d="M8 12h.01" /><rect width="20" height="16" x="2" y="4" rx="2" /></symbol>
+  <!-- full screen -->
+  <symbol id="i-maximize-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="m21 3-7 7" /><path d="m3 21 7-7" /><path d="M9 21H3v-6" /></symbol>
+  <!-- leave full screen -->
+  <symbol id="i-minimize-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 10 7-7" /><path d="M20 10h-6V4" /><path d="m3 21 7-7" /><path d="M4 14h6v6" /></symbol>
 </svg>
 <!-- icons:end -->
 
 <div id="shell">
   <aside id="sidebar">
+    <div class="sidebar-mark" aria-hidden="true"></div>
     <header>
       <img class="brand-mark" src="brand/mark.svg" alt="" width="15" height="15">
       <span class="brand">CLIque</span>
@@ -111,6 +116,7 @@
     <div id="termwrap">
       <div id="terminal"></div>
       <div id="follow" hidden></div>
+      <button type="button" id="copySel" hidden>Copy</button>
       <div id="empty">
         <div class="empty-inner">
           <div class="empty-head">
@@ -164,6 +170,19 @@
       <button id="keysBtn" class="hdr-btn" title="Keyboard shortcuts (Ctrl+Shift+/)">
         <svg class="ico" aria-hidden="true"><use href="#i-keyboard"/></svg>
       </button>
+      <button type="button" id="fullScr" class="hdr-btn" title="Full screen (Ctrl+Shift+F)">
+        <svg class="ico ico-fs-enter" aria-hidden="true"><use href="#i-maximize-2"/></svg>
+        <svg class="ico ico-fs-leave" aria-hidden="true"><use href="#i-minimize-2"/></svg>
+      </button>
+      <div id="fontSize" title="Terminal font size">
+        <button type="button" id="fontMinus" title="Smaller terminal text">
+          <svg class="ico" aria-hidden="true"><use href="#i-minus"/></svg>
+        </button>
+        <span id="fontSizeVal">13</span>
+        <button type="button" id="fontPlus" title="Larger terminal text">
+          <svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg>
+        </button>
+      </div>
     </div>
   </main>
 </div>
@@ -191,6 +210,25 @@
       <button type="submit" class="primary">Start</button>
     </div>
   </form>
+</div>
+
+<div id="file" hidden>
+  <div class="sheet art-sheet">
+    <div class="art-head">
+      <h2 id="fileTitle">File</h2>
+      <button type="button" id="fileClose" class="hdr-btn" title="Close"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <p class="note" id="fileNote" hidden></p>
+    <pre id="fileText" hidden></pre>
+    <img id="fileImg" alt="" hidden>
+    <div class="file-foot">
+      <code id="filePath"></code>
+      <span class="art-acts">
+        <button type="button" id="fileSend">Send path</button>
+        <button type="button" id="fileCopy">Copy path</button>
+      </span>
+    </div>
+  </div>
 </div>
 
 <div id="art" hidden>
@@ -256,7 +294,13 @@
       <p class="note">A preset carries its own light or dark base. This only
          decides which built-in is used when no preset is chosen.</p>
 
-      <h3>Font size</h3>
+      <h3>Font</h3>
+      <label class="field">Terminal typeface
+        <select id="setFontFamily"></select>
+      </label>
+      <p class="note">Monospace only. Each choice is a stack that exists on
+         Windows, Mac and Linux, so a font that is not installed still lines
+         up instead of going proportional.</p>
       <label class="field row">Sidebar
         <input type="range" id="setFontPanel" min="9" max="28" step="1">
         <output id="outFontPanel"></output>
@@ -265,6 +309,8 @@
         <input type="range" id="setFontTerminal" min="9" max="28" step="1">
         <output id="outFontTerminal"></output>
       </label>
+      <p class="note">Terminal size is also the <kbd>+</kbd>/<kbd>−</kbd>
+         stepper in the bottom-right of the panel.</p>
 
       <h3>Sidebar</h3>
       <label class="check"><input type="checkbox" id="setHistorySidebar">
@@ -492,6 +538,12 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
       <p class="note">Folder-organised, CLI-agnostic coding sessions in a
          browser, persisted in tmux. Stdlib only — no framework, no
          node_modules, no build step.</p>
+      <p class="note" id="installHint">Install as an app for a window of its
+         own — no browser tabs, no URL bar. The panel is the same; the chrome
+         is not.</p>
+      <button type="button" id="installApp" class="star-btn" hidden>
+        Install as an app
+      </button>
 
       <h3>Something missing, something broken</h3>
       <p class="note">Both go to the same place, and the version and browser

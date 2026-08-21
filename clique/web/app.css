@@ -65,6 +65,27 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
+  isolation: isolate;
+}
+
+/* A faint large mark at the foot of the list. Decorative — the header already
+   names the app. Behind the tree so names stay readable, and pointer-events
+   none so it never takes a click. The list scrolls over it. */
+.sidebar-mark {
+  position: absolute;
+  left: 50%;
+  bottom: 2.4em;
+  width: 70%;
+  max-width: 11.25rem;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--fg);
+  opacity: .07;
+  -webkit-mask: url("brand/mark-mono.svg") center / contain no-repeat;
+          mask: url("brand/mark-mono.svg") center / contain no-repeat;
 }
 
 #sidebar header {
@@ -73,6 +94,7 @@ body {
   gap: 2px;
   padding: 8px 6px 8px 12px;
   border-bottom: 1px solid var(--line);
+  background: var(--panel);
 }
 
 .brand {
@@ -88,7 +110,7 @@ body {
   padding: 6px 8px; border-radius: 3px; font-size: 13px; line-height: 1;
 }
 
-.search { padding: 8px; }
+.search { padding: 8px; background: var(--panel); }
 .search input {
   width: 100%; padding: 5px 8px; font: inherit;
   background: var(--field); color: var(--fg);
@@ -154,8 +176,9 @@ body {
 }
 .session .path { display: block; font-size: 11px; color: var(--dim);
                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session .git-dirty { color: var(--warn); }
 .session .age { font-size: 10px; color: var(--dim); flex: 0 0 auto; }
-.session.dead .name { color: var(--dead); text-decoration: line-through; }
+.session.dead .name { color: var(--dead); }
 
 .session .name input {
   width: 100%; font: inherit; color: var(--fg);
@@ -164,7 +187,7 @@ body {
 }
 
 #sidebar footer { padding: 6px 12px; font-size: 10px; color: var(--dim);
-                  border-top: 1px solid var(--line); }
+                  border-top: 1px solid var(--line); background: var(--panel); }
 
 /* Collapsed rail: a dot per live session, so hiding the list never costs
    awareness of what is running. */
@@ -287,6 +310,19 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 }
 #statusbar #keysBtn { margin-left: auto; height: 100%; padding: 0 8px; }
 
+/* Terminal size, live. Rightmost on the bar so it is where a window's
+   own size control would sit. The number is the setting, not a guess. */
+#fontSize {
+  display: flex; align-items: center; flex: 0 0 auto; height: 100%;
+  color: var(--dim); font-variant-numeric: tabular-nums; font-size: 11px;
+}
+#fontSize button {
+  background: none; border: 0; color: var(--dim); cursor: pointer;
+  padding: 0 7px; height: 100%; line-height: 1;
+}
+#fontSize button:disabled { opacity: .35; cursor: default; }
+#fontSizeVal { min-width: 1.7em; text-align: center; color: var(--fg); }
+
 #stats { display: flex; align-items: center; gap: 12px;
          font-size: 11px; color: var(--dim);
          flex: 0 1 auto; min-width: 0; overflow: hidden;
@@ -317,6 +353,10 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 #termwrap { flex: 1; position: relative; min-height: 0; background: var(--bg); }
 #terminal { position: absolute; inset: 0; padding: 6px 8px; }
 #terminal.hidden { visibility: hidden; }
+/* Inactive panes stay painted (opacity, not visibility) so Chrome cannot
+   throw the canvas away. No transition: tab switching does not animate. */
+#terminal > [data-session] { opacity: 0; z-index: 0; }
+#terminal > [data-session].is-front { opacity: 1; z-index: 1; }
 
 /* The pane with nothing in it. Not a placeholder — the two shortest routes
    back into work, plus what the box is doing while you decide. */
@@ -594,14 +634,22 @@ button.primary { background: var(--accent); color: var(--on-accent); }
   border: 1.5px solid transparent; pointer-events: none;
 }
 
-/* Working: the arc turns. Waiting: the arc stops and the ring pulses.
-   Those are the only two motions, and they never share a state. */
+/* Three motions, three facts, never shared:
+   working — the arc turns
+   unseen  — it finished, you have not opened it: a slow pulse
+   asking  — work is paused on a question: two knocks, then a rest */
 .cli-status[data-work="working"]::after {
   border-top-color: var(--accent); border-right-color: var(--accent);
   animation: cli-spin 1s linear infinite;
 }
+.cli-status[data-work="unseen"]::after,
 .cli-status[data-work="waiting"]::after {
-  border-color: var(--warn); animation: cli-pulse 1.8s ease-in-out infinite;
+  border-color: var(--accent); animation: cli-pulse 1.8s ease-in-out infinite;
+}
+.cli-status[data-work="asking"]::after {
+  border-color: var(--warn);
+  transform-origin: center;
+  animation: cli-ask 1.6s var(--ease-out) infinite;
 }
 .cli-status[data-work="error"]::after {
   border-color: var(--critical); animation: cli-pulse 1.4s ease-in-out infinite;
@@ -610,11 +658,20 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 
 @keyframes cli-spin { to { transform: rotate(360deg); } }
 @keyframes cli-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes cli-ask {
+  0%, 70%, 100% { transform: scale(1); opacity: 1; }
+  10% { transform: scale(1.16); opacity: 1; }
+  22% { transform: scale(1); opacity: 1; }
+  34% { transform: scale(1.16); opacity: 1; }
+  46% { transform: scale(1); opacity: 1; }
+}
 @keyframes cli-nudge { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* The fill of a dot is colour, not motion. The ring around it (when this
    dot is wrapped in .cli-status) is what spins or pulses. */
 .dot[data-work="working"] { background: var(--accent); }
+.dot[data-work="asking"]  { background: var(--warn); }
+.dot[data-work="unseen"]  { background: var(--accent); }
 .dot[data-work="waiting"] { background: var(--warn); }
 .dot[data-work="idle"]    { background: var(--dim); opacity: .5; }
 .dot[data-work="stopped"] { background: var(--dead); }
@@ -742,10 +799,13 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 }
 .tab { position: relative; }
 .session.attention .name { color: var(--warn); font-weight: 600; }
+.tab.asking .label { font-weight: 600; color: var(--warn); }
+.session.asking .name { color: var(--warn); font-weight: 600; }
 @keyframes nudge { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 
 /* Reduced motion keeps every state distinguishable — the arc still points to
-   working, the ring still points to waiting. Only the movement stops. */
+   working, the full ring to a question, the pulse colour to unseen. Only
+   the movement stops. */
 @media (prefers-reduced-motion: reduce) {
   .cli-status::after, .tab.attention::after { animation: none; }
 }
@@ -879,6 +939,15 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 #lock .ico-pause { display: none; }
 #lock.on .ico-follow { display: none; }
 #lock.on .ico-pause { display: block; }
+#fullScr .ico-fs-leave { display: none; }
+body.is-fs #fullScr .ico-fs-enter { display: none; }
+body.is-fs #fullScr .ico-fs-leave { display: block; }
+@media (display-mode: standalone), (display-mode: window-controls-overlay) {
+  /* Installed app: the OS already drew the titlebar. Don't double a browser
+     safe-area the tab used to need. */
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                  env(safe-area-inset-bottom) env(safe-area-inset-left); }
+}
 /* The directory field and its picker. The picker is sized to its own content
    rather than sharing the width, because the field is the thing being filled
    in and the list is how you fill it. */
@@ -988,6 +1057,17 @@ button > .ico:only-child { vertical-align: baseline; }
           max-width: 60%; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; }
 
+/* Same family as the paused badge: a real button, because a phone has no
+   Ctrl+C and a canvas has no native copy. Shown only while something is
+   selected, so a session that is not being copied from never grows one. */
+#copySel { position: absolute; left: 16px; bottom: 14px; z-index: 40;
+           padding: 5px 12px; border-radius: 999px; cursor: pointer;
+           background: var(--panel); color: var(--fg); font-size: 11px;
+           border: 1px solid var(--accent); box-shadow: 0 4px 14px var(--shadow); }
+@media (pointer: coarse) {
+  #copySel { padding: 11px 16px; }
+}
+
 /* The shortcut reference. One list, built from the same table the bindings are
    described by, so a binding cannot ship without appearing here. */
 #keys { position: fixed; inset: 0; background: var(--scrim); display: grid;
@@ -1088,6 +1168,32 @@ a.give-value { color: var(--accent); }
   .tab .x, .tab .gear { opacity: .7; }
   .hdr-btn { min-width: 32px; min-height: 32px; padding: 8px; }
 }
+
+/* ------------------------------------------------------------- file sheet */
+
+/* A path in the pane, glanced at. Same overlay family as images: occasional,
+   so it may move; not an editor, so it has no chrome beyond look / copy / send. */
+
+#file { position: fixed; inset: 0; background: var(--scrim); display: grid;
+        place-items: center; z-index: 80;
+        opacity: 1; transition: opacity 200ms var(--ease-out); }
+@starting-style { #file { opacity: 0; } }
+#file .sheet { opacity: 1; transform: scale(1);
+               transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out); }
+@starting-style { #file .sheet { opacity: 0; transform: scale(0.97); } }
+#fileNote { margin: 0 0 12px; font-size: 12px; color: var(--dim); line-height: 1.45; }
+#fileText {
+  max-height: 60vh; overflow: auto; margin: 0 0 12px;
+  background: var(--bg); color: var(--fg); border-radius: 6px;
+  padding: 12px; font-size: 12px; line-height: 1.45;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+#fileImg { max-width: 100%; max-height: 60vh; object-fit: contain;
+           border-radius: 6px; background: var(--bg); display: block;
+           margin: 0 auto 12px; }
+.file-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.file-foot code { flex: 1; min-width: 0; font-size: 11px; color: var(--dim);
+                  overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------- artifacts */
 
@@ -1237,6 +1343,7 @@ a.give-value { color: var(--accent); }
    finger lifted. Fine pointer + real hover only. */
 @media (hover: hover) and (pointer: fine) {
   .hdr-btn:hover { background: var(--row); color: var(--fg); }
+  #fontSize button:hover:not(:disabled) { background: var(--row); color: var(--fg); }
   .folder-head:hover { background: var(--row); }
   .folder-head .folder-edit { opacity: 0; visibility: hidden; }
   .folder-head:hover .folder-edit { opacity: .75; visibility: visible; }
@@ -1280,8 +1387,8 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #modal, #settings, #keys, #menu,
-  #modal form, #settings .sheet, #keys .sheet {
+  #modal, #settings, #keys, #menu, #file,
+  #modal form, #settings .sheet, #keys .sheet, #file .sheet {
     transition: opacity 160ms ease;
     transform: none;
   }
@@ -1290,7 +1397,7 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
     transform: translateX(-50%);
   }
   @starting-style {
-    #modal form, #settings .sheet, #keys .sheet, #menu { transform: none; }
+    #modal form, #settings .sheet, #keys .sheet, #file .sheet, #menu { transform: none; }
     #toast { transform: translateX(-50%); }
   }
 }

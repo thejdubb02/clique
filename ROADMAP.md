@@ -76,7 +76,7 @@ field reaches a phone with no app of ours and no per-service settings.
 
 **Seeing what an agent made — 0.23.0**, status as a ring around an untouched
 logo — **0.24.0**, the pane telling you which CLI you are in — **0.25.0**, and
-clickable URLs — **0.27.1**.
+clickable URLs — **0.27.1**, clickable file paths — **0.50.12**.
 
 ---
 
@@ -104,13 +104,11 @@ the notification is a taunt. The README currently admits the gap directly under
 the headline promise.
 *Front end · a week, and the least fun week here*
 
-### 3. Repo, branch and dirty state on the row `[1/5]`
+### 3. Repo, branch and dirty state on the row — **0.50.14**
 `git -C <cwd>` three times, cached per directory with a short TTL. Rated low by
 the original lists and it should not have been: the leader of this category is
 rooted in one repo and its users are openly asking for exactly this, while
 CLIque's folder tree has been multi-repo since day one and says so nowhere.
-Half implementation, half finally showing an advantage that already exists.
-*Both · hours*
 
 ### 4. Hover preview of the last few lines `[3/5]`
 On sidebar rows and tabs, and on long-press for touch. Glance without

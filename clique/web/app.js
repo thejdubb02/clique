@@ -88,16 +88,20 @@ function ago(epoch) {
  * running, which is not a trade anyone asked for. */
 /* What a session is *doing*, which is not the same as whether it is attached.
  *
- * Five states, and only four of them draw anything:
+ * Six states, and only four of them draw anything:
  *
  *   error    — it said so, or its pane matched an error pattern
- *   working  — output is arriving
- *   waiting  — it stopped and wants you: either it said so, or it went quiet
- *              with something unread
+ *   asking   — work is paused on a question. A permission prompt, a y/n,
+ *              a numbered choice. Not working: nothing moves until you answer.
+ *   working  — output is arriving. The only state that spins.
+ *   unseen   — it finished, and this tab has not been opened since
  *   idle     — alive and quiet and read. Draws nothing, because most sessions
  *              are in this state most of the time and a sidebar of twenty
  *              indicators saying "fine" is a sidebar of noise.
  *   stopped  — the process is gone
+ *
+ * Asking and unseen must not share a motion. One is blocked on you; the
+ * other is a thing that happened while you were elsewhere.
  *
  * `busy` from the server is "output within the last two seconds", polled every
  * three, so a CLI that writes in bursts flickers between busy and not. A
@@ -125,10 +129,12 @@ function workState(s) {
   // What the session said about itself beats anything derived from watching
   // it, and an error beats a question: a CLI that failed and then offered a
   // prompt is reporting the failure, which is the more useful of the two.
+  // A question beats working: a blinking permission prompt still ticks the
+  // activity clock, and that is work *paused*, not work happening.
   if (s.signal === "error") return "error";
-  if (s.signal === "waiting") return "waiting";
+  if (s.signal === "waiting") return "asking";
   if (s.busy || (busyUntil.get(s.id) || 0) > Date.now()) return "working";
-  if (attention.has(s.id)) return "waiting";
+  if (attention.has(s.id)) return "unseen";
   // Unread deliberately does *not* appear here. It already has a mark of its
   // own beside the name, and one fact drawn twice is how a row stops being
   // readable at a glance.
@@ -297,7 +303,9 @@ function statusDot(s, where) {
  * something to people who can see it is half a signal. */
 const WORK_WORDS = {
   working: "working",
-  waiting: "waiting for you",
+  asking: "needs an answer",
+  unseen: "finished — not opened yet",
+  waiting: "needs an answer",
   error: "stopped on an error",
   idle: "idle",
   stopped: "stopped",
@@ -359,6 +367,10 @@ function restoreWorkspace() {
 }
 
 function saveWorkspace(now) {
+  // Never write before we have read. The first fetch used to fail (home
+  // wifi, a slow cookie) and the startup `.then` still ran, saving an
+  // empty strip over the tabs you left at work.
+  if (!workspaceRestored) return;
   clearTimeout(workspaceTimer);
   const push = () => {
     const body = {
@@ -369,8 +381,14 @@ function saveWorkspace(now) {
     Object.assign(state.settings, body);
     // Not saveSettings(): that repaints the tree, the tabs and every open
     // terminal, and this fires on every step of a tab drag.
-    api("api/settings", { method: "PATCH", body: JSON.stringify(body) })
-      .catch(() => {});   // a lost workspace write is not worth interrupting for
+    // keepalive: a closing tab otherwise aborts the fetch, which is how
+    // going home found an empty strip even after a save was sent.
+    fetch("api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      keepalive: true,
+    }).catch(() => {});
   };
   // Debounced, because a drag is a dozen reorders; committed at once when the
   // page is going away, which is the moment it actually matters.
@@ -385,15 +403,8 @@ async function refresh() {
     $("#offline").hidden = true;
   } catch (err) {
     pollFailures++;
-    // Retry the opening fetch quickly instead of waiting out the poll: the
-    // usual cause is a connection dropped while the page was still loading
-    // the rest of itself.
-    if (pollFailures < 4) {
-      setTimeout(refresh, 250 * pollFailures);
-      return;
-    }
-    $("#offline").hidden = false;
-    return;
+    if (pollFailures >= 4) $("#offline").hidden = false;
+    return false;
   }
   // A session killed behind our back keeps its tab until the user closes it,
   // but must not keep a dead socket open.
@@ -411,6 +422,42 @@ async function refresh() {
   // First load pulls history in so the sidebar is complete without anyone
   // having to open the palette to trigger it.
   if (!resumable) loadResumable().then(renderTree);
+  return true;
+}
+
+async function bootWorkspace() {
+  /* Wait until the workspace has actually been read, then open it.
+   *
+   * `refresh().then(...)` used to run even when the first fetch failed
+   * and retried in the background. That `.then` saved whatever tabs this
+   * window had — none — and that is the empty strip waiting at home. */
+  for (let i = 0; i < 10; i++) {
+    if (await refresh()) break;
+    await new Promise((ok) => setTimeout(ok, Math.min(250 * (i + 1), 2000)));
+  }
+  if (!workspaceRestored) return;
+
+  const want = pendingWorkspace || { tabs: [], active: "" };
+  openTabs = want.tabs.filter((id) => session(id));
+  const pick = (want.active && openTabs.includes(want.active))
+    ? want.active
+    : openTabs[0];
+  if (pick) {
+    await openSession(pick);
+    setTimeout(warmOpenTabs, 500);
+  }
+
+  const asked = new URLSearchParams(location.search).get("session");
+  if (asked && session(asked)) {
+    await openSession(asked);
+    selectTab(asked);
+  }
+  if (asked) {
+    const clean = new URL(location.href);
+    clean.searchParams.delete("session");
+    history.replaceState(null, "", clean);
+  }
+  saveWorkspace(true);
 }
 
 /* Load as a colour, on a continuous ramp rather than three fixed steps.
@@ -702,6 +749,7 @@ function treeFingerprint() {
     x.id, x.name, x.folder || "", x.archived ? 1 : 0, x.alive ? 1 : 0,
     workState(x), unread(x) ? 1 : 0, attention.has(x.id) ? 1 : 0,
     x.signal || "", x.saying || "", x.cli || "", x.cwd || "",
+    x.branch || "", x.dirty || 0,
     ago(x.created), x.cli_session_id || "",
   ].join("\x1f")).join("\x1e");
   const folders = (state.folders || []).map((f) =>
@@ -751,17 +799,20 @@ function renderTree() {
   tree.innerHTML = "";
 
   const matches = (s) =>
-    !query || s.name.toLowerCase().includes(query) || s.cwd.toLowerCase().includes(query);
+    !query || s.name.toLowerCase().includes(query)
+      || s.cwd.toLowerCase().includes(query)
+      || (s.branch || "").toLowerCase().includes(query);
 
   // Running-and-open first: what you are working on should not be somewhere
   // you have to scroll to.
   const groups = [];
   const live = state.sessions.filter((s) => !s.archived);
-  /* Running is for sessions with no tab open. A pane you are looking at is
-   * already a tab across the top, and a second row for it says nothing; what
-   * needs a home is the session still working with nothing on screen, which
-   * is exactly the one you forget you started. */
-  const running = live.filter((s) => s.alive && !openTabs.includes(s.id));
+  const filed = (s) => state.folders.some((f) => f.id === s.folder);
+  /* Running is the inbox: alive, not filed, and not already a tab. A
+   * session you put in a folder stays there — even with no tab open.
+   * Pulling filed ones up here is why a new browser looked like nothing
+   * was organised: the folders were saved, the tree just hid them. */
+  const running = live.filter((s) => s.alive && !openTabs.includes(s.id) && !filed(s));
   if (running.length) {
     groups.push({ id: "__running", name: "Running", color: "#2d7d46", pinned: true,
                   collapsed: viewsCollapsed.has("__running"), sessions: running });
@@ -771,8 +822,7 @@ function renderTree() {
    * just started is the one you are looking for, and filing it is a decision
    * you make afterwards — so it has to be somewhere you can see without
    * scrolling past every folder you already have. */
-  const unfiled = live.filter(
-    (s) => !running.includes(s) && !state.folders.some((f) => f.id === s.folder));
+  const unfiled = live.filter((s) => !running.includes(s) && !filed(s));
   if (unfiled.length) {
     groups.push({ id: "__unfiled", name: "Ungrouped", color: "#8b8b8b",
                   collapsed: viewsCollapsed.has("__unfiled"), sessions: unfiled });
@@ -781,7 +831,7 @@ function renderTree() {
   for (const folder of state.folders) {
     groups.push({
       ...folder,
-      sessions: live.filter((s) => s.folder === folder.id && !running.includes(s)),
+      sessions: live.filter((s) => s.folder === folder.id),
     });
   }
 
@@ -1004,6 +1054,7 @@ function sessionRow(s) {
   row.className = "session" + (s.id === activeId ? " active" : "") +
     (s.alive ? "" : " dead") + (s.busy ? " busy" : "") +
     (unread(s) ? " unread" : "") +
+    (workState(s) === "asking" ? " asking" : "") +
     (attention.has(s.id) ? " attention" : "");
   row.draggable = true;
   row.dataset.id = s.id;
@@ -1019,17 +1070,34 @@ function sessionRow(s) {
    * layering one broke right-click on every row for a while. A line that is
    * simply there when it matters has none of those problems. */
   const wants = s.signal && s.saying;
+  const git = s.branch
+    ? escapeHtml(s.branch) + (s.dirty
+        ? ` · <span class="git-dirty">${s.dirty} changed</span>` : "")
+    : "";
+  let pathHtml;
+  let pathClass = "path";
+  if (!s.alive) {
+    pathHtml = escapeHtml("Stopped — click to start again");
+  } else if (wants) {
+    pathHtml = escapeHtml(s.saying);
+    pathClass += " saying";
+  } else if (git) {
+    pathHtml = git;
+  } else {
+    pathHtml = escapeHtml(s.cwd);
+  }
   row.innerHTML =
     statusDot(s, "sidebar") +
     sessionMarker(s, "sidebar") +
     `<span class="meta"><span class="name">${escapeHtml(s.name)}</span>` +
-    (wants
-      ? `<span class="path saying">${escapeHtml(s.saying)}</span>`
-      : `<span class="path">${escapeHtml(s.cwd)}</span>`) +
+    `<span class="${pathClass}">${pathHtml}</span>` +
     `</span>` +
     `<span class="age">${ago(s.created)}</span>`;
-  // The directory is still one hover away, rather than gone.
-  row.title = wants ? `${s.cwd}\n${s.saying}` : s.cwd;
+  // The directory is still one hover away, rather than gone — and so is the
+  // branch, when the line is showing a question instead.
+  const gitLine = s.branch
+    ? (s.dirty ? `${s.branch} · ${s.dirty} changed` : s.branch) : "";
+  row.title = [s.cwd, gitLine, wants ? s.saying : ""].filter(Boolean).join("\n");
 
   /* A draft dragged out of the prompt box and dropped on a session.
    *
@@ -1274,7 +1342,7 @@ function showMenu(ev, items) {
 function sessionMenu(ev, s) {
   const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
   showMenu(ev, [
-    ["Open", () => openSession(s.id)],
+    [s.alive ? "Open" : "Start again", () => openSession(s.id)],
     ["Rename", () => renameSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
@@ -1323,7 +1391,7 @@ function nextUp() {
     const work = workState(s);
     let kind = "";
     if (work === "error") kind = "error";
-    else if (work === "waiting") kind = "waiting";
+    else if (work === "asking" || work === "waiting") kind = "waiting";
     else if (work !== "working" && unread(s)) kind = "unread";
     if (!kind) continue;
     // Since the pane last said anything, which is when it started waiting.
@@ -1529,10 +1597,14 @@ async function adoptSessions() {
 }
 
 async function killSession(s) {
-  const question = s.alive
-    ? `Kill "${s.name}"? The CLI running in it is stopped for good.`
-    : `Delete "${s.name}"? Nothing is running in it — this removes the session from the sidebar.`;
-  if (!confirm(question)) return;
+  if (s.alive) {
+    if (!confirm(`Stop "${s.name}"? It stays in the folder. You can start it again.`)) return;
+    closeTab(s.id, true);
+    await api("api/sessions/" + s.id + "/kill", { method: "POST", body: "{}" });
+    refresh();
+    return;
+  }
+  if (!confirm(`Remove "${s.name}" from the sidebar?`)) return;
   closeTab(s.id, true);
   await api("api/sessions/" + s.id, { method: "DELETE" });
   refresh();
@@ -1570,6 +1642,7 @@ function renderTabs() {
     tab.dataset.id = id;
     tab.className = "tab" + (id === activeId ? " active" : "") +
       (s.busy ? " busy" : "") + (unread(s) ? " unread" : "") +
+      (workState(s) === "asking" ? " asking" : "") +
       (attention.has(id) ? " attention" : "");
     /* A mark nobody can name is a mark nobody trusts.
      *
@@ -1581,8 +1654,9 @@ function renderTabs() {
     const says = [];
     if (!s.alive) says.push("stopped");
     else if (s.signal === "error") says.push("stopped on an error");
-    else if (s.signal === "waiting") says.push("waiting for you");
+    else if (s.signal === "waiting") says.push("needs an answer");
     else if (workState(s) === "working") says.push("working");
+    else if (workState(s) === "unseen") says.push("finished — not opened yet");
     if (unread(s)) says.push("new output since you last looked");
     tab.title = says.length ? `${s.cwd}\n${says.join(" · ")}` : s.cwd;
     tab.innerHTML =
@@ -1696,7 +1770,8 @@ function paintOverflowButton(ids) {
   const states = rows.map((s) => workState(s));
   let work = "idle";
   if (states.includes("error")) work = "error";
-  else if (states.includes("waiting") || rows.some((s) => attention.has(s.id))) work = "waiting";
+  else if (states.includes("asking")) work = "asking";
+  else if (states.includes("unseen") || rows.some((s) => attention.has(s.id))) work = "unseen";
   else if (states.includes("working")) work = "working";
   btn.dataset.work = work;
   const ring = btn.querySelector(".cli-status");
@@ -1708,10 +1783,11 @@ function paintOverflowButton(ids) {
 function overflowRank(s) {
   const work = workState(s);
   if (work === "error") return 0;
-  if (work === "waiting" || attention.has(s.id)) return 1;
-  if (work === "working") return 2;
-  if (unread(s)) return 3;
-  return 4;
+  if (work === "asking") return 1;
+  if (work === "unseen" || attention.has(s.id)) return 2;
+  if (work === "working") return 3;
+  if (unread(s)) return 4;
+  return 5;
 }
 
 function openOverflowMenu(ev) {
@@ -1734,6 +1810,7 @@ function openOverflowMenu(ev) {
     row.type = "button";
     row.className = "tab-more-item" +
       (unread(s) ? " unread" : "") +
+      (workState(s) === "asking" ? " asking" : "") +
       (attention.has(s.id) ? " attention" : "");
     const mark = document.createElement("span");
     mark.className = "empty-mark";
@@ -1826,6 +1903,7 @@ function renderInputBar() {
 
   $("#empty").style.display = activeId ? "none" : "grid";
   if (!activeId) renderEmpty();
+  renderCopyChip();
 }
 
 /* Advance a session to its next mode and remember it.
@@ -1974,7 +2052,10 @@ function renderEmpty() {
   renderTip();
   const sessions = state.sessions || [];
   const alive = sessions.filter((x) => x.alive);
-  const wants = alive.filter((x) => workState(x) === "waiting" || workState(x) === "error");
+  const wants = alive.filter((x) => {
+    const w = workState(x);
+    return w === "asking" || w === "waiting" || w === "error";
+  });
   const working = alive.filter((x) => workState(x) === "working");
 
   const bits = [];
@@ -2048,17 +2129,24 @@ function fillEmptyList(block, rows) {
   }
 }
 
-/* Clickable URLs in the pane.
+/* Clickable URLs and paths in the pane.
  *
  * Written here rather than vendoring xterm's web-links addon: the API this
- * needs is already exposed, the whole thing is forty lines, and one more
- * vendored file is one more version to keep in step with the core for a
- * feature this size.
+ * needs is already exposed, and one more vendored file is one more version to
+ * keep in step with the core for a feature this size.
  *
- * Only http and https. A terminal prints whatever a program sends it, so the
- * text on screen is not trustworthy input — `javascript:` and `file:` are the
- * two that would matter and neither is matched or opened. */
+ * Only http and https for URLs. A terminal prints whatever a program sends
+ * it, so the text on screen is not trustworthy input — `javascript:` and
+ * `file:` are the two that would matter and neither is matched or opened.
+ *
+ * A path opens a read-only sheet, not an editor. Ctrl/Cmd+click skips the
+ * sheet and drops the path where you are already typing. */
 const LINK_RE = /\bhttps?:\/\/[^\s"'`<>]+/g;
+
+/* Paths a CLI prints: absolute, ~/ , ./ ../, or a relative path with a slash
+ * and a file extension. Bare words and host/path URLs without a scheme are
+ * not matches — those are how you click `example.com/foo` by accident. */
+const PATH_RE = /(?:^|[\s"'`=(])((?:~\/|\.{1,2}\/|\/)[^\s"'`<>]+|[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+\.[A-Za-z0-9]{1,12})/g;
 
 /* Trailing punctuation almost always belongs to the sentence, not the URL:
  * "see https://example.com/docs." and "(https://example.com)". Brackets are
@@ -2083,6 +2171,19 @@ function trimUrl(text) {
   return out;
 }
 
+function trimPath(text) {
+  let out = text;
+  const linecol = /:\d+(?::\d+)?$/;
+  if (linecol.test(out)) out = out.replace(linecol, "");
+  return trimUrl(out);
+}
+
+function pathRange(line, full, captured) {
+  const start = line.indexOf(captured, Math.max(0, full.index));
+  const at = start >= 0 ? start : full.index + (full[0].length - captured.length);
+  return { start: at + 1, end: at + captured.length };
+}
+
 function openLink(url, newWindow) {
   // Re-checked at the point of opening, not only at the point of matching.
   if (!/^https?:\/\//i.test(url)) return;
@@ -2094,7 +2195,7 @@ function openLink(url, newWindow) {
   window.open(url, "_blank", how);
 }
 
-function wireLinks(term) {
+function wireLinks(term, sessionId) {
   if (!term.registerLinkProvider) return;   // older core: links simply stay text
   term.registerLinkProvider({
     provideLinks(lineNumber, callback) {
@@ -2119,9 +2220,112 @@ function wireLinks(term) {
           },
         });
       }
+      PATH_RE.lastIndex = 0;
+      while ((match = PATH_RE.exec(text)) !== null) {
+        const raw = trimPath(match[1]);
+        if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
+        const at = pathRange(text, match, raw);
+        // A URL's path is not a file path. The character before an http(s)
+        // match is `:`; skip anything sitting on that.
+        if (at.start > 1 && text[at.start - 2] === ":") continue;
+        links.push({
+          range: { start: { x: at.start, y: lineNumber },
+                   end: { x: at.end, y: lineNumber } },
+          text: raw,
+          decorations: { underline: true, pointerCursor: true },
+          activate(event, path) {
+            if (event.ctrlKey || event.metaKey) {
+              toast("Path is in " + deliverPath(path));
+              return;
+            }
+            openFileSheet(sessionId, path);
+          },
+        });
+      }
       callback(links.length ? links : undefined);
     },
   });
+}
+
+/* A read-only glance at a path the pane printed. Copy it, drop it in the
+ * prompt, or look at the text / image. Not an editor — that is a tool the
+ * person already has, and opening it is what Send path is for. */
+let fileAsked = "";
+let fileSession = "";
+
+function filePathNow() {
+  return ($("#filePath").textContent || fileAsked || "").trim();
+}
+
+async function openFileSheet(sessionId, path) {
+  const asked = String(path || "").trim();
+  if (!sessionId || !asked) return;
+  fileSession = sessionId;
+  fileAsked = asked;
+  $("#fileTitle").textContent = asked.split("/").pop() || asked;
+  $("#filePath").textContent = asked;
+  $("#fileText").hidden = true;
+  $("#fileText").textContent = "";
+  $("#fileImg").hidden = true;
+  $("#fileImg").removeAttribute("src");
+  $("#fileNote").hidden = false;
+  $("#fileNote").textContent = "Looking…";
+  $("#file").hidden = false;
+  try {
+    const info = await api(
+      "api/sessions/" + encodeURIComponent(sessionId)
+      + "/file?path=" + encodeURIComponent(asked));
+    if (fileAsked !== asked || fileSession !== sessionId) return;
+    showFile(info);
+  } catch (err) {
+    if (fileAsked !== asked) return;
+    $("#fileNote").hidden = false;
+    $("#fileNote").textContent = "Could not read it.";
+  }
+}
+
+function showFile(info) {
+  $("#fileTitle").textContent = info.name || info.asked || "File";
+  $("#filePath").textContent = info.path || info.asked || fileAsked;
+  const note = $("#fileNote");
+  const text = $("#fileText");
+  const img = $("#fileImg");
+  text.hidden = true;
+  text.textContent = "";
+  img.hidden = true;
+  img.removeAttribute("src");
+  note.hidden = true;
+
+  if (info.kind === "text") {
+    text.hidden = false;
+    text.textContent = info.text || "";
+    if (info.truncated) {
+      note.hidden = false;
+      note.textContent = "First 256 KB shown. Copy the path to open the rest.";
+    }
+  } else if (info.kind === "image") {
+    img.hidden = false;
+    img.alt = info.name || "";
+    img.src = "api/sessions/" + encodeURIComponent(fileSession)
+      + "/file?path=" + encodeURIComponent(info.asked || fileAsked) + "&raw=1";
+  } else if (info.kind === "dir") {
+    note.hidden = false;
+    note.textContent = "That is a directory. Send the path if you want to work from it.";
+  } else if (info.kind === "binary") {
+    note.hidden = false;
+    note.textContent = "Not text — copy or send the path to open it in something that can.";
+  } else {
+    note.hidden = false;
+    note.textContent = "Nothing at that path from this session’s directory.";
+  }
+}
+
+function closeFileSheet() {
+  $("#file").hidden = true;
+  $("#fileImg").removeAttribute("src");
+  $("#fileText").textContent = "";
+  fileAsked = "";
+  fileSession = "";
 }
 
 /* Artifacts — the other direction of paste.
@@ -2591,6 +2795,8 @@ const SHORTCUTS = [
     ["Alt + 1…9", "Jump to a tab by its number"],
     ["Ctrl/Cmd + B", "Show or hide the sidebar"],
     ["Ctrl/Cmd + Shift + /", "This list"],
+    ["Ctrl/Cmd + Shift + F", "Full screen — the pane, not the browser"],
+    ["F11", "Full screen, if this browser will give it up"],
   ]],
   ["Inside the palette", [
     ["@", "Sessions"],
@@ -2604,7 +2810,10 @@ const SHORTCUTS = [
   ]],
   ["Working in a session", [
     ["Click a link", "Opens it in a new tab. Ctrl/Cmd + click opens a new window"],
-    ["Ctrl/Cmd + V", "With an image on the clipboard: saves it into the session’s folder and drops the path where you are typing"],
+    ["Click a path", "Looks at the file. Ctrl/Cmd + click drops the path where you are typing"],
+    ["Ctrl/Cmd + C", "Copy the selected text. With nothing selected, interrupts as usual"],
+    ["Ctrl/Cmd + Shift + C", "Copy the selection, or everything on the screen if nothing is selected"],
+    ["Ctrl/Cmd + V", "Paste. An image is saved into the session’s folder and the path is dropped where you are typing"],
     ["Tab", "Expand a snippet — in the pane or the prompt box"],
     ["Shift + Tab", "Cycle the autonomy mode. The key is whatever that CLI declares, so it differs between them"],
     ["Enter", "Send what is in the prompt box"],
@@ -2729,6 +2938,67 @@ function showDeparture(id) {
   } catch (err) { /* as above: a missing line is not worth an error */ }
 }
 
+function syncPanes() {
+  /* Which pane is showing is decided from *current* activeId, never from
+   * whoever started attaching. A finishing background attach must not
+   * uncover itself if you have already clicked away.
+   *
+   * Opacity, not visibility. Chrome throws away the canvas of a
+   * visibility:hidden terminal, and showing it again used to need a dummy
+   * resize that also threw away a live selection. An invisible pane stays
+   * painted; switching tabs is just which one is in front. */
+  for (const [tid, entry] of terms) {
+    const on = tid === activeId;
+    entry.el.classList.toggle("is-front", on);
+    entry.el.style.pointerEvents = on ? "auto" : "none";
+  }
+}
+
+function layoutPane(entry) {
+  /* Boxed CLIs wrap their own chrome when the grid gets narrower — that is
+   * the stacked Gemini prompt. Zooming the picture to fit keeps the grid
+   * (and the conversation) and still puts the whole pane on screen.
+   * A phone is too small to zoom; that still resizes for real. */
+  if (!entry || !entry.term || !entry.fit) return;
+  const boxed = sessionOwnsInput(entry.id);
+  const cell = paneCellPx(entry.term);
+  const scale = paneZoomScale(
+    entry.el.clientWidth, entry.el.clientHeight,
+    entry.term.cols, entry.term.rows, cell.w, cell.h);
+  if (paneShouldZoom(boxed, scale)) {
+    applyPaneZoom(entry.term, scale);
+    return;
+  }
+  applyPaneZoom(entry.term, 1);
+  try { entry.fit.fit(); } catch (err) { /* not laid out yet */ }
+}
+
+function paintPane(entry) {
+  if (!entry || !entry.term) return;
+  // Fitting would throw away a live selection, which is exactly when
+  // someone is about to hit Ctrl+C.
+  if (entry.term.hasSelection && entry.term.hasSelection()) {
+    try { entry.term.refresh(0, entry.term.rows - 1); } catch (err) { /* frozen */ }
+    return;
+  }
+  layoutPane(entry);
+  try { entry.term.refresh(0, entry.term.rows - 1); } catch (err) { /* same */ }
+}
+
+function showActivePane() {
+  syncPanes();
+  const entry = terms.get(activeId);
+  if (!entry) { renderCopyChip(); return; }
+  paintPane(entry);
+  entry.term.focus();
+  renderCopyChip();
+  requestAnimationFrame(() => {
+    if (terms.get(activeId) !== entry) return;
+    paintPane(entry);
+    if (!document.hidden) reclaimSize(true);
+  });
+}
+
 function selectTab(id) {
   if (activeId && activeId !== id) markDeparture(activeId);
   if (draftFor && draftFor !== id) saveDraft(true);   // commit before reusing the box
@@ -2744,27 +3014,36 @@ function selectTab(id) {
   loadDraft(id);
   showDeparture(id);
   markSeen(id);
-  for (const [tid, entry] of terms) {
-    const on = tid === id;
-    entry.el.style.visibility = on ? "visible" : "hidden";
-    entry.el.style.pointerEvents = on ? "auto" : "none";
-    entry.el.style.zIndex = on ? "1" : "0";
-  }
-  const entry = terms.get(id);
-  if (entry) {
-    try { entry.fit.fit(); } catch (err) { /* not laid out yet */ }
-    try { entry.term.refresh(0, entry.term.rows - 1); } catch (err) { /* same */ }
-    entry.term.focus();
-  }
+  showActivePane();
   renderTabs();
   renderTree();
   saveWorkspace();
 }
 
 async function openSession(id) {
+  /* Paint the tab you clicked *now*, then hook the socket if it is not
+   * already there. Waiting on attach first left the previous pane on
+   * screen — a click on a tab that had not warmed yet showed someone
+   * else's window until the PTY landed. And if you clicked away while
+   * that wait was in flight, the finishing attach stole the view back. */
+  const row = session(id);
+  if (row && !row.alive) {
+    try {
+      await api("api/sessions/" + encodeURIComponent(id) + "/start", {
+        method: "POST", body: "{}",
+      });
+      await refresh();
+    } catch (err) {
+      toast(String(err.message || err), true);
+      return;
+    }
+  }
   if (!openTabs.includes(id)) openTabs.push(id);
-  if (!terms.has(id)) await attach(id);
   selectTab(id);
+  if (!terms.has(id)) {
+    await attach(id);
+    showActivePane();
+  }
 }
 
 /* Warm the other open tabs after the one in front is up.
@@ -2877,8 +3156,10 @@ function wsUrl(id, cols, rows) {
   const url = new URL("ws", document.baseURI);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.search = `?id=${encodeURIComponent(id)}&cols=${cols}&rows=${rows}`;
-  // A tab that is not in front must not claim the shared window's size.
-  if (id !== activeId) url.searchParams.set("passive", "1");
+  // A tab that is not in front — or one sitting in a background browser
+  // tab — must not claim the shared window's size. Reconnect-while-hidden
+  // used to steal it from the window you were actually looking at.
+  if (id !== activeId || document.hidden) url.searchParams.set("passive", "1");
   return url.toString();
 }
 
@@ -2903,13 +3184,20 @@ async function attach(id) {
 
 async function attachNow(id) {
   const size = attachSize(id);
-  const front = id === activeId;
+  const box = $("#terminal");
+  // A second attach of the same session (reconnect racing a warmup) used
+  // to leave an empty host sitting on top of the real pane.
+  for (const old of box.querySelectorAll(`[data-session="${id}"]`)) old.remove();
   const host = document.createElement("div");
+  /* Always born hidden. Visibility is decided from live activeId once
+   * the terminal is in `terms` — a host that guessed "I am in front"
+   * at construction time would flash the wrong pane if you had clicked
+   * away, and a host that guessed "I am not" would stay blank if you
+   * had clicked *to* it while it was still attaching. */
+  host.dataset.session = id;
   host.style.cssText = "position:absolute;inset:0;padding:6px 8px;" +
-    (front
-      ? "visibility:visible;pointer-events:auto;z-index:1"
-      : "visibility:hidden;pointer-events:none;z-index:0");
-  $("#terminal").appendChild(host);
+    "pointer-events:none";
+  box.appendChild(host);
 
   // Built with the theme already on, not with the built-in dark and a repaint
   // on the next poll: under a light theme that was a black pane flashing up
@@ -2918,11 +3206,15 @@ async function attachNow(id) {
     cols: size.cols,
     rows: size.rows,
     fontSize: state.settings.font_terminal || 13,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+    fontFamily: termFontStack(),
     theme: termTheme(currentTheme()),
     scrollback: 20000,
     cursorBlink: true,
     allowProposedApi: true,
+    rightClickSelectsWord: true,
+    // Drag-select has to win on a Mac too. xterm's default only honours
+    // Option, and only when this is on — Shift does nothing there.
+    macOptionClickForcesSelection: true,
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
@@ -2975,11 +3267,8 @@ async function attachNow(id) {
 
   // A hidden tab must not measure the pane and then claim that size. The
   // constructor already matched the shared window, which is what history
-  // will arrive at. Fitting waits until the tab is in front.
-  if (front) {
-    try { fit.fit(); } catch (err) { /* not visible yet */ }
-  }
-  wireLinks(term);
+  // will arrive at. Fitting waits until syncPanes sees this tab in front.
+  wireLinks(term, id);
 
   /* The pane owns the keyboard — deliberately, and that is why tabs are
    * Alt+1..9 rather than plain digits. The palette is the single exception,
@@ -2989,6 +3278,11 @@ async function attachNow(id) {
    * in a terminal claims it. */
   term.attachCustomKeyEventHandler((ev) => {
     if (ev.type !== "keydown") return true;
+    if (ev.key === "F11") {
+      ev.preventDefault();
+      toggleFullscreen();
+      return false;
+    }
 
     /* Shift+Enter is a newline, not a submit.
      *
@@ -3003,9 +3297,7 @@ async function attachNow(id) {
      * line. A CLI that does not understand it ignores it, which is the same
      * outcome as today. */
     if (ev.key === "Enter" && ev.shiftKey && !ev.ctrlKey && !ev.altKey) {
-      if (entry.ws && entry.ws.readyState === 1) {
-        entry.ws.send(new TextEncoder().encode(NEWLINE_SEQ));
-      }
+      paneSend(entry, NEWLINE_SEQ);
       return false;
     }
 
@@ -3015,6 +3307,11 @@ async function attachNow(id) {
     // Ctrl+Shift+P is. Acting here as well would toggle it twice.
     if (ev.shiftKey && (key === "l" || key === "/")) return false;
     if (ev.shiftKey && key === "p") return false;
+    if (ev.shiftKey && key === "f") {
+      ev.preventDefault();
+      toggleFullscreen();
+      return false;
+    }
     if (!ev.shiftKey && key === "k") return !paletteHotkeyOn();
 
     /* Ctrl+V is paste. In a browser it could not be anything else.
@@ -3033,29 +3330,30 @@ async function attachNow(id) {
     if (!ev.shiftKey && key === "v") return false;
 
     /* Ctrl+C copies when something is selected, and interrupts when nothing
-     * is.
-     *
-     * In a terminal Ctrl+C has always been SIGINT, and that is still what it
-     * does with no selection — a CLI you cannot stop is worse than one you
-     * cannot copy from. But every terminal people have used for a decade
-     * copies instead when there is a selection, because having deliberately
-     * selected a line, "interrupt" is not what anyone meant. Ctrl+Shift+C
-     * copies unconditionally, and nobody discovers that on their own.
+     * is. preventDefault is load-bearing: returning false only stops xterm
+     * sending SIGINT, and the browser then "copies" from the hidden
+     * textarea — which is empty — and overwrites what we just wrote.
+     * Ctrl+Shift+C always copies: the selection, or the visible screen.
      */
-    if (!ev.shiftKey && key === "c" && term.hasSelection()) {
-      const picked = term.getSelection();
-      if (picked) {
-        copyText(picked).then(() => toast("Copied " + plural(picked)));
+    if (key === "c" && (ev.shiftKey || term.hasSelection())) {
+      const took = copyPaneSelection() || (ev.shiftKey && copyPaneVisible());
+      if (took || ev.shiftKey) {
+        ev.preventDefault();
+        ev.stopPropagation();
         return false;
       }
     }
 
     return true;
   });
+  term.onSelectionChange(() => {
+    if (id === activeId) renderCopyChip();
+  });
+  wirePaneClipboard(term, host, id);
 
-  const entry = { term, fit, el: host, ws: null, closing: false, typed: "",
+  const entry = { id, term, fit, el: host, ws: null, closing: false, typed: "",
                   follow: true, behind: 0, pinned: 0, baseline: 0, attempt: 0,
-                  note: null };
+                  note: null, kicking: false, outbox: [] };
   terms.set(id, entry);
   if (!openTabs.includes(id)) {
     entry.closing = true;
@@ -3064,6 +3362,11 @@ async function attachNow(id) {
     terms.delete(id);
     return;
   }
+  // The tab you clicked is already active; uncover this pane now rather
+  // than waiting for the socket. A warmup for a background tab stays hidden
+  // and must not refit the pane you are looking at.
+  if (id === activeId) showActivePane();
+  else syncPanes();
 
   /* Scrolling up detaches the viewport; arriving back at the bottom
    * re-attaches it. Our own corrections set `pinning`, so they are never
@@ -3089,7 +3392,12 @@ async function attachNow(id) {
       writeOut(entry, id,
         typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data));
     };
-    ws.onopen = () => { entry.attempt = 0; paneNote(entry, ""); };
+    ws.onopen = () => {
+      entry.attempt = 0;
+      paneNote(entry, "");
+      paneFlushOut(entry);
+      if (id === activeId) wakePane();
+    };
     ws.onclose = () => {
       if (entry.closing) return;
       /* A dropped tailnet connection should heal itself; a killed session
@@ -3119,11 +3427,7 @@ async function attachNow(id) {
   };
   connect();
 
-  const send = (text) => {
-    if (entry.ws && entry.ws.readyState === 1) {
-      entry.ws.send(new TextEncoder().encode(text));
-    }
-  };
+  const send = (text) => paneSend(entry, text);
 
   term.onData((data) => {
     /* Snippets work in the CLI's own input field too, because CLIque owns
@@ -3159,8 +3463,10 @@ async function attachNow(id) {
     send(data);
   });
   term.onResize(({ cols, rows }) => {
+    if (entry.kicking) return;     // paintPane's one-column nudge is not a resize
     if (id !== activeId) return;   // a hidden tab must not resize the window
     if (document.hidden || !document.hasFocus()) return;
+    if (!claimable(cols, rows)) return;
     if (entry.ws && entry.ws.readyState === 1) {
       entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
     }
@@ -3725,6 +4031,60 @@ function derived(theme) {
   };
 }
 
+/* Monospace stacks that exist on Windows, Mac and Linux.
+ *
+ * Each id is a chain, not a single face: the first font that is actually
+ * installed wins, and `monospace` is always last so a missing font can
+ * never fall through to a proportional one and ruin the grid. Ligatures
+ * stay off — `fi` as one glyph steals a column. */
+const FONT_FAMILIES = [
+  { id: "system",   label: "System",
+    stack: 'ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace' },
+  { id: "menlo",    label: "Menlo / SF Mono",
+    stack: 'Menlo, "SF Mono", "Cascadia Mono", Consolas, "Ubuntu Mono", "DejaVu Sans Mono", monospace' },
+  { id: "consolas", label: "Consolas / Cascadia",
+    stack: '"Cascadia Mono", Consolas, "Ubuntu Mono", Menlo, "DejaVu Sans Mono", monospace' },
+  { id: "ubuntu",   label: "Ubuntu / DejaVu",
+    stack: '"Ubuntu Mono", "DejaVu Sans Mono", "Liberation Mono", Consolas, Menlo, monospace' },
+  { id: "courier",  label: "Courier",
+    stack: '"Courier New", Courier, monospace' },
+];
+const FONT_MIN = 9;
+const FONT_MAX = 28;
+
+function termFontStack() {
+  const id = (state.settings && state.settings.font_family) || "system";
+  const row = FONT_FAMILIES.find((item) => item.id === id);
+  return (row || FONT_FAMILIES[0]).stack;
+}
+
+function paintFontChrome() {
+  const size = Number((state.settings || {}).font_terminal) || 13;
+  const val = $("#fontSizeVal");
+  if (val) val.textContent = String(size);
+  const minus = $("#fontMinus");
+  const plus = $("#fontPlus");
+  if (minus) minus.disabled = size <= FONT_MIN;
+  if (plus) plus.disabled = size >= FONT_MAX;
+  const slider = $("#setFontTerminal");
+  const out = $("#outFontTerminal");
+  if (slider && document.activeElement !== slider) {
+    slider.value = size;
+    if (out) out.textContent = size + "px";
+  }
+  const pick = $("#setFontFamily");
+  if (pick && document.activeElement !== pick) {
+    pick.value = (state.settings && state.settings.font_family) || "system";
+  }
+}
+
+function bumpTermFont(delta) {
+  const now = Number(state.settings.font_terminal) || 13;
+  const size = Math.min(FONT_MAX, Math.max(FONT_MIN, now + delta));
+  if (size === now) return;
+  saveSettings({ font_terminal: size });
+}
+
 function applySettings() {
   const s = state.settings;
   // Repainted from here as well as from selectTab, so toggling the setting or
@@ -3744,6 +4104,7 @@ function applySettings() {
   // theme still gets dark scrollbars.
   root.style.colorScheme = theme.base || "dark";
   root.style.setProperty("--font-panel", (s.font_panel || 13) + "px");
+  paintFontChrome();
 
   /* Applied when it changes, not on every poll.
    *
@@ -3751,11 +4112,13 @@ function applySettings() {
    * xterm rebuild its colour service and repaint the whole grid — so a panel
    * left open was repainting every terminal it had, twenty times a minute, to
    * arrive at exactly the colours already on screen. */
-  const stamp = (s.theme || "") + "|" + (s.appearance || "") + "|" + (s.font_terminal || 13);
+  const stamp = (s.theme || "") + "|" + (s.appearance || "") + "|" +
+    (s.font_terminal || 13) + "|" + (s.font_family || "system");
   for (const entry of terms.values()) {
     if (entry.painted === stamp) continue;
     entry.painted = stamp;
     entry.term.options.fontSize = s.font_terminal || 13;
+    entry.term.options.fontFamily = termFontStack();
     entry.term.options.theme = termTheme(theme);
     try { entry.fit.fit(); } catch (err) { /* not visible yet */ }
   }
@@ -3817,6 +4180,10 @@ function noticeFinished(sessions) {
     // Finished. Only worth saying so if he was not already watching it.
     const watching = session.id === activeId && document.hasFocus();
     if (watching) continue;
+    // A question is work paused, not work finished. The asking ring
+    // already has this; stuffing it into "finished, not opened" would
+    // pulse and knock at once for the same fact.
+    if (session.signal === "waiting" || session.signal === "error") continue;
     if (s.notify_flash !== false) attention.add(session.id);
     if (s.notify_sound) chime();
   }
@@ -3854,6 +4221,17 @@ function openSettings() {
   }
   $("#setAppearance").value = s.appearance || "dark";
   $("#setInputMode").value = s.input_mode || "auto";
+
+  const family = $("#setFontFamily");
+  if (!family.options.length) {
+    for (const item of FONT_FAMILIES) {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.label;
+      family.appendChild(option);
+    }
+  }
+  family.value = s.font_family || "system";
 
   for (const [slider, out, value] of [
     ["#setFontPanel", "#outFontPanel", s.font_panel || 13],
@@ -4071,17 +4449,18 @@ function wire() {
   };
 
   $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });
+  $("#setFontFamily").onchange = (ev) => saveSettings({ font_family: ev.target.value });
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
   $("#setPalette").onchange = (ev) => saveSettings({ palette_hotkey: ev.target.checked });
   $("#setHistorySidebar").onchange = (ev) => {
     saveSettings({ history_in_sidebar: ev.target.checked }).then(renderTree);
+  };
   $("#setHistoryDays").oninput = (ev) => {
     $("#outHistoryDays").textContent = ev.target.value;
   };
   $("#setHistoryDays").onchange = (ev) =>
     saveSettings({ history_days: Number(ev.target.value) }).then(renderTree);
-  };
   $("#setStatusOnIcon").onchange = (ev) => saveSettings({ status_on_icon: ev.target.checked });
   $("#setTabsMarkers").onchange = (ev) => saveSettings({ markers_in_tabs: ev.target.checked });
   $("#setSidebar").onchange = (ev) => saveSettings({ markers_in_sidebar: ev.target.checked });
@@ -4163,6 +4542,8 @@ function wire() {
     renderSnippetRows();
   };
 
+  $("#fontMinus").onclick = () => bumpTermFont(-1);
+  $("#fontPlus").onclick = () => bumpTermFont(1);
   $("#stats").onclick = showHistory;
   $("#cancel").onclick = () => ($("#modal").hidden = true);
   $("#collapse").onclick = () => setSidebar(false);
@@ -4238,6 +4619,11 @@ function wire() {
       saveWorkspace(true);
     }
   });
+  // Closing the window is not always a visibilitychange. pagehide is.
+  addEventListener("pagehide", () => {
+    saveDraft(true);
+    saveWorkspace(true);
+  });
 
   $("#palQ").oninput = renderPalette;
   $("#palQ").onkeydown = (ev) => {
@@ -4262,16 +4648,50 @@ function wire() {
 
   $("#lock").onclick = toggleFollow;
   $("#keysBtn").onclick = showKeys;
+  $("#fullScr").onclick = toggleFullscreen;
+  $("#installApp").onclick = installApp;
+  document.addEventListener("fullscreenchange", syncFullscreen);
+  document.addEventListener("webkitfullscreenchange", syncFullscreen);
+  addEventListener("beforeinstallprompt", (ev) => {
+    ev.preventDefault();
+    installPrompt = ev;
+    paintInstall();
+  });
+  addEventListener("appinstalled", () => {
+    installPrompt = null;
+    paintInstall();
+    toast("Installed — open it from your apps");
+  });
+  paintInstall();
   $("#keysClose").onclick = () => ($("#keys").hidden = true);
   $("#keys").onclick = (ev) => {
     if (ev.target === $("#keys")) $("#keys").hidden = true;   // the backdrop
   };
   $("#follow").onclick = () => setFollow(activeId, true);
+  $("#copySel").onclick = () => copyPaneSelection();
+  $("#terminal").addEventListener("contextmenu", (ev) => {
+    // A canvas has no native copy. Right-click with a selection copies;
+    // without one, leave the event so a browser menu can still appear.
+    if (copyPaneSelection()) ev.preventDefault();
+  });
   $("#artBtn").onclick = openArtifacts;
   $("#artClose").onclick = closeArtifacts;
   $("#artBack").onclick = showArtifactGrid;
   $("#art").onclick = (ev) => {
     if (ev.target === $("#art")) closeArtifacts();          // the backdrop
+  };
+  $("#fileClose").onclick = closeFileSheet;
+  $("#file").onclick = (ev) => {
+    if (ev.target === $("#file")) closeFileSheet();
+  };
+  $("#fileSend").onclick = () => {
+    const path = filePathNow();
+    closeFileSheet();
+    if (path) toast("Path is in " + deliverPath(path));
+  };
+  $("#fileCopy").onclick = () => {
+    const path = filePathNow();
+    if (path) copyText(path).then(() => toast("Path copied"));
   };
 
   // Capture phase: xterm handles paste on its own textarea, so this has to see
@@ -4308,6 +4728,20 @@ function wire() {
   // (the colour picker replaces the buttons that opened it).
   $("#menu").addEventListener("click", (ev) => ev.stopPropagation());
 
+  // Capture: xterm's handler returning false does not preventDefault, so
+  // the browser then "copies" from the empty helper textarea and wins the
+  // race against our clipboard write. This has to see Ctrl+C first.
+  document.addEventListener("keydown", (ev) => {
+    const key = ev.key.toLowerCase();
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+    if (key !== "c") return;
+    if (typingInAField(ev.target)) return;
+    if (copyPaneSelection() || (ev.shiftKey && copyPaneVisible())) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  }, true);
+
   document.onkeydown = (ev) => {
     const key = ev.key.toLowerCase();
     // Ctrl+Shift+P is always live; Ctrl+K can be handed back to the pane in
@@ -4332,6 +4766,16 @@ function wire() {
       toggleFollow();
       return;
     }
+    if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && key === "f") {
+      ev.preventDefault();
+      toggleFullscreen();
+      return;
+    }
+    if (ev.key === "F11") {
+      ev.preventDefault();
+      toggleFullscreen();
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.key === "b") {
       ev.preventDefault();
       setSidebar($("#sidebar").hidden);
@@ -4349,6 +4793,7 @@ function wire() {
       $("#menu").hidden = true;
       $("#settings").hidden = true;
       $("#keys").hidden = true;
+      closeFileSheet();
       // A full image goes back to the grid first; Escape twice leaves.
       if (!$("#art").hidden && !$("#artOne").hidden) showArtifactGrid();
       else closeArtifacts();
@@ -4360,6 +4805,17 @@ function wire() {
     const packOnSize = new ResizeObserver(() => packTabs());
     packOnSize.observe($("#tabs"));
     packOnSize.observe($("#tabbar"));
+    // The pane's box moved — sidebar drag, font size, window chrome.
+    // Measure again and, if this window is the one being looked at, take
+    // the shared size back. Not on a timer: a second window that also
+    // polled would fight this one.
+    const paneBox = new ResizeObserver(() => {
+      if (document.hidden) return;
+      refitAll();
+      reclaimSize(document.hasFocus());
+    });
+    const termwrap = $("#terminal");
+    if (termwrap) paneBox.observe(termwrap);
   }
 }
 
@@ -4528,8 +4984,8 @@ function paletteSessions() {
       kind: "session",
       id: s.id,
       title: s.name,
-      detail: shortPath(s.cwd),
-      match: s.name + " " + s.cwd + " " + (s.cli_label || ""),
+      detail: [s.branch, shortPath(s.cwd)].filter(Boolean).join(" · "),
+      match: s.name + " " + s.cwd + " " + (s.cli_label || "") + " " + (s.branch || ""),
       icon: paletteMarker(s),
       tag: sessionTag(s),
       run: () => openSession(s.id),
@@ -4559,6 +5015,10 @@ function paletteCommands() {
   add("Adopt sessions", "Take over tmux sessions CLIque did not start", adoptSessions);
   add("Settings", "Themes, markers, snippets, notifications", openSettings);
   add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
+  add("Full screen", "The pane, not the browser. Ctrl+Shift+F", toggleFullscreen);
+  if (installPrompt) {
+    add("Install as an app", "Its own window — no tabs, no URL bar", installApp);
+  }
   add("Keyboard shortcuts", "Every binding, in one list", showKeys);
   add("System history", "cpu and memory over the last hour", showHistory);
   add("Resume a past conversation", "Every transcript your CLIs have kept",
@@ -4570,6 +5030,8 @@ function paletteCommands() {
         current.name + " — nothing is killed either way",
         () => setArchived(current, !current.archived));
     add("Copy working directory", current.cwd, () => copyText(current.cwd));
+    add("Copy what's on screen", "The visible pane, not the scrollback",
+        () => { copyPaneSelection() || copyPaneVisible(); });
     add("Focus the terminal", current.name, focusTerminal);
     add(following(current.id) ? "Scroll lock — stop following output"
                               : "Follow output again",
@@ -4608,7 +5070,8 @@ function paletteCommands() {
   // Destructive last, and the only entry that gets the danger colour.
   if (current) {
     add(current.alive ? "Kill session" : "Delete session",
-        current.alive ? "Stops the CLI for good" : "Nothing is running — removes it from the sidebar",
+        current.alive ? "Stops the CLI. It stays in the folder."
+                      : "Nothing is running — removes it from the sidebar",
         () => killSession(current), true);
   }
   return items;
@@ -4655,6 +5118,304 @@ async function copyText(text) {
     document.execCommand("copy");
     box.remove();
   }
+}
+
+function paneSelection() {
+  const entry = terms.get(activeId);
+  if (!entry || !entry.term) return "";
+  try {
+    return entry.term.hasSelection() ? (entry.term.getSelection() || "") : "";
+  } catch (err) {
+    return "";
+  }
+}
+
+function copyPaneSelection(keepHighlight) {
+  const picked = paneSelection();
+  if (!picked || !picked.trim()) return false;
+  const entry = terms.get(activeId);
+  copyText(picked).then(() => {
+    toast("Copied " + plural(picked));
+    if (!keepHighlight && entry && entry.term) {
+      try { entry.term.clearSelection(); } catch (err) { /* disposed */ }
+      renderCopyChip();
+    }
+  });
+  return true;
+}
+
+function paneVisibleText() {
+  const entry = terms.get(activeId);
+  if (!entry || !entry.term) return "";
+  const buf = entry.term.buffer.active;
+  const lines = [];
+  for (let i = 0; i < entry.term.rows; i++) {
+    const line = buf.getLine(buf.viewportY + i);
+    lines.push(line ? line.translateToString(true) : "");
+  }
+  return lines.join("\n").replace(/\s+$/, "");
+}
+
+function copyPaneVisible() {
+  const picked = paneVisibleText();
+  if (!picked || !picked.trim()) return false;
+  copyText(picked).then(() => toast("Copied the screen"));
+  return true;
+}
+
+function paneAtLiveScreen(term) {
+  const buf = term && term.buffer && term.buffer.active;
+  return !buf || buf.viewportY >= buf.baseY;
+}
+
+function paneSgrClick(col, row) {
+  return "\x1b[<0;" + col + ";" + row + "M\x1b[<0;" + col + ";" + row + "m";
+}
+
+function paneGridCell(term, clientX, clientY) {
+  const el = term.element;
+  if (!el || !term.cols || !term.rows) return { col: 1, row: 1 };
+  const r = el.getBoundingClientRect();
+  const col = 1 + Math.max(0, Math.min(term.cols - 1,
+    Math.floor((clientX - r.left) / (r.width / term.cols))));
+  const row = 1 + Math.max(0, Math.min(term.rows - 1,
+    Math.floor((clientY - r.top) / (r.height / term.rows))));
+  return { col, row };
+}
+
+function sendPaneClick(term, clientX, clientY, sessionId) {
+  const entry = terms.get(sessionId || activeId);
+  if (!entry || !entry.ws || entry.ws.readyState !== 1) return;
+  const at = paneGridCell(term, clientX, clientY);
+  entry.ws.send(new TextEncoder().encode(paneSgrClick(at.col, at.row)));
+}
+
+function sessionOwnsInput(id) {
+  const s = session(id || activeId);
+  return Boolean(s && s.own_input);
+}
+
+/* Drag-select has to work even when the CLI has turned on mouse tracking.
+ * xterm then sends every mousedown to the app and refuses to select unless
+ * Shift is held (Option on a Mac, and only if we asked). Nobody holds a
+ * modifier to copy a line. A drag is a selection; a click still goes through.
+ * A phone is untouched: there is no hover, and the Copy chip is the way. */
+const PANE_DRAG_PX = 5;
+
+/* Zoom a boxed CLI instead of shrinking its grid. Below this, the text would
+ * be smaller than a readable font, so a phone still resizes for real. */
+const PANE_ZOOM_MIN = 0.45;
+const PANE_OUTBOX_CAP = 8192;
+
+function paneCellPx(term) {
+  try {
+    const cell = term._core._renderService.dimensions.css.cell;
+    if (cell && cell.width && cell.height) return { w: cell.width, h: cell.height };
+  } catch (err) { /* xterm internals moved */ }
+  const size = (term && term.options && term.options.fontSize) || 13;
+  return { w: size * 0.6, h: size * 1.2 };
+}
+
+function paneZoomScale(availW, availH, cols, rows, cellW, cellH) {
+  if (availW < 2 || availH < 2 || cols < 1 || rows < 1 || cellW < 1 || cellH < 1) {
+    return 1;
+  }
+  const needW = cols * cellW, needH = rows * cellH;
+  if (needW <= availW && needH <= availH) return 1;
+  return Math.min(availW / needW, availH / needH);
+}
+
+function paneShouldZoom(boxed, scale) {
+  return Boolean(boxed) && scale < 1 && scale >= PANE_ZOOM_MIN;
+}
+
+function applyPaneZoom(term, scale) {
+  const el = term && term.element;
+  if (!el) return;
+  if (!scale || scale >= 0.995) {
+    el.style.transform = "";
+    el.style.transformOrigin = "";
+    return;
+  }
+  el.style.transformOrigin = "top left";
+  el.style.transform = "scale(" + scale + ")";
+}
+
+function paneQueueOut(q, text, cap) {
+  const next = (Array.isArray(q) ? q.slice() : []).concat([String(text)]);
+  let n = 0;
+  for (let i = 0; i < next.length; i++) n += next[i].length;
+  const limit = cap || PANE_OUTBOX_CAP;
+  while (next.length > 1 && n > limit) n -= next.shift().length;
+  return next;
+}
+
+function paneSend(entry, text) {
+  if (!entry || text == null || text === "") return;
+  if (entry.ws && entry.ws.readyState === 1) {
+    entry.ws.send(new TextEncoder().encode(text));
+    return;
+  }
+  entry.outbox = paneQueueOut(entry.outbox, text, PANE_OUTBOX_CAP);
+}
+
+function paneFlushOut(entry) {
+  const q = entry && entry.outbox;
+  if (!q || !q.length) return;
+  entry.outbox = [];
+  if (!entry.ws || entry.ws.readyState !== 1) return;
+  for (let i = 0; i < q.length; i++) {
+    entry.ws.send(new TextEncoder().encode(q[i]));
+  }
+}
+
+function paneForceSelectMods(platform) {
+  const mac = /Mac|iPhone|iPod|iPad/.test(platform || "");
+  return mac ? { altKey: true, shiftKey: false } : { shiftKey: true, altKey: false };
+}
+
+function paneDragFarEnough(x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  return dx * dx + dy * dy >= PANE_DRAG_PX * PANE_DRAG_PX;
+}
+
+function paneShouldStealMouse(ev, mouseEventsOn, finePointer) {
+  if (!finePointer || !mouseEventsOn) return false;
+  if (!ev || ev.button !== 0) return false;
+  if (ev.ctrlKey || ev.metaKey) return false;
+  if (ev.shiftKey || ev.altKey) return false;
+  if (ev.sourceCapabilities && ev.sourceCapabilities.firesTouchEvents) return false;
+  return true;
+}
+
+function paneFinePointer() {
+  // Headless browsers often report hover:none even when they send real
+  // mouse events, so this keys off pointer, not hover.
+  try {
+    return !window.matchMedia("(pointer: coarse)").matches;
+  } catch (err) {
+    return true;
+  }
+}
+
+function paneCellAt(term, clientX, clientY) {
+  const el = term.element;
+  if (!el || !term.cols || !term.rows) return { x: 0, y: 0 };
+  const r = el.getBoundingClientRect();
+  const col = Math.max(0, Math.min(term.cols - 1,
+    Math.floor((clientX - r.left) / (r.width / term.cols))));
+  const row = Math.max(0, Math.min(term.rows - 1,
+    Math.floor((clientY - r.top) / (r.height / term.rows))));
+  return { x: col, y: row + term.buffer.active.viewportY };
+}
+
+function paneSelectRange(term, from, to) {
+  const a = from.y * term.cols + from.x;
+  const b = to.y * term.cols + to.x;
+  const start = a <= b ? from : to;
+  const end = a <= b ? to : from;
+  const len = Math.max(1, (end.y * term.cols + end.x) - (start.y * term.cols + start.x) + 1);
+  try { term.select(start.x, start.y, len); } catch (err) { /* disposed */ }
+}
+
+function wirePaneClipboard(term, host, sessionId) {
+  let replaying = false;
+  const mouseOn = () => Boolean(term.element &&
+    term.element.classList.contains("enable-mouse-events"));
+  const play = (src, type) => {
+    replaying = true;
+    (term.element || src.target).dispatchEvent(new MouseEvent(type, {
+      bubbles: true, cancelable: true, composed: true, view: window,
+      clientX: src.clientX, clientY: src.clientY,
+      screenX: src.screenX, screenY: src.screenY,
+      button: src.button, buttons: type === "mouseup" ? 0 : 1,
+      ctrlKey: src.ctrlKey, metaKey: src.metaKey,
+      altKey: false, shiftKey: false, detail: src.detail || 1,
+    }));
+    replaying = false;
+  };
+
+  host.addEventListener("mousedown", (e) => {
+    if (replaying) return;
+    if (!paneShouldStealMouse(e, mouseOn(), paneFinePointer())) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    let mode = "pending";
+    const swallowClick = (ev) => {
+      ev.stopImmediatePropagation();
+      ev.preventDefault();
+      document.removeEventListener("click", swallowClick, true);
+    };
+    const paint = (x, y) => paneSelectRange(term, paneCellAt(term, startX, startY),
+                                            paneCellAt(term, x, y));
+    if (e.detail >= 2) {
+      const at = paneCellAt(term, e.clientX, e.clientY);
+      try { term.selectLines(at.y, at.y); } catch (err) { /* disposed */ }
+      document.addEventListener("click", swallowClick, true);
+      const done = () => {
+        document.removeEventListener("mouseup", done, true);
+        requestAnimationFrame(() => copyPaneSelection(true));
+      };
+      document.addEventListener("mouseup", done, true);
+      return;
+    }
+    const onMove = (ev) => {
+      if (mode === "pending") {
+        if (!paneDragFarEnough(startX, startY, ev.clientX, ev.clientY)) return;
+        mode = "select";
+      }
+      ev.stopImmediatePropagation();
+      ev.preventDefault();
+      paint(ev.clientX, ev.clientY);
+    };
+    const onUp = (ev) => {
+      document.removeEventListener("mousemove", onMove, true);
+      document.removeEventListener("mouseup", onUp, true);
+      if (mode === "pending") {
+        document.removeEventListener("click", swallowClick, true);
+        play(e, "mousedown");
+        play(ev, "mouseup");
+        play(ev, "click");
+      } else {
+        requestAnimationFrame(() => copyPaneSelection(true));
+      }
+    };
+    document.addEventListener("mousemove", onMove, true);
+    document.addEventListener("mouseup", onUp, true);
+    document.addEventListener("click", swallowClick, true);
+  }, true);
+
+  host.addEventListener("mouseup", () => {
+    if (mouseOn()) return;
+    requestAnimationFrame(() => copyPaneSelection(true));
+  });
+
+  host.addEventListener("click", (e) => {
+    if (e.button !== 0 || e.detail !== 1) return;
+    if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!sessionOwnsInput(sessionId)) return;
+    if (term.hasSelection && term.hasSelection()) return;
+    if (!paneAtLiveScreen(term)) return;
+    if (e.target && e.target.closest && e.target.closest("a, button")) return;
+    sendPaneClick(term, e.clientX, e.clientY, sessionId);
+  });
+}
+
+function renderCopyChip() {
+  const chip = $("#copySel");
+  if (!chip) return;
+  chip.hidden = !paneSelection();
+}
+
+function typingInAField(el) {
+  if (!el || !el.tagName) return false;
+  // xterm's hidden textarea is how the pane takes keys. Ctrl+C there is
+  // ours, not a form field's.
+  if (el.classList && el.classList.contains("xterm-helper-textarea")) return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return Boolean(el.isContentEditable);
 }
 
 function openPalette(prefill) {
@@ -4894,26 +5655,123 @@ function wireResizer() {
  * knows what the window is; this compares it to what we are drawing and says
  * so when they differ.
  *
- * Only the tab in front, and only while this window is focused. Growing
- * forever left a full-screen CLI's prompt hanging off the bottom; shrinking
- * on a timer let a second window punch dots into this one. Matching this
- * pane, only while you are looking at it, is the size that holds. */
-function reclaimSize() {
-  if (document.hidden || !document.hasFocus()) return;
+ * Only the tab in front, and only while this window is the one being looked
+ * at. Growing forever left a full-screen CLI's prompt hanging off the bottom;
+ * shrinking on a timer let a second window punch dots into this one.
+ *
+ * `force` is for the moment you come back to the tab. visibilitychange
+ * fires before the document is focused (Brave and Chrome), so a hasFocus()
+ * gate here used to swallow the reclaim and leave the dots until you
+ * clicked the pane. */
+function claimable(cols, rows) {
+  // A collapsed or hidden tab measures as almost nothing. Sending that
+  // as the shared window's size is how coming back left a sea of dots.
+  // A real phone still clears this.
+  return cols >= 20 && rows >= 8;
+}
+
+function reclaimSize(force) {
+  if (document.hidden) return;
+  if (!force && !document.hasFocus()) return;
   const entry = terms.get(activeId);
   const s = session(activeId);
-  if (!entry || !s || !s.alive || !s.cols) return;
-  if (entry.term.cols === s.cols && entry.term.rows === s.rows) return;
+  if (!entry || !s || !s.alive) return;
   if (!entry.ws || entry.ws.readyState !== 1) return;
-  entry.ws.send(JSON.stringify({
-    type: "resize", cols: entry.term.cols, rows: entry.term.rows,
-  }));
+  const cols = entry.term.cols;
+  const rows = entry.term.rows;
+  if (!claimable(cols, rows)) return;
+  // Coming back always claims this window's size. The poll's idea of the
+  // pane can be a few seconds behind a hidden reconnect, and skipping
+  // because the numbers already matched is how a screen of dots lasted
+  // until you clicked.
+  if (!force && s.cols && s.rows && cols === s.cols && rows === s.rows) return;
+  entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
 }
 
 function refitAll() {
   // Only the visible terminal can be measured; the rest refit when selected.
   const entry = terms.get(activeId);
-  if (entry) { try { entry.fit.fit(); } catch (err) { /* not visible */ } }
+  if (!entry) return;
+  if (entry.term.hasSelection && entry.term.hasSelection()) return;
+  layoutPane(entry);
+}
+
+function wakePane() {
+  /* The tab is on screen again. Measure it, paint it, and take the shared
+   * window's size back. Layout is often still the background-tab size on
+   * the first tick, so the caller retries on a frame and a short timeout. */
+  if (document.hidden) return;
+  const entry = terms.get(activeId);
+  if (entry) paintPane(entry);
+  reclaimSize(true);
+}
+
+let installPrompt = null;
+
+function isAppWindow() {
+  return matchMedia("(display-mode: standalone)").matches
+    || matchMedia("(display-mode: window-controls-overlay)").matches
+    || matchMedia("(display-mode: fullscreen)").matches
+    || Boolean(navigator.standalone);
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled) {
+    toast("This browser will not give up the window");
+    return;
+  }
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    return;
+  }
+  const root = document.documentElement;
+  const go = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (!go) {
+    toast("This browser will not give up the window");
+    return;
+  }
+  Promise.resolve(go.call(root)).catch(() => {
+    toast("This browser will not give up the window");
+  });
+}
+
+function syncFullscreen() {
+  const on = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  document.body.classList.toggle("is-fs", on);
+  const btn = $("#fullScr");
+  if (btn) {
+    btn.title = on ? "Leave full screen (Ctrl+Shift+F)" : "Full screen (Ctrl+Shift+F)";
+  }
+  scheduleWake();
+}
+
+function installApp() {
+  if (!installPrompt) {
+    if (isAppWindow()) toast("Already in its own window");
+    else toast("Use the browser’s Install app / Add to Home Screen");
+    return;
+  }
+  const pending = installPrompt;
+  installPrompt = null;
+  pending.prompt();
+  pending.userChoice.then((choice) => {
+    paintInstall();
+    if (choice && choice.outcome === "accepted") toast("Installed — open it from your apps");
+  }).catch(() => { paintInstall(); });
+}
+
+function paintInstall() {
+  const btn = $("#installApp");
+  const hint = $("#installHint");
+  const own = isAppWindow();
+  if (btn) btn.hidden = own || !installPrompt;
+  if (hint) {
+    hint.hidden = own;
+    if (own) return;
+    hint.textContent = installPrompt
+      ? "Install as an app for a window of its own — no browser tabs, no URL bar."
+      : "Install as an app from the browser menu (Install app, or on a phone Share → Add to Home Screen).";
+  }
 }
 
 function setSidebar(show) {
@@ -4950,51 +5808,7 @@ wireResizer();
 wireTouchMenus();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
-refresh().then(async () => {
-  // Re-open whatever was open last, so a reload is not a fresh start — and on
-  // a second device, so signing in there is not a fresh start either.
-  const want = pendingWorkspace || { tabs: [], active: "" };
-  /* Tabs in the strip, a socket only for the one in front.
-   *
-   * Attaching every saved tab on load meant a reload opened a PTY for
-   * each of them — and two browsers then fought over the pane size.
-   * The strip still lists them all; the first click (or Alt+1–9) is
-   * what attaches a background one. */
-  openTabs = want.tabs.filter((id) => session(id));
-  const pick = (want.active && openTabs.includes(want.active))
-    ? want.active
-    : openTabs[0];
-  if (pick) {
-    await openSession(pick);
-    // After the front one is hooked up, not in the same breath: a pile of
-    // PTYs at once is how the box used to hitch on reload.
-    setTimeout(warmOpenTabs, 500);
-  }
-  else saveWorkspace();
-
-  /* Arriving from a notification.
-   *
-   * The webhook has been putting `?session=<id>` in every payload since
-   * 0.27.0 and nothing was reading it, so tapping the notification landed you
-   * on whatever tab you left open — which is the one thing a notification is
-   * supposed to save you from. Handled after the workspace restores, so the
-   * link wins over what was open last, and the parameter is stripped
-   * afterwards so a reload does not keep yanking you back.
-   */
-  const asked = new URLSearchParams(location.search).get("session");
-  if (asked && session(asked)) {
-    await openSession(asked);
-    selectTab(asked);
-  }
-  if (asked) {
-    const clean = new URL(location.href);
-    clean.searchParams.delete("session");
-    history.replaceState(null, "", clean);
-  }
-  // Now that the tabs exist, commit: this is what persists a lifted copy, and
-  // what prunes tabs whose sessions are gone.
-  saveWorkspace(true);
-});
+bootWorkspace();
 setInterval(refresh, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and
 // nobody is waiting on a screenshot to the second.
@@ -5003,11 +5817,34 @@ setInterval(pollArtifacts, ART_POLL_MS);
 // the resolution it displays, so a minute is what it costs.
 setInterval(() => { if (!activeId && !document.hidden) renderClock(); }, 20000);
 // Coming back to the tab should not mean waiting out the interval.
+// Focus often lands a tick after visibilitychange; layout a tick after
+// that. One reclaim on the event is not enough — the dots in the
+// screenshot were exactly "the event fired, hasFocus was still false."
+function scheduleWake() {
+  // Layout after a long background tab can land after the first paint,
+  // and Brave reports hasFocus=false on the visibility event itself.
+  // One reclaim is not enough; the dots in the screenshot were exactly
+  // "the event fired, the box was still the background-tab size."
+  wakePane();
+  requestAnimationFrame(wakePane);
+  setTimeout(wakePane, 150);
+  setTimeout(wakePane, 400);
+  setTimeout(wakePane, 1000);
+}
+
 addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     pollArtifacts();
-    refitAll();
-    reclaimSize();
+    scheduleWake();
   }
 });
-addEventListener("focus", () => { refitAll(); reclaimSize(); });
+addEventListener("focus", scheduleWake);
+addEventListener("pageshow", scheduleWake);
+document.addEventListener("focusin", () => reclaimSize(true));
+
+/* A service worker that fetches and does not cache. Chromium will not
+ * offer "Install app" without one, and a cache would serve yesterday's
+ * panel on a project that ships ten times a day. */
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.register("sw.js").catch(() => { /* install stays a browser menu */ });
+}

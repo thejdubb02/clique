@@ -103,6 +103,26 @@ def busy(pane, socket: str | None, now: float | None = None) -> bool:
         return now - changed < STILL
 
 
+def settled(pane, now: float | None = None) -> bool:
+    """Whether it is time to look at what the pane is *saying*.
+
+    The activity clock is a bad witness for this. A permission prompt that
+    blinks, or a choice list whose selected row pulses, ticks the clock the
+    same way streamed output does — so "output in the last two seconds" is
+    also the animated-question case. After SETTLE we already capture to
+    verify work; that is also when a question is allowed to surface. Before
+    that, a burst is just a burst.
+    """
+    now = time.time() if now is None else now
+    if now - (pane.activity or 0) >= WINDOW:
+        return True
+    with _lock:
+        started = _since.get(pane.mux)
+    if started is None:
+        return False
+    return now - started >= SETTLE
+
+
 def forget(live: set[str]) -> None:
     """Drop everything about sessions that are gone.
 
