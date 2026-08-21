@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.30 — 2026-08-21 16:34 PDT
+
+**Changing the terminal font now resizes the CLI to match.** The bottom-right
+font stepper (and the settings slider) resized the grid drawn in the pane but
+never told tmux, so the CLI kept wrapping at the old width — dead space, and a
+pane that looked a different size from one tab to the next. The new size is
+pushed to tmux on the change now, the same as a window resize already was.
+
 ## 0.50.29 — 2026-08-21 15:08 PDT
 
 **Copy the last lines without dragging across them.** Selection and the

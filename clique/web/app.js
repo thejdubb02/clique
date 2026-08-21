@@ -4330,6 +4330,12 @@ async function saveSettings(changes) {
   // reads as "changing the theme did not change the terminal" — especially
   // with the settings sheet still covering the pane you were looking at.
   applySettings();
+  // A font change resizes the grid inside the pane, not the box around it, so
+  // the ResizeObserver that normally pushes a new size to tmux never fires —
+  // and the CLI keeps drawing at the old width, leaving dead space. Push it
+  // from here. Guarded (only sends on a real change) and user-initiated, so it
+  // does not become the timer-based reclaim two windows would fight over.
+  reclaimSize();
   renderTree();
   renderTabs();
 }
