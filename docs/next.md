@@ -22,27 +22,25 @@ Hours each. These are the ones that pay off every hour in the panel.
    capture attention already pays for.
 2. **Searchable prompt history.** Every prompt sent, per session and globally,
    fuzzy, one click to reuse. Snippets stay for the ones you meant to keep.
-3. **Confirm before killing a session that is working or has a draft.**
-   Stopping is easy now; losing a paragraph should not be.
-4. **Land on the last prompt when a session opens.** You currently land
+3. **Land on the last prompt when a session opens.** You currently land
    wherever the stream left you.
 
 ## Next — awareness
 
-5. **Copy last output / last N lines.** Selection and the visible screen
+4. **Copy last output / last N lines.** Selection and the visible screen
    already copy (0.50.17–0.50.21). This is the leftover: last reply, last N
    lines, without dragging.
-6. **Smart focus:** prompt box on tab switch, Esc back to the terminal.
-7. **Pin / favourite** sessions, above recency.
-8. **Session status line:** elapsed, last activity, process state.
+5. **Smart focus:** prompt box on tab switch, Esc back to the terminal.
+6. **Pin / favourite** sessions, above recency.
+7. **Session status line:** elapsed, last activity, process state.
 
 ## Then — bigger slices
 
-9. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
+8. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
     gap between the README and the panel.
-10. **Session templates:** CLI + directory + starter prompt + name pattern.
-11. **An agent-facing skill.** The API exists; nothing tells an agent so.
-12. **Per-session CPU/memory,** to catch one agent starving the box.
+9. **Session templates:** CLI + directory + starter prompt + name pattern.
+10. **An agent-facing skill.** The API exists; nothing tells an agent so.
+11. **Per-session CPU/memory,** to catch one agent starving the box.
 
 ## Hygiene, not a feature
 

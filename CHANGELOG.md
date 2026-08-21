@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.26 — 2026-08-21 14:34 PDT
+
+**Stopping a busy session now says what you would interrupt.** Kill asked a
+flat "Stop this?" whether the session was idle or an agent was mid-task with
+an unsent prompt still in the box — the same reflex click either way. It now
+names what is live: *"X is still working and has an unsent draft — stop it
+anyway?"* Nothing is lost regardless — the session stays in its folder, draft
+and all, and starts again — but the question is no longer one you answer
+without looking.
+
 ## 0.50.25 — 2026-08-21 09:39 PDT
 
 **A login link that wraps is still one link.** Codex (and anything else)

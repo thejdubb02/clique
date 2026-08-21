@@ -1611,7 +1611,19 @@ async function adoptSessions() {
 
 async function killSession(s) {
   if (s.alive) {
-    if (!confirm(`Stop "${s.name}"? It stays in the folder. You can start it again.`)) return;
+    // A bland "Stop?" gets a reflexive OK. When the session is mid-task or
+    // holds an unsent draft, the confirm should say what is at stake — that is
+    // the moment stopping actually costs something. The record and its draft
+    // survive a stop either way; what a working session loses is the work in
+    // flight, so name that rather than ask a blank question.
+    const stakes = [];
+    if (workState(s) === "working") stakes.push("still working");
+    if ((s.draft || "").trim()) stakes.push("has an unsent draft");
+    const question = stakes.length
+      ? `"${s.name}" is ${stakes.join(" and ")} — stop it anyway? `
+        + `It stays in the folder, draft and all, and you can start it again.`
+      : `Stop "${s.name}"? It stays in the folder. You can start it again.`;
+    if (!confirm(question)) return;
     closeTab(s.id, true);
     await api("api/sessions/" + s.id + "/kill", { method: "POST", body: "{}" });
     refresh();
