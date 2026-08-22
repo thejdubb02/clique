@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.41 — 2026-08-21 19:41 PDT
+
+**`X-Forwarded-*` is believed only behind a trusted proxy now.** Host and
+scheme were taken from `X-Forwarded-Host`/`X-Forwarded-Proto` no matter who
+sent them, so any client could set `X-Forwarded-Host` and walk past the
+DNS-rebinding gate that runs on `Host`. They are honored only when
+`CLIQUE_TRUST_PROXY=1` declares a proxy sets them; otherwise `Host` is the
+truth. This deployment runs behind tailscale, so the flag is set here.
+
 ## 0.50.40 — 2026-08-21 19:37 PDT
 
 **Killing a session from the tab closes it cleanly, right away.** Kill closed

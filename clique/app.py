@@ -126,6 +126,11 @@ class Panel:
         self.allowed_hosts = {h.strip().lower() for h in
                               os.environ.get("CLIQUE_ALLOWED_HOSTS", "").split(",")
                               if h.strip()}
+        #: Believe X-Forwarded-* only when the operator confirms a proxy sets
+        #: them. Otherwise any client could send X-Forwarded-Host and step past
+        #: the DNS-rebinding gate on Host. Set behind tailscale / caddy / nginx.
+        self.trust_proxy = os.environ.get("CLIQUE_TRUST_PROXY", "").strip().lower() in (
+            "1", "true", "yes")
         self.history = sysinfo.History()
         self._last_reap = 0.0
         self._lock = threading.Lock()
@@ -791,7 +796,7 @@ class Handler(BaseHTTPRequestHandler):
             origin = "/".join(referer.split("/")[:3])
         if origin == "null":
             return False        # an opaque origin is a sandboxed frame, not our page
-        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        host = self._fwd_host()
         # Compare host AND port, parsed with urlsplit so [::1] stays ::1 rather
         # than "[". A different *port* of the same host is a different origin —
         # the CSWSH this check exists to stop — and the old split-on-":" merged
@@ -826,8 +831,19 @@ class Handler(BaseHTTPRequestHandler):
             return False, "cross-origin request refused"
         return True, ""
 
+    def _fwd_host(self) -> str:
+        """The host the browser reached us on. A forwarded host is believed only
+        behind a trusted proxy; otherwise Host is the truth and X-Forwarded-Host
+        is a header any client can forge past the DNS-rebinding gate."""
+        if self.panel.trust_proxy:
+            forwarded = self.headers.get("X-Forwarded-Host")
+            if forwarded:
+                return forwarded
+        return self.headers.get("Host") or ""
+
     def _secure(self) -> bool:
-        return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        return (self.panel.trust_proxy
+                and self.headers.get("X-Forwarded-Proto", "").lower() == "https")
 
     def _host_ok(self) -> bool:
         """Runs before anything else, including auth.
@@ -837,7 +853,7 @@ class Handler(BaseHTTPRequestHandler):
         with ours and every other check is arguing with a decision the browser
         has already made.
         """
-        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        host = self._fwd_host()
         return host_allowed(host, self.panel.allowed_hosts)
 
     def _route(self) -> tuple[str, dict]:
