@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.40 — 2026-08-21 19:37 PDT
+
+**Killing a session from the tab closes it cleanly, right away.** Kill closed
+the tab silently and then waited on the request before repainting — so the
+dead tab and a blank pane hung on screen until the kill came back, and whether
+a poll fired in between is what made it feel hit-or-miss. It now closes the
+tab, selects the next one, and repaints immediately, then kills in the
+background. Same for removing a stopped session.
+
 ## 0.50.39 — 2026-08-21 19:06 PDT
 
 **The same-origin check compares the port too, and understands IPv6.** It split

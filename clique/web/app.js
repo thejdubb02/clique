@@ -1640,13 +1640,16 @@ async function killSession(s) {
         + `It stays in the folder, draft and all, and you can start it again.`
       : `Stop "${s.name}"? It stays in the folder. You can start it again.`;
     if (!confirm(question)) return;
-    closeTab(s.id, true);
+    // Close the tab and repaint now — awaiting the kill first left the dead tab
+    // and a blank pane on screen until the request came back. `killing`
+    // suppresses the "still running" nudge, because it is not.
+    closeTab(s.id, false, true);
     await api("api/sessions/" + s.id + "/kill", { method: "POST", body: "{}" });
     refresh();
     return;
   }
   if (!confirm(`Remove "${s.name}" from the sidebar?`)) return;
-  closeTab(s.id, true);
+  closeTab(s.id, false, true);
   await api("api/sessions/" + s.id, { method: "DELETE" });
   refresh();
 }
@@ -3219,7 +3222,7 @@ function warmOpenTabs() {
   }, 350);
 }
 
-function closeTab(id, silent) {
+function closeTab(id, silent, killing) {
   const closed = session(id);
   const entry = terms.get(id);
   if (entry) {
@@ -3248,7 +3251,9 @@ function closeTab(id, silent) {
      * they only meant to put down. Saying it, and offering the other choice
      * in the same breath, is the whole fix. The kill path keeps its
      * confirmation. */
-    if (closed && closed.alive) {
+    // Not on a kill: the session is being stopped, not left running, so the
+    // "still running" nudge would be a lie and its offer moot.
+    if (!killing && closed && closed.alive) {
       toast(`Closed the tab — ${closed.name} is still running`, false,
             { label: "Kill it instead", run: () => killSession(closed) });
     }
