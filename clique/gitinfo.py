@@ -122,3 +122,79 @@ def clear() -> None:
     with _lock:
         _cache.clear()
         _pending.clear()
+
+
+# --------------------------------------------------------------- worktrees
+#: Isolate an agent's checkout so several can run on one repo at once without
+#: touching each other's files. CLIque creates the worktree, runs the session
+#: inside it, and removes it when the session is deleted and nothing is lost.
+
+
+def repo_root(cwd: str) -> str | None:
+    """The top of the working tree ``cwd`` sits in, or None if it is not one."""
+    try:
+        path = Path(cwd).expanduser()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    top = _git(path, "rev-parse", "--show-toplevel")
+    return top.strip() if top else None
+
+
+def _slug(branch: str) -> str:
+    keep = "".join(c if (c.isalnum() or c in "-._") else "-" for c in branch)
+    return keep.strip("-.") or "work"
+
+
+def worktree_path(repo: str, branch: str) -> Path:
+    """Where a worktree goes: a sibling of the repo, never inside it — a
+    worktree nested in its own repo confuses git and everything that walks the
+    tree. One directory per repo holds them, named by branch."""
+    root = Path(repo)
+    return root.parent / f"{root.name}-worktrees" / _slug(branch)
+
+
+def add_worktree(repo: str, branch: str) -> tuple[str | None, str]:
+    """Create a worktree on ``branch`` and return ``(path, "")``. A new branch
+    is made; if it already exists it is checked out instead. Returns
+    ``(None, reason)`` if git refuses."""
+    path = worktree_path(repo, branch)
+    if path.exists():
+        if (path / ".git").exists():
+            return str(path), ""
+        return None, f"{path} already exists and is not a worktree"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    made = _git(Path(repo), "worktree", "add", "-b", branch, str(path))
+    if made is None:                       # branch may already exist
+        made = _git(Path(repo), "worktree", "add", str(path), branch)
+    if made is None:
+        return None, f"git could not create a worktree for {branch!r}"
+    return str(path), ""
+
+
+def worktree_clean(path: str) -> bool:
+    """True only when the worktree has no uncommitted changes — safe to remove
+    without losing work. A missing or non-git path is not clean."""
+    status = _git(Path(path), "status", "--porcelain")
+    return status is not None and status.strip() == ""
+
+
+def _main_worktree(path: str) -> str | None:
+    """The repo a worktree belongs to. ``worktree list`` names the main
+    worktree first, and ``worktree remove`` must be run from it, not from the
+    checkout being removed."""
+    out = _git(Path(path), "worktree", "list", "--porcelain")
+    if not out:
+        return None
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            return line[len("worktree "):].strip()
+    return None
+
+
+def remove_worktree(path: str) -> bool:
+    """Remove a worktree checkout. The caller decides whether it is safe; this
+    only does the removal, run from the main worktree so git allows it."""
+    main = _main_worktree(path)
+    if not main:
+        return False
+    return _git(Path(main), "worktree", "remove", str(path)) is not None

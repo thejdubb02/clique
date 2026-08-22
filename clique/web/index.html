@@ -220,6 +220,11 @@
     </label>
     <datalist id="cwdList"></datalist>
     <label>Folder <select name="folder"></select></label>
+    <div id="wtRow" class="wt-row" hidden>
+      <label class="wt-check" title="Runs this agent in its own git worktree — a separate checkout — so several agents can work the same repo at once without touching each other's files.">
+        <input type="checkbox" id="wtToggle"> Run in a new git worktree</label>
+      <input id="wtBranch" placeholder="branch name" autocomplete="off" hidden>
+    </div>
     <!-- What is already going on in that directory. Only ever shown when there
          is something to say; see checkWorkspace. -->
     <p class="heads-up" id="modalHeads" hidden></p>

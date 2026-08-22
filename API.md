@@ -160,6 +160,12 @@ Only `cli` and `cwd` matter; the name defaults to the directory. `mode` is one
 the CLI declares. `cli_session_id` resumes a past conversation — the same code
 path as starting a new one, differing only in the argv the registry returns.
 
+Pass `worktree: true` with a `branch` to run the session in a fresh git worktree
+of the repo at `cwd` — an isolated checkout, so several agents can work the same
+repo at once without touching each other's files. The response then carries the
+`worktree` path. Deleting such a session removes the worktree, but only when it
+has no uncommitted changes; a dirty one is left alone so nothing is lost.
+
 A missing directory, an unknown CLI, or a CLI whose command is not installed is
 a `400` with the reason in `error`.
 

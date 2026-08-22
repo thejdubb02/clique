@@ -1489,3 +1489,12 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 #fileTurns .body { white-space: pre-wrap; overflow-wrap: anywhere;
                    font-size: 13px; line-height: 1.55; color: var(--fg); }
 #fileTurns .turn.user .body { color: var(--dim); }
+
+
+/* The worktree option in the new-session dialog. Shown only in a git repo,
+   so it is never a checkbox that cannot do anything. Scoped to #modal to beat
+   the dialog's own `#modal label { display: block }` and full-width inputs. */
+#modal .wt-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+#modal .wt-check { display: flex; align-items: center; gap: 8px; margin: 0;
+                   cursor: pointer; color: var(--fg); }
+#modal .wt-check input { width: auto; margin: 0; }

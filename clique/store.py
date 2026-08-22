@@ -251,6 +251,10 @@ class Session:
     folder: str | None = None
     mode: str | None = None
     cli_session_id: str | None = None
+    #: A git worktree CLIque made for this session, so several agents can run
+    #: on one repo without clobbering each other. Empty for an ordinary
+    #: session. Deleting the session removes it — but only when it is clean.
+    worktree: str = ""
     created: float = 0.0
     #: When this session was last looked at, in any browser. Lives here rather
     #: than in localStorage because "the one I was just in" is a fact about the

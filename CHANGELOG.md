@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.51
+
+**Run an agent in its own git worktree.** Starting a session in a repo now offers
+"Run in a new git worktree": CLIque makes an isolated checkout on a fresh branch
+and runs the agent there, so several agents can work the same repo at once without
+touching each other's files — no more two sessions clobbering one working tree.
+Delete the session and the worktree goes with it, but only when it is clean; a
+worktree with uncommitted work is left alone so nothing is lost. Scriptable too —
+`POST /api/sessions` takes `worktree` and `branch`.
+
 ## 0.50.50
 
 **Filter the sidebar to just what is running.** A funnel button at the top of

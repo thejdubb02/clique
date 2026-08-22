@@ -388,6 +388,22 @@ class Panel:
         # machine this was written on. A self-hoster who omits cwd should get
         # somewhere that exists and is theirs.
         cwd = body.get("cwd") or str(Path.home())
+        # A worktree isolates this agent's checkout so several can run on one
+        # repo at once. Made now, run in, and remembered so deleting the
+        # session can clean it up. The name and everything below then see the
+        # worktree as the working directory, because it is.
+        worktree = ""
+        if body.get("worktree"):
+            repo = gitinfo.repo_root(cwd)
+            if not repo:
+                raise ValueError("working directory is not a git repository")
+            branch = (body.get("branch") or "").strip()
+            if not branch:
+                raise ValueError("a branch name is required to make a worktree")
+            made, why = gitinfo.add_worktree(repo, branch)
+            if not made:
+                raise ValueError(why)
+            cwd = worktree = made
         name = (body.get("name") or "").strip() or Path(cwd).name or cli_id
         mode = body.get("mode")
         # Resuming a past conversation is the same code path as starting a new
@@ -423,8 +439,9 @@ class Panel:
             # is nobody to ask.
             folder=body.get("folder") or None,
             cli_session_id=prior,
+            worktree=worktree,
         ))
-        return {"id": session.id}
+        return {"id": session.id, "worktree": worktree}
 
     def detect_cli(self, pane) -> str:
         """Which registered CLI is running in this pane.
@@ -613,7 +630,13 @@ class Panel:
         if tmux.exists(session.mux, session.socket):
             tmux.kill(session.mux, session.socket, force=session.adopted)
         self.store.remove_session(session_id)
-        return {"deleted": session_id}
+        # A worktree we made is ours to clean up -- but never at the cost of
+        # someone's uncommitted work: if the checkout is dirty it stays, and so
+        # does the branch, rather than deleting changes out from under them.
+        removed = False
+        if session.worktree and gitinfo.worktree_clean(session.worktree):
+            removed = gitinfo.remove_worktree(session.worktree)
+        return {"deleted": session_id, "worktree_removed": removed}
 
 
 

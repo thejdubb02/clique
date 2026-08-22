@@ -3855,6 +3855,7 @@ function checkWorkspace() {
     const box = $("#modalHeads");
     const cwd = $("#newForm").cwd.value.trim();
     box.hidden = true;
+    $("#wtRow").hidden = true;   // re-shown below only when cwd is a git repo
     if (!cwd) return;
     let look;
     try {
@@ -3904,6 +3905,9 @@ function checkWorkspace() {
       box.hidden = false;
       return;
     }
+
+    // A worktree only makes sense in a git repo; look.branch is set for one.
+    $("#wtRow").hidden = !look.branch;
 
     const said = [];
     if (look.sessions.length === 1) {
@@ -4108,6 +4112,10 @@ function openModal() {
     checkWorkspace();
   };
   $("#modalErr").hidden = true;
+  $("#wtToggle").checked = false;
+  $("#wtBranch").value = "";
+  $("#wtBranch").hidden = true;
+  $("#wtRow").hidden = true;
   form.cwd.oninput = () => { checkWorkspace(); browseFrom(form.cwd.value.trim()); };
   checkWorkspace();
   $("#modal").hidden = false;
@@ -4819,16 +4827,39 @@ function wire() {
   $("#activeOnly").onclick = toggleActiveOnly;
   applyActiveOnly();
 
+  $("#wtToggle").onchange = () => {
+    const on = $("#wtToggle").checked;
+    $("#wtBranch").hidden = !on;
+    if (on) {
+      if (!$("#wtBranch").value) {
+        const base = ($("#newForm").name.value.trim() || "work")
+          .toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+        $("#wtBranch").value = base || "work";
+      }
+      $("#wtBranch").focus();
+      $("#wtBranch").select();
+    }
+  };
+
   $("#newForm").onsubmit = async (ev) => {
     ev.preventDefault();
     const form = ev.target;
+    const wtOn = $("#wtToggle").checked && !$("#wtRow").hidden;
+    const branch = $("#wtBranch").value.trim();
+    if (wtOn && !branch) {
+      const box = $("#modalErr");
+      box.textContent = "Give the worktree a branch name.";
+      box.hidden = false;
+      return;
+    }
     try {
+      const payload = {
+        name: form.name.value, cli: form.cli.value,
+        cwd: form.cwd.value, folder: form.folder.value || null,
+      };
+      if (wtOn) { payload.worktree = true; payload.branch = branch; }
       const created = await api("api/sessions", {
-        method: "POST",
-        body: JSON.stringify({
-          name: form.name.value, cli: form.cli.value,
-          cwd: form.cwd.value, folder: form.folder.value || null,
-        }),
+        method: "POST", body: JSON.stringify(payload),
       });
       $("#modal").hidden = true;
       form.reset();
