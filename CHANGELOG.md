@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.53
+
+**Scrolling works in every CLI now, including Claude and Grok.** A full-screen
+app on the alternate screen keeps no terminal scrollback — it owns its own view
+— so the wheel was being swallowed into a buffer tmux only ever redraws in
+place, and scrolling did nothing. The panel now knows, per session, whether the
+pane is on the alternate screen (`alt`), and forwards the wheel to the app as
+mouse-wheel events there: it scrolls its own conversation and the redraw streams
+back. A shell or any normal-screen output still scrolls the pane's own 20k-line
+scrollback exactly as before.
+
 ## 0.50.52
 
 **Drive CLIque from an agent.** Every session now reports a one-word `state` —

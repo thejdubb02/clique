@@ -62,6 +62,10 @@ _FIELDS = (
     # is drawing at a different size gets a screen padded out with dots. This
     # is what lets a browser notice.
     "window_width", "window_height",
+    # Whether the pane is on the alternate screen right now — a full-screen app
+    # (Claude, Grok, an editor) is, a shell at a prompt is not. It decides where
+    # a wheel tick should go: the app's own scroll, or the pane's scrollback.
+    "alternate_on",
 )
 
 
@@ -83,6 +87,7 @@ class Pane:
     cwd: str
     command: str
     group: str = ""
+    alternate_on: bool = False
     #: The shared window's size, which is not necessarily what any one client
     #: is drawing at.
     width: int = 0
@@ -340,6 +345,7 @@ def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> lis
             pid=int(parts[6] or 0), cwd=parts[7], command=parts[8],
             group=parts[9],
             width=int(parts[10] or 0), height=int(parts[11] or 0),
+            alternate_on=parts[12] == "1",
         ))
     return panes
 

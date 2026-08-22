@@ -5643,6 +5643,20 @@ function sendPaneClick(term, clientX, clientY, sessionId) {
   entry.ws.send(new TextEncoder().encode(paneSgrClick(at.col, at.row)));
 }
 
+function paneSgrWheel(col, row, up) {
+  // SGR mouse wheel: button 64 is up, 65 is down. Press only — a wheel tick has
+  // no release, unlike a click.
+  return "\x1b[<" + (up ? 64 : 65) + ";" + col + ";" + row + "M";
+}
+
+function sendPaneWheel(term, clientX, clientY, up, ticks, sessionId) {
+  const entry = terms.get(sessionId || activeId);
+  if (!entry || !entry.ws || entry.ws.readyState !== 1) return;
+  const at = paneGridCell(term, clientX, clientY);
+  const seq = new TextEncoder().encode(paneSgrWheel(at.col, at.row, up));
+  for (let i = 0; i < Math.max(1, ticks); i++) entry.ws.send(seq);
+}
+
 function sessionOwnsInput(id) {
   const s = session(id || activeId);
   return Boolean(s && s.own_input);
@@ -5854,18 +5868,30 @@ function wirePaneClipboard(term, host, sessionId) {
     sendPaneClick(term, e.clientX, e.clientY, sessionId);
   });
 
-  /* The wheel is the one that hurts. A CLI in mouse mode is handed every wheel
-   * tick by xterm, so scrolling up never reaches the pane's own 20k lines of
-   * scrollback — on a tool whose whole job is watching output go past, the
-   * thing you wanted to re-read is simply gone off the top. Caught in the
-   * capture phase, before xterm can forward it: the wheel scrolls the buffer
-   * and the CLI never sees it. Scrolling up trips the same follow-pause a
-   * mouse would, so the view stays where you left it. Non-mouse-mode CLIs
-   * already scroll fine and are left alone. */
+  /* The wheel cuts two ways, and which way is decided by the screen the pane
+   * is on — which the server tells us as `alt`.
+   *
+   * On the NORMAL screen a CLI in mouse mode is handed every wheel tick by
+   * xterm, so scrolling up never reaches the pane's own 20k lines of
+   * scrollback — the thing you wanted to re-read is simply gone off the top.
+   * Caught in the capture phase, before xterm can forward it: the wheel scrolls
+   * that buffer and the CLI never sees it.
+   *
+   * On the ALTERNATE screen a full-screen app — Claude, Grok, an editor — owns
+   * the view and keeps no scrollback here; tmux redraws it in place, so that
+   * buffer never fills and scrolling it does nothing. The scroll is the app's.
+   * So we forward the wheel to it as SGR mouse-wheel events; it moves its own
+   * view and the redraw streams back. That is what makes those CLIs, which
+   * never scrolled here before, finally scroll. */
   host.addEventListener("wheel", (e) => {
     if (!sessionOwnsInput(sessionId)) return;
-    const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 24));
-    term.scrollLines(lines);
+    const ticks = Math.max(1, Math.round(Math.abs(e.deltaY) / 24));
+    const s = session(sessionId);
+    if (s && s.alt) {
+      sendPaneWheel(term, e.clientX, e.clientY, e.deltaY < 0, ticks, sessionId);
+    } else {
+      term.scrollLines(Math.sign(e.deltaY) * ticks);
+    }
     e.preventDefault();
     e.stopPropagation();
   }, { capture: true, passive: false });

@@ -295,6 +295,10 @@ class Panel:
                 "last_seen": session.last_seen,
                 "alive": pane is not None,
                 "attached": bool(pane and pane.attached),
+                # On the alternate screen a full-screen app owns its own scroll,
+                # so the browser forwards the wheel to it instead of scrolling a
+                # pane scrollback that tmux only ever redraws in place.
+                "alt": bool(pane and pane.alternate_on),
                 "command": pane.command if pane else None,
                 # Resident memory of the whole process tree, so you can see
                 # which tab is expensive before deciding what to do with it.
