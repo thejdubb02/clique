@@ -1428,3 +1428,22 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
   }
   #scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.45); }
 }
+
+/* On-screen terminal keys, phone only — Esc/Tab/Ctrl+C/arrows a soft keyboard
+ * cannot produce. Hidden on a pointer device and when no session is up. */
+#keyrow { display: none; }
+@media (max-width: 640px) {
+  #keyrow:not([hidden]) {
+    display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto;
+    background: var(--bg); border-top: 1px solid rgba(127, 127, 127, 0.25);
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  #keyrow::-webkit-scrollbar { display: none; }
+  #keyrow button {
+    flex: 0 0 auto; min-width: 46px; min-height: 38px; padding: 6px 12px;
+    font: inherit; font-size: 13px; color: var(--fg);
+    background: rgba(127, 127, 127, 0.16);
+    border: 1px solid rgba(127, 127, 127, 0.3); border-radius: 7px;
+  }
+  #keyrow button:active { background: rgba(127, 127, 127, 0.34); }
+}

@@ -625,6 +625,9 @@ def _run(panel) -> int:
         page.set_viewport_size({"width": 390, "height": 844})
         page.goto(BASE, wait_until="networkidle")
         page.wait_for_timeout(600)
+        # Open the session so activeId is set — the key row shows with a pane in front.
+        page.evaluate("typeof state !== 'undefined' && state.sessions[0] && openSession(state.sessions[0].id)")
+        page.wait_for_timeout(900)
         page.screenshot(path=str(SHOTS / "mobile-closed.png"))
         page.evaluate("setSidebar(true)")
         page.wait_for_timeout(400)

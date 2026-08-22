@@ -1669,6 +1669,9 @@ function tabsFingerprint() {
 }
 
 function renderTabs() {
+  // The on-screen key row exists for a phone with a session in front; nothing
+  // to send keys to means nothing to show.
+  const kr = $("#keyrow"); if (kr) kr.hidden = !activeId;
   const bar = $("#tabs");
   const fp = tabsFingerprint();
   if (fp === tabsFp && bar.childElementCount) {
@@ -6139,6 +6142,21 @@ async function peekInto(el) {
 
 /* Delegated, because both containers are rebuilt every poll: a listener per
  * row would be churn for nothing, the same reason the touch menus are. */
+/* A phone keyboard cannot send Esc, Tab, Ctrl+C or the arrows a TUI needs, so a
+ * row of them sits above the input on a narrow screen and taps them straight
+ * into the pane. Delegated: the row is static, the target is whatever is in
+ * front. */
+function wireKeyRow() {
+  const row = $("#keyrow");
+  if (!row) return;
+  row.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-key]");
+    if (!btn || !activeId) return;
+    sendPaneKey(activeId, btn.dataset.key);
+    focusTerminal();
+  });
+}
+
 function wirePeekTooltips() {
   for (const sel of ["#tree", "#tabs"]) {
     const root = $(sel);
@@ -6165,6 +6183,7 @@ wire();
 wireResizer();
 wireTouchMenus();
 wirePeekTooltips();
+wireKeyRow();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 // A phone starts with the drawer closed and the pane in front, whatever a

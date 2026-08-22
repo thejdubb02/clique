@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.43 — 2026-08-21 19:50 PDT
+
+**An on-screen key row on the phone.** A soft keyboard cannot send Esc, Tab,
+Ctrl+C or the arrow keys a TUI lives on — so a row of them now sits above the
+input on a narrow screen, tapping each straight into the pane in front. It
+shows only with a session up, only on a touch layout, and scrolls if it runs
+out of room. That was the last thing between the phone build and actually
+driving an agent from it.
+
 ## 0.50.42 — 2026-08-21 19:43 PDT
 
 **Two more from the sweep.** Static files are served with a real containment
