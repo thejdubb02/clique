@@ -215,6 +215,11 @@ DEFAULT_SETTINGS = {
 #: would bloat every /api/state response the sidebar polls.
 MAX_SNIPPET_CHARS = 8000
 
+#: A draft is text you are about to send and a name is a label — neither is a
+#: file, and /api/state replays every one on every three-second poll.
+MAX_DRAFT_CHARS = 100_000
+MAX_NAME_CHARS = 200
+
 #: Same reasoning: custom CSS is a stylesheet, not a payload.
 MAX_CSS_CHARS = 40000
 
@@ -466,6 +471,10 @@ class Store:
                 # folder has to be able to clear it.
                 if value is None and key != "folder":
                     continue
+                if key == "draft" and isinstance(value, str):
+                    value = value[:MAX_DRAFT_CHARS]
+                elif key == "name" and isinstance(value, str):
+                    value = value[:MAX_NAME_CHARS]
                 setattr(found, key, value)
             self._write()
             return found

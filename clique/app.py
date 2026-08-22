@@ -718,7 +718,7 @@ class Handler(BaseHTTPRequestHandler):
             "Content-Security-Policy",
             f"default-src 'self'; script-src {script_src}; "
             "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; "
+            "img-src 'self' data:; connect-src 'self'; font-src 'self'; "
             "worker-src 'self'; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
         )
@@ -738,7 +738,9 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             return {}
-        if not length:
+        # <= 0 covers a negative length too: rfile.read(-1) reads to EOF and
+        # hangs the thread until the connection closes.
+        if length <= 0:
             return {}
         # Bounded, because a pasted image arrives through here and an unbounded
         # Content-Length is a one-request way to exhaust memory.
@@ -1345,7 +1347,9 @@ class Handler(BaseHTTPRequestHandler):
                 # Same for the status feeds: turning them off should stop the
                 # thread now, not at the next restart.
                 self.panel.services.ensure()
-                return self._json(updated)
+                # Redact on the way out too: GET already hides webhook_secret,
+                # and PATCH returning it raw handed a write token the secret.
+                return self._json(redacted(updated))
             if len(parts) == 3 and parts[1] == "sessions":
                 # Only fields the caller actually sent. `folder: null` is a
                 # real value (drag to Ungrouped), so "absent" and "null" have

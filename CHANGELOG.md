@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.50.36 — 2026-08-21 18:37 PDT
+
+**Security pass, part one.** Six fixes from the three-model review: `PATCH
+/api/settings` no longer returns the webhook secret in its response; the file
+glance reads only the 256 KB it shows instead of loading the whole file into
+memory; a negative `Content-Length` can no longer hang a request thread on a
+read-to-EOF; drafts and names are capped so they cannot bloat the state poll;
+the terminal filter bounds an unterminated control sequence instead of
+buffering it without limit; and the CSP allows WebSockets only to the panel's
+own origin. None of these were reachable in the single-user loopback model
+without a credential — all of them matter the moment CLIque is self-hosted.
+
 ## 0.50.35 — 2026-08-21 17:57 PDT
 
 **Closing and reopening the sidebar no longer leaves the pane the wrong size.**

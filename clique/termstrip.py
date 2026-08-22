@@ -50,6 +50,11 @@ class StreamFilter:
             taken, piece = self._take(data[esc:])
             if taken is None:
                 self._hold = data[esc:]
+                if len(self._hold) > 65_536:  # 64 KiB: a real CSI is never this long
+                    # No final byte in that much data means it is not a control
+                    # sequence — pass it through and recover rather than grow.
+                    out += self._hold
+                    self._hold = b""
                 break
             out += piece
             i = esc + taken

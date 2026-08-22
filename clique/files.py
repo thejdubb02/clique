@@ -87,7 +87,10 @@ def inspect(cwd: str, raw: str) -> dict:
             return out
         size = target.stat().st_size
         out["size"] = size
-        head = target.read_bytes()[: min(size, TEXT_CAP + 1)]
+        # Read only what is shown, not the whole file: read_bytes() on a
+        # 30 GB build artifact would load it all into RAM before slicing.
+        with target.open("rb") as fh:
+            head = fh.read(TEXT_CAP + 1)
     except OSError:
         return out
 
