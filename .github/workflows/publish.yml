@@ -1,0 +1,43 @@
+name: publish
+
+# Publishes clique-panel to PyPI with Trusted Publishing (OIDC): no API token
+# lives in the repo or in a secret. PyPI is configured to trust this exact
+# repository + workflow, and GitHub mints a short-lived identity per run.
+#
+# One-time PyPI setup (owner only, ~2 min at pypi.org/manage/account/publishing):
+#   Project name:     clique-panel
+#   Owner:            thejdubb02
+#   Repository name:  clique
+#   Workflow name:    publish.yml
+#   Environment name: pypi
+#
+# Then publishing is automatic: cut a GitHub Release, or run this workflow by
+# hand (Actions -> publish -> Run workflow).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # the whole point — trusted publishing, no token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
