@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.37 — 2026-08-21 18:42 PDT
+
+**Revoking an API token now sticks.** `last_used` was written back to disk on
+the request path, so a `token revoke` from the CLI could be undone the instant
+the running server persisted its stale in-memory list over it. The timestamp
+is now kept in memory and flushed on shutdown only; the file is written on
+mint, revoke, and exit — the three moments that change which tokens exist. A
+revoke is durable.
+
 ## 0.50.36 — 2026-08-21 18:37 PDT
 
 **Security pass, part one.** Six fixes from the three-model review: `PATCH

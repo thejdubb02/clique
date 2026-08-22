@@ -149,16 +149,13 @@ class TokenStore:
             # compare_digest over the hashes, so a timing side channel cannot
             # be used to walk a valid token out of the server.
             if hmac.compare_digest(token.hash, presented):
-                now = time.time()
-                stale = now - token.last_used
-                token.last_used = now
-                # Persisted at most hourly. A write per API request would be
-                # absurd, but never writing made `token list` report "never
-                # used" for a token in daily use — which is exactly the column
-                # you would read to decide whether to revoke something.
-                if stale > 3600:
-                    with contextlib.suppress(OSError):
-                        self._write()
+                # last_used is updated in memory and flushed on shutdown, but
+                # deliberately NOT written here on the request path: a `token
+                # revoke` from the CLI writes tokens.json, and a stale in-memory
+                # copy writing last_used back over it could resurrect the token
+                # it had just removed. A slightly stale timestamp in `token list`
+                # is a fair trade for a revoke that actually sticks.
+                token.last_used = time.time()
                 return token
         return None
 
