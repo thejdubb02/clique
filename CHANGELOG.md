@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.56 - 2026-08-22 16:30 PDT
+
+**Kill session now actually kills it, every time.** Stopping a session used to
+report success unconditionally, even when a tmux hiccup or an adopted session on
+a foreign prefix meant the process never died -- so the tab closed and a live
+session was left behind. It now kills, verifies, force-kills anything that
+survived, and reports the real outcome; the browser surfaces a retry if it ever
+truly will not stop. Both the tab's gear menu and the sidebar right-click use
+this path, so "Kill session" is now reliable from either one.
+
 ## 0.50.55 — 2026-08-22 16:03 PDT
 
 **The leaked-sessions warning is now hard to miss.** It was a correct but quiet

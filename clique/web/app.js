@@ -1672,13 +1672,29 @@ async function killSession(s) {
     // and a blank pane on screen until the request came back. `killing`
     // suppresses the "still running" nudge, because it is not.
     closeTab(s.id, false, true);
-    await api("api/sessions/" + s.id + "/kill", { method: "POST", body: "{}" });
+    try {
+      const res = await api("api/sessions/" + s.id + "/kill", { method: "POST", body: "{}" });
+      // The server verifies and force-kills; alive:true here means it truly
+      // would not die, so say so rather than leave a zombie unmentioned.
+      if (res && res.alive) {
+        toast(`"${s.name}" would not stop.`, true,
+              { label: "Try again", run: () => killSession(session(s.id) || s) });
+      }
+    } catch (err) {
+      toast(`Could not stop "${s.name}" — it may still be running.`, true,
+            { label: "Retry", run: () => killSession(session(s.id) || s) });
+    }
     refresh();
     return;
   }
   if (!confirm(`Remove "${s.name}" from the sidebar?`)) return;
   closeTab(s.id, false, true);
-  await api("api/sessions/" + s.id, { method: "DELETE" });
+  try {
+    await api("api/sessions/" + s.id, { method: "DELETE" });
+  } catch (err) {
+    toast(`Could not remove "${s.name}" — retry?`, true,
+          { label: "Retry", run: () => killSession(session(s.id) || s) });
+  }
   refresh();
 }
 

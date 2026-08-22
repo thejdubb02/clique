@@ -583,13 +583,24 @@ class Panel:
         return True
 
     def stop_session(self, session_id: str) -> dict:
-        """Stop the process. The record stays, so it can be started again."""
+        """Stop the process for good. The record stays, so it can be started
+        again. Kills, then *verifies*, then force-kills anything that survived,
+        and reports whether it is actually dead -- a tmux hiccup or an adopted
+        session on a foreign prefix must not be reported as stopped when it is
+        still running, which is how a killed tab left a live session behind."""
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
+        with contextlib.suppress(tmux.TmuxError):
+            if tmux.exists(session.mux, session.socket):
+                tmux.kill(session.mux, session.socket, force=session.adopted)
+        # If it is still there, it was adopted/foreign-prefixed or the first
+        # kill did not take -- force it. Suppressed so the endpoint never 500s
+        # on a wedged tmux; the returned `alive` carries the real outcome.
         if tmux.exists(session.mux, session.socket):
-            tmux.kill(session.mux, session.socket, force=session.adopted)
-        return {"id": session.id, "alive": False}
+            with contextlib.suppress(tmux.TmuxError):
+                tmux.kill(session.mux, session.socket, force=True)
+        return {"id": session.id, "alive": tmux.exists(session.mux, session.socket)}
 
     def orphans(self) -> list[dict]:
         """Live sessions on our own socket that no record points to.
