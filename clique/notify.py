@@ -21,6 +21,7 @@ always did.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import ipaddress
@@ -127,7 +128,7 @@ def _worker() -> None:
         job = _QUEUE.get()
         try:
             job()
-        except Exception:  # noqa: BLE001 — a delivery failing is not the panel's problem
+        except Exception:  # noqa: BLE001, S110 — a delivery failing is not the panel's problem
             pass
         finally:
             _QUEUE.task_done()
@@ -140,10 +141,8 @@ def _enqueue(job) -> None:
             _workers_started = True
             for _ in range(3):
                 threading.Thread(target=_worker, daemon=True).start()
-    try:
+    with contextlib.suppress(queue.Full):
         _QUEUE.put_nowait(job)
-    except queue.Full:
-        pass
 
 
 def post(url: str, secret: str, payload: dict) -> None:
