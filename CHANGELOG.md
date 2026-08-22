@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.44 — 2026-08-21 19:52 PDT
+
+**Host header with a `userinfo@` part is refused.** `host_allowed` took the
+text after an `@`, so `Host: evil.com@127.0.0.1` read as the safe `127.0.0.1`.
+Browsers never send that, so any `@` in a Host is now a rejection. Closes the
+last of the three-model security review; what remains is defense-in-depth for
+exposed self-hosting (a WS-aware slow-header timeout), not a reachable bug.
+
 ## 0.50.43 — 2026-08-21 19:50 PDT
 
 **An on-screen key row on the phone.** A soft keyboard cannot send Esc, Tab,

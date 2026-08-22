@@ -76,8 +76,12 @@ ALLOWED_HOST_EXACT = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 def host_allowed(host: str, extra: set[str]) -> bool:
     """Whether a Host/Origin hostname is one we answer to."""
-    name = (host or "").split("://")[-1].rsplit("@", 1)[-1]
-    name = name.split("]")[0].lstrip("[") if name.startswith("[") else name.split(":")[0]
+    raw = (host or "").split("://")[-1]
+    # A userinfo "@" is not something a browser puts in a Host, and taking the
+    # part after it read "Host: evil.com@127.0.0.1" as the safe 127.0.0.1.
+    if "@" in raw:
+        return False
+    name = raw.split("]")[0].lstrip("[") if raw.startswith("[") else raw.split(":")[0]
     name = name.lower().rstrip(".")
     if not name:
         return False
