@@ -175,6 +175,21 @@ error = [
   "Traceback \\(most recent call last\\)",
 ]
 
+[cli.antigravity]
+label   = "Antigravity"
+command = "agy"
+args    = []
+# agy resumes a conversation by its own id, and there is no flag to hand it
+# ours, so a fresh session starts a fresh conversation; --conversation is here
+# for when an id has been captured. `agy --continue` is the "most recent" door.
+resume  = ["--conversation", "{cli_session_id}"]
+color   = "#7c6cf0"
+icon    = "antigravity.svg"
+# No `modes`: agy cycles its own execution mode inside the TUI (accept-edits,
+# plan), like Grok's approval toggle. The pill stays hidden with the key absent.
+
+own_input = true
+
 [cli.shell]
 label   = "Shell"
 command = "bash"

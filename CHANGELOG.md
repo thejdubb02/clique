@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.54
+
+**Google Antigravity is a first-class CLI now.** Its `agy` command is recognised,
+selectable in the New Session dialog, and carries its own tinted mark — a session
+started as Antigravity is no longer an unlabelled pane. It draws its own screen,
+so the alternate-screen scroll fix applies to it as well. Purely config plus an
+icon, the way adding a CLI is meant to be.
+
 ## 0.50.53
 
 **Scrolling works in every CLI now, including Claude and Grok.** A full-screen
