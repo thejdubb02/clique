@@ -36,6 +36,20 @@ If you run more than two coding agents at once, you already know the problem: te
 
 It is **not** an IDE, not another AI, and not a replacement for your CLIs — it is the control panel in front of the tools you already use. If you want the tool to *be* the agent, look elsewhere.
 
+## What it looks like
+
+<p align="center">
+  <img src="docs/screenshots/desktop.png" alt="CLIque desktop: five coding agents across two folders, each with its icon, memory and status, and a live terminal pane" width="850">
+</p>
+
+Several agents in folders — Claude, Codex, Grok, Gemini, a shell — each with its
+own icon, the git branch it is on, its memory, and a status dot. The same list
+is a tap away on a phone:
+
+<p align="center">
+  <img src="docs/screenshots/mobile.png" alt="CLIque on a phone: the session list in a drawer" width="300">
+</p>
+
 ## What it does
 
 | | |
