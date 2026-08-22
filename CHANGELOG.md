@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.50.54
+## 0.50.54 — 2026-08-22 11:06 PDT
 
 **Google Antigravity is a first-class CLI now.** Its `agy` command is recognised,
 selectable in the New Session dialog, and carries its own tinted mark — a session
@@ -8,7 +8,7 @@ started as Antigravity is no longer an unlabelled pane. It draws its own screen,
 so the alternate-screen scroll fix applies to it as well. Purely config plus an
 icon, the way adding a CLI is meant to be.
 
-## 0.50.53
+## 0.50.53 — 2026-08-22 10:58 PDT
 
 **Scrolling works in every CLI now, including Claude and Grok.** A full-screen
 app on the alternate screen keeps no terminal scrollback — it owns its own view
@@ -19,7 +19,7 @@ mouse-wheel events there: it scrolls its own conversation and the redraw streams
 back. A shell or any normal-screen output still scrolls the pane's own 20k-line
 scrollback exactly as before.
 
-## 0.50.52
+## 0.50.52 — 2026-08-22 10:41 PDT
 
 **Drive CLIque from an agent.** Every session now reports a one-word `state` —
 `working`, `waiting`, `error`, `idle`, or `stopped` — and a new
@@ -30,7 +30,7 @@ option, an agent can run one task across many repos in parallel and collect the
 results. The workflow — mint a token, start sessions, send, wait, read — is
 written up as a skill in `skills/drive-clique/SKILL.md`.
 
-## 0.50.51
+## 0.50.51 — 2026-08-22 10:32 PDT
 
 **Run an agent in its own git worktree.** Starting a session in a repo now offers
 "Run in a new git worktree": CLIque makes an isolated checkout on a fresh branch
@@ -40,7 +40,7 @@ Delete the session and the worktree goes with it, but only when it is clean; a
 worktree with uncommitted work is left alone so nothing is lost. Scriptable too —
 `POST /api/sessions` takes `worktree` and `branch`.
 
-## 0.50.50
+## 0.50.50 — 2026-08-22 09:06 PDT
 
 **Filter the sidebar to just what is running.** A funnel button at the top of
 the sidebar hides every stopped session — and any folder left empty by that —
@@ -49,7 +49,7 @@ lights up while it is on, and the choice is remembered on this device (like the
 sidebar's width and whether it is shown), so it survives a reload without
 following you to your phone.
 
-## 0.50.49
+## 0.50.49 — 2026-08-21 20:58 PDT
 
 **Read back a conversation that scrolled away.** Claude draws over the terminal's
 alternate screen, so once its output scrolls off it is gone from the pane — but
@@ -60,7 +60,7 @@ transcript, never the whole file, and keyed off the session id Claude was launch
 with, so it is always the right conversation. Offered only where there is a full
 transcript to show.
 
-## 0.50.48
+## 0.50.48 — 2026-08-21 20:46 PDT
 
 **Leaked sessions are visible and reclaimable.** A tmux session left running
 with no record behind it — the record removed without stopping its process —
@@ -71,7 +71,7 @@ window, so a session mid-creation is never mistaken for a leak, and a mux that
 belongs to a real record is never killed. Completes the memory trio with
 per-tab RSS and idle reaping.
 
-## 0.50.47
+## 0.50.47 — 2026-08-21 20:36 PDT
 
 **A directory can no longer be mistaken for the state file.** `Store` now refuses
 a path that is a directory instead of quietly renaming it: the atomic save writes
@@ -79,7 +79,7 @@ a path that is a directory instead of quietly renaming it: the atomic save write
 `$CLIQUE_HOME/state.json` that rename moved the whole home aside. A caller mistake
 now raises on the spot rather than displacing a workspace.
 
-## 0.50.46
+## 0.50.46 — 2026-08-21 20:28 PDT
 
 **Idle sessions reap themselves and resume on click.** A tab left untouched for
 six hours has its process stopped — freeing its memory, ~700 MB for an idle

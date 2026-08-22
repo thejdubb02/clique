@@ -23,9 +23,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import queue
 import ipaddress
 import json
+import queue
 import socket
 import threading
 import time
@@ -117,7 +117,7 @@ def sign(body: bytes, secret: str) -> str:
 #: call: POST /api/webhook/test reaches here directly, so a caller spamming it
 #: could otherwise leave thousands of daemon threads each blocked for the request
 #: timeout. A full queue drops the delivery — the model already permits that.
-_QUEUE: "queue.Queue" = queue.Queue(maxsize=64)
+_QUEUE: queue.Queue = queue.Queue(maxsize=64)
 _WORKERS_LOCK = threading.Lock()
 _workers_started = False
 

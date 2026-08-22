@@ -138,7 +138,7 @@ _proc_cache: dict = {"at": 0.0, "rss": {}, "kids": {}}
 _PAGE_KB = os.sysconf("SC_PAGE_SIZE") // 1024
 
 
-def _walk_proc() -> "tuple[dict, dict]":
+def _walk_proc() -> tuple[dict, dict]:
     """(rss_kb_by_pid, children_by_ppid) from one pass over /proc."""
     rss: dict = {}
     kids: dict = {}
