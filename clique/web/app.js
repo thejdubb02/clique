@@ -3339,9 +3339,19 @@ function closeTab(id, silent, killing) {
   const entry = terms.get(id);
   if (entry) {
     entry.closing = true;
-    if (entry.ws) entry.ws.close();
-    entry.term.dispose();
-    entry.el.remove();
+    try { if (entry.ws) entry.ws.close(); } catch (err) { /* already closing */ }
+    // Dispose the renderer addon while the terminal is still whole; disposing
+    // it inside term.dispose() throws and used to abort the whole teardown.
+    // Then dispose the term, guarded, so nothing a renderer does can stop the
+    // tab from closing or the kill that follows from firing.
+    try {
+      if (entry.term._cliqueRenderer) {
+        entry.term._cliqueRenderer.dispose();
+        entry.term._cliqueRenderer = null;
+      }
+    } catch (err) { /* renderer already gone */ }
+    try { entry.term.dispose(); } catch (err) { /* going away regardless */ }
+    try { entry.el.remove(); } catch (err) { /* already detached */ }
     terms.delete(id);
   }
   openTabs = openTabs.filter((t) => t !== id);
@@ -3523,7 +3533,14 @@ async function attachNow(id) {
    */
   if (window.CanvasAddon) {
     try {
-      term.loadAddon(new CanvasAddon.CanvasAddon());
+      const canvas = new CanvasAddon.CanvasAddon();
+      term.loadAddon(canvas);
+      // Kept so closeTab can dispose the renderer *before* the terminal. A
+      // renderer addon disposed as part of term.dispose() tries to restore the
+      // DOM renderer against an already-torn-down linkifier and throws — which
+      // was aborting closeTab mid-teardown: the tab that would not close and
+      // the kill that never fired after it.
+      term._cliqueRenderer = canvas;
     } catch (err) {
       /* falls back to the DOM renderer on its own */
     }

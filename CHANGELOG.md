@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.57 - 2026-08-22 16:59 PDT
+
+**Closing a tab now really closes it, and Kill really kills.** The renderer addon
+threw while a terminal was being disposed -- it tried to restore the DOM renderer
+against an already-torn-down linkifier -- and that exception aborted closeTab
+half-way: the tab stayed on screen, and worse, the kill request that runs right
+after it never fired, so the session lived on. closeTab now disposes the renderer
+while the terminal is still whole, then tears the terminal down under guards, so
+nothing a renderer does can stop a tab from closing. Kill from the tab gear and
+Kill from the sidebar right-click both go through this, and both are now reliable.
+
 ## 0.50.56 - 2026-08-22 16:30 PDT
 
 **Kill session now actually kills it, every time.** Stopping a session used to
