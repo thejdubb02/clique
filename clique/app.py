@@ -527,6 +527,45 @@ class Panel:
             tmux.kill(session.mux, session.socket, force=session.adopted)
         return {"id": session.id, "alive": False}
 
+    def orphans(self) -> list[dict]:
+        """Live sessions on our own socket that no record points to.
+
+        A record removed without killing its tmux leaks the process and its
+        memory: it keeps running, but nothing in the panel can see or stop it.
+        A just-started session has its tmux a beat before its record, so only
+        sessions past a short grace window count -- never one mid-creation.
+        Heaviest first, so the memory worth reclaiming is at the top."""
+        known = {sess.mux for sess in self.store.sessions}
+        now = time.time()
+        loose = [p for p in tmux.list_sessions(tmux.SOCKET, prefix=tmux.PREFIX)
+                 if p.mux not in known
+                 and not p.mux.startswith("sm-view-")
+                 and now - p.created > 120]
+        if not loose:
+            return []
+        rss_map = sysinfo.rss_by_root([p.pid for p in loose])
+        return [{"mux": p.mux, "command": p.command, "pid": p.pid,
+                 "idle": round(now - p.activity),
+                 "rss": rss_map.get(p.pid, 0) * 1024}
+                for p in sorted(loose, key=lambda p: -rss_map.get(p.pid, 0))]
+
+    def reap_orphans(self, muxes=None) -> dict:
+        """Kill leaked sessions and reclaim their memory. With no list, every
+        orphan; otherwise only the named ones that are still orphans. A mux
+        that belongs to a real record is never killed, whatever was asked."""
+        known = {sess.mux for sess in self.store.sessions}
+        targets = {o["mux"] for o in self.orphans()}
+        if muxes is not None:
+            targets &= set(muxes)
+        killed = []
+        for mux in sorted(targets):
+            if mux in known:
+                continue
+            with contextlib.suppress(tmux.TmuxError):
+                tmux.kill(mux, tmux.SOCKET)
+                killed.append(mux)
+        return {"killed": killed}
+
     def start_session(self, session_id: str) -> dict:
         """Start a stopped session again. Same id, name, folder, directory.
 
@@ -965,6 +1004,8 @@ class Handler(BaseHTTPRequestHandler):
                 known = {s.mux for s in self.panel.store.sessions}
                 return self._json([p.as_dict() for p in tmux.adoptable()
                                    if p.mux not in known])
+            if path == "/api/orphans":
+                return self._json(self.panel.orphans())
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
             if path == "/api/workspace":
@@ -1147,6 +1188,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.create_session(body), 201)
             if path == "/api/sessions/adopt":
                 return self._json(self.panel.adopt())
+            if path == "/api/orphans/reap":
+                return self._json(self.panel.reap_orphans(body.get("muxes")))
             if path == "/api/workspace":
                 # A directory that does not exist yet is the commonest reason a
                 # new session fails, and "go and find a shell" is a poor answer

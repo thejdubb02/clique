@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.48
+
+**Leaked sessions are visible and reclaimable.** A tmux session left running
+with no record behind it — the record removed without stopping its process —
+used to hold its memory invisibly, off the list and past any control. The
+sidebar now shows a quiet line when any exist: how many, how much memory, and a
+Reclaim button that stops them. Detection skips anything younger than the grace
+window, so a session mid-creation is never mistaken for a leak, and a mux that
+belongs to a real record is never killed. Completes the memory trio with
+per-tab RSS and idle reaping.
+
 ## 0.50.47
 
 **A directory can no longer be mistaken for the state file.** `Store` now refuses

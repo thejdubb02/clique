@@ -418,6 +418,7 @@ async function refresh() {
   renderStats();
   renderServices();
   renderVersion();
+  loadOrphans();
   reclaimSize();
   // First load pulls history in so the sidebar is complete without anyone
   // having to open the palette to trigger it.
@@ -5022,6 +5023,9 @@ let palReturnTo = null;
 let resumable = null;
 let resumableAt = 0;
 
+let orphans = null;
+let orphansAt = 0;
+
 async function loadResumable(force) {
   if (!force && resumable && Date.now() - resumableAt < 60000) return resumable;
   try {
@@ -5031,6 +5035,59 @@ async function loadResumable(force) {
     resumable = resumable || [];
   }
   return resumable;
+}
+
+/* Leaked sessions: tmux still running with no record behind it, so nothing in
+ * the list can see or stop it. Fetched off the three-second poll and cached a
+ * minute, like resumable — this is a rare exception surface, not a live gauge. */
+async function loadOrphans(force) {
+  if (!force && orphans && Date.now() - orphansAt < 60000) return orphans;
+  try {
+    orphans = await api("api/orphans");
+    orphansAt = Date.now();
+  } catch (err) {
+    orphans = orphans || [];
+  }
+  renderOrphans();
+  return orphans;
+}
+
+function orphanMB(list) {
+  return Math.round(list.reduce((n, o) => n + (o.rss || 0), 0) / 1e6);
+}
+
+function renderOrphans() {
+  const el = $("#orphans");
+  if (!el) return;
+  const list = orphans || [];
+  if (!list.length) { el.hidden = true; el.textContent = ""; return; }
+  el.textContent = "";
+  const label = document.createElement("span");
+  const n = document.createElement("b");
+  n.textContent = list.length;
+  label.append(n, ` leaked session${list.length > 1 ? "s" : ""} \u00b7 ${orphanMB(list)} MB`);
+  label.title = "tmux sessions still running with no record behind them \u2014 "
+    + "nothing in the panel points to them, so they are safe to reclaim";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "reclaim";
+  btn.textContent = "Reclaim";
+  btn.onclick = reclaimOrphans;
+  el.append(label, btn);
+  el.hidden = false;
+}
+
+async function reclaimOrphans() {
+  const list = orphans || [];
+  if (!list.length) return;
+  if (!confirm(`Stop ${list.length} leaked session(s) and reclaim ~${orphanMB(list)} MB? `
+    + `They have no record in the panel and nothing points to them.`)) return;
+  let result;
+  try { result = await api("api/orphans/reap", { method: "POST", body: "{}" }); }
+  catch (err) { toast("Could not reclaim leaked sessions.", true); return; }
+  const killed = (result.killed || []).length;
+  toast(`Reclaimed ${killed} leaked session${killed === 1 ? "" : "s"}.`);
+  await loadOrphans(true);
 }
 
 /* Prompts you have already sent, for the palette's prompt search. Fetched the

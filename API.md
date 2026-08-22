@@ -113,6 +113,14 @@ reuse), `when`, and `cli_session_id`. `limit` is capped at 400.
 tmux sessions started by another tool that CLIque could take over, with the CLI
 guessed from the process tree. Already-known sessions are filtered out.
 
+### `GET /api/orphans`
+
+Leaked sessions: live tmux on our own socket, past a short grace window, that no
+record points to — the process keeps running and holds its memory, but nothing
+in the panel can see or stop it. `mux`, `command`, `pid`, `idle` seconds and
+`rss` bytes, heaviest first. A record removed without killing its tmux is how
+they arise. Reclaim them with the route below.
+
 ### `GET /api/changelog`
 
 Release notes parsed out of `CHANGELOG.md`: `version`, `date`, `time`, `zone`,
@@ -366,6 +374,13 @@ compares tmux's activity clock against.
 
 Takes over every adoptable tmux session found. Safe to run twice — it repairs
 earlier runs rather than duplicating them.
+
+### `POST /api/orphans/reap`
+
+Kills leaked sessions (see `GET /api/orphans`) and reclaims their memory. Body
+`{"muxes": [...]}` limits it to those names; an empty or absent list reaps all
+of them. A mux that belongs to a real record is never touched. Returns
+`{"killed": [...]}`.
 
 ### `POST /api/reorder`
 

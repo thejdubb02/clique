@@ -189,6 +189,20 @@ body {
 #sidebar footer { padding: 6px 12px; font-size: 10px; color: var(--dim);
                   border-top: 1px solid var(--line); background: var(--panel); }
 
+/* Leaked sessions: a rare exception surface, hidden until there is memory to
+   reclaim, and quiet enough never to compete with the list above it. */
+.orphans { padding: 7px 12px; font-size: 11px; color: var(--dim);
+           border-top: 1px solid var(--line); background: var(--panel);
+           display: flex; align-items: center; gap: 8px; }
+.orphans b { color: var(--warn); font-weight: 600; }
+.orphans .reclaim { margin-left: auto; background: none;
+                    border: 1px solid var(--warn); color: var(--warn);
+                    border-radius: 4px; padding: 2px 9px; cursor: pointer;
+                    font: inherit; font-size: 11px; line-height: 1.4; }
+@media (hover: hover) and (pointer: fine) {
+  .orphans .reclaim:hover { background: var(--warn); color: var(--bg); }
+}
+
 /* Collapsed rail: a dot per live session, so hiding the list never costs
    awareness of what is running. */
 /* Zero-width flex item with a wider hit area, so dragging the edge does not
