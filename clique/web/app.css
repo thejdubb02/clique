@@ -1447,3 +1447,9 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
   }
   #keyrow button:active { background: rgba(127, 127, 127, 0.34); }
 }
+
+/* Per-session memory in the sidebar row — small and dim, but there when you
+ * want to know which tab is heavy. */
+.session .rss { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums;
+                flex: 0 0 auto; margin-left: auto; padding-left: 6px; }
+.session .age { flex: 0 0 auto; }

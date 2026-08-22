@@ -210,6 +210,7 @@ class Panel:
 
     def sessions_view(self) -> list[dict]:
         panes = self.live()
+        rss_map = sysinfo.rss_by_root([p.pid for p in panes.values()])
         now = time.time()
         # Sessions that have gone stop being remembered by the busy check.
         working.forget(set(panes))
@@ -258,6 +259,9 @@ class Panel:
                 "alive": pane is not None,
                 "attached": bool(pane and pane.attached),
                 "command": pane.command if pane else None,
+                # Resident memory of the whole process tree, so you can see
+                # which tab is expensive before deciding what to do with it.
+                "rss": (rss_map.get(pane.pid, 0) * 1024) if pane else 0,
                 "activity": pane.activity if pane else 0,
                 # The pane's real size, so a browser can notice when it has
                 # drifted from what it is drawing. A tmux window has one size

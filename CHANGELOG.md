@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.45 — 2026-08-21 20:11 PDT
+
+**Every session shows its memory in the sidebar.** A small dim figure on each
+row — the resident memory of the CLI and everything it spawned, from one cached
+/proc walk for the whole list. It turns "which tab is eating the box" from a
+guess into a number: a stack of idle Claude tabs at ~700 MB each is suddenly
+visible. Groundwork for reaping the idle ones.
+
 ## 0.50.44 — 2026-08-21 19:52 PDT
 
 **Host header with a `userinfo@` part is refused.** `host_allowed` took the

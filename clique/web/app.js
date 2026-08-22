@@ -1065,6 +1065,12 @@ function historyRow(conv) {
   return row;
 }
 
+function humanBytes(n) {
+  if (!n) return "";
+  const mb = n / (1024 * 1024);
+  return mb >= 1024 ? (mb / 1024).toFixed(1) + "G" : Math.round(mb) + "M";
+}
+
 function sessionRow(s) {
   const row = document.createElement("div");
   row.className = "session" + (s.id === activeId ? " active" : "") +
@@ -1109,6 +1115,7 @@ function sessionRow(s) {
     `<span class="meta"><span class="name">${s.pinned ? '<span class="pin" title="Pinned">\u2605</span>' : ''}${escapeHtml(s.name)}</span>` +
     `<span class="${pathClass}">${pathHtml}</span>` +
     `</span>` +
+    (s.rss ? `<span class="rss" title="Memory — the CLI and everything it spawned">${humanBytes(s.rss)}</span>` : "") +
     `<span class="age">${ago(s.created)}</span>`;
   // The directory is still one hover away, rather than gone — and so is the
   // branch, when the line is showing a question instead.

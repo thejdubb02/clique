@@ -133,6 +133,60 @@ def load() -> dict:
     }
 
 
+_RSS_TTL = 8.0
+_proc_cache: dict = {"at": 0.0, "rss": {}, "kids": {}}
+_PAGE_KB = os.sysconf("SC_PAGE_SIZE") // 1024
+
+
+def _walk_proc() -> "tuple[dict, dict]":
+    """(rss_kb_by_pid, children_by_ppid) from one pass over /proc."""
+    rss: dict = {}
+    kids: dict = {}
+    for entry in os.scandir("/proc"):
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        try:
+            with open(f"/proc/{pid}/stat", "rb") as fh:
+                data = fh.read()
+        except OSError:
+            continue
+        close = data.rfind(b")")   # comm can hold spaces/parens; split after it
+        if close < 0:
+            continue
+        fields = data[close + 2:].split()
+        try:
+            ppid = int(fields[1])            # stat field 4, minus the two before comm
+            rss[pid] = int(fields[21]) * _PAGE_KB   # stat field 24 (rss, in pages)
+        except (IndexError, ValueError):
+            continue
+        kids.setdefault(ppid, []).append(pid)
+    return rss, kids
+
+
+def rss_by_root(roots) -> dict:
+    """Resident memory (KiB) of each root pid's whole tree — the CLI plus
+    everything it spawned. Cached briefly: RSS does not move fast enough to
+    reread on every three-second poll, and one /proc walk covers every tab."""
+    now = time.time()
+    if now - _proc_cache["at"] >= _RSS_TTL:
+        rss, kids = _walk_proc()
+        _proc_cache.update(at=now, rss=rss, kids=kids)
+    rss, kids = _proc_cache["rss"], _proc_cache["kids"]
+    out: dict = {}
+    for root in set(roots):
+        total, stack, seen = 0, [root], set()
+        while stack:
+            pid = stack.pop()
+            if pid in seen:
+                continue
+            seen.add(pid)
+            total += rss.get(pid, 0)
+            stack.extend(kids.get(pid, []))
+        out[root] = total
+    return out
+
+
 def snapshot(clients: int = 0) -> dict:
     return {
         "cpu": cpu_percent(),

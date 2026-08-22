@@ -71,7 +71,7 @@ client that finds these differ from its own terminal should say so; that is how
 a pane recovers from being resized by somebody else instead of sitting in
 tmux's dot-fill until something happens to jog it.
 
-Each session also carries `created`, `last_seen`, `order`, plus the live facts: `alive`, `attached`,
+Each session also carries `created`, `last_seen`, `order`, `rss` (process-tree resident bytes), plus the live facts: `alive`, `attached`,
 `command`, `activity` (tmux's own clock) and `busy`.
 
 `branch` and `dirty` come from git in that session's working directory —
