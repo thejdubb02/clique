@@ -354,6 +354,15 @@ class Store:
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
+        # The state file, never the directory holding it. A directory here is
+        # a caller mistake ($CLIQUE_HOME instead of $CLIQUE_HOME/state.json),
+        # and _write would rename it out from under itself: `path.replace(
+        # path.with_suffix(".json.bak"))` on a directory moves the whole home.
+        # Fail loudly instead of clobbering a workspace.
+        if self.path.is_dir():
+            raise ValueError(
+                f"state path is a directory, not a file: {self.path} "
+                "-- pass $CLIQUE_HOME/state.json, not $CLIQUE_HOME")
         self._lock = threading.RLock()
         self.folders: list[Folder] = []
         self.sessions: list[Session] = []

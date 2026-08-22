@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.47
+
+**A directory can no longer be mistaken for the state file.** `Store` now refuses
+a path that is a directory instead of quietly renaming it: the atomic save writes
+`state.json.bak` beside `state.json`, and pointed at `$CLIQUE_HOME` rather than
+`$CLIQUE_HOME/state.json` that rename moved the whole home aside. A caller mistake
+now raises on the spot rather than displacing a workspace.
+
 ## 0.50.46
 
 **Idle sessions reap themselves and resume on click.** A tab left untouched for
