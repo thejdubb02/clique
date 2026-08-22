@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.39 — 2026-08-21 19:06 PDT
+
+**The same-origin check compares the port too, and understands IPv6.** It split
+the host on ":" and dropped the port, so a page on another port of the same
+host — `http://127.0.0.1:9999` against the panel on `:3200` — counted as the
+panel's own origin and could drive it (the CSWSH the check exists to stop),
+and IPv6 literals were mangled to `[`. It now parses the origin and compares
+host and port, leaving scheme out so a tunnelled panel is never locked out of
+itself. A `CLIQUE_ALLOWED_HOSTS` name is still trusted as an origin, as before.
+
 ## 0.50.38 — 2026-08-21 18:54 PDT
 
 **A fenced read mode for public deployments.** Set `CLIQUE_FENCE_READS=1` and

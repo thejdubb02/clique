@@ -792,22 +792,26 @@ class Handler(BaseHTTPRequestHandler):
         if origin == "null":
             return False        # an opaque origin is a sandboxed frame, not our page
         host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
-        origin_host = origin.split("://")[-1].split(":")[0]
-        if origin_host == host.split(":")[0]:
+        # Compare host AND port, parsed with urlsplit so [::1] stays ::1 rather
+        # than "[". A different *port* of the same host is a different origin —
+        # the CSWSH this check exists to stop — and the old split-on-":" merged
+        # http://127.0.0.1:9999 with our :3200, and mangled every IPv6 literal.
+        # Scheme is deliberately not compared: behind a tunnel the panel cannot
+        # always tell its own, and host + port already separates the origins
+        # that matter here.
+        try:
+            o = urllib.parse.urlsplit(origin)
+            h = urllib.parse.urlsplit("//" + host)   # a Host header carries no scheme
+        except ValueError:
+            return False
+        if o.hostname and o.hostname == h.hostname and o.port == h.port:
             return True
-        # It used to fall back to host_allowed() here, and that was wrong.
-        #
-        # host_allowed is the *DNS-rebinding* allowlist for the Host header: it
-        # accepts any ts.net, any trycloudflare.com, any ngrok domain, and any
-        # bare IPv4, because those are the names a tunnel legitimately gives
-        # this server. As an *Origin* test it says the opposite of what is
-        # wanted — it means a page served from anyone's free ngrok subdomain
-        # counts as our own page, which is precisely the cross-site case the
-        # check exists to stop.
-        #
-        # A name the operator configured is different: they chose it, so it is
-        # theirs. Nothing else matches.
-        return origin_host in self.panel.allowed_hosts
+        # A hostname the operator explicitly named in CLIQUE_ALLOWED_HOSTS is
+        # trusted as an origin too — they chose it. Empty by default, and never
+        # host_allowed(): that allowlist accepts any ts.net / ngrok / bare IPv4
+        # for DNS-rebinding on the *Host*, which as an Origin test would count
+        # anyone's free subdomain as our own page.
+        return bool(o.hostname) and o.hostname in self.panel.allowed_hosts
 
     def _may_write(self) -> tuple[bool, str]:
         """(allowed, reason). Writes need auth, scope, and a same-origin check."""
