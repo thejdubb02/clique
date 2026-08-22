@@ -70,6 +70,7 @@ ICONS: dict[str, str] = {
     "pencil": "rename, recolour or delete a folder",
     "image": "images this session made",
     "keyboard": "keyboard shortcuts",
+    "filter": "show only running sessions",
     "maximize-2": "full screen",
     "minimize-2": "leave full screen",
 }
