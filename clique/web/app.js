@@ -5663,6 +5663,22 @@ function wirePaneClipboard(term, host, sessionId) {
     if (e.target && e.target.closest && e.target.closest("a, button")) return;
     sendPaneClick(term, e.clientX, e.clientY, sessionId);
   });
+
+  /* The wheel is the one that hurts. A CLI in mouse mode is handed every wheel
+   * tick by xterm, so scrolling up never reaches the pane's own 20k lines of
+   * scrollback — on a tool whose whole job is watching output go past, the
+   * thing you wanted to re-read is simply gone off the top. Caught in the
+   * capture phase, before xterm can forward it: the wheel scrolls the buffer
+   * and the CLI never sees it. Scrolling up trips the same follow-pause a
+   * mouse would, so the view stays where you left it. Non-mouse-mode CLIs
+   * already scroll fine and are left alone. */
+  host.addEventListener("wheel", (e) => {
+    if (!sessionOwnsInput(sessionId)) return;
+    const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 24));
+    term.scrollLines(lines);
+    e.preventDefault();
+    e.stopPropagation();
+  }, { capture: true, passive: false });
 }
 
 function renderCopyChip() {

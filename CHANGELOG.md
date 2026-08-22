@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.34 — 2026-08-21 17:47 PDT
+
+**The wheel scrolls the pane's history again, even when the CLI grabs the
+mouse.** Claude, Grok and anything else that turns on mouse tracking was being
+handed every wheel tick by the terminal, so scrolling up did nothing and
+output that went off the top was unreachable — on a panel built for watching
+output, the one thing you needed. The wheel now scrolls the pane's own 20,000
+lines of scrollback instead, and scrolling up pauses following so the view
+holds. No Shift required; non-mouse-mode CLIs are unchanged.
+
 ## 0.50.33 — 2026-08-21 17:38 PDT
 
 **First pass at a phone layout.** On a narrow screen the sidebar is now an
