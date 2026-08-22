@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import queue
 import ipaddress
 import json
 import socket
@@ -112,6 +113,39 @@ def sign(body: bytes, secret: str) -> str:
     return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
+#: Deliveries run on a small fixed pool behind a bounded queue, not a thread per
+#: call: POST /api/webhook/test reaches here directly, so a caller spamming it
+#: could otherwise leave thousands of daemon threads each blocked for the request
+#: timeout. A full queue drops the delivery — the model already permits that.
+_QUEUE: "queue.Queue" = queue.Queue(maxsize=64)
+_WORKERS_LOCK = threading.Lock()
+_workers_started = False
+
+
+def _worker() -> None:
+    while True:
+        job = _QUEUE.get()
+        try:
+            job()
+        except Exception:  # noqa: BLE001 — a delivery failing is not the panel's problem
+            pass
+        finally:
+            _QUEUE.task_done()
+
+
+def _enqueue(job) -> None:
+    global _workers_started
+    with _WORKERS_LOCK:
+        if not _workers_started:
+            _workers_started = True
+            for _ in range(3):
+                threading.Thread(target=_worker, daemon=True).start()
+    try:
+        _QUEUE.put_nowait(job)
+    except queue.Full:
+        pass
+
+
 def post(url: str, secret: str, payload: dict) -> None:
     """Fire and forget, on a thread, swallowing everything.
 
@@ -141,7 +175,7 @@ def post(url: str, secret: str, payload: dict) -> None:
         except (urllib.error.URLError, TimeoutError, OSError, ValueError):
             pass
 
-    threading.Thread(target=send, daemon=True).start()
+    _enqueue(send)
 
 
 class Watcher:

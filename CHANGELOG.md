@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.42 — 2026-08-21 19:43 PDT
+
+**Two more from the sweep.** Static files are served with a real containment
+check instead of a string prefix, so a sibling directory named `web-anything`
+cannot slip through. And webhook deliveries run on a small fixed worker pool
+behind a bounded queue rather than a thread per call — so a caller hammering
+the test endpoint cannot pile up daemon threads; a full queue drops the
+delivery, which the notification model already allows.
+
 ## 0.50.41 — 2026-08-21 19:41 PDT
 
 **`X-Forwarded-*` is believed only behind a trusted proxy now.** Host and

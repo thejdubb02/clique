@@ -1017,8 +1017,10 @@ class Handler(BaseHTTPRequestHandler):
     def _static(self, path: str) -> None:
         name = "index.html" if path == "/" else path.lstrip("/")
         target = (WEB / name).resolve()
-        # Path traversal check: resolve() first, then confirm containment.
-        if not str(target).startswith(str(WEB.resolve())) or not target.is_file():
+        # Path traversal check: resolve() first, then confirm real containment —
+        # a string prefix would also match a sibling like ".../web-evil".
+        base = WEB.resolve()
+        if (target != base and base not in target.parents) or not target.is_file():
             return self._send(404, b"not found", "text/plain")
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type.endswith("javascript"):
