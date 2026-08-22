@@ -247,6 +247,10 @@ class CliType:
             "icon": self.icon,
             "icon_full_color": bool(self.icon) and icon_is_full_colour(self.icon),
             "own_input": self.own_input,
+            # Whether a per-session conversation can be read back for scroll-back:
+            # true only for a full-turn transcript (Claude's dashed-dir), not a
+            # prompt-only log. Gates the "View conversation" action client-side.
+            "transcript": bool(self.history) and self.history.get("layout") == "dashed-dir",
         }
 
 

@@ -1467,3 +1467,21 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .session .rss { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums;
                 flex: 0 0 auto; margin-left: auto; padding-left: 6px; }
 .session .age { flex: 0 0 auto; }
+
+
+/* The conversation view reuses the file sheet: a CLI that draws over the
+   alternate screen keeps no scroll-back, so this reads it from the transcript.
+   Turns down the page, newest at the bottom, the way the session itself ran. */
+#fileTurns { overflow-y: auto; max-height: 68vh; display: flex;
+             flex-direction: column; gap: 12px; padding: 4px 2px; }
+#fileTurns .turn { display: flex; flex-direction: column; gap: 3px; }
+#fileTurns .who { font-size: 10px; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .06em; }
+#fileTurns .turn.user .who { color: var(--accent); }
+#fileTurns .turn.assistant .who { color: var(--warn); }
+/* A hairline above each turn so the back-and-forth reads as a conversation,
+   not one wall of text. The first turn needs none. */
+#fileTurns .turn + .turn { border-top: 1px solid var(--line); padding-top: 12px; }
+#fileTurns .body { white-space: pre-wrap; overflow-wrap: anywhere;
+                   font-size: 13px; line-height: 1.55; color: var(--fg); }
+#fileTurns .turn.user .body { color: var(--dim); }

@@ -227,6 +227,40 @@ def _prompt_text(message) -> str:
     return raw
 
 
+def _assistant_text(message) -> str:
+    """The prose of an assistant turn — the part a person read. Not the thinking
+    blocks, not the tool calls, not their results: those are how the answer was
+    reached, not the answer, and a scroll-back wants the conversation."""
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        return "\n".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        ).strip()
+    return ""
+
+
+def _tail_lines(path: Path, cap: int) -> list[str]:
+    """The last ``cap`` bytes of a file as whole lines, the partial first one
+    dropped. Never the whole file — a transcript runs to tens of MB, and this
+    is on a request path."""
+    try:
+        size = path.stat().st_size
+        with open(path, "rb") as fh:
+            if size > cap:
+                fh.seek(size - cap)
+                fh.readline()          # discard the line the seek landed inside
+            data = fh.read()
+    except OSError:
+        return []
+    return data.decode("utf-8", "replace").splitlines()
+
+
 class History:
     """Discovery across every CLI whose registry block declares a history."""
 
@@ -348,6 +382,56 @@ class History:
         return out
 
     # -------------------------------------------------------------- prompts
+
+    def _transcript_path(self, cli: str, session_id: str):
+        """The one transcript file for a session. Claude names it ``<id>.jsonl``
+        and ``<id>`` is the session id we launched it with, so a glob under the
+        history dir finds it with no cwd-to-directory mapping to get wrong. Only
+        the dashed-dir layout (Claude) keeps whole turns; a prompt-log has the
+        user side only, so there is no transcript to show."""
+        cli_type = self.registry.types().get(cli)
+        spec = getattr(cli_type, "history", None) if cli_type else None
+        if not spec or spec.get("layout") != "dashed-dir":
+            return None
+        root = Path(str(spec.get("dir", ""))).expanduser()
+        try:
+            matches = sorted(root.glob(f"*/{session_id}.jsonl"))
+        except OSError:
+            return None
+        return matches[0] if matches else None
+
+    def session_transcript(self, cli: str, session_id: str,
+                           cap: int = 800_000, max_turns: int = 300) -> list[dict]:
+        """The recent conversation for one session, oldest turn first — the
+        scroll-back a CLI that draws over the alternate screen keeps none of.
+        Bounded to the tail of the transcript, and to the typed turns: user
+        prompts and the assistant's prose. Consecutive turns from one side are
+        merged, since the assistant's prose arrives in pieces around its tools."""
+        if not session_id:
+            return []
+        path = self._transcript_path(cli, session_id)
+        if not path:
+            return []
+        turns: list[dict] = []
+        for line in _tail_lines(path, cap):
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            kind = rec.get("type")
+            if kind == "user":
+                role, text = "user", _prompt_text(rec.get("message"))
+            elif kind == "assistant":
+                role, text = "assistant", _assistant_text(rec.get("message"))
+            else:
+                continue
+            if not text:
+                continue
+            if turns and turns[-1]["role"] == role:
+                turns[-1]["text"] += "\n\n" + text
+            else:
+                turns.append({"role": role, "text": text})
+        return turns[-max_turns:]
 
     def prompts(self, limit: int = PROMPT_LIMIT, force: bool = False) -> list[dict]:
         """Individual prompts across every CLI that keeps a history, newest first.

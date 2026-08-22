@@ -1368,6 +1368,7 @@ function sessionMenu(ev, s) {
   const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
   showMenu(ev, [
     [s.alive ? "Open" : "Start again", () => openSession(s.id)],
+    ...(cliHasTranscript(s.cli) ? [["View conversation", () => openTranscript(s)]] : []),
     ["Rename", () => renameSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
@@ -2410,6 +2411,68 @@ function filePathNow() {
   return ($("#filePath").textContent || fileAsked || "").trim();
 }
 
+function cliHasTranscript(cliId) {
+  const cli = (state.clis || []).find((c) => c.id === cliId);
+  return Boolean(cli && cli.transcript);
+}
+
+/* Scroll-back for a CLI that keeps none. Claude and Grok draw over the terminal's
+ * alternate screen, so their own history is gone the moment it scrolls off — but
+ * the transcript on disk has every turn. This reads it into the file sheet: same
+ * surface, turns instead of a file. */
+async function openTranscript(s) {
+  fileSession = s.id;
+  fileAsked = "\u0000transcript:" + s.id;   // no real path collides with this
+  $("#fileTitle").textContent = s.name || "Conversation";
+  $("#filePath").textContent = "conversation";
+  $("#fileText").hidden = true; $("#fileText").textContent = "";
+  $("#fileImg").hidden = true; $("#fileImg").removeAttribute("src");
+  $("#fileTurns").hidden = true; $("#fileTurns").textContent = "";
+  $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading\u2026";
+  $("#file").hidden = false;
+  let data;
+  try {
+    data = await api("api/sessions/" + encodeURIComponent(s.id) + "/transcript");
+  } catch (err) {
+    if (fileSession === s.id) $("#fileNote").textContent = "Could not read the conversation.";
+    return;
+  }
+  if (fileSession !== s.id) return;   // a newer sheet opened while we waited
+  showTurns(data);
+}
+
+function showTurns(data) {
+  const note = $("#fileNote");
+  const box = $("#fileTurns");
+  const turns = (data && data.turns) || [];
+  box.textContent = "";
+  $("#fileText").hidden = true;
+  $("#fileImg").hidden = true;
+  if (!turns.length) {
+    box.hidden = true;
+    note.hidden = false;
+    note.textContent = "No conversation recorded yet for this session.";
+    return;
+  }
+  const cli = (state.clis || []).find((c) => c.id === data.cli);
+  const them = (cli && cli.label) || data.cli || "Assistant";
+  note.hidden = true;
+  for (const t of turns) {
+    const turn = document.createElement("div");
+    turn.className = "turn " + (t.role === "user" ? "user" : "assistant");
+    const who = document.createElement("div");
+    who.className = "who";
+    who.textContent = t.role === "user" ? "You" : them;
+    const body = document.createElement("div");
+    body.className = "body";
+    body.textContent = t.text || "";
+    turn.append(who, body);
+    box.append(turn);
+  }
+  box.hidden = false;
+  box.scrollTop = box.scrollHeight;   // land at the newest turn, like the session
+}
+
 async function openFileSheet(sessionId, path) {
   const asked = String(path || "").trim();
   if (!sessionId || !asked) return;
@@ -2421,6 +2484,8 @@ async function openFileSheet(sessionId, path) {
   $("#fileText").textContent = "";
   $("#fileImg").hidden = true;
   $("#fileImg").removeAttribute("src");
+  $("#fileTurns").hidden = true;
+  $("#fileTurns").textContent = "";
   $("#fileNote").hidden = false;
   $("#fileNote").textContent = "Looking…";
   $("#file").hidden = false;
@@ -2447,6 +2512,7 @@ function showFile(info) {
   text.textContent = "";
   img.hidden = true;
   img.removeAttribute("src");
+  $("#fileTurns").hidden = true;
   note.hidden = true;
 
   if (info.kind === "text") {

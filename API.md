@@ -113,6 +113,15 @@ reuse), `when`, and `cli_session_id`. `limit` is capped at 400.
 tmux sessions started by another tool that CLIque could take over, with the CLI
 guessed from the process tree. Already-known sessions are filtered out.
 
+### `GET /api/sessions/<id>/transcript`
+
+The session's conversation as turns — `{cli, name, turns}` where each turn is
+`{role, text}`, oldest first, consecutive same-role turns merged. For a CLI that
+draws over the alternate screen (Claude, Grok) and so keeps no scroll-back of
+its own. Read from the CLI's own transcript, bounded to a tail (never the whole
+file), and only the typed turns: user prompts and the assistant's prose, not its
+thinking or tool calls. Empty for a CLI whose history is prompts-only.
+
 ### `GET /api/orphans`
 
 Leaked sessions: live tmux on our own socket, past a short grace window, that no

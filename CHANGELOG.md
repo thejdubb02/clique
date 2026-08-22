@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.49
+
+**Read back a conversation that scrolled away.** Claude draws over the terminal's
+alternate screen, so once its output scrolls off it is gone from the pane — but
+every turn is on disk. A new "View conversation" on a Claude session's menu opens
+its transcript in the file sheet: user prompts and the assistant's prose, oldest
+first, the thinking and tool calls left out. Read from a bounded tail of the
+transcript, never the whole file, and keyed off the session id Claude was launched
+with, so it is always the right conversation. Offered only where there is a full
+transcript to show.
+
 ## 0.50.48
 
 **Leaked sessions are visible and reclaimable.** A tmux session left running

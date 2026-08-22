@@ -1023,11 +1023,25 @@ class Handler(BaseHTTPRequestHandler):
                 if query.get("raw") in {"1", "true", "yes"}:
                     return self._file_raw(path.split("/")[3], query.get("path") or "")
                 return self._file(path.split("/")[3], query.get("path") or "")
+            if path.startswith("/api/sessions/") and path.endswith("/transcript"):
+                return self._transcript(path.split("/")[3])
             if path.startswith("/api"):
                 return self._json({"error": "not found"}, 404)
             return self._static(path)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
+
+    def _transcript(self, session_id: str) -> None:
+        """The conversation for a session, for scroll-back on a CLI that keeps
+        none. The transcript's own id is the one we resumed if this was a
+        resume, otherwise the id we launched it with -- Claude's --session-id is
+        our own session id, which is why a fresh session needs nothing stored."""
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "not found"}, 404)
+        tid = session.cli_session_id or session.id
+        turns = self.panel.conversations.session_transcript(session.cli, tid)
+        return self._json({"cli": session.cli, "name": session.name, "turns": turns})
 
     def _peek(self, session_id: str, want: str) -> None:
         """The last few lines of a pane, without opening it.
