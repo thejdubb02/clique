@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.38 — 2026-08-21 18:54 PDT
+
+**A fenced read mode for public deployments.** Set `CLIQUE_FENCE_READS=1` and
+the file glance can no longer read outside a session's working directory, and
+refuses obvious credential files (`id_rsa`, `.env`, `.aws/`, and the like) even
+inside it. Default deployments are unchanged — the trusted-local model still
+lets an authenticated user read any path, because they already have a shell as
+this user. This is a self-hosting gate: the flag is what makes read tokens safe
+to hand out on an exposed instance.
+
 ## 0.50.37 — 2026-08-21 18:42 PDT
 
 **Revoking an API token now sticks.** `last_used` was written back to disk on

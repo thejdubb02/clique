@@ -12,12 +12,35 @@ ordinary case of an agent printing an absolute path.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
 #: How much text the sheet will hold. Bigger than that is still copyable;
 #: we just will not dump it into the browser.
 TEXT_CAP = 256 * 1024
+
+#: A public/self-hosted deployment sets CLIQUE_FENCE_READS=1: a read may not then
+#: escape the session's working directory, and may not touch an obvious
+#: credential file even inside it. Default deployments keep the trusted-local
+#: behaviour — anyone past the auth gate already has a shell as this user.
+_FENCE = os.environ.get("CLIQUE_FENCE_READS", "").strip().lower() in ("1", "true", "yes")
+_BLOCKED_FILES = frozenset((
+    "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".env", ".netrc",
+    ".pgpass", ".htpasswd", "credentials", ".git-credentials",
+))
+_BLOCKED_DIRS = frozenset((".ssh", ".aws", ".gnupg", ".gcloud", ".kube", ".docker"))
+
+
+def _fence(cwd: str, target: Path) -> None:
+    base = Path(cwd).resolve()
+    if target != base and base not in target.parents:
+        raise ValueError("outside the session directory")
+    if {p.lower() for p in target.parts} & _BLOCKED_DIRS:
+        raise ValueError("blocked directory")
+    if target.name.lower() in _BLOCKED_FILES:
+        raise ValueError("blocked file")
+
 
 #: A printed path with a compiler-style suffix: ``src/app.js:42`` or
 #: ``src/app.js:42:7``. The file is the part before that.
@@ -51,11 +74,13 @@ def resolve(cwd: str, raw: str) -> Path:
     if not text:
         raise ValueError("empty path")
     if text.startswith("~/"):
-        return (Path.home() / text[2:]).resolve()
-    path = Path(text)
-    if path.is_absolute():
-        return path.resolve()
-    return (Path(cwd) / path).resolve()
+        target = (Path.home() / text[2:]).resolve()
+    else:
+        path = Path(text)
+        target = path.resolve() if path.is_absolute() else (Path(cwd) / path).resolve()
+    if _FENCE:
+        _fence(cwd, target)
+    return target
 
 
 def inspect(cwd: str, raw: str) -> dict:
