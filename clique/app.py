@@ -137,6 +137,7 @@ class Panel:
             "1", "true", "yes")
         self.history = sysinfo.History()
         self._last_reap = 0.0
+        self._last_idle_reap = 0.0
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ views
@@ -169,6 +170,7 @@ class Panel:
         # already listing every session; the incremental cost is one kill for
         # something that should not exist.
         self._reap_viewers(tuple(sockets))
+        self._reap_idle(panes)
         return panes
 
     def _reap_viewers(self, sockets: tuple[str | None, ...]) -> None:
@@ -180,6 +182,41 @@ class Panel:
         # Housekeeping must never break the session list.
         with contextlib.suppress(tmux.TmuxError):
             tmux.sweep_viewers(sockets, detached_only=True)
+
+    def _reap_idle(self, panes: dict) -> None:
+        """Free the memory of an idle session by stopping its process, keeping
+        the record and greying its tab. Nothing is lost: the state is on disk
+        and resumable, so clicking the tab runs the CLI's resume and it is back
+        where it was. Never touches a session a browser is attached to, one that
+        is busy, or one that could not be brought back."""
+        try:
+            hours = float(self.store.settings.get("reap_idle_hours", 0) or 0)
+        except (TypeError, ValueError):
+            return
+        if hours <= 0:
+            return
+        now = time.time()
+        with self._lock:
+            if now - self._last_idle_reap < 60:
+                return
+            self._last_idle_reap = now
+        threshold = hours * 3600
+        for session in list(self.store.sessions):
+            pane = panes.get(session.mux)
+            if pane is None or pane.attached:
+                continue                        # already stopped, or in view
+            if now - pane.activity < threshold:
+                continue                        # not idle long enough
+            cli = self.registry.types().get(session.cli)
+            if not (cli and cli.resume):
+                continue                        # nothing to resume -> keep running
+            args = " ".join(cli.args)
+            if not (session.cli_session_id or "{id}" in args or "{uuid}" in args):
+                continue                        # no resume key -> do not lose it
+            if working.busy(pane, session.socket, now):
+                continue                        # do not interrupt work in progress
+            with contextlib.suppress(tmux.TmuxError):
+                tmux.kill(session.mux, session.socket, force=session.adopted)
 
     def health(self, detailed: bool = False) -> dict:
         """A monitor's-eye view of the panel.

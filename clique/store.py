@@ -119,6 +119,12 @@ DEFAULT_SETTINGS = {
     #: ceiling the list only ever grows, and a conversation from three weeks
     #: ago is something you search for rather than something you scroll past.
     "history_days": 14,
+    #: Kill an idle session's process after this many hours and grey its tab,
+    #: freeing its memory — a claude tab is ~700 MB of nothing while idle. Its
+    #: state is on disk, so clicking the tab resumes it exactly where it was.
+    #: Only a session that can be resumed, that no browser is looking at, and
+    #: that is not busy is ever reaped. 0 turns it off.
+    "reap_idle_hours": 6,
     #: "auto" lets each CLI decide: a CLI that draws its own input box gets no
     #: second box under it, and one that does not — a shell, a readline tool —
     #: keeps the panel's, which is also the only place Run, the repeat counter
@@ -592,6 +598,9 @@ class Store:
                 elif key == "history_days":
                     with contextlib.suppress(TypeError, ValueError):
                         self.settings[key] = max(1, min(int(value), 90))
+                elif key == "reap_idle_hours":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(0, min(int(value), 720))
                 else:
                     # Coerced to the shape of its own default.
                     #

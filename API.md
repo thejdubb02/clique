@@ -456,6 +456,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `palette_hotkey` | bool | Whether `Ctrl`+`K` opens the palette or is handed to the pane |
 | `history_in_sidebar` | bool | Past conversations listed under live sessions. **Off by default** — a month of work is several hundred of them, and at that ratio the sidebar stops showing what is running. The palette still searches all of it |
 | `history_days` | int | How far back the sidebar goes when the above is on. Default 14. Does not limit the palette |
+| `reap_idle_hours` | int | Stop an idle session's process after this many hours to free its memory, greying its tab; clicking it resumes exactly where it was. Only a resumable session no browser is attached to and that is not busy is reaped. Default 6; `0` turns it off; clamped to 720 |
 | `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it. The mode pill is never hidden by this |
 | `css_both`, `css_panel`, `css_terminal` | string | Custom CSS, applied in that order |
 | `snippets` | list | `{"trigger", "label", "text"}`; malformed entries are dropped here rather than becoming a render error later |

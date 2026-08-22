@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.46
+
+**Idle sessions reap themselves and resume on click.** A tab left untouched for
+six hours has its process stopped — freeing its memory, ~700 MB for an idle
+Claude — and its tab greys out. Click it and the session comes back exactly
+where it was: the state was on disk the whole time, so nothing is lost. Ten open
+tabs now cost what two do. Only a session that can actually be resumed, that no
+browser is attached to, and that is not mid-task is ever touched; a shell, which
+has nothing to resume, is left alone. The window is the `reap_idle_hours`
+setting — set it to `0` to switch reaping off.
+
 ## 0.50.45 — 2026-08-21 20:11 PDT
 
 **Every session shows its memory in the sidebar.** A small dim figure on each
