@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.52
+
+**Drive CLIque from an agent.** Every session now reports a one-word `state` —
+`working`, `waiting`, `error`, `idle`, or `stopped` — and a new
+`GET /api/sessions/<id>/wait?for=idle,waiting` blocks until it reaches one of
+those or times out, so an agent can start work and wait for it to finish or come
+back asking instead of polling the whole panel. With that plus the worktree
+option, an agent can run one task across many repos in parallel and collect the
+results. The workflow — mint a token, start sessions, send, wait, read — is
+written up as a skill in `skills/drive-clique/SKILL.md`.
+
 ## 0.50.51
 
 **Run an agent in its own git worktree.** Starting a session in a repo now offers

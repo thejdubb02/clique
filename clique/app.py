@@ -326,8 +326,51 @@ class Panel:
                 # "waiting" or "error", from whichever tier of the attention
                 # ladder could answer. See Panel._signal.
                 "signal": signal,
+                # One word for what the session is doing, for a caller that
+                # wants the answer rather than the ingredients: "stopped" (no
+                # process), "working" (producing output), "waiting"/"error"
+                # (needs a person), or "idle" (up, quiet, nothing pending).
+                "state": ("stopped" if pane is None
+                          else "working" if busy else (signal or "idle")),
             })
         return out
+
+    def session_state(self, session) -> str:
+        """One word for what a session is doing, the same vocabulary the
+        sidebar uses: stopped, working, waiting, error, idle. Computed fresh so
+        it is usable off the poll -- by the wait endpoint below, and by an agent
+        orchestrating CLIque over the API."""
+        pane = self.live().get(session.mux)
+        if pane is None:
+            return "stopped"
+        if working.busy(pane, session.socket):
+            return "working"
+        cli = self.registry.types().get(session.cli)
+        return self._signal(session, pane, cli) or "idle"
+
+    def wait_for_state(self, session_id: str, wanted: set, timeout: float) -> dict:
+        """Block until a session reaches one of ``wanted`` states, or timeout.
+
+        The primitive an agent needs to drive CLIque: start work, then wait for
+        it to finish or come back asking, instead of polling the whole panel.
+        The timeout is capped so a handler thread cannot be held forever; a
+        caller that wants longer calls again."""
+        if not self.store.session(session_id):
+            raise KeyError(session_id)
+        timeout = max(1.0, min(float(timeout), 300.0))
+        start = time.time()
+        deadline = start + timeout
+        while True:
+            session = self.store.session(session_id)
+            if session is None:
+                return {"id": session_id, "state": "gone", "matched": False,
+                        "waited": round(time.time() - start, 1)}
+            state = self.session_state(session)
+            if state in wanted or time.time() >= deadline:
+                return {"id": session_id, "state": state,
+                        "matched": state in wanted,
+                        "waited": round(time.time() - start, 1)}
+            time.sleep(1.0)
 
     def _signal(self, session, pane, cli) -> str:
         """Whether this session is waiting on a person, and how we know.
@@ -1048,6 +1091,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._file(path.split("/")[3], query.get("path") or "")
             if path.startswith("/api/sessions/") and path.endswith("/transcript"):
                 return self._transcript(path.split("/")[3])
+            if path.startswith("/api/sessions/") and path.endswith("/wait"):
+                wanted = {w for w in (query.get("for") or "idle").split(",") if w}
+                try:
+                    timeout = float(query.get("timeout") or 60)
+                except (TypeError, ValueError):
+                    timeout = 60.0
+                try:
+                    return self._json(
+                        self.panel.wait_for_state(path.split("/")[3], wanted, timeout))
+                except KeyError:
+                    return self._json({"error": "not found"}, 404)
             if path.startswith("/api"):
                 return self._json({"error": "not found"}, 404)
             return self._static(path)

@@ -31,6 +31,9 @@ python3 -m clique token revoke tk_xxxxxxxx
 curl -H "Authorization: Bearer $CLIQUE_TOKEN" http://127.0.0.1:3200/api/state
 ```
 
+Driving CLIque from an agent — start sessions, send prompts, wait for one to
+finish — is written up in `skills/drive-clique/SKILL.md`.
+
 A read-only token is refused on every write with `403 this API token is
 read-only`. Bearer tokens skip the same-origin check — they are not a browser
 credential and nothing can attach them to a cross-site request by accident.
@@ -57,7 +60,7 @@ The whole panel in one object, and what the browser polls every three seconds.
 
 Each session carries `own_input` — whether this CLI draws its own input box,
 which is what `input_mode: "auto"` reads — plus `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
-`folder`, `mode` (and `modes`, `mode_label`), `adopted`, `archived`, `pinned`, `draft`,
+`folder`, `mode` (and `modes`, `mode_label`), `adopted`, `archived`, `pinned`, `draft`, `state`,
 `saying` — the last line a session actually printed, and only for one that is
 waiting or has errored. It is what the sidebar shows in place of the working
 directory when something is asking for you: the ring says a session is blocked,
@@ -121,6 +124,15 @@ draws over the alternate screen (Claude, Grok) and so keeps no scroll-back of
 its own. Read from the CLI's own transcript, bounded to a tail (never the whole
 file), and only the typed turns: user prompts and the assistant's prose, not its
 thinking or tool calls. Empty for a CLI whose history is prompts-only.
+
+### `GET /api/sessions/<id>/wait`
+
+Blocks until the session reaches one of the `for` states — a comma list of
+`working`, `waiting`, `error`, `idle`, `stopped` — or `timeout` seconds pass
+(default 60, capped at 300). Returns `{id, state, matched, waited}`; `matched`
+is false on a timeout. The primitive for driving CLIque from a script or an
+agent: start work, then wait for `idle` (done) or `waiting` (needs a person)
+instead of polling the whole panel. See `skills/drive-clique/SKILL.md`.
 
 ### `GET /api/orphans`
 
