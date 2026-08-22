@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.55 — 2026-08-22 16:03 PDT
+
+**The leaked-sessions warning is now hard to miss.** It was a correct but quiet
+line at the foot of the sidebar, easy to scroll past. Now it is a warn-tinted
+bar with a warning mark, a bold count, and a filled Reclaim button, pinned where
+it always was but loud enough to notice. Nothing changed about when it appears:
+only while there is leaked memory to reclaim, and gone the moment you reclaim it.
+
 ## 0.50.54 — 2026-08-22 11:06 PDT
 
 **Google Antigravity is a first-class CLI now.** Its `agy` command is recognised,
