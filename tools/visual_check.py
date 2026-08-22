@@ -619,6 +619,17 @@ def _run(panel) -> int:
         page.screenshot(path=str(SHOTS / "settings.png"))
         check("settings opens", page.locator("#settings").is_visible())
 
+        # Phone build, first pass: a narrow viewport, reloaded so the mobile
+        # bootstrap runs (drawer starts closed), then the drawer opened over the
+        # pane. Not asserted yet — screenshots to iterate the layout on.
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(BASE, wait_until="networkidle")
+        page.wait_for_timeout(600)
+        page.screenshot(path=str(SHOTS / "mobile-closed.png"))
+        page.evaluate("setSidebar(true)")
+        page.wait_for_timeout(400)
+        page.screenshot(path=str(SHOTS / "mobile-drawer.png"))
+
         browser.close()
 
     print(f"\nscreenshots in {SHOTS}")

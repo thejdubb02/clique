@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.33 — 2026-08-21 17:38 PDT
+
+**First pass at a phone layout.** On a narrow screen the sidebar is now an
+overlay drawer over a full-width pane, not a column fighting the terminal for
+room: the drag-resizer steps aside, a tap on the rail slides the drawer in over
+a dimmed pane, and opening a session slides it back out. The rest of the phone
+work — an on-screen key row, the input bar's spacing — is still to come; this is
+the layout it hangs on.
+
 ## 0.50.32 — 2026-08-21 17:17 PDT
 
 **Pin a session and it floats to the top of its group.** Right-click or

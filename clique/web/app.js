@@ -3162,6 +3162,8 @@ function selectTab(id) {
   renderTree();
   saveWorkspace();
   landFocus();
+  // On a phone, opening a session slides the drawer shut so the pane is in front.
+  if (isMobile() && !$("#sidebar").hidden) setSidebar(false);
 }
 
 async function openSession(id) {
@@ -4699,6 +4701,7 @@ function wire() {
   $("#stats").onclick = showHistory;
   $("#cancel").onclick = () => ($("#modal").hidden = true);
   $("#collapse").onclick = () => setSidebar(false);
+  $("#scrim").onclick = () => setSidebar(false);
   $("#expand").onclick = () => setSidebar(true);
   $("#tabOverflow").onclick = (ev) => {
     ev.stopPropagation();
@@ -6042,10 +6045,15 @@ function paintInstall() {
   }
 }
 
+function isMobile() { return matchMedia("(max-width: 640px)").matches; }
+
 function setSidebar(show) {
   $("#sidebar").hidden = !show;
   $("#resizer").hidden = !show;
   $("#rail").hidden = show;
+  // On a phone the sidebar is an overlay drawer, so a shown one gets a scrim
+  // behind it — to dim the pane and to catch a tap that means "close".
+  $("#scrim").hidden = !(show && isMobile());
   localStorage.setItem("clique.sidebar", show ? "1" : "0");
   // Re-apply the stored width on the way back in, so collapsing and expanding
   // returns the sidebar you had rather than the default one.
@@ -6132,6 +6140,9 @@ wireTouchMenus();
 wirePeekTooltips();
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
+// A phone starts with the drawer closed and the pane in front, whatever a
+// desktop session in the same browser last left the sidebar at.
+if (isMobile()) setSidebar(false);
 bootWorkspace();
 setInterval(refresh, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and

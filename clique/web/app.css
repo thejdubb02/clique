@@ -1415,3 +1415,16 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
   }
 }
 .session .pin { color: #e8a33d; margin-right: 3px; font-size: .85em; line-height: 1; }
+
+/* Phone, first pass: the sidebar becomes an overlay drawer over a full-width
+ * pane, and the drag-resizer goes away (no dragging on a touch screen). The
+ * rest of the layout is not responsive yet — that is the tracked next step. */
+@media (max-width: 640px) {
+  #resizer { display: none; }
+  #sidebar {
+    position: fixed !important; top: 0; left: 0; bottom: 0;
+    width: min(84vw, 300px) !important; max-width: none !important;
+    z-index: 60; box-shadow: 2px 0 22px rgba(0, 0, 0, 0.5);
+  }
+  #scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.45); }
+}
