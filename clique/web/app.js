@@ -28,6 +28,8 @@ const api = async (path, opts = {}) => {
 
 let state = { folders: [], sessions: [], clis: [], stats: {}, settings: {} };
 let openTabs = [];            // session ids, in tab order
+let activeOnly = (() => { try { return localStorage.getItem("clique.activeOnly") === "1"; }
+                          catch (e) { return false; } })();  // show only running sessions
 let activeId = null;
 const SESSION_DRAG = "text/clique-session";
 const FOLDER_DRAG = "text/clique-folder";
@@ -773,7 +775,7 @@ function treeFingerprint() {
     ago(c.updated), c.repeats || 1, c.cli || "",
   ].join("\x1f")).join("\x1e");
   return [
-    query, activeId || "",
+    query, activeOnly ? 1 : 0, activeId || "",
     [...viewsCollapsed].sort().join(","),
     openTabs.join(","),
     [...historyOpen].sort().join(","),
@@ -786,6 +788,22 @@ function treeFingerprint() {
 
 let treeFp = "";
 let tabsFp = "";
+
+function applyActiveOnly() {
+  const btn = $("#activeOnly");
+  if (!btn) return;
+  btn.classList.toggle("on", activeOnly);
+  btn.setAttribute("aria-pressed", activeOnly ? "true" : "false");
+  btn.title = activeOnly ? "Showing only running sessions \u2014 click to show all"
+                         : "Show only running sessions";
+}
+
+function toggleActiveOnly() {
+  activeOnly = !activeOnly;
+  try { localStorage.setItem("clique.activeOnly", activeOnly ? "1" : "0"); } catch (e) {}
+  applyActiveOnly();
+  renderTree();   // the fingerprint carries activeOnly, so this rebuilds
+}
 
 function renderTree() {
   const tree = $("#tree");
@@ -813,9 +831,10 @@ function renderTree() {
   tree.innerHTML = "";
 
   const matches = (s) =>
-    !query || s.name.toLowerCase().includes(query)
+    (!activeOnly || s.alive)
+    && (!query || s.name.toLowerCase().includes(query)
       || s.cwd.toLowerCase().includes(query)
-      || (s.branch || "").toLowerCase().includes(query);
+      || (s.branch || "").toLowerCase().includes(query));
 
   // Running-and-open first: what you are working on should not be somewhere
   // you have to scroll to.
@@ -862,7 +881,7 @@ function renderTree() {
     // Pinned sessions float to the top of their group, above recency. A stable
     // sort keeps the order within the pinned, and within the rest.
     shown.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-    if (query && !shown.length) continue;
+    if ((query || activeOnly) && !shown.length) continue;
 
     const head = document.createElement("div");
     /* A folder holding the session you are looking at says so, whether it is
@@ -4797,6 +4816,8 @@ function wire() {
 
   $("#newFolder").onclick = newFolder;
   $("#adopt").onclick = adoptSessions;
+  $("#activeOnly").onclick = toggleActiveOnly;
+  applyActiveOnly();
 
   $("#newForm").onsubmit = async (ev) => {
     ev.preventDefault();

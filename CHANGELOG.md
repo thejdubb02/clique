@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.50
+
+**Filter the sidebar to just what is running.** A funnel button at the top of
+the sidebar hides every stopped session — and any folder left empty by that —
+so a list of two dozen collapses to the handful you are actually working in. It
+lights up while it is on, and the choice is remembered on this device (like the
+sidebar's width and whether it is shown), so it survives a reload without
+following you to your phone.
+
 ## 0.50.49
 
 **Read back a conversation that scrolled away.** Claude draws over the terminal's

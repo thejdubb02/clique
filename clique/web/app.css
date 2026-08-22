@@ -110,6 +110,10 @@ body {
   padding: 6px 8px; border-radius: 3px; font-size: 13px; line-height: 1;
 }
 
+/* The active-only filter is a stateful toggle, so unlike the other header
+   buttons it stays lit while it is on. */
+.hdr-btn.on { color: var(--accent); background: var(--row); }
+
 .search { padding: 8px; background: var(--panel); }
 .search input {
   width: 100%; padding: 5px 8px; font: inherit;

@@ -53,6 +53,7 @@
   <symbol id="i-arrow-down-to-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3" /><path d="m6 11 6 6 6-6" /><path d="M19 21H5" /></symbol>
   <!-- output is paused, not following -->
   <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="3" width="5" height="18" rx="1" /><rect x="5" y="3" width="5" height="18" rx="1" /></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" /></symbol>
   <!-- rename, recolour or delete a folder -->
   <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /><path d="m15 5 4 4" /></symbol>
   <!-- images this session made -->
@@ -72,6 +73,7 @@
     <header>
       <img class="brand-mark" src="brand/mark.svg" alt="" width="15" height="15">
       <span class="brand">CLIque</span>
+      <button id="activeOnly" class="hdr-btn" title="Show only running sessions" aria-pressed="false"><svg class="ico" aria-hidden="true"><use href="#i-filter"/></svg></button>
       <button id="newFolder" class="hdr-btn" title="New folder"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
       <button id="adopt" class="hdr-btn" title="Adopt sessions from another tool"><svg class="ico" aria-hidden="true"><use href="#i-download"/></svg></button>
       <button id="settingsBtn" class="hdr-btn" title="Settings"><svg class="ico" aria-hidden="true"><use href="#i-settings"/></svg></button>
