@@ -79,17 +79,25 @@ What is next, and why that order: [ROADMAP.md](ROADMAP.md). What shipped: [CHANG
 Needs **Python 3.11+** and **tmux**. Nothing else.
 
 ```bash
-git clone https://github.com/thejdubb02/clique.git
-cd clique
-python3 -m clique password    # prompted; stored as an scrypt hash
-python3 -m clique             # http://127.0.0.1:3200
+pip install clique-panel     # or: uvx --from clique-panel clique
+
+clique password              # prompted; stored as an scrypt hash
+clique                       # http://127.0.0.1:3200
 ```
 
-State lives in `$CLIQUE_HOME`, default `~/.clique`. To edit the CLI catalogue,
-`python3 -m clique config` drops one where your edits survive an upgrade.
+The command is `clique`; the package is `clique-panel` because `clique` on PyPI
+belongs to an unrelated library. State lives in `$CLIQUE_HOME`, default
+`~/.clique`. To edit the CLI catalogue on an installed copy, `clique config`
+puts one in there for you.
 
-Once it is on PyPI, `pip install clique-panel` gives you a `clique` command
-(the package is `clique-panel` because `clique` there is an unrelated library).
+From a checkout instead:
+
+```bash
+git clone https://github.com/thejdubb02/clique.git
+cd clique
+python3 -m clique password
+python3 -m clique
+```
 
 It binds to loopback on purpose. Put a tunnel in front of it (Tailscale Serve, Caddy, nginx) if you want it from another machine. Do not bind it to the public internet. Anyone who reaches the panel has a terminal as the user that started it.
 
