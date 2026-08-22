@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.32 — 2026-08-21 17:17 PDT
+
+**Pin a session and it floats to the top of its group.** Right-click or
+long-press a session and "Pin to top" keeps it above the newer ones that
+would otherwise push it down — the handful you keep coming back to, marked
+with a star and held above recency, in the sidebar and inside its folder.
+Unpin drops it back into the flow.
+
 ## 0.50.31 — 2026-08-21 16:49 PDT
 
 **Search everything you have typed, and send it again.** The command palette

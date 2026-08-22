@@ -1414,3 +1414,4 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
     #toast { transform: translateX(-50%); }
   }
 }
+.session .pin { color: #e8a33d; margin-right: 3px; font-size: .85em; line-height: 1; }

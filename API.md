@@ -57,7 +57,7 @@ The whole panel in one object, and what the browser polls every three seconds.
 
 Each session carries `own_input` — whether this CLI draws its own input box,
 which is what `input_mode: "auto"` reads — plus `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
-`folder`, `mode` (and `modes`, `mode_label`), `adopted`, `archived`, `draft`,
+`folder`, `mode` (and `modes`, `mode_label`), `adopted`, `archived`, `pinned`, `draft`,
 `saying` — the last line a session actually printed, and only for one that is
 waiting or has errored. It is what the sidebar shows in place of the working
 directory when something is asking for you: the ring says a session is blocked,
@@ -148,7 +148,7 @@ a `400` with the reason in `error`.
 
 ### `PATCH /api/sessions/<id>`
 
-Fields: `name`, `folder` (`null` means Ungrouped), `mode`, `archived`, `draft`.
+Fields: `name`, `folder` (`null` means Ungrouped), `mode`, `archived`, `pinned`, `draft`.
 Only the fields you send are touched — absent and `null` are different, so a
 rename cannot silently unfile a session.
 

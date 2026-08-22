@@ -858,6 +858,9 @@ function renderTree() {
 
   for (const group of groups) {
     const shown = group.sessions.filter(matches);
+    // Pinned sessions float to the top of their group, above recency. A stable
+    // sort keeps the order within the pinned, and within the rest.
+    shown.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     if (query && !shown.length) continue;
 
     const head = document.createElement("div");
@@ -1068,6 +1071,7 @@ function sessionRow(s) {
     (s.alive ? "" : " dead") + (s.busy ? " busy" : "") +
     (unread(s) ? " unread" : "") +
     (workState(s) === "asking" ? " asking" : "") +
+    (s.pinned ? " pinned" : "") +
     (attention.has(s.id) ? " attention" : "");
   row.draggable = true;
   row.dataset.id = s.id;
@@ -1102,7 +1106,7 @@ function sessionRow(s) {
   row.innerHTML =
     statusDot(s, "sidebar") +
     sessionMarker(s, "sidebar") +
-    `<span class="meta"><span class="name">${escapeHtml(s.name)}</span>` +
+    `<span class="meta"><span class="name">${s.pinned ? '<span class="pin" title="Pinned">\u2605</span>' : ''}${escapeHtml(s.name)}</span>` +
     `<span class="${pathClass}">${pathHtml}</span>` +
     `</span>` +
     `<span class="age">${ago(s.created)}</span>`;
@@ -1366,6 +1370,7 @@ function sessionMenu(ev, s) {
     ...(folders.length ? [["Move to folder…", () => moveToFolder(s)]] : []),
     ...(s.folder ? [["Take out of its folder", () => setFolder(s, null)]] : []),
     [s.archived ? "Unarchive" : "Archive", () => setArchived(s, !s.archived)],
+    [s.pinned ? "Unpin from top" : "Pin to top", () => setPinned(s, !s.pinned)],
     [s.alive ? "Kill session" : "Delete session", () => killSession(s), true],
   ]);
 }
@@ -1581,6 +1586,17 @@ async function setArchived(s, archived) {
     method: "PATCH", body: JSON.stringify({ archived }),
   });
   if (archived) closeTab(s.id, true);
+  refresh();
+}
+
+async function setPinned(s, pinned) {
+  // Stamped locally first so the row jumps to the top on the click rather than
+  // on the next poll, then told to the server like the rest of the settings.
+  s.pinned = pinned;
+  renderTree();
+  await api("api/sessions/" + s.id, {
+    method: "PATCH", body: JSON.stringify({ pinned }),
+  });
   refresh();
 }
 

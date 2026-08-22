@@ -251,6 +251,10 @@ class Session:
     #: Out of the way, not gone. Archiving never touches the tmux session, so
     #: an archived session is still running and can be un-archived at any time.
     archived: bool = False
+    #: Floated to the top of its group in the sidebar, above recency — a
+    #: favourite. The few sessions you keep coming back to should not sink as
+    #: newer ones arrive.
+    pinned: bool = False
     #: What is half-typed in the prompt box and not sent yet. On the server for
     #: the same reason `last_seen` is: an unsent instruction is about the work,
     #: not about the screen, so it survives a reload and follows you to another

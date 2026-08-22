@@ -242,6 +242,7 @@ class Panel:
                 "mode_label": cli.mode_label if cli else "",
                 "adopted": session.adopted,
                 "archived": session.archived,
+                "pinned": session.pinned,
                 "draft": session.draft,
                 "created": session.created,
                 "last_seen": session.last_seen,
@@ -1350,7 +1351,7 @@ class Handler(BaseHTTPRequestHandler):
                 # real value (drag to Ungrouped), so "absent" and "null" have
                 # to stay distinguishable — passing body.get() for every field
                 # would make a rename silently unfile the session.
-                allowed = {"name", "folder", "mode", "archived", "draft"}
+                allowed = {"name", "folder", "mode", "archived", "draft", "pinned"}
                 fields = {k: v for k, v in body.items() if k in allowed}
                 updated = self.panel.store.update_session(parts[2], **fields)
                 return self._json({"ok": bool(updated)}, 200 if updated else 404)
