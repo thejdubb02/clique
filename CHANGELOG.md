@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.35 — 2026-08-21 17:57 PDT
+
+**Closing and reopening the sidebar no longer leaves the pane the wrong size.**
+The toggle refit the terminal at the instant of the change — before the layout
+had settled — and never told tmux the new width, so a boxed CLI came back scaled
+against the old size, with a stray scrollbar and dead space beside it. It now
+refits on the next frame and again once settled, and pushes the new width
+through to tmux.
+
 ## 0.50.34 — 2026-08-21 17:47 PDT
 
 **The wheel scrolls the pane's history again, even when the CLI grabs the

@@ -6074,7 +6074,13 @@ function setSidebar(show) {
   // Re-apply the stored width on the way back in, so collapsing and expanding
   // returns the sidebar you had rather than the default one.
   if (show) setSidebarWidth(storedSidebarWidth(), false);
-  setTimeout(() => { packTabs(); refitAll(); }, 0);
+  // Toggling the sidebar changes the pane's width, so refit and push the new
+  // size to tmux — after the layout has actually settled, not at 0ms. Fitting
+  // too early computes a boxed CLI's zoom against the old width, and the pane
+  // comes back scaled wrong with a stray scrollbar and dead space beside it.
+  const settle = () => { packTabs(); refitAll(); reclaimSize(document.hasFocus()); };
+  requestAnimationFrame(settle);
+  setTimeout(settle, 80);
 }
 
 /* Carry the browser's own state across the rename, once.

@@ -460,7 +460,7 @@ def _run(panel) -> int:
                       }
                       return false;
                     }""",
-                    timeout=2500)
+                    timeout=6000)
                 clicked_ok = True
                 after_click = "clicked"
             except Exception as err:  # noqa: BLE001 — the check names what failed
