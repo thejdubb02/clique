@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>A folder for every CLI on the box. Coding sessions in the browser, kept alive in tmux.</strong><br>
-  Claude Code, Grok, Gemini, Codex, or anything you add in four lines of config.
+  Claude Code, Codex, Gemini, Grok, Antigravity, or anything you add in four lines of config.
 </p>
 
 <p align="center">
@@ -12,7 +12,7 @@
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/thejdubb02/clique/actions/workflows/tests.yml"><img src="https://github.com/thejdubb02/clique/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.46.0-A855F7?style=flat-square" alt="0.30.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.50.54-A855F7?style=flat-square" alt="0.50.54"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
   <a href="https://buymeacoffee.com/jdubb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
   <a href="#support-the-dev"><img src="https://img.shields.io/badge/Donate-BTC%20%7C%20SHIB%20%7C%20DOGE-5FA8F5?style=flat-square" alt="Donate"></a>
@@ -26,11 +26,15 @@ If you run more than two coding agents at once, you already know the problem: te
 
 **24 MB resident.** No framework, no `node_modules`, no build step. `tmux`, a PTY, and the Python standard library.
 
-## Who it is for
+## Who it's for
 
-You already run more than one coding agent. Claude Code, Grok, Gemini, Codex, or the next one, and you have lost track of which terminal is waiting on you. CLIque is the panel in front of them. It is not an IDE, not a chat client, and not a replacement for the CLIs themselves.
+**Using one AI coding agent?** Claude Code, Codex, Cursor's CLI, Gemini, Grok, Antigravity — CLIque puts it in your browser. Kick off a task, close the laptop, and check on it from your phone on the couch. Nothing to babysit, nothing to install but Python and tmux.
 
-If you are happy with a tmux session per project, you do not need this. If you want the tool to *be* the agent, look elsewhere.
+**Running several at once?** You already know the problem: terminals everywhere, no idea which one is waiting on you, a conversation you cannot get back to. CLIque is the one screen in front of all of them — folders, a status ring on each, one click to jump, and a real phone notification when one wants you.
+
+**Driving a fleet?** Run ten agents across ten repos, each in its own git worktree so they do not step on each other, reap the idle ones to reclaim memory and resume them later exactly where they left off, and script the whole thing over an HTTP API.
+
+It is **not** an IDE, not another AI, and not a replacement for your CLIs — it is the control panel in front of the tools you already use. If you want the tool to *be* the agent, look elsewhere.
 
 ## What it does
 
@@ -38,6 +42,11 @@ If you are happy with a tmux session per project, you do not need this. If you w
 |---|---|
 | **Command palette** | `Ctrl`/`Cmd`+`K`: fuzzy jump between sessions, most-recently-used first. `>` commands, `@` sessions, `~` past conversations. |
 | **History** | Every conversation your CLIs have kept, filed by directory, resumable in one click. Repeated runs of the same scheduled agent fold into one row. |
+| **Resume & reap** | An idle tab has its process stopped after a few hours — ~700 MB freed for an idle Claude — and its tab greys out. Click it and it resumes exactly where it was. Ten open tabs cost what two do. |
+| **Worktrees** | Start a session in its own git worktree, so several agents work the same repo at once without touching each other's files. Delete the session and the worktree goes too — unless it has uncommitted work. |
+| **Conversation view** | A CLI that draws full-screen keeps no scrollback; **View conversation** reads its transcript back — your turns and the assistant's prose, tools and thinking left out — in a clean sheet. |
+| **Agent-drivable** | A one-word `state` per session, a `wait`-until-done call, and a skill, so an agent can drive CLIque itself: fan one task across many repos and collect the results. |
+| **Filter** | One button in the sidebar hides every stopped session — and any folder left empty by it — so a list of two dozen collapses to what is actually running. |
 | **Folders** | A tree. Drag to reorder folders and sessions, or drop a session on a folder to file it. Double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). Each row names the git branch it is on, and how many files have changed. |
 | **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Names shrink first; what still will not fit lands in **N more**, wearing the same working / waiting ring. Closing a tab is not killing the session. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. Drag to copy, even when the CLI wants the mouse. `Ctrl`/`Cmd`+`C` copies a selection and interrupts when there isn't one; `Ctrl`/`Cmd`+`Shift`+`C` copies the screen. |
@@ -59,7 +68,7 @@ If you are happy with a tmux session per project, you do not need this. If you w
 | **Monitoring** | `GET /healthz` answers without a login. Point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |
 | **Touch** | Long press a session for the menu right-click gives, with tap targets sized for a finger. |
-| **Installable** | Its own window: Install as an app, no browser tabs, no URL bar. Full screen from the bottom bar (`Ctrl`/`Cmd`+`Shift`+`F`). (The layout is not mobile-optimised yet.) |
+| **Phone & PWA** | Install it as its own app — no tabs, no URL bar, full screen from the bottom bar. Built for a phone browser too: a drawer sidebar, a full-width pane, an on-screen row for the keys a terminal needs (Esc, Tab, Ctrl+C, arrows), and a wheel that scrolls a full-screen CLI's own view. |
 
 Not built, on purpose: subagent visualisation, a respawn controller, multi-host, a Ralph loop. Those need to know which vendor is talking. This product does not.
 
