@@ -39,7 +39,7 @@ CLONE = "git clone https://github.com/thejdubb02/clique.git\ncd clique\npython3 
 CSS_V = "11"
 
 #: Homepage strip. Editorial order; every id must exist in clis.toml.
-FEATURED = ("claude", "grok", "gemini", "codex", "opencode", "cursor", "cline", "shell")
+FEATURED = ("claude", "grok", "gemini", "codex", "antigravity", "opencode", "cursor", "cline", "shell")
 SHORT_LEDE = 4
 EXAMPLE_CLI = "grok"
 META_KEYS = {"html_lang", "locale"}
