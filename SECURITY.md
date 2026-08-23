@@ -77,6 +77,20 @@ reason not to). Mode 0600.
   shared across panes, not per-session, so it is not individually attributable
   and cannot prove which session a nudge is *for*: an agent can still spoof
   another session's status dot. That is the honest limit of it.
+- **BYOK model keys** — optional, and off unless you add one. A provider's key
+  is encrypted at rest with AES-256-GCM before it is written; the data key is a
+  separate `0600` `secret.key` under `$CLIQUE_HOME`, so lifting `state.json`
+  (from a backup or a sync) yields ciphertext, not a key. The crypto comes from
+  the opt-in extra (`pip install 'clique-panel[llm]'`); with it absent, a key is
+  refused rather than stored in the clear. The plaintext key is never returned
+  by any endpoint (only whether one is set), never logged, and never rides
+  `/api/state`. Outbound calls to a provider refuse a `base_url` that resolves
+  to a cloud-metadata / link-local address or, by default, an internal-network
+  host — so a mistyped or hostile URL cannot turn the panel into an SSRF proxy;
+  loopback stays open for local models. What we do **not** yet do: pin the
+  connection to the resolved IP (DNS-rebinding on an operator-set URL is the
+  residual), and a model's own output is treated as data — the copilot's
+  "run this" is always a draft an operator approves, never auto-run.
 
 ## Where we are stronger than the tool we replaced
 

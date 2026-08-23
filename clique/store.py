@@ -424,6 +424,12 @@ class Store:
         # Merge rather than replace, so a setting added in a later version
         # appears with its default instead of being missing.
         self.settings = {**DEFAULT_SETTINGS, **(raw.get("settings") or {})}
+        # Bring-your-own-key LLM providers. Kept out of `settings` on purpose:
+        # each carries an encrypted key, and settings is echoed to every read
+        # client — providers are fetched only on demand, keys never in the poll.
+        llm = raw.get("llm") if isinstance(raw.get("llm"), dict) else {}
+        providers = llm.get("providers")
+        self.llm = {"providers": providers if isinstance(providers, list) else []}
         if not raw:
             self._write()
         else:
@@ -444,6 +450,7 @@ class Store:
             "folders": [asdict(f) for f in self.folders],
             "sessions": [asdict(s) for s in self.sessions],
             "settings": self.settings,
+            "llm": self.llm,
         }
         tmp = self.path.with_suffix(".json.tmp")
         # Flushed and fsynced before the rename, not just written.
@@ -670,6 +677,47 @@ class Store:
                         self.settings[key] = value
             self._write()
             return self.settings
+
+    # ------------------------------------------------------------ llm providers
+    #
+    # The store is deliberately dumb here: it persists whatever record it is
+    # handed and never sees a plaintext key. Encryption (secretbox), redaction
+    # and validation all live one layer up, in the panel — this just keeps the
+    # list and writes it to the 0600 state file.
+
+    def llm_providers(self) -> list[dict]:
+        with self._lock:
+            return [dict(p) for p in self.llm.get("providers", [])]
+
+    def provider(self, provider_id: str) -> dict | None:
+        with self._lock:
+            found = next(
+                (p for p in self.llm.get("providers", []) if p.get("id") == provider_id), None
+            )
+            return dict(found) if found else None
+
+    def save_provider(self, record: dict) -> dict:
+        """Insert or replace a provider by id, and persist."""
+        with self._lock:
+            providers = self.llm.setdefault("providers", [])
+            for i, existing in enumerate(providers):
+                if existing.get("id") == record.get("id"):
+                    providers[i] = record
+                    break
+            else:
+                providers.append(record)
+            self._write()
+            return dict(record)
+
+    def remove_provider(self, provider_id: str) -> bool:
+        with self._lock:
+            providers = self.llm.get("providers", [])
+            kept = [p for p in providers if p.get("id") != provider_id]
+            if len(kept) == len(providers):
+                return False
+            self.llm["providers"] = kept
+            self._write()
+            return True
 
     # ---------------------------------------------------------------- folders
 

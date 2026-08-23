@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.50.77 — 2026-08-23 16:13 PDT
+
+**Bring your own model keys.** A new **Models** tab in Settings lets you add any
+OpenAI-compatible provider (OpenRouter, Groq, Together, a local Ollama) or the
+Anthropic API, give it a model, and test the key on the spot. This is the
+foundation the coming assistant features (an intelligent inbox, a chat skin, a
+docked copilot) will run on — but the key handling is worth shipping on its own,
+because it's built to a real bar:
+
+- **Encrypted at rest.** Each key is encrypted with AES-256-GCM before it
+  touches disk; the data key lives in a separate `0600` file, so a copy of
+  `state.json` — from a backup or a sync — is ciphertext, not a key.
+- **Never leaves the box, never comes back.** The key is never returned to the
+  browser (the panel only tells you whether one is *set*), never logged, and
+  never rides the status poll.
+- **Can't be pointed anywhere dangerous.** Before a prompt and a key go out, the
+  destination is checked: a cloud-metadata or internal-network address is
+  refused, so a mistyped or hostile endpoint can't turn the panel into a proxy.
+  Local models on loopback still work.
+
+The encryption comes from one optional extra — `pip install 'clique-panel[llm]'`
+— so the base install stays 100% dependency-free; without it, the panel refuses
+to store a key rather than write it in the clear.
+
 ## 0.50.76 — 2026-08-23 15:36 PDT
 
 **A heads-up when the box is getting full — never a blocker.** CLIque already

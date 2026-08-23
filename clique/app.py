@@ -37,8 +37,10 @@ from . import (
     changelog,
     files,
     gitinfo,
+    llm,
     migrate,
     notify,
+    secretbox,
     services,
     sysinfo,
     termstrip,
@@ -517,6 +519,93 @@ class Panel:
         waiting = cli.waiting_patterns if cli else []
         errors = cli.error_patterns if cli else []
         return attention.detect(session.mux, pane.activity, waiting, errors, session.socket)
+
+    # ------------------------------------------------------------ llm providers
+    #
+    # Bring-your-own-key model providers. The key is encrypted at rest by
+    # secretbox and never returned to a client (only whether one is set); a
+    # provider is validated here, and reachability is proved by an actual probe
+    # rather than trusted. Kept off /api/state — fetched only on demand.
+
+    _PROVIDER_KINDS = ("openai", "anthropic")
+
+    def _secret_key_path(self) -> Path:
+        return self.store.path.parent / "secret.key"
+
+    def _redact_provider(self, p: dict) -> dict:
+        """What a client is allowed to see: everything but the key itself."""
+        return {
+            "id": p.get("id"),
+            "label": p.get("label", ""),
+            "kind": p.get("kind", ""),
+            "base_url": p.get("base_url", ""),
+            "model": p.get("model", ""),
+            "key_set": bool(p.get("key_enc")),
+        }
+
+    def _provider_fields(self, body: dict, existing: dict | None = None) -> dict:
+        base_of = existing or {}
+        kind = str(body.get("kind") or base_of.get("kind") or "").strip().lower()
+        if kind not in self._PROVIDER_KINDS:
+            raise ValueError(f"kind must be one of: {', '.join(self._PROVIDER_KINDS)}")
+        base = str(body.get("base_url") or base_of.get("base_url") or "").strip()[:2048]
+        if not base.startswith(("http://", "https://")):
+            raise ValueError("base URL must be http or https")
+        model = str(body.get("model") or base_of.get("model") or "").strip()[:200]
+        if not model:
+            raise ValueError("a model is required")
+        label = str(body.get("label") or base_of.get("label") or "").strip()[:80]
+        return {"kind": kind, "base_url": base, "model": model, "label": label or kind}
+
+    def _encrypt_key(self, key: str) -> str:
+        if not secretbox.available():
+            raise ValueError(f"encryption is unavailable — {secretbox.SecretsUnavailable.HINT}")
+        return secretbox.encrypt(key, self._secret_key_path())
+
+    def llm_list(self) -> dict:
+        return {
+            "providers": [self._redact_provider(p) for p in self.store.llm_providers()],
+            "encryption": secretbox.available(),
+        }
+
+    def llm_create(self, body: dict) -> dict:
+        fields = self._provider_fields(body)
+        key = str(body.get("key") or "")
+        if not key:
+            raise ValueError("an API key is required")
+        record = {"id": "lp-" + secrets.token_hex(4), **fields, "key_enc": self._encrypt_key(key)}
+        return self._redact_provider(self.store.save_provider(record))
+
+    def llm_update(self, provider_id: str, body: dict) -> dict | None:
+        existing = self.store.provider(provider_id)
+        if not existing:
+            return None
+        record = {**existing, **self._provider_fields(body, existing)}
+        key = str(body.get("key") or "")
+        if key:  # a blank key on update means "keep the stored one"
+            record["key_enc"] = self._encrypt_key(key)
+        return self._redact_provider(self.store.save_provider(record))
+
+    def llm_delete(self, provider_id: str) -> dict | None:
+        return {"ok": True} if self.store.remove_provider(provider_id) else None
+
+    def llm_test(self, provider_id: str) -> dict | None:
+        p = self.store.provider(provider_id)
+        if not p:
+            return None
+        key = ""
+        if p.get("key_enc"):
+            if not secretbox.available():
+                return {
+                    "ok": False,
+                    "error": f"encryption unavailable — {secretbox.SecretsUnavailable.HINT}",
+                }
+            try:
+                key = secretbox.decrypt(p["key_enc"], self._secret_key_path())
+            except Exception:  # noqa: BLE001 — a corrupt/tampered key is a failed test, not a 500
+                return {"ok": False, "error": "the stored key could not be decrypted"}
+        profile = {"kind": p["kind"], "base_url": p["base_url"], "model": p["model"], "key": key}
+        return llm.test(profile)
 
     def state(self, *, reveal_urls: bool = False) -> dict:
         panes = self.live()
@@ -1396,6 +1485,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json([p.as_dict() for p in tmux.adoptable() if p.mux not in known])
             if path == "/api/orphans":
                 return self._json(self.panel.orphans())
+            if path == "/api/llm/providers":
+                return self._json(self.panel.llm_list())
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
             if path == "/api/workspace":
@@ -1673,6 +1764,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.spawn(body), 201)
             if path == "/api/orphans/reap":
                 return self._json(self.panel.reap_orphans(body.get("muxes")))
+            if path == "/api/llm/providers":
+                return self._json(self.panel.llm_create(body), 201)
+            if path.startswith("/api/llm/providers/"):
+                parts = path.split("/")
+                provider_id = parts[4]
+                action = parts[5] if len(parts) > 5 else ""
+                if action == "test":
+                    result = self.panel.llm_test(provider_id)
+                elif action == "delete":
+                    result = self.panel.llm_delete(provider_id)
+                elif not action:
+                    result = self.panel.llm_update(provider_id, body)
+                else:
+                    return self._json({"error": "not found"}, 404)
+                if result is None:
+                    return self._json({"error": "no such provider"}, 404)
+                return self._json(result)
             if path == "/api/workspace":
                 # A directory that does not exist yet is the commonest reason a
                 # new session fails, and "go and find a shell" is a poor answer

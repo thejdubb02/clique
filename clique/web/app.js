@@ -5658,7 +5658,10 @@ function wire() {
       pane.hidden = pane.dataset.pane !== button.dataset.pane;
     }
     if (button.dataset.pane === "changelog") loadChangelog();
+    if (button.dataset.pane === "models") loadProviders();
   };
+
+  $("#llmForm").onsubmit = addProvider;
 
   $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });
   $("#setFontFamily").onchange = (ev) => saveSettings({ font_family: ev.target.value });
@@ -6147,6 +6150,154 @@ async function loadResumable(force) {
     resumable = resumable || [];
   }
   return resumable;
+}
+
+/* ---------------------------------------------------------- model providers */
+
+/* Bring-your-own-key model providers, shown in the Models settings tab. Off the
+ * poll entirely (keys never ride the three-second /api/state), fetched when the
+ * tab opens. The key itself never comes back — the panel reports only whether
+ * one is set, so there is nothing here to leak into the DOM. */
+let llmProviders = null;
+
+async function loadProviders() {
+  let data;
+  try {
+    data = await api("api/llm/providers");
+  } catch (err) {
+    llmProviders = [];
+    renderProviders();
+    return;
+  }
+  llmProviders = data.providers || [];
+  const warn = $("#llmCryptoWarn");
+  const form = $("#llmForm");
+  const cryptoOff = data.encryption === false;
+  if (warn) {
+    warn.textContent = cryptoOff
+      ? "Key encryption isn't available on this box yet. Install it with "
+        + "pip install 'clique-panel[llm]' and restart, then you can add a key."
+      : "";
+    warn.hidden = !cryptoOff;
+  }
+  if (form) {
+    // Without encryption we refuse to take a key at all, rather than store it
+    // in the clear — so the field and the button go dead until it's installed.
+    form.key.disabled = cryptoOff;
+    form.querySelector('button[type="submit"]').disabled = cryptoOff;
+  }
+  renderProviders();
+}
+
+function providerKindLabel(kind) {
+  return kind === "anthropic" ? "Anthropic" : "OpenAI-compatible";
+}
+
+function renderProviders() {
+  const host = $("#llmProviders");
+  if (!host) return;
+  host.textContent = "";
+  const list = llmProviders || [];
+  if (!list.length) {
+    const empty = document.createElement("p");
+    empty.className = "note dim";
+    empty.textContent = "No providers yet — add one below.";
+    host.append(empty);
+    return;
+  }
+  for (const prov of list) {
+    const row = document.createElement("div");
+    row.className = "llm-row";
+    row.dataset.id = prov.id;
+
+    const main = document.createElement("div");
+    main.className = "llm-main";
+    const name = document.createElement("b");
+    name.textContent = prov.label || prov.model;
+    const meta = document.createElement("span");
+    meta.className = "dim";
+    meta.textContent = `${providerKindLabel(prov.kind)} · ${prov.model}`;
+    main.append(name, meta);
+
+    const status = document.createElement("span");
+    status.className = "llm-status";
+
+    const test = document.createElement("button");
+    test.type = "button";
+    test.className = "llm-btn";
+    test.textContent = "Test";
+    test.onclick = () => testProvider(prov.id, status);
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "llm-btn danger";
+    del.textContent = "Delete";
+    del.onclick = () => deleteProvider(prov.id, prov.label || prov.model);
+
+    row.append(main, status, test, del);
+    host.append(row);
+  }
+}
+
+async function testProvider(id, statusEl) {
+  if (statusEl) { statusEl.textContent = "testing…"; statusEl.dataset.state = ""; statusEl.title = ""; }
+  let result;
+  try {
+    result = await api(`api/llm/providers/${id}/test`, { method: "POST", body: "{}" });
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = "✗ test failed"; statusEl.dataset.state = "bad"; }
+    return;
+  }
+  if (!statusEl) return;
+  if (result.ok) {
+    statusEl.textContent = "✓ reachable";
+    statusEl.dataset.state = "ok";
+    statusEl.title = result.sample ? `replied: ${result.sample}` : "";
+  } else {
+    statusEl.textContent = "✗ failed";
+    statusEl.dataset.state = "bad";
+    statusEl.title = result.error || "";
+  }
+}
+
+async function deleteProvider(id, label) {
+  if (!confirm(`Remove "${label}" and its stored key?`)) return;
+  try {
+    await api(`api/llm/providers/${id}/delete`, { method: "POST", body: "{}" });
+  } catch (err) {
+    toast("Could not remove that provider.", true);
+    return;
+  }
+  toast("Provider removed.");
+  await loadProviders();
+}
+
+async function addProvider(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const errBox = $("#llmFormErr");
+  errBox.hidden = true;
+  const body = {
+    label: form.label.value.trim(),
+    kind: form.kind.value,
+    base_url: form.base_url.value.trim(),
+    model: form.model.value.trim(),
+    key: form.key.value,
+  };
+  let created;
+  try {
+    created = await api("api/llm/providers", { method: "POST", body: JSON.stringify(body) });
+  } catch (err) {
+    errBox.textContent = (err && err.message) || "Could not add the provider.";
+    errBox.hidden = false;
+    return;
+  }
+  form.reset();
+  await loadProviders();
+  // Answer "does my key work?" right away by testing what we just added.
+  const status = $("#llmProviders")
+    .querySelector(`.llm-row[data-id="${created.id}"] .llm-status`);
+  if (status) testProvider(created.id, status);
 }
 
 /* Leaked sessions: tmux still running with no record behind it, so nothing in

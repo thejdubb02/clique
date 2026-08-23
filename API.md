@@ -464,6 +464,31 @@ place at the tail. Order is what `/api/state` returns.
 {"sessions": ["id1", "id2", "id3"], "folders": ["f-aaaa", "f-bbbb"]}
 ```
 
+## Model providers (bring your own key)
+
+Optional. Storing a key needs the crypto extra — `pip install 'clique-panel[llm]'`
+— so the key can be encrypted at rest (AES-256-GCM, a data key in a `0600`
+`secret.key`). Without it, a create/update carrying a key is refused `400` with
+that hint. **The key is never returned by any endpoint**; a provider reads back
+with `key_set` only, and it never rides `/api/state`.
+
+- `GET /api/llm/providers` → `{"providers": [...], "encryption": <bool>}`. Each
+  provider is `{id, label, kind, base_url, model, key_set}`. Read scope.
+- `POST /api/llm/providers` → `201` the redacted provider. Body `{label, kind,
+  base_url, model, key}`. `kind` is `openai` (any OpenAI-compatible endpoint —
+  OpenRouter, Groq, Together, local Ollama) or `anthropic`; `base_url` must be
+  http(s). Write scope.
+- `POST /api/llm/providers/<id>` — update. Same fields; an absent or empty
+  `key` keeps the stored one. Returns the redacted provider, or `404`.
+- `POST /api/llm/providers/<id>/test` → `{"ok": true, "model", "sample"}` or
+  `{"ok": false, "error"}`. A cheap live probe: decrypts the key in-process,
+  sends one bounded completion, returns whether it worked. `404` if unknown.
+- `POST /api/llm/providers/<id>/delete` → `{"ok": true}`, or `404`.
+
+Outbound calls refuse a `base_url` that resolves to a cloud-metadata /
+link-local address or (by default) an internal-network host; loopback stays
+allowed for local models. `CLIQUE_LLM_ALLOW_PRIVATE=1` opts into private ranges.
+
 ## Folders
 
 - `POST /api/folders` → `201` with the whole folder — body `name`, `color`

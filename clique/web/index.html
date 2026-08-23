@@ -376,6 +376,7 @@
       <button data-pane="notify">Notifications</button>
       <button data-pane="images">Images</button>
       <button data-pane="css">Custom CSS</button>
+      <button data-pane="models">Models</button>
       <button data-pane="api">API</button>
       <button data-pane="changelog">Changelog</button>
       <button data-pane="about">About</button>
@@ -608,6 +609,53 @@
                   placeholder="/* scoped to the terminal area */"></textarea></label>
       <button type="button" id="saveCss" class="primary">Apply</button>
       <span class="note" id="cssSaved"></span>
+    </section>
+
+    <section class="pane" data-pane="models" hidden>
+      <p class="note">Bring your own model keys. Each key is encrypted on this
+         box before it is written to disk and is never sent back to the browser
+         — the panel only ever tells you whether one is set. Works with any
+         OpenAI-compatible endpoint (OpenRouter, Groq, Together, a local Ollama)
+         or the Anthropic API.</p>
+      <p class="note" id="llmCryptoWarn" hidden></p>
+
+      <div id="llmProviders" class="llm-list"></div>
+
+      <form id="llmForm" class="llm-form" autocomplete="off">
+        <h3>Add a provider</h3>
+        <div class="llm-grid">
+          <label>Name <input name="label" placeholder="e.g. OpenRouter" autocomplete="off"></label>
+          <label>API
+            <select name="kind">
+              <option value="openai">OpenAI-compatible</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </label>
+          <label>Endpoint
+            <input name="base_url" list="llmBases" placeholder="https://openrouter.ai/api/v1"
+                   autocomplete="off" required>
+          </label>
+          <label>Model
+            <input name="model" placeholder="e.g. anthropic/claude-3.5-sonnet"
+                   autocomplete="off" required>
+          </label>
+          <label class="llm-key">Key
+            <input name="key" type="password" placeholder="sk-…"
+                   autocomplete="new-password" required>
+          </label>
+        </div>
+        <datalist id="llmBases">
+          <option value="https://openrouter.ai/api/v1"></option>
+          <option value="https://api.openai.com/v1"></option>
+          <option value="https://api.anthropic.com"></option>
+          <option value="https://api.groq.com/openai/v1"></option>
+          <option value="http://127.0.0.1:11434/v1"></option>
+        </datalist>
+        <p class="err" id="llmFormErr" hidden></p>
+        <div class="actions">
+          <button type="submit" class="primary">Add & test</button>
+        </div>
+      </form>
     </section>
 
     <section class="pane" data-pane="api" hidden>
