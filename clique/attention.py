@@ -51,16 +51,23 @@ WAITING_TAIL = 12
 #: anything about those vendors. Per-CLI patterns in clis.toml *add* to
 #: this list; they do not replace it.
 DEFAULT_WAITING = [
-    r"\(y/n\)",
-    r"\[[Yy]/[Nn]\]",
-    r"\[[Yy]/[Nn]/[Aa]\]",
-    r"\(yes/no\)",
-    r"Do you want",
-    r"Would you like",
-    r"Press Enter to continue",
-    r"Esc to cancel",
-    r"Don.t ask me again",
-    r"❯\s*\d+\.",  # noqa: RUF001 — Claude/Gemini draw this, not ASCII >
+    # y/n prompts are case-insensitive: the common default-capital forms
+    # (Y/n), (y/N), [Y/N] were previously missed by every CLI.
+    r"(?i)\(y/n\)",
+    r"(?i)\(y/n/a\)",
+    r"(?i)\[y/n\]",
+    r"(?i)\[y/n/a\]",
+    r"(?i)\(yes/no\)",
+    r"(?i)do you want",
+    r"(?i)would you like",
+    r"(?i)press enter to continue",
+    r"(?i)esc to cancel",
+    r"(?i)don.t ask me again",
+    r"(?i)use arrow keys",
+    # A selection menu's chosen row: a pointer glyph then a numbered option.
+    # The glyphs are the angle and triangle pointers CLIs actually draw for a
+    # selected row; never a bare ASCII ">", which is far too common in output.
+    r"[❯›»▶◆]\s*\d+[.)]",  # noqa: RUF001
     r"(?i)allow (this|command|action)",
     r"^.{8,80}\?\s*$",
 ]

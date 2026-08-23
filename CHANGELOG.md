@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.73 — 2026-08-23 09:28 PDT
+
+**Sharper "needs you" detection for every CLI.** The generic waiting patterns —
+the ones that surface a prompt for a CLI CLIque knows nothing about (Codex,
+Gemini, Cursor and the rest) — now match case-insensitively, so a default-capital
+`(Y/n)` or `[y/N]` is caught; recognise a selection menu drawn with pointers
+other than `❯`; and pick up an "(Use arrow keys)" menu hint. New tests lock in
+both the prompts that must fire and the finished-turn output that must stay
+silent, so the inbox does not cry wolf. ("Working" was already CLI-agnostic — it
+reads the activity clock and content, not any vendor.)
+
 ## 0.50.72 — 2026-08-23 09:12 PDT
 
 **A finished turn no longer reads as "needs an answer."** Claude Code's `Stop`

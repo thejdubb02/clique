@@ -376,15 +376,41 @@ def main() -> int:
     # CLIque knowing anything about those vendors.
     check("(y/n) is a question",
           attention.verdict_text("Allow this command (y/n)", [], []) == "waiting")
+    check("a capitalised default (Y/n) is too",
+          attention.verdict_text("Apply this change? (Y/n)", [], []) == "waiting")
+    check("a [y/N] bracket prompt is",
+          attention.verdict_text("Overwrite the file [y/N]", [], []) == "waiting")
     check("a short question-mark line is",
           attention.verdict_text("Do you want to continue?", [], []) == "waiting")
+    check("a Codex-style permission question is",
+          attention.verdict_text("Allow Codex to run `npm test`?", [], []) == "waiting")
     check("a numbered choice is",
           attention.verdict_text("  ❯ 1. Allow\n    2. Deny", [], []) == "waiting")  # noqa: RUF001
+    check("a menu drawn with another pointer glyph is",
+          attention.verdict_text("  › 2. No, keep it", [], []) == "waiting")  # noqa: RUF001
+    check("an arrow-key menu hint is",
+          attention.verdict_text("Choose one: (Use arrow keys)", [], []) == "waiting")
     check("a traceback is an error, not a question",
           attention.verdict_text("Traceback (most recent call last):\n  File",
                                  [], []) == "error")
+    # False positives are the failure mode that erodes trust in the inbox, so
+    # the finished-turn shapes that actually caused one must stay silent.
     check("ordinary output is neither",
           attention.verdict_text("wrote 12 files\nrunning tests", [], []) == "")
+    check("a finished-turn summary is not a question",
+          attention.verdict_text("● Done — 109.3 GB back, verified on disk", [], []) == "")
+    check("a spinner status line is not a question",
+          attention.verdict_text("✻ Sautéed for 9m 17s · 1 shell still running", [], []) == "")
+    check("a bare prompt glyph is not a question",
+          attention.verdict_text("❯", [], []) == "")  # noqa: RUF001
+    check("a plain numbered list is not a menu",
+          attention.verdict_text("1. First step\n2. Second step", [], []) == "")
+    check("a ternary in code is not a question",
+          attention.verdict_text("  const x = ok ? 1 : 2;", [], []) == "")
+    check("a long prose line ending in ? is not a prompt",
+          attention.verdict_text(
+              "this is a long explanatory sentence that trails off into a "
+              "rhetorical question aimed straight at the reader?", [], []) == "")
 
     print("service status")
     # The two things that make this feature honest rather than a widget: it
