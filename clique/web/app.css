@@ -881,6 +881,41 @@ button.primary { background: var(--accent); color: var(--on-accent); }
   .svc-detail { display: none; }
 }
 
+/* The resource guard's banner. Same shape as the outage bar above it — one
+   quiet strip — but keyed to how stretched the box is, not a provider. */
+#guard {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 10px; font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--warn) 12%, var(--panel));
+  color: var(--fg);
+}
+#guard[data-level="high"] {
+  background: color-mix(in srgb, var(--err) 14%, var(--panel));
+}
+.guard-mark { display: inline-flex; align-items: center; flex: none; color: var(--warn); }
+#guard[data-level="high"] .guard-mark { color: var(--err); }
+.guard-said { flex: 1 1 auto; min-width: 0; font-weight: 600;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guard-act {
+  flex: none; background: var(--warn); color: var(--bg); border: 0;
+  border-radius: 5px; padding: 2px 9px; font: inherit; font-size: 11px;
+  font-weight: 600; cursor: pointer;
+}
+.guard-act:hover { filter: brightness(1.12); }
+.guard-x {
+  flex: none; background: none; border: 0; color: var(--dim); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 0 2px;
+}
+.guard-x:hover { color: var(--fg); }
+
+/* The soft-ceiling line in the New-Session form: informational, not a warning,
+   so it drops the alarm colour the other heads-up messages carry. */
+.heads-up.soft {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  border-left-color: var(--accent); color: var(--dim);
+}
+
 #history {
   position: absolute; top: 36px; right: 8px; z-index: 30; width: 348px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;

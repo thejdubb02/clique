@@ -128,8 +128,11 @@ def load() -> dict:
         return {"one": 0.0, "five": 0.0, "fifteen": 0.0, "cores": 1, "ratio": 0.0}
     cores = os.cpu_count() or 1
     return {
-        "one": round(one, 2), "five": round(five, 2), "fifteen": round(fifteen, 2),
-        "cores": cores, "ratio": round(one / cores, 2),
+        "one": round(one, 2),
+        "five": round(five, 2),
+        "fifteen": round(fifteen, 2),
+        "cores": cores,
+        "ratio": round(one / cores, 2),
     }
 
 
@@ -151,13 +154,13 @@ def _walk_proc() -> tuple[dict, dict]:
                 data = fh.read()
         except OSError:
             continue
-        close = data.rfind(b")")   # comm can hold spaces/parens; split after it
+        close = data.rfind(b")")  # comm can hold spaces/parens; split after it
         if close < 0:
             continue
-        fields = data[close + 2:].split()
+        fields = data[close + 2 :].split()
         try:
-            ppid = int(fields[1])            # stat field 4, minus the two before comm
-            rss[pid] = int(fields[21]) * _PAGE_KB   # stat field 24 (rss, in pages)
+            ppid = int(fields[1])  # stat field 4, minus the two before comm
+            rss[pid] = int(fields[21]) * _PAGE_KB  # stat field 24 (rss, in pages)
         except (IndexError, ValueError):
             continue
         kids.setdefault(ppid, []).append(pid)
@@ -195,6 +198,150 @@ def snapshot(clients: int = 0) -> dict:
         "disk": disk(),
         "load": load(),
         "clients": clients,
+    }
+
+
+# --- Resource guard --------------------------------------------------------
+#
+# A soft read on whether the box is stretched for the number of live agent
+# sessions. Never a blocker — it hands the UI a level, one plain sentence, and
+# a soft session ceiling for the New-Session form. This is the same read-only
+# /proc sampling the status bar already does; the added cost is a comparison.
+
+#: Left free for the OS, the panel itself, and a little burst headroom.
+_RESERVE_MB = 1024
+#: Below this much available RAM the box is tight whatever the session count.
+_RAM_FLOOR_MB = 512
+#: A coding agent's rough resident cost, used only until real sessions are
+#: measured. Deliberately mid-range — agents vary a lot by CLI and repo.
+_DEFAULT_SESSION_MB = 650
+
+#: Swap climbing by more than this between baselines counts as "growing".
+_SWAP_STEP_MB = 64
+#: Don't re-baseline swap faster than this, so the verdict does not depend on
+#: how often the guard is polled — every client's poll calls it.
+_SWAP_REBASE_S = 20.0
+
+_swap_lock = threading.Lock()
+_swap_seen: dict = {"at": 0.0, "mb": None, "growing": False}
+
+
+def _swap_growing(used_mb: int) -> bool:
+    """Is swap actively climbing? Re-baselined at most every few seconds and
+    holding its last verdict in between, so a burst of polls cannot reset it."""
+    now = time.time()
+    with _swap_lock:
+        seen = _swap_seen
+        if seen["mb"] is None:
+            seen.update(at=now, mb=used_mb, growing=False)
+            return False
+        if now - seen["at"] < _SWAP_REBASE_S:
+            return seen["growing"]
+        growing = used_mb > 0 and (used_mb - seen["mb"]) >= _SWAP_STEP_MB
+        seen.update(at=now, mb=used_mb, growing=growing)
+        return growing
+
+
+def _avg_session_mb(session_rss_kb) -> float:
+    """Mean resident cost of a live session in MB — measured, not guessed.
+
+    Falls back to a default until at least one session is running, so a fresh
+    box still gets a sensible ceiling instead of one built on no data.
+    """
+    vals = [kb for kb in session_rss_kb if kb and kb > 0]
+    if not vals:
+        return float(_DEFAULT_SESSION_MB)
+    return max(1.0, (sum(vals) / len(vals)) / 1024)
+
+
+def _reap_phrase(hours: float) -> str:
+    if not hours or hours <= 0:
+        return ""
+    h = int(hours) if float(hours).is_integer() else round(hours, 1)
+    return f"{h}h"
+
+
+def guard(
+    sessions: int,
+    session_rss_kb=(),
+    *,
+    mem: dict | None = None,
+    swap_info: dict | None = None,
+    load_info: dict | None = None,
+    reap_hours: float = 6.0,
+) -> dict:
+    """Soft verdict on whether the box is stretched for its live sessions.
+
+    Returns a level (``ok`` / ``watch`` / ``high``), a one-line headline, the
+    reasons behind it, and a soft session ceiling for the New-Session form.
+    Reads mem/swap/load itself unless handed the values a snapshot already
+    gathered (which is also how the checks feed it synthetic numbers).
+    """
+    mem = memory() if mem is None else mem
+    swap_info = swap() if swap_info is None else swap_info
+    load_info = load() if load_info is None else load_info
+
+    total_mb = int(mem.get("total_mb", 0))
+    used_mb = int(mem.get("used_mb", 0))
+    free_mb = max(total_mb - used_mb, 0)
+    free_gb = round(free_mb / 1024, 1)
+
+    avg_mb = _avg_session_mb(session_rss_kb)
+    usable = max(total_mb - _RESERVE_MB, 0)
+    ceiling = max(1, int(usable // avg_mb)) if avg_mb else 1
+
+    cores = int(load_info.get("cores", 1) or 1)
+    one = load_info.get("one", 0.0)
+    ratio = load_info.get("ratio", 0.0)
+    swap_growing = _swap_growing(int(swap_info.get("used_mb", 0)))
+
+    rank = {"ok": 0, "watch": 1, "high": 2}
+    level = "ok"
+    reasons: list[str] = []
+
+    def flag(new: str, reason: str) -> None:
+        nonlocal level
+        if rank[new] > rank[level]:
+            level = new
+        reasons.append(reason)
+
+    cores_word = "core" if cores == 1 else "cores"
+    if sessions > ceiling:
+        flag("high", f"{sessions} sessions, past a comfortable ~{ceiling} for this box")
+    elif sessions >= ceiling and sessions >= 2:
+        flag("watch", f"{sessions} sessions, about the most this box runs well (~{ceiling})")
+
+    if free_mb < _RAM_FLOOR_MB:
+        flag("high", f"only ~{free_gb} GB RAM free")
+    elif free_mb < _RAM_FLOOR_MB * 3:
+        flag("watch", f"~{free_gb} GB RAM free")
+
+    if swap_growing:
+        flag("high", "swap is climbing — memory pressure has already hit")
+
+    if ratio >= 2.0:
+        flag("high", f"load {one} over {cores} {cores_word}")
+    elif ratio >= 1.0:
+        flag("watch", f"load {one} over {cores} {cores_word}")
+
+    headline = ""
+    if level != "ok":
+        tail = "heavy for this box" if level == "high" else "getting full for this box"
+        plural = "" if sessions == 1 else "s"
+        headline = f"{sessions} session{plural}, ~{free_gb} GB free — {tail}."
+        reap = _reap_phrase(reap_hours)
+        headline += (
+            f" Idle ones auto-reap in {reap}." if reap else " You can reclaim idle ones now."
+        )
+
+    return {
+        "level": level,
+        "sessions": sessions,
+        "ceiling": ceiling,
+        "avg_session_mb": round(avg_mb),
+        "free_mb": free_mb,
+        "reasons": reasons,
+        "headline": headline,
     }
 
 

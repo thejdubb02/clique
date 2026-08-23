@@ -306,8 +306,23 @@ class Panel:
         )
         return body
 
-    def sessions_view(self) -> list[dict]:
-        panes = self.live()
+    def resource_guard(self, panes: dict | None = None) -> dict:
+        """Soft read on whether the box is stretched for its live sessions.
+
+        Never blocks a new session — it just surfaces the levers (idle-reap,
+        Reclaim) at the moment they start to matter. Measures the real
+        per-session cost from the live panes rather than a fixed guess.
+        """
+        panes = self.live() if panes is None else panes
+        rss_map = sysinfo.rss_by_root([p.pid for p in panes.values()])
+        return sysinfo.guard(
+            len(panes),
+            rss_map.values(),
+            reap_hours=float(self.store.settings.get("reap_idle_hours", 0) or 0),
+        )
+
+    def sessions_view(self, panes: dict | None = None) -> list[dict]:
+        panes = self.live() if panes is None else panes
         rss_map = sysinfo.rss_by_root([p.pid for p in panes.values()])
         now = time.time()
         # Sessions that have gone stop being remembered by the busy check.
@@ -504,6 +519,9 @@ class Panel:
         return attention.detect(session.mux, pane.activity, waiting, errors, session.socket)
 
     def state(self, *, reveal_urls: bool = False) -> dict:
+        panes = self.live()
+        stats = sysinfo.snapshot(self.clients)
+        stats["guard"] = self.resource_guard(panes)
         return {
             "version": version_string(),
             "folders": [
@@ -516,7 +534,7 @@ class Panel:
                 }
                 for f in sorted(self.store.folders, key=lambda f: f.order)
             ],
-            "sessions": self.sessions_view(),
+            "sessions": self.sessions_view(panes),
             "clis": [c.as_dict() for c in self.registry.types().values()],
             # Almost always empty, which is the point — this carries the
             # exceptions, not a running commentary on four status pages being
@@ -528,7 +546,7 @@ class Panel:
             # to forge a signature the receiver trusts. Whether one is set is
             # all the UI ever needed to know.
             "settings": redacted(self.store.settings, reveal_urls=reveal_urls),
-            "stats": sysinfo.snapshot(self.clients),
+            "stats": stats,
         }
 
     # --------------------------------------------------------------- mutation
@@ -1342,7 +1360,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/state":
                 return self._json(self.panel.state(reveal_urls=self._cookie_authed))
             if path == "/api/stats":
-                return self._json(sysinfo.snapshot(self.panel.clients))
+                snap = sysinfo.snapshot(self.panel.clients)
+                snap["guard"] = self.panel.resource_guard()
+                return self._json(snap)
             if path == "/api/stats/history":
                 minutes = max(1, min(int(query.get("minutes") or 60), 180))
                 return self._json(self.panel.history.series(minutes))

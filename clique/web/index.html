@@ -130,6 +130,11 @@
          is always there is a banner nobody reads on the day it matters. -->
     <div id="services" hidden></div>
 
+    <!-- A soft, dismissible heads-up when the box is getting stretched for the
+         number of live sessions. Never blocks a new session; it just surfaces
+         the levers (auto-reap, Reclaim) at the moment they start to matter. -->
+    <div id="guard" hidden></div>
+
     <div id="termwrap">
       <div id="terminal"></div>
       <div id="follow" hidden></div>
@@ -238,6 +243,9 @@
         <input type="checkbox" id="wtToggle"> Run in a new git worktree</label>
       <input id="wtBranch" placeholder="branch name" autocomplete="off" hidden>
     </div>
+    <!-- How many agents this box comfortably runs, shown only when near that
+         soft ceiling. Never disables Start; see openModal. -->
+    <p class="heads-up soft" id="modalCeiling" hidden></p>
     <!-- What is already going on in that directory. Only ever shown when there
          is something to say; see checkWorkspace. -->
     <p class="heads-up" id="modalHeads" hidden></p>

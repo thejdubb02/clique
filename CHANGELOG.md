@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.50.76 — 2026-08-23 15:36 PDT
+
+**A heads-up when the box is getting full — never a blocker.** CLIque already
+watches CPU, memory, swap and load; now it weighs them against how many agent
+sessions are actually live and, when the box is genuinely stretched, drops a
+quiet, dismissible strip at the top: *"12 sessions, ~1.2 GB free — heavy for
+this box. Idle ones auto-reap in 6h."* It fires on any of the real signals —
+available RAM near the floor, swap climbing, load sustained above the cores, or
+the session count past a soft ceiling worked out from this box's RAM and the
+**measured** cost of the sessions it's actually running (not a fixed guess).
+The New-Session form shows that ceiling when you're near it ("this box
+comfortably runs ~8 agents"), and Start is never disabled — the guard warns and
+gets out of the way. It ties into the levers that already exist: idle sessions
+auto-reap, and Reclaim is offered right there when there's something leaked to
+reclaim. All of this is the read-only sampling the status bar already does, so
+it costs nothing and nothing leaves the box.
+
 ## 0.50.75 — 2026-08-23 14:11 PDT
 
 **A second window opens clean, and closing one collects its tabs.** Opening the

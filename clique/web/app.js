@@ -949,6 +949,7 @@ async function refresh() {
   renderBoard();   // no-op unless the board is open
   updateTitle();
   renderServices();
+  renderGuard();
   renderVersion();
   loadOrphans();
   reclaimSize();
@@ -1298,6 +1299,72 @@ function renderServices() {
     }
     host.append(bar);
   }
+}
+
+/* The resource guard's banner.
+ *
+ * A heads-up, never a gate. It shows only when the box is genuinely stretched
+ * for the number of live sessions the backend saw, carries the one plain
+ * sentence it composed, and offers the levers that already exist. Dismissible,
+ * and it comes back on its own if the situation gets worse. */
+let guardDismissed = "";
+
+function renderGuard() {
+  const host = $("#guard");
+  if (!host) return;
+  const g = (state.stats || {}).guard || {};
+  const level = g.level || "ok";
+  if (level === "ok" || !g.headline) {
+    host.hidden = true;
+    host.textContent = "";
+    guardDismissed = "";   // a calm box forgets the dismissal
+    return;
+  }
+  // Re-surface after a dismissal only if it got worse or the count changed —
+  // the same sentence about the same box stays gone.
+  const sig = level + ":" + (g.sessions ?? 0);
+  if (guardDismissed === sig) { host.hidden = true; return; }
+
+  host.textContent = "";
+  host.dataset.level = level;
+
+  const mark = document.createElement("span");
+  mark.className = "guard-mark";
+  mark.innerHTML =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>' +
+    '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+  const said = document.createElement("span");
+  said.className = "guard-said";
+  said.textContent = g.headline;
+  if ((g.reasons || []).length) said.title = g.reasons.join(" · ");
+
+  host.append(mark, said);
+
+  // Only offer Reclaim when there is actually something leaked to reclaim —
+  // never a button that does nothing. The other lever (auto-reap) needs no
+  // button; the sentence already names it.
+  if ((orphans || []).length) {
+    const act = document.createElement("button");
+    act.type = "button";
+    act.className = "guard-act";
+    act.textContent = "Reclaim";
+    act.onclick = reclaimOrphans;
+    host.append(act);
+  }
+
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "guard-x";
+  x.title = "Dismiss";
+  x.setAttribute("aria-label", "Dismiss this heads-up");
+  x.textContent = "×";
+  x.onclick = () => { guardDismissed = sig; host.hidden = true; };
+  host.append(x);
+
+  host.hidden = false;
 }
 
 /* ------------------------------------------------------------------- sidebar */
@@ -4980,8 +5047,27 @@ function openModal() {
   $("#wtRow").hidden = true;
   form.cwd.oninput = () => { checkWorkspace(); browseFrom(form.cwd.value.trim()); };
   checkWorkspace();
+  showCeilingHint();
   $("#modal").hidden = false;
   form.name.focus();
+}
+
+/* The soft ceiling, shown in the New-Session form only when we are near it.
+ * Purely informational — Start is never disabled; the guard's whole promise is
+ * that it warns and gets out of the way. */
+function showCeilingHint() {
+  const el = $("#modalCeiling");
+  if (!el) return;
+  const g = (state.stats || {}).guard || {};
+  const ceil = g.ceiling || 0;
+  const running = g.sessions ?? (state.sessions || []).filter((s) => s.alive).length;
+  if (ceil && (g.level !== "ok" || running >= ceil - 1)) {
+    el.textContent =
+      `This box comfortably runs ~${ceil} agent${ceil === 1 ? "" : "s"} — ${running} running now.`;
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
 }
 
 /* --------------------------------------------------------- applying settings */
