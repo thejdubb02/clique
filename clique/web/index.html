@@ -71,6 +71,8 @@
   <symbol id="i-corner-down-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4v7a4 4 0 0 1-4 4H4" /><path d="m9 10-5 5 5 5" /></symbol>
   <!-- broadcast one message to every live session -->
   <symbol id="i-megaphone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /><path d="M8 6v8" /></symbol>
+  <!-- the board — sessions by what they are doing -->
+  <symbol id="i-layout-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></symbol>
 </svg>
 <!-- icons:end -->
 
@@ -85,6 +87,7 @@
       <button id="newFolder" class="hdr-btn" title="New folder"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
       <button id="adopt" class="hdr-btn" title="Adopt sessions from another tool"><svg class="ico" aria-hidden="true"><use href="#i-download"/></svg></button>
       <button id="broadcastBtn" class="hdr-btn" title="Broadcast to every session"><svg class="ico" aria-hidden="true"><use href="#i-megaphone"/></svg></button>
+      <button id="boardBtn" class="hdr-btn" title="Board — sessions by what they're doing"><svg class="ico" aria-hidden="true"><use href="#i-layout-grid"/></svg></button>
       <button id="settingsBtn" class="hdr-btn" title="Settings"><svg class="ico" aria-hidden="true"><use href="#i-settings"/></svg></button>
       <button id="collapse" class="hdr-btn" title="Hide sidebar (Ctrl+B)"><svg class="ico" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
     </header>
@@ -283,6 +286,16 @@
         </span>
       </figcaption>
     </figure>
+  </div>
+</div>
+
+<div id="board" hidden>
+  <div class="sheet board-sheet">
+    <header class="sheet-head">
+      <h2>Board</h2>
+      <button type="button" id="boardClose" class="hdr-btn" title="Close"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </header>
+    <div id="boardCols" class="board-cols"></div>
   </div>
 </div>
 

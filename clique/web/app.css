@@ -1641,3 +1641,43 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .inbox-approve { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .inbox-deny { background: var(--field); color: var(--fg); }
 .inbox-deny:hover { border-color: var(--critical); color: var(--critical); }
+
+/* ------------------------------------------------------------------ the board */
+
+.board-sheet { max-width: min(1100px, 94vw); width: 94vw; }
+.board-cols {
+  display: flex; gap: 12px; overflow-x: auto; align-items: flex-start;
+  padding-bottom: 4px;
+}
+.board-col {
+  flex: 1 1 0; min-width: 190px;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+}
+.board-col-head {
+  padding: 8px 11px; font-size: 12px; font-weight: 700; color: var(--dim);
+  border-bottom: 1px solid var(--line); position: sticky; top: 0;
+  background: var(--panel); border-radius: 8px 8px 0 0;
+}
+.board-col-cards {
+  display: flex; flex-direction: column; gap: 7px; padding: 8px;
+  overflow-y: auto; max-height: 62vh;
+}
+.board-card {
+  text-align: left; width: 100%; font: inherit; cursor: pointer;
+  background: var(--row); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+  box-shadow: inset 3px 0 0 var(--dim);
+}
+.board-card:hover { border-color: var(--accent); }
+.board-card.work-working { box-shadow: inset 3px 0 0 var(--accent); }
+.board-card.work-asking, .board-card.work-unseen { box-shadow: inset 3px 0 0 var(--warn); }
+.board-card.work-error { box-shadow: inset 3px 0 0 var(--critical); }
+.board-card-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.board-card-name {
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.board-card-sub {
+  margin-top: 4px; font-size: 11px; color: var(--dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

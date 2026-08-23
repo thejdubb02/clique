@@ -398,6 +398,77 @@ function saveWorkspace(now) {
   workspaceTimer = setTimeout(push, 600);
 }
 
+/* ------------------------------------------------------------------ the board */
+
+/* Every session as a card, in a column for what it is doing. The columns fill
+ * from the same authoritative state the sidebar ring uses, so a card moves the
+ * instant a session's state does — while the board is open, the poll re-renders
+ * it. A scannable whole-fleet view the one-per-line sidebar is not. */
+const BOARD_COLUMNS = [
+  { key: "working", label: "Working", states: ["working"] },
+  { key: "waiting", label: "Needs you", states: ["asking", "error", "unseen"] },
+  { key: "idle", label: "Idle", states: ["idle"] },
+  { key: "stopped", label: "Stopped", states: ["stopped"] },
+];
+
+function openBoard() {
+  $("#board").hidden = false;   // unhide first — renderBoard no-ops while hidden
+  renderBoard();
+}
+
+function closeBoard() {
+  $("#board").hidden = true;
+}
+
+function renderBoard() {
+  if ($("#board").hidden) return;   // only pay for it while it is on screen
+  const host = $("#boardCols");
+  host.textContent = "";
+  const byState = {};
+  for (const s of state.sessions) {
+    const w = workState(s);
+    (byState[w] || (byState[w] = [])).push(s);
+  }
+  for (const col of BOARD_COLUMNS) {
+    const cards = col.states.flatMap((st) => byState[st] || []);
+    const column = document.createElement("div");
+    column.className = "board-col";
+    const head = document.createElement("div");
+    head.className = "board-col-head";
+    head.textContent = `${col.label} · ${cards.length}`;
+    column.appendChild(head);
+    const list = document.createElement("div");
+    list.className = "board-col-cards";
+    for (const s of cards) list.appendChild(boardCard(s));
+    column.appendChild(list);
+    host.appendChild(column);
+  }
+}
+
+function boardCard(s) {
+  const w = workState(s);
+  const card = document.createElement("button");
+  card.className = "board-card work-" + w;
+  card.onclick = () => { closeBoard(); openSession(s.id); };
+  const top = document.createElement("div");
+  top.className = "board-card-top";
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  dot.dataset.work = w;
+  const name = document.createElement("span");
+  name.className = "board-card-name";
+  name.textContent = s.name || s.id;
+  top.append(dot, name);
+  card.appendChild(top);
+  if (s.saying) {
+    const sub = document.createElement("div");
+    sub.className = "board-card-sub";
+    sub.textContent = s.saying;
+    card.appendChild(sub);
+  }
+  return card;
+}
+
 /* -------------------------------------------------------------- broadcast */
 
 /* One message to every live session at once — the clearest expression of "one
@@ -635,6 +706,7 @@ async function refresh() {
   renderTabs();
   renderStats();
   renderInbox();
+  renderBoard();   // no-op unless the board is open
   updateTitle();
   renderServices();
   renderVersion();
@@ -5363,6 +5435,9 @@ function wire() {
   $("#inboxBtn").onclick = openInbox;
   $("#inboxClose").onclick = closeInbox;
   $("#inbox").onclick = (ev) => { if (ev.target === $("#inbox")) closeInbox(); };
+  $("#boardBtn").onclick = openBoard;
+  $("#boardClose").onclick = closeBoard;
+  $("#board").onclick = (ev) => { if (ev.target === $("#board")) closeBoard(); };
   $("#broadcastBtn").onclick = openBroadcast;
   $("#broadcastClose").onclick = closeBroadcast;
   $("#broadcastScope").onchange = updateBroadcastCount;

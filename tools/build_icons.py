@@ -76,6 +76,7 @@ ICONS: dict[str, str] = {
     "bell": "the inbox — sessions waiting on you",
     "corner-down-left": "send this reply / accept the default (Enter)",
     "megaphone": "broadcast one message to every live session",
+    "layout-grid": "the board — sessions by what they are doing",
 }
 
 _BODY = re.compile(r"<svg[^>]*>(?P<body>.*)</svg>", re.S)

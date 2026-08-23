@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.67 — 2026-08-22 21:41 PDT
+
+**A board of the whole fleet.** A new grid button opens every session as a card
+in a column for what it is doing — Working, Needs you, Idle, Stopped — filled
+from the same authoritative status the sidebar ring reads, so a card moves the
+moment a session's state does, and the poll re-ranks it live while the board is
+open. Tap a card to jump to that session. The whole-fleet glance the
+one-per-line sidebar is not.
+
 ## 0.50.66 — 2026-08-22 21:33 PDT
 
 **See what a session has spent.** A "Usage" action on any session that keeps a
