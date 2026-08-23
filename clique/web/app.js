@@ -381,6 +381,13 @@ function saveWorkspace(now) {
       views_collapsed: [...viewsCollapsed],
     };
     Object.assign(state.settings, body);
+    // Mirror this window's own strip locally, keyed by its id, so two open
+    // windows keep separate tabs across a reload (the server copy is one shared
+    // workspace and would otherwise make them converge).
+    try {
+      localStorage.setItem("clique.ws." + winId, JSON.stringify(
+        { tabs: body.open_tabs, active: body.active_tab, ts: Date.now() }));
+    } catch (err) { /* storage full or blocked: the server copy still saves */ }
     // Not saveSettings(): that repaints the tree, the tabs and every open
     // terminal, and this fires on every step of a tab drag.
     // keepalive: a closing tab otherwise aborts the fetch, which is how
@@ -397,6 +404,137 @@ function saveWorkspace(now) {
   if (now) return push();
   workspaceTimer = setTimeout(push, 600);
 }
+
+/* --------------------------------------------------- other browser windows */
+
+/* Two windows, one per screen, is a common way to drive this — a build on one
+ * monitor, a diff on the other. Same-origin windows talk directly over a
+ * BroadcastChannel: no server, nothing over the wire. They find each other and
+ * a session can be handed from one to another. Cross-*device* (phone and
+ * desktop) is a different problem — separate browsers cannot share a channel —
+ * and would need a server relay; this is the same-browser case, which is what
+ * "another window" usually means. */
+
+let winId = "";
+try { winId = sessionStorage.getItem("clique.win") || ""; } catch (err) { winId = ""; }
+if (!winId) {
+  winId = (self.crypto && self.crypto.randomUUID)
+    ? crypto.randomUUID() : "w" + Math.random().toString(36).slice(2);
+  try { sessionStorage.setItem("clique.win", winId); } catch (err) { /* private mode */ }
+}
+const winJoined = Date.now();
+const winPeers = new Map([[winId, { joined: winJoined, seen: winJoined }]]);
+let winBus = null;
+try { winBus = new BroadcastChannel("clique.windows"); } catch (err) { winBus = null; }
+
+// Every known window oldest-first, so each window computes the SAME numbering
+// from the shared join times — the earliest-opened is "1". Ties break on id.
+function windowsInOrder() {
+  return [...winPeers.entries()]
+    .sort((a, b) => a[1].joined - b[1].joined || (a[0] < b[0] ? -1 : 1))
+    .map(([id]) => id);
+}
+function windowLabel(id) { return windowsInOrder().indexOf(id) + 1; }
+function otherWindows() { return windowsInOrder().filter((id) => id !== winId); }
+
+function renderWinTag() {
+  const tag = $("#winTag");
+  if (!tag) return;
+  const n = winPeers.size;
+  tag.hidden = n < 2;
+  if (n >= 2) {
+    tag.textContent = "\u29c9 " + windowLabel(winId);
+    tag.title = `This is window ${windowLabel(winId)} of ${n}. Open a session's `
+      + `menu (its gear, or right-click) to move it to another window.`;
+  }
+}
+
+let winFlashTimer = null;
+function flashWindow() {
+  document.body.classList.add("win-flash");
+  clearTimeout(winFlashTimer);
+  winFlashTimer = setTimeout(() => document.body.classList.remove("win-flash"), 1300);
+}
+
+function winSend(msg) {
+  try { if (winBus) winBus.postMessage(msg); } catch (err) { /* channel gone */ }
+}
+function winSee(id, joined) {
+  const now = Date.now();
+  const cur = winPeers.get(id);
+  if (cur) { cur.seen = now; if (joined) cur.joined = joined; }
+  else { winPeers.set(id, { joined: joined || now, seen: now }); }
+}
+
+function windowMoveItems(s) {
+  const others = otherWindows();
+  if (!others.length) return [];
+  if (others.length === 1) {
+    return [["Move to the other window", () => moveSessionToWindow(s.id, others[0])]];
+  }
+  return others.map((w) => ["Move to window " + windowLabel(w), () => moveSessionToWindow(s.id, w)]);
+}
+
+function moveSessionToWindow(id, targetId) {
+  const s = session(id);
+  if (!s) return;
+  winSend({ t: "open", win: targetId, session: id });
+  if (openTabs.includes(id)) {
+    const wasActive = activeId === id;
+    closeTab(id, true);   // silent: a move, not a "still running" close
+    if (wasActive && activeId) {
+      if (terms.has(activeId)) selectTab(activeId); else openSession(activeId);
+    } else { renderTabs(); renderTree(); }
+  }
+  toast(`Moved ${s.name || "session"} to window ${windowLabel(targetId)}`);
+}
+
+// A window's remembered strip is kept under its own id; drop the ones whose
+// window has not been seen in days so the keys do not pile up forever.
+function pruneWinWorkspaces() {
+  try {
+    const cutoff = Date.now() - 2 * 864e5;
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith("clique.ws.")) continue;
+      let stale = true;
+      try { stale = ((JSON.parse(localStorage.getItem(key)) || {}).ts || 0) < cutoff; }
+      catch (err) { stale = true; }
+      if (stale) localStorage.removeItem(key);
+    }
+  } catch (err) { /* storage blocked */ }
+}
+
+if (winBus) {
+  winBus.onmessage = (ev) => {
+    const m = ev.data || {};
+    if (m.t === "open") {
+      if (m.win === winId && m.session && session(m.session)) {
+        openSession(m.session);
+        flashWindow();
+        toast("A session was handed to this window");
+      }
+      return;
+    }
+    if (!m.id || m.id === winId) return;
+    if (m.t === "join") { winSee(m.id, m.joined); winSend({ t: "ping", id: winId, joined: winJoined }); }
+    else if (m.t === "ping") { winSee(m.id, m.joined); }
+    else if (m.t === "leave") { winPeers.delete(m.id); }
+    renderWinTag();
+  };
+  winSend({ t: "join", id: winId, joined: winJoined });
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, p] of [...winPeers]) {
+      if (id !== winId && now - p.seen > 8000) winPeers.delete(id);
+    }
+    winSend({ t: "ping", id: winId, joined: winJoined });
+    renderWinTag();
+  }, 3000);
+  addEventListener("pagehide", () => winSend({ t: "leave", id: winId }));
+  pruneWinWorkspaces();
+  renderWinTag();
+}
+
 
 /* ------------------------------------------------------------------ the board */
 
@@ -801,9 +939,16 @@ async function bootWorkspace() {
   if (!workspaceRestored) return;
 
   const want = pendingWorkspace || { tabs: [], active: "" };
-  openTabs = want.tabs.filter((id) => session(id));
-  const pick = (want.active && openTabs.includes(want.active))
-    ? want.active
+  // Prefer this window's own remembered strip (from a previous visit) over the
+  // shared server workspace, so two windows do not collapse into one set.
+  let wantTabs = want.tabs, wantActive = want.active;
+  try {
+    const local = JSON.parse(localStorage.getItem("clique.ws." + winId) || "null");
+    if (local && Array.isArray(local.tabs)) { wantTabs = local.tabs; wantActive = local.active || ""; }
+  } catch (err) { /* fall back to the server workspace */ }
+  openTabs = wantTabs.filter((id) => session(id));
+  const pick = (wantActive && openTabs.includes(wantActive))
+    ? wantActive
     : openTabs[0];
   if (pick) {
     await openSession(pick);
@@ -1759,6 +1904,7 @@ function sessionMenu(ev, s) {
      * on a desktop: nothing about a row says it can be dragged. */
     ...(folders.length ? [["Move to folder…", () => moveToFolder(s)]] : []),
     ...(s.folder ? [["Take out of its folder", () => setFolder(s, null)]] : []),
+    ...windowMoveItems(s),
     [s.archived ? "Unarchive" : "Archive", () => setArchived(s, !s.archived)],
     [s.pinned ? "Unpin from top" : "Pin to top", () => setPinned(s, !s.pinned)],
     [s.alive ? "Kill session" : "Delete session", () => killSession(s), true],

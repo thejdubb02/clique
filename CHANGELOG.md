@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.74 — 2026-08-23 13:59 PDT
+
+**Move a session to another browser window.** Open the panel in two windows —
+one per screen — and they find each other over a BroadcastChannel (no server,
+nothing over the wire). A "Move to window …" item on any session's menu (its gear
+or a right-click) hands the session to the other window, which flashes its edges
+so you can see where it landed; the source lets go of the tab. A small "⧉ N" chip
+in the header names which window you're looking at, and each window remembers its
+own strip of tabs across a reload. Same-browser for now — cross-*device* (phone
+and desktop) would need a server relay.
+
 ## 0.50.73 — 2026-08-23 09:28 PDT
 
 **Sharper "needs you" detection for every CLI.** The generic waiting patterns —

@@ -838,7 +838,8 @@ button.primary { background: var(--accent); color: var(--on-accent); }
    working, the full ring to a question, the pulse colour to unseen. Only
    the movement stops. */
 @media (prefers-reduced-motion: reduce) {
-  .cli-status::after, .tab.attention::after, #inboxBtn.lit .ico { animation: none; }
+  .cli-status::after, .tab.attention::after, #inboxBtn.lit .ico,
+  body.win-flash::after { animation: none; }
 }
 
 /* ------------------------------------------------------------ stats history */
@@ -1522,6 +1523,20 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 /* The badge overhangs the bell's right edge, so the 2px header gap alone leaves
    it crowding the next button. Give the bell its own clearance. */
 #inboxBtn { margin-right: 7px; }
+.win-tag {
+  font-size: 11px; font-weight: 600; color: var(--dim);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 1px 7px; margin: 0 3px; white-space: nowrap; cursor: default;
+  user-select: none;
+}
+body.win-flash::after {
+  content: ""; position: fixed; inset: 0; z-index: 90; pointer-events: none;
+  border: 3px solid var(--accent); border-radius: 3px;
+  animation: win-flash-pulse 1.3s ease-out forwards;
+}
+@keyframes win-flash-pulse {
+  0% { opacity: 0; } 12% { opacity: 1; } 60% { opacity: 1; } 100% { opacity: 0; }
+}
 
 /* When something is waiting, the bell rings — briefly, then rests for a good
    while, and again. A once-and-done flash is missed if you glanced away; a
