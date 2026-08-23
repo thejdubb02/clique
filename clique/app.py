@@ -73,16 +73,23 @@ def _hooks_settings(python: str) -> str:
     attention endpoint. Loaded with ``--settings`` so it merges on top of the
     user's own Claude config for these sessions and touches nothing on disk."""
 
-    def cmd(state: str) -> dict:
+    def cmd(state: str, note: str = "") -> dict:
+        tail = f" {shlex.quote(note)}" if note else ""
         return {
             "type": "command",
-            "command": f"{shlex.quote(python)} {shlex.quote(str(HOOK))} {state}",
+            "command": f"{shlex.quote(python)} {shlex.quote(str(HOOK))} {state}{tail}",
         }
 
+    # The Notification matcher carries the "why": a permission prompt wants an
+    # approval, an idle prompt is a question or a finished turn. Both are
+    # "waiting"; the note is what lets the inbox offer Approve/Deny vs a reply.
     config = {
         "hooks": {
-            "Notification": [{"hooks": [cmd("waiting")]}],
-            "Stop": [{"hooks": [cmd("waiting")]}],
+            "Notification": [
+                {"matcher": "permission_prompt", "hooks": [cmd("waiting", "permission")]},
+                {"matcher": "idle_prompt", "hooks": [cmd("waiting", "idle")]},
+            ],
+            "Stop": [{"hooks": [cmd("waiting", "idle")]}],
             "UserPromptSubmit": [{"hooks": [cmd("clear")]}],
         }
     }
@@ -384,6 +391,12 @@ class Panel:
                     # "waiting" or "error", from whichever tier of the attention
                     # ladder could answer. See Panel._signal.
                     "signal": signal,
+                    # The "why" behind a live authoritative signal, so the inbox
+                    # can offer Approve/Deny for a permission prompt rather than
+                    # a plain reply. Empty once the signal is stale or a guess.
+                    "signal_note": (
+                        session.signal_note if self._authoritative(session, pane) else ""
+                    ),
                     # One word for what the session is doing, for a caller that
                     # wants the answer rather than the ingredients: "stopped" (no
                     # process), "working" (producing output), "waiting"/"error"
@@ -1663,6 +1676,8 @@ class Handler(BaseHTTPRequestHandler):
         state = str(body.get("state") or "").strip().lower()
         if state not in ("waiting", "error", "clear"):
             return self._json({"error": 'state must be "waiting", "error" or "clear"'}, 400)
+        # Optional "why", bounded — a hook's matcher name, not free text.
+        note = str(body.get("note") or "").strip().lower()[:16]
 
         pane = self.panel.live().get(session.mux)
         # Stamped with the pane's own clock rather than the wall clock, so the
@@ -1671,6 +1686,7 @@ class Handler(BaseHTTPRequestHandler):
             session_id,
             signal="" if state == "clear" else state,
             signal_at=float(pane.activity if pane else 0),
+            signal_note="" if state == "clear" else note,
         )
         return self._json({"ok": True, "signal": updated.signal if updated else ""})
 

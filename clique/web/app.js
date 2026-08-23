@@ -534,18 +534,38 @@ function inboxRow(s) {
   const name = document.createElement("span");
   name.className = "inbox-name";
   name.textContent = s.name || s.id;
+  // A permission prompt wants a yes/no; a question or a finished turn wants a
+  // reply. The reported note is what tells them apart.
+  const wantsPermission = w === "asking" && s.signal_note === "permission";
   const sub = document.createElement("span");
   sub.className = "inbox-sub";
-  sub.textContent = WORK_WORDS[w] + (s.saying ? " · " + s.saying : "");
+  sub.textContent = (wantsPermission ? "wants your approval" : WORK_WORDS[w])
+    + (s.saying ? " · " + s.saying : "");
   meta.append(name, sub);
   open.appendChild(meta);
   row.appendChild(open);
 
+  const bar = document.createElement("div");
+  bar.className = "inbox-answer";
+
+  // For a permission prompt, lead with one-tap Approve / Deny (Enter accepts the
+  // highlighted default, Escape cancels) — the reply box stays for a worded
+  // answer.
+  if (wantsPermission) {
+    const approve = document.createElement("button");
+    approve.className = "inbox-approve";
+    approve.textContent = "Approve";
+    approve.onclick = () => sendKey(s.id, "Enter", "Approved");
+    const deny = document.createElement("button");
+    deny.className = "inbox-deny";
+    deny.textContent = "Deny";
+    deny.onclick = () => sendKey(s.id, "Escape", "Denied");
+    bar.append(approve, deny);
+  }
+
   // Answer without opening the pane: type a reply, or send it empty to accept
   // the highlighted default — which is how a Claude Code permission prompt, and
   // most y/n prompts, say yes.
-  const bar = document.createElement("div");
-  bar.className = "inbox-answer";
   const input = document.createElement("input");
   input.type = "text";
   input.className = "inbox-reply";
@@ -575,6 +595,20 @@ async function answerSession(id, input) {
     input.value = "";
     toast(text ? `Replied to "${who}"` : `Sent to "${who}"`);
     setTimeout(refresh, 400);   // let the state settle, then re-rank the inbox
+  } catch (err) {
+    toast(`Could not reach "${who}" — ${err.message || err}`, true);
+  }
+}
+
+/* Approve / Deny a permission prompt with one key — Enter accepts the
+ * highlighted default, Escape cancels. */
+async function sendKey(id, key, label) {
+  const s = session(id);
+  const who = s ? s.name : "session";
+  try {
+    await api("api/sessions/" + id + "/send", { method: "POST", body: JSON.stringify({ key }) });
+    toast(`${label} → "${who}"`);
+    setTimeout(refresh, 400);
   } catch (err) {
     toast(`Could not reach "${who}" — ${err.message || err}`, true);
   }

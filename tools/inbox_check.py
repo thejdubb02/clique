@@ -111,7 +111,7 @@ def main() -> int:
                 """async (id) => {
               await fetch('/api/sessions/' + id + '/attention', {method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({state: 'waiting'})});
+                body: JSON.stringify({state: 'waiting', note: 'permission'})});
               await refresh();
             }""",
                 sid,
@@ -129,6 +129,11 @@ def main() -> int:
             res["sheet_open"] = page.evaluate("() => !document.getElementById('inbox').hidden")
             res["row_name"] = page.evaluate(
                 "() => { const r = document.querySelector('#inboxList .inbox-name'); return r ? r.textContent : ''; }"
+            )
+            # A permission prompt (note='permission') offers Approve/Deny.
+            res["approve_shown"] = page.evaluate(
+                "() => !!document.querySelector('#inboxList .inbox-approve') "
+                "&& !!document.querySelector('#inboxList .inbox-deny')"
             )
             page.locator("#inboxList .inbox-reply").first.fill("echo inbox-reply-works")
             page.locator("#inboxList .inbox-send").first.click()
@@ -158,6 +163,7 @@ def main() -> int:
         and res.get("title") == "(1) CLIque"
         and res.get("sheet_open")
         and res.get("row_name") == "needs-me"
+        and res.get("approve_shown")
         and res.get("reply_landed")
         and not res.get("errors")
     )

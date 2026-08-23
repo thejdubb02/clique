@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.65 — 2026-08-22 21:24 PDT
+
+**The inbox tells "wants approval" apart from "asked you something".** A Claude
+Code permission prompt and an open question both mean "needs you", but they want
+different answers — so the state hooks now report which (the Notification
+matcher: permission_prompt vs idle_prompt), carried through the attention
+endpoint as an optional `note`. A permission prompt in the inbox gets one-tap
+**Approve / Deny** (Enter accepts the highlighted default, Escape cancels); a
+question keeps the reply box. Everything else is unchanged.
+
 ## 0.50.64 — 2026-08-22 21:14 PDT
 
 **Broadcast: one message to every session at once.** The clearest form of "one

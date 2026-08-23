@@ -1632,3 +1632,12 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 }
 .broadcast-foot #broadcastCount { flex: 1; font-size: 12px; }
 #broadcastSend:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Approve / Deny on a permission prompt in the inbox. */
+.inbox-approve, .inbox-deny {
+  flex: 0 0 auto; font: inherit; font-size: 12px; font-weight: 600;
+  padding: 6px 11px; border-radius: 4px; cursor: pointer; border: 1px solid var(--line);
+}
+.inbox-approve { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.inbox-deny { background: var(--field); color: var(--fg); }
+.inbox-deny:hover { border-color: var(--critical); color: var(--critical); }

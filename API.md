@@ -276,6 +276,11 @@ costs nothing when idle.
 
 ### `POST /api/sessions/<id>/attention`
 
+An optional `note` alongside `state` says *why* it is waiting — `"permission"`
+(the inbox then offers Approve/Deny) or `"idle"` (a question or finished turn).
+Bounded, cleared with the signal.
+
+
 ```json
 {"state": "waiting"}
 ```

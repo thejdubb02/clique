@@ -36,6 +36,9 @@ STATES = {"waiting", "error", "clear"}
 
 def main(argv: list[str]) -> int:
     state = (argv[1] if len(argv) > 1 else "").strip().lower()
+    # Optional "why" (permission / idle), from the hook's matcher. Reported so
+    # the inbox can tell a permission prompt from a plain question.
+    note = (argv[2] if len(argv) > 2 else "").strip().lower()
     session = os.environ.get("CLIQUE_SESSION", "").strip()
     base = os.environ.get("CLIQUE_URL", "").strip().rstrip("/")
     token = os.environ.get("CLIQUE_TOKEN", "").strip()
@@ -50,7 +53,10 @@ def main(argv: list[str]) -> int:
     if state not in STATES or not session or not base:
         return 0  # not a CLIque-launched session, or nothing worth sending
 
-    body = json.dumps({"state": state}).encode()
+    payload = {"state": state}
+    if note:
+        payload["note"] = note
+    body = json.dumps(payload).encode()
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = "Bearer " + token

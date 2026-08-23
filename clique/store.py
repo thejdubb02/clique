@@ -52,10 +52,30 @@ DEFAULT_FOLDERS = [
 ]
 
 PALETTE = [
-    "#c7915b", "#6f42c1", "#2d7d46", "#1f6feb", "#0d7d8f", "#a63d2f",
-    "#8b8b8b", "#d96f6f", "#e8a33d", "#3aa3a0", "#7a7fd6", "#ff5fa2",
-    "#c4500a", "#8250df", "#1a7f37", "#0550ae", "#bf3989", "#9a6700",
-    "#cf222e", "#0969da", "#bc4c00", "#5a32a3", "#087f5b", "#364fc7",
+    "#c7915b",
+    "#6f42c1",
+    "#2d7d46",
+    "#1f6feb",
+    "#0d7d8f",
+    "#a63d2f",
+    "#8b8b8b",
+    "#d96f6f",
+    "#e8a33d",
+    "#3aa3a0",
+    "#7a7fd6",
+    "#ff5fa2",
+    "#c4500a",
+    "#8250df",
+    "#1a7f37",
+    "#0550ae",
+    "#bf3989",
+    "#9a6700",
+    "#cf222e",
+    "#0969da",
+    "#bc4c00",
+    "#5a32a3",
+    "#087f5b",
+    "#364fc7",
 ]
 
 #: How a CLI is marked in the tab bar and sidebar.
@@ -285,6 +305,10 @@ class Session:
     #: point means the session moved on, and the signal is stale — which is
     #: what stops "waiting" sticking to a session that carried on by itself.
     signal_at: float = 0.0
+    #: Why it is waiting, when the source knows: "permission" (wants an approval
+    #: — the inbox offers Approve/Deny), "idle" (a question or a finished turn —
+    #: a reply), or "" (unspecified). Set alongside `signal`, cleared with it.
+    signal_note: str = ""
 
 
 def new_id() -> str:
@@ -340,11 +364,13 @@ def _clean_snippets(value) -> list[dict]:
         text = str(raw.get("text") or "")[:MAX_SNIPPET_CHARS]
         if not trigger or not text:
             continue
-        out.append({
-            "trigger": trigger[:40],
-            "label": str(raw.get("label") or "").strip()[:80],
-            "text": text,
-        })
+        out.append(
+            {
+                "trigger": trigger[:40],
+                "label": str(raw.get("label") or "").strip()[:80],
+                "text": text,
+            }
+        )
     return out
 
 
@@ -366,7 +392,8 @@ class Store:
         if self.path.is_dir():
             raise ValueError(
                 f"state path is a directory, not a file: {self.path} "
-                "-- pass $CLIQUE_HOME/state.json, not $CLIQUE_HOME")
+                "-- pass $CLIQUE_HOME/state.json, not $CLIQUE_HOME"
+            )
         self._lock = threading.RLock()
         self.folders: list[Folder] = []
         self.sessions: list[Session] = []
@@ -387,10 +414,13 @@ class Store:
                 continue  # try the backup rather than starting empty
 
         folders = raw.get("folders") or DEFAULT_FOLDERS
-        self.folders = [Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__})
-                        for f in folders]
-        self.sessions = [Session(**{k: v for k, v in s.items() if k in Session.__annotations__})
-                         for s in raw.get("sessions", [])]
+        self.folders = [
+            Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__}) for f in folders
+        ]
+        self.sessions = [
+            Session(**{k: v for k, v in s.items() if k in Session.__annotations__})
+            for s in raw.get("sessions", [])
+        ]
         # Merge rather than replace, so a setting added in a later version
         # appears with its default instead of being missing.
         self.settings = {**DEFAULT_SETTINGS, **(raw.get("settings") or {})}
@@ -428,8 +458,7 @@ class Store:
         # holds the webhook secret and every unsent draft; the password hash,
         # the signing secret and the token store are all 0600 and this one was
         # 0644 purely because `open(..., "w")` does not take a mode.
-        with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
-                  "w") as handle:
+        with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as handle:
             handle.write(json.dumps(payload, indent=2))
             handle.flush()
             os.fsync(handle.fileno())
@@ -545,7 +574,7 @@ class Store:
                     merged = dict(self.settings.get("cli_colors") or {})
                     for cli_id, colour in value.items():
                         if colour is None or not str(colour).strip():
-                            merged.pop(cli_id, None)      # back to the shipped one
+                            merged.pop(cli_id, None)  # back to the shipped one
                         elif _HEX.fullmatch(str(colour).strip()):
                             merged[str(cli_id)[:64]] = str(colour).strip().lower()
                     self.settings["cli_colors"] = merged
