@@ -7,12 +7,13 @@ rather than pulled from a CDN or npm.
 replace xterm's default DOM renderer, which draws elements per run of text so a
 screen redrawing underneath a live selection leaves fragments of the old text
 behind — stale nodes, not a font or width problem. Both repaint the whole cell
-grid each frame. WebGL does it on the client's GPU (a real win with many live
-panes); canvas does it on the CPU. The panel tries WebGL first and falls back
-to canvas, then to the DOM renderer, because a phone, a VM or a remote session
-can refuse or silently lose a WebGL2 context — so WebGL is used where it works
-and never required. (The two addon families version separately: webgl 0.18.0
-and canvas 0.7.0 are the siblings that ride xterm core 5.5.0.)
+grid each frame. WebGL is the default and does it on the client's GPU — a real,
+felt speed-up; canvas does it on the CPU and is the fallback. A browser allows
+only ~16 live WebGL contexts, so past that the oldest pane's context is dropped
+and that pane quietly falls back to canvas (onContextLoss); the panel offers to
+turn the GPU off if losses keep happening. The two addon families version
+separately: webgl 0.18.0 and canvas 0.7.0 are the siblings that ride xterm core
+5.5.0.
 
 `addon-unicode11.js` (v0.8.0) is not optional polish. Without it xterm.js
 uses Unicode 6 width tables, in which an emoji-presentation glyph such as

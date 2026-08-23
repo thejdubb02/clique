@@ -338,6 +338,16 @@
       <p class="note">Terminal size is also the <kbd>+</kbd>/<kbd>−</kbd>
          stepper in the bottom-right of the panel.</p>
 
+      <h3>Rendering</h3>
+      <label class="check"><input type="checkbox" id="setGpu">
+        Use the GPU to draw terminals <span class="dim">this device</span></label>
+      <p class="note">On by default, and worth leaving on — terminals are
+         painted on this computer's graphics chip, which is noticeably faster
+         and lighter. That work happens in your browser, never on the server, so
+         a server with no GPU is fine. If a device ever draws oddly it falls
+         back on its own, and CLIque will offer to turn this off if it keeps
+         struggling. The choice is remembered per device.</p>
+
       <h3>Sidebar</h3>
       <label class="check"><input type="checkbox" id="setHistorySidebar">
         List past conversations under each folder</label>

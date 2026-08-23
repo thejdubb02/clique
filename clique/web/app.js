@@ -3133,18 +3133,35 @@ function toggleFollow() {
   if (activeId) setFollow(activeId, !following(activeId));
 }
 
-/* WebGL first (GPU), canvas next (CPU full-repaint), DOM last (built in). All
- * guarded: the addons are vendored, and a WebGL2 context can be refused. */
+/* A real renderer, and the GPU by default.
+ *
+ * xterm's default DOM renderer draws one element per run of text, so a screen
+ * redrawing under a live selection — an interactive menu being arrowed through
+ * — leaves fragments of the old text behind. Stale nodes, not a font or width
+ * problem. A full-repaint renderer has nothing left over to show. WebGL does
+ * that repaint on the client's GPU (the work is in your browser, never on the
+ * server, so a GPU-less server is fine), and it is a real, felt speed-up.
+ *
+ * The one catch is that WebGL is a per-terminal GPU context and a browser
+ * allows only ~16 at once; open more panes than that and the browser drops the
+ * oldest pane's context. That is handled, not feared: the losing pane — always
+ * a background one — falls back to canvas on the spot (onContextLoss), so
+ * nothing you are looking at ever breaks. If losses keep happening we take the
+ * hint and offer to turn the GPU off for steadier drawing (see noteWebglLoss).
+ *
+ * The renderer is kept on the term so closeTab can dispose it before the
+ * terminal — a renderer disposed inside term.dispose() throws and used to
+ * abort the teardown. */
 function attachRenderer(term) {
-  if (window.WebglAddon) {
+  if (gpuEnabled() && window.WebglAddon) {
     try {
       const webgl = new WebglAddon.WebglAddon();
-      // A lost GPU context — a tab backgrounded on a phone, a driver reset —
-      // would otherwise freeze the pane. Drop to canvas the moment it happens.
       webgl.onContextLoss(() => {
+        if (term._cliqueRenderer !== webgl) return;   // already replaced
         try { webgl.dispose(); } catch (e) { /* already gone */ }
-        if (term._cliqueRenderer === webgl) term._cliqueRenderer = null;
-        attachCanvas(term);
+        term._cliqueRenderer = null;
+        attachCanvas(term);   // a background pane; the visible one keeps its context
+        noteWebglLoss();
       });
       term.loadAddon(webgl);
       term._cliqueRenderer = webgl;
@@ -3167,6 +3184,49 @@ function attachCanvas(term) {
   }
 }
 
+/* GPU rendering is per device — a desktop has one, an old phone may not, and
+ * the choice must not follow the person across machines the way the server's
+ * settings do. So it lives in localStorage, and is on by default. */
+function gpuEnabled() {
+  try { return localStorage.getItem("clique.gpu") !== "0"; } catch (e) { return true; }
+}
+
+function setGpu(on) {
+  try { localStorage.setItem("clique.gpu", on ? "1" : "0"); } catch (e) { /* private mode */ }
+  // Applied live to every open pane, not just new ones — the toggle is a
+  // visible before/after. Dispose whatever each holds, re-attach, repaint.
+  for (const entry of terms.values()) {
+    if (entry.closing) continue;
+    try {
+      if (entry.term._cliqueRenderer) {
+        try { entry.term._cliqueRenderer.dispose(); } catch (e) { /* gone */ }
+        entry.term._cliqueRenderer = null;
+      }
+      attachRenderer(entry.term);
+      entry.term.refresh(0, entry.term.rows - 1);
+    } catch (e) { /* one bad pane must not stop the rest */ }
+  }
+}
+
+/* Detecting that the GPU is not coping, and saying so once.
+ *
+ * A lost context now and then is normal churn past the ~16-pane cap and is
+ * handled silently. But if they keep coming — a weak GPU, a driver that resets,
+ * far more panes than the cap — canvas is the steadier choice, so offer it.
+ * Once ever (a flag in localStorage): a panel that keeps nagging is one people
+ * stop reading, and the toggle in Settings is always there to change back. */
+let webglLosses = 0;
+
+function noteWebglLoss() {
+  webglLosses += 1;
+  if (webglLosses < 3 || !gpuEnabled()) return;
+  try { if (localStorage.getItem("clique.gpuAdvised") === "1") return; } catch (e) { /* no store */ }
+  try { localStorage.setItem("clique.gpuAdvised", "1"); } catch (e) { /* no store */ }
+  toast("GPU rendering keeps dropping on this device — canvas is steadier with "
+        + "this many panes. Turn the GPU off?", true,
+        { label: "Turn off GPU", run: () => setGpu(false) });
+}
+
 /* Server output is coalesced onto one write per animation frame, not one per
  * WebSocket frame. A build that floods — a `yes` loop, a giant diff, a screen
  * cleared and redrawn fast — can deliver hundreds of small frames a second,
@@ -3178,11 +3238,19 @@ function attachCanvas(term) {
  * frame — runs in the write callback, the first moment the new lines exist. */
 function writeOut(entry, id, data) {
   (entry.wq || (entry.wq = [])).push(data);
-  if (!entry.wqRAF) entry.wqRAF = requestAnimationFrame(() => flushWrites(entry, id));
+  if (entry.wqRAF || entry.wqTimer) return;   // a flush is already scheduled
+  const flush = () => flushWrites(entry, id);
+  entry.wqRAF = requestAnimationFrame(flush);
+  // Safety net. requestAnimationFrame is starved when the page produces no
+  // frames — a backgrounded tab, a headless context — and rAF alone would
+  // leave the queue unflushed and the pane looking frozen. Whichever of the
+  // two fires first flushes; flushWrites cancels the other.
+  entry.wqTimer = setTimeout(flush, 100);
 }
 
 function flushWrites(entry, id) {
-  entry.wqRAF = 0;
+  if (entry.wqRAF) { cancelAnimationFrame(entry.wqRAF); entry.wqRAF = 0; }
+  if (entry.wqTimer) { clearTimeout(entry.wqTimer); entry.wqTimer = 0; }
   if (entry.closing) return;            // the term may already be disposed
   const q = entry.wq;
   if (!q || !q.length) return;
@@ -3408,6 +3476,7 @@ function closeTab(id, silent, killing) {
   if (entry) {
     entry.closing = true;
     try { if (entry.wqRAF) cancelAnimationFrame(entry.wqRAF); } catch (err) { /* nothing queued */ }
+    try { if (entry.wqTimer) clearTimeout(entry.wqTimer); } catch (err) { /* nothing queued */ }
     try { if (entry.ws) entry.ws.close(); } catch (err) { /* already closing */ }
     // Dispose the renderer addon while the terminal is still whole; disposing
     // it inside term.dispose() throws and used to abort the whole teardown.
@@ -3581,23 +3650,8 @@ async function attachNow(id) {
 
   term.open(host);
 
-  /* A real renderer, not the DOM fallback — and the GPU where the client has
-   * one.
-   *
-   * xterm's default DOM renderer draws one element per run of text, so a
-   * screen that redraws underneath a live selection — an interactive menu
-   * being arrowed through — leaves fragments of the old text behind. Stale
-   * nodes, not a font or width problem. A full-repaint renderer has nothing
-   * left over to show. WebGL does that repaint on the client's GPU, a real
-   * win with a dozen live panes; but a phone, a VM or a remote context can
-   * refuse or silently lose a WebGL2 context, so it cannot be *required*. The
-   * chain is WebGL -> canvas -> DOM: the GPU if it will, a CPU full-repaint if
-   * not, and the built-in DOM renderer if even that is refused. Whatever
-   * attaches is kept on the term so closeTab can dispose it before the
-   * terminal — a renderer disposed inside term.dispose() throws and used to
-   * abort the teardown, which was the tab that would not close.
-   *
-   * After `open` because it binds to the element the terminal just made. */
+  /* The canvas renderer (see attachRenderer). After `open` because it binds to
+   * the element the terminal just made. */
   attachRenderer(term);
 
   // A hidden tab must not measure the pane and then claim that size. The
@@ -4590,6 +4644,7 @@ function openSettings() {
     $(out).textContent = value + "px";
   }
 
+  $("#setGpu").checked = gpuEnabled();
   $("#setPalette").checked = s.palette_hotkey !== false;
   $("#setHistorySidebar").checked = s.history_in_sidebar !== false;
   $("#setHistoryDays").value = s.history_days || 14;
@@ -4802,6 +4857,8 @@ function wire() {
   $("#setFontFamily").onchange = (ev) => saveSettings({ font_family: ev.target.value });
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
+  // Per device, so it never goes through saveSettings (which is server-side).
+  $("#setGpu").onchange = (ev) => setGpu(ev.target.checked);
   $("#setPalette").onchange = (ev) => saveSettings({ palette_hotkey: ev.target.checked });
   $("#setHistorySidebar").onchange = (ev) => {
     saveSettings({ history_in_sidebar: ev.target.checked }).then(renderTree);

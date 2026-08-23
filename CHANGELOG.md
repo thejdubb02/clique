@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.50.59 — 2026-08-22 19:06 PDT
+
+**GPU rendering stays on by default, and now knows when to bow out.** WebGL
+(0.50.58) is a real, felt speed-up, so it stays the default — but a browser
+allows only ~16 live GPU contexts, and CLIque is built to hold many panes. Past
+that the browser drops the oldest pane's context; that pane, always a
+background one, now falls back to canvas on the spot, so nothing you are looking
+at ever breaks. If those losses keep happening — a weak GPU, a driver that
+resets, far more panes than the cap — CLIque offers, once, to turn the GPU off
+for steadier canvas drawing. A **per-device toggle** in Settings › Rendering
+does the same by hand (per device, because a desktop has a GPU an old phone may
+not, and the choice should not follow you across machines). The frame-batching
+from 0.50.58 — one terminal write per animation frame, not one per network
+packet — is unchanged.
+
 ## 0.50.58 — 2026-08-22 18:06 PDT
 
 **Smoother terminals: GPU rendering, and output batched to the frame.** Three
