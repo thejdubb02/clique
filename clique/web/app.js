@@ -5479,6 +5479,22 @@ function wire() {
         cwd: form.cwd.value, folder: form.folder.value || null,
       };
       if (wtOn) { payload.worktree = true; payload.branch = branch; }
+      const count = Math.max(1, Math.min(20, parseInt(form.count.value, 10) || 1));
+      if (count > 1) {
+        // A fleet: one request, N sessions, each with its own worktree when one
+        // is on. Open the first; say if any did not start.
+        const r = await api("api/sessions/spawn", {
+          method: "POST", body: JSON.stringify({ ...payload, count }),
+        });
+        $("#modal").hidden = true;
+        form.reset();
+        await refresh();
+        if (r.created && r.created[0]) openSession(r.created[0]);
+        if (r.errors && r.errors.length) {
+          toast(`${r.errors.length} of ${count} didn't start — ${r.errors[0]}`, true);
+        }
+        return;
+      }
       const created = await api("api/sessions", {
         method: "POST", body: JSON.stringify(payload),
       });

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.68 — 2026-08-22 21:54 PDT
+
+**Start a fleet in one click.** The new-session form takes a "How many" count now
+— up to 20 — and spins them all up at once, each with a numbered name. Turn on a
+worktree and each gets its own branch (`<branch>-1`, `-2`, …), so a fleet of
+agents can work the same repo without treading on each other's files. New
+endpoint `POST /api/sessions/spawn`, reusing the ordinary per-session create;
+one that fails to start is reported, not fatal to the rest.
+
 ## 0.50.67 — 2026-08-22 21:41 PDT
 
 **A board of the whole fleet.** A new grid button opens every session as a card

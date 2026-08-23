@@ -235,6 +235,14 @@ stopped.
 Text is typed into the pane; `enter` decides whether it is submitted. `key`
 sends a single key by tmux name instead.
 
+### `POST /api/sessions/spawn` → `201`
+
+The new-session body plus `count` (1–20) — a fleet in one call. Each is an
+ordinary session with a numbered name; with `worktree: true`, each gets its own
+branch (`<branch>-1`, `<branch>-2`, …) so they never collide. Returns
+`{created, errors}` — the ids that started, and any messages for ones that did
+not. `count: 1` is the same as a plain create.
+
 ### `POST /api/broadcast`
 
 ```json

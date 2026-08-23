@@ -667,6 +667,34 @@ class Panel:
         )
         return {"id": session.id, "worktree": worktree}
 
+    def spawn(self, body: dict) -> dict:
+        """Start several sessions from one request — a fleet in a click. Each is
+        an ordinary create_session with a numbered name; with a worktree, each
+        gets its own branch so they never collide. Bounded to 20, and one that
+        fails is reported rather than sinking the rest."""
+        try:
+            count = int(body.get("count") or 1)
+        except (TypeError, ValueError):
+            count = 1
+        count = max(1, min(count, 20))
+        if count == 1:
+            return {"created": [self.create_session(body)["id"]], "errors": []}
+        base_name = (body.get("name") or "").strip()
+        base_branch = (body.get("branch") or "").strip() or "agent"
+        worktree = bool(body.get("worktree"))
+        created: list[str] = []
+        errors: list[str] = []
+        for i in range(1, count + 1):
+            sub = dict(body)
+            sub["name"] = f"{base_name} {i}" if base_name else ""
+            if worktree:
+                sub["branch"] = f"{base_branch}-{i}"
+            try:
+                created.append(self.create_session(sub)["id"])
+            except (ValueError, RegistryError, tmux.TmuxError) as exc:
+                errors.append(str(exc))
+        return {"created": created, "errors": errors}
+
     def broadcast(self, body: dict) -> dict:
         """Send one message to every live session at once, optionally scoped to a
         folder. The thing a cockpit driving many agents most wants: one
@@ -1583,6 +1611,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.adopt())
             if path == "/api/broadcast":
                 return self._json(self.panel.broadcast(body))
+            if path == "/api/sessions/spawn":
+                return self._json(self.panel.spawn(body), 201)
             if path == "/api/orphans/reap":
                 return self._json(self.panel.reap_orphans(body.get("muxes")))
             if path == "/api/workspace":
