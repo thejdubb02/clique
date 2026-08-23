@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.62 — 2026-08-22 20:13 PDT
+
+**Review what an agent changed, and comment straight back to it.** A session in a
+git repo gets a "Review changes" action that shows its uncommitted diff — tracked
+edits and the new files it wrote, added and removed lines coloured — and a
+comment box that sends what you type as the agent's next message. The review note
+and the follow-up are the same message: read the change, say what to fix, done.
+No new write-side endpoints; it is git's own diff and the send path that already
+existed. Also fixes a long-standing crash in the hover-to-peek handler — a null
+dereference when the mouse left empty sidebar space with nothing being peeked.
+
 ## 0.50.61 — 2026-08-22 19:57 PDT
 
 **A "needs you" inbox — see who is waiting, and answer from anywhere.** A bell in

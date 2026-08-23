@@ -125,6 +125,16 @@ its own. Read from the CLI's own transcript, bounded to a tail (never the whole
 file), and only the typed turns: user prompts and the assistant's prose, not its
 thinking or tool calls. Empty for a CLI whose history is prompts-only.
 
+### `GET /api/sessions/<id>/diff`
+
+What the session's agent has changed but not committed, for review —
+`{repo, name, diff, empty, untracked_hidden}`. `diff` is git's own unified diff:
+tracked changes (`git diff HEAD`, staged and unstaged together) plus new files
+git is not yet tracking, shown as all-additions and capped, with any beyond the
+cap named in `untracked_hidden`. `empty` is true for a clean checkout; `repo` is
+false when the working directory is not a git repository (then there is no
+`diff`). Computed on demand, not on the poll.
+
 ### `GET /api/sessions/<id>/wait`
 
 Blocks until the session reaches one of the `for` states — a comma list of

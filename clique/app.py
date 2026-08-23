@@ -1296,6 +1296,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._file(path.split("/")[3], query.get("path") or "")
             if path.startswith("/api/sessions/") and path.endswith("/transcript"):
                 return self._transcript(path.split("/")[3])
+            if path.startswith("/api/sessions/") and path.endswith("/diff"):
+                return self._diff(path.split("/")[3])
             if path.startswith("/api/sessions/") and path.endswith("/wait"):
                 wanted = {w for w in (query.get("for") or "idle").split(",") if w}
                 try:
@@ -1325,6 +1327,20 @@ class Handler(BaseHTTPRequestHandler):
         tid = session.cli_session_id or session.id
         turns = self.panel.conversations.session_transcript(session.cli, tid)
         return self._json({"cli": session.cli, "name": session.name, "turns": turns})
+
+    def _diff(self, session_id: str) -> None:
+        """What a session's agent has changed but not committed, for review.
+
+        ``repo: false`` when the checkout is not a git repository; ``empty: true``
+        when it is clean. The diff itself is git's, unified, computed on demand
+        rather than on the poll — see gitinfo.diff for what it includes."""
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "not found"}, 404)
+        info = gitinfo.diff(session.cwd)
+        if info is None:
+            return self._json({"repo": False, "name": session.name})
+        return self._json({"repo": True, "name": session.name, **info})
 
     def _peek(self, session_id: str, want: str) -> None:
         """The last few lines of a pane, without opening it.

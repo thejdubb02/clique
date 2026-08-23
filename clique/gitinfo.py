@@ -198,3 +198,58 @@ def remove_worktree(path: str) -> bool:
     if not main:
         return False
     return _git(Path(main), "worktree", "remove", str(path)) is not None
+
+
+#: A review can pull in many new files; cap how many untracked ones get their
+#: contents shown, so a forgotten node_modules is a bounded list, not a download.
+MAX_UNTRACKED = 50
+
+#: Diffs are read on demand, not on the poll, and can be large — give git longer
+#: than the sidebar's one-second budget.
+DIFF_TIMEOUT = 5.0
+
+
+def _git_diff(cwd: Path, *args: str) -> str:
+    """Like ``_git`` but for diff: keep stdout even when git exits 1, which is
+    how ``git diff --no-index`` (and ``--exit-code``) report that files differ."""
+    try:
+        done = subprocess.run(                       # noqa: S603 — argv list, no shell
+            ["git", "-C", str(cwd), *args],          # noqa: S607 — git from PATH
+            capture_output=True, text=True, timeout=DIFF_TIMEOUT, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout if done.returncode in (0, 1) else ""
+
+
+def diff(cwd: str) -> dict | None:
+    """The uncommitted changes in a session's checkout, as one unified diff.
+
+    Tracked changes are ``git diff HEAD`` — staged and unstaged together, which
+    is everything the agent has done since the last commit. Files git is not yet
+    tracking are shown as all-additions, because a file the agent just wrote is
+    the most important thing to review; they are capped at ``MAX_UNTRACKED`` so a
+    stray dependency directory cannot turn a review into a download. ``None``
+    when the directory is not a git repository."""
+    path = Path(cwd)
+    if _git(path, "rev-parse", "--show-toplevel") is None:
+        return None
+    parts = []
+    tracked = _git_diff(path, "-c", "core.quotepath=false", "diff", "HEAD")
+    if tracked.strip():
+        parts.append(tracked)
+    untracked = [
+        line[3:] for line in (_git(path, "status", "--porcelain") or "").splitlines()
+        if line.startswith("?? ")
+    ]
+    shown = untracked[:MAX_UNTRACKED]
+    for name in shown:
+        one = _git_diff(path, "diff", "--no-index", "--", "/dev/null", name)
+        if one.strip():
+            parts.append(one)
+    full = "\n".join(parts)
+    return {
+        "diff": full,
+        "untracked_hidden": untracked[MAX_UNTRACKED:],
+        "empty": not full.strip(),
+    }

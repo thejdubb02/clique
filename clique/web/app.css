@@ -1557,3 +1557,41 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .inbox-reply:focus { outline: none; border-color: var(--accent); }
 .inbox-send { flex: 0 0 auto; }
 .inbox-send:hover { color: var(--accent); }
+
+/* -------------------------------------------------------------- review diff */
+
+#diffBody { overflow: auto; }
+.diff-file {
+  border: 1px solid var(--line); border-radius: 6px; margin-bottom: 10px;
+  overflow: hidden; background: var(--panel);
+}
+.diff-file-head {
+  position: sticky; top: 0; z-index: 1;
+  padding: 6px 10px; font-weight: 600; font-size: 12px;
+  background: var(--row); border-bottom: 1px solid var(--line);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.diff-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  padding: 0 10px;
+}
+.diff-line.add  { background: color-mix(in srgb, #3fb950 16%, transparent); color: var(--fg); }
+.diff-line.del  { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--fg); }
+.diff-line.hunk { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.diff-line.meta { color: var(--dim); }
+.diff-line.ctx  { color: var(--fg); opacity: .85; }
+
+/* The comment box is the review: what you type here is the agent's next
+   message. Pinned to the foot so it is reachable without scrolling the diff. */
+.diff-foot {
+  flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-end;
+  padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--line);
+}
+#diffComment {
+  flex: 1; min-width: 0; resize: vertical; font: inherit; font-size: 13px;
+  color: var(--fg); background: var(--field);
+  border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px;
+}
+#diffComment:focus { outline: none; border-color: var(--accent); }
+#diffSend { flex: 0 0 auto; align-self: stretch; white-space: nowrap; }
