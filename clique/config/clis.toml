@@ -97,6 +97,13 @@ status  = { url = "https://status.claude.com/api/v2/status.json", page = "https:
 
 own_input = true
 
+# Claude Code speaks a hook protocol, so CLIque wires the curl above for you:
+# sessions launched here run with a --settings block whose Notification / Stop /
+# UserPromptSubmit hooks POST their real state to the attention endpoint. No
+# guessing from output, and nothing for you to install. Set false to opt out and
+# fall back to the patterns above.
+hooks = true
+
 [cli.claude.attention]
 waiting = [
   "\\(y/n\\)",

@@ -21,6 +21,8 @@ import json
 import mimetypes
 import os
 import secrets
+import shlex
+import sys
 import threading
 import time
 import traceback
@@ -56,6 +58,37 @@ from .wsproto import OP_TEXT, WebSocket, handshake_response
 
 WEB = Path(__file__).parent / "web"
 
+#: The reporter a hook-speaking CLI runs to report its state (clique/hook.py).
+#: Standard-library only, so any python can run it as a plain script.
+HOOK = Path(__file__).parent / "hook.py"
+
+
+def _hooks_settings(python: str) -> str:
+    """A Claude Code ``--settings`` JSON string that wires the state hooks.
+
+    Notification and Stop mean the session yielded — it is waiting on the
+    person. UserPromptSubmit means the person answered — it is working again,
+    so clear. Each event runs the reporter with the state as its one argument;
+    the reporter reads the pane's ``CLIQUE_*`` env and POSTs it to the
+    attention endpoint. Loaded with ``--settings`` so it merges on top of the
+    user's own Claude config for these sessions and touches nothing on disk."""
+
+    def cmd(state: str) -> dict:
+        return {
+            "type": "command",
+            "command": f"{shlex.quote(python)} {shlex.quote(str(HOOK))} {state}",
+        }
+
+    config = {
+        "hooks": {
+            "Notification": [{"hooks": [cmd("waiting")]}],
+            "Stop": [{"hooks": [cmd("waiting")]}],
+            "UserPromptSubmit": [{"hooks": [cmd("clear")]}],
+        }
+    }
+    return json.dumps(config, separators=(",", ":"))
+
+
 #: Proxies drop a silent connection; a terminal is silent whenever you stop
 #: typing. Ping often enough to stay under any sane idle timeout.
 PING_SECONDS = 25
@@ -69,8 +102,14 @@ PING_SECONDS = 25
 #:
 #: Loopback literals, the tailnet, and the usual tunnel providers. Anything
 #: else has to be named in CLIQUE_ALLOWED_HOSTS.
-ALLOWED_HOST_SUFFIXES = (".ts.net", ".trycloudflare.com", ".cfargotunnel.com",
-                         ".ngrok.io", ".ngrok-free.app", ".ngrok.app")
+ALLOWED_HOST_SUFFIXES = (
+    ".ts.net",
+    ".trycloudflare.com",
+    ".cfargotunnel.com",
+    ".ngrok.io",
+    ".ngrok-free.app",
+    ".ngrok.app",
+)
 ALLOWED_HOST_EXACT = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 
@@ -88,11 +127,10 @@ def host_allowed(host: str, extra: set[str]) -> bool:
     if name in ALLOWED_HOST_EXACT or name in extra:
         return True
     if name.replace(".", "").isdigit():
-        return True                       # a bare IPv4 literal cannot be rebound
+        return True  # a bare IPv4 literal cannot be rebound
     if any(name.endswith(suffix) for suffix in ALLOWED_HOST_SUFFIXES):
         return True
-    return any(name == e.lstrip(".") or name.endswith(e)
-               for e in extra if e.startswith("."))
+    return any(name == e.lstrip(".") or name.endswith(e) for e in extra if e.startswith("."))
 
 
 #: When this process came up, for the uptime in /healthz. Process-local by
@@ -103,12 +141,18 @@ _STARTED = time.time()
 class Panel:
     """Everything the request handlers share. One instance per process."""
 
-    def __init__(self, store: Store, registry: Registry, auth: Auth,
-                 tokens: TokenStore) -> None:
+    def __init__(self, store: Store, registry: Registry, auth: Auth, tokens: TokenStore) -> None:
         self.store = store
         self.registry = registry
         self.auth = auth
         self.tokens = tokens
+        #: Where this server is listening, filled in by serve(). Until then the
+        #: port is 0, which reads as "no URL to hand a hook", so hook wiring is
+        #: skipped rather than pointed at a guess (e.g. under a test Panel).
+        self.host = ""
+        self.port = 0
+        #: The persistent token the hooks authenticate with, made on first use.
+        self._hook_token = ""
         #: Past conversations, discovered on demand and cached. Deliberately
         #: NOT `self.history` — that name was already the cpu/memory series,
         #: and taking it silently replaced the stats endpoint's backing object
@@ -127,14 +171,19 @@ class Panel:
         self.services = services.Services(self)
         self.services.ensure()
         self.clients = 0
-        self.allowed_hosts = {h.strip().lower() for h in
-                              os.environ.get("CLIQUE_ALLOWED_HOSTS", "").split(",")
-                              if h.strip()}
+        self.allowed_hosts = {
+            h.strip().lower()
+            for h in os.environ.get("CLIQUE_ALLOWED_HOSTS", "").split(",")
+            if h.strip()
+        }
         #: Believe X-Forwarded-* only when the operator confirms a proxy sets
         #: them. Otherwise any client could send X-Forwarded-Host and step past
         #: the DNS-rebinding gate on Host. Set behind tailscale / caddy / nginx.
         self.trust_proxy = os.environ.get("CLIQUE_TRUST_PROXY", "").strip().lower() in (
-            "1", "true", "yes")
+            "1",
+            "true",
+            "yes",
+        )
         self.history = sysinfo.History()
         self._last_reap = 0.0
         self._last_idle_reap = 0.0
@@ -204,17 +253,17 @@ class Panel:
         for session in list(self.store.sessions):
             pane = panes.get(session.mux)
             if pane is None or pane.attached:
-                continue                        # already stopped, or in view
+                continue  # already stopped, or in view
             if now - pane.activity < threshold:
-                continue                        # not idle long enough
+                continue  # not idle long enough
             cli = self.registry.types().get(session.cli)
             if not (cli and cli.resume):
-                continue                        # nothing to resume -> keep running
+                continue  # nothing to resume -> keep running
             args = " ".join(cli.args)
             if not (session.cli_session_id or "{id}" in args or "{uuid}" in args):
-                continue                        # no resume key -> do not lose it
+                continue  # no resume key -> do not lose it
             if working.busy(pane, session.socket, now):
-                continue                        # do not interrupt work in progress
+                continue  # do not interrupt work in progress
             with contextlib.suppress(tmux.TmuxError):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
 
@@ -235,14 +284,16 @@ class Panel:
             return body
         panes = self.live()
         sessions = self.store.sessions
-        body.update({
-            "version": version_string(),
-            "uptime": int(time.time() - _STARTED),
-            "tmux": tmux.available(),
-            "sessions": len(sessions),
-            "alive": sum(1 for x in sessions if x.mux in panes),
-            "attached": self.clients,
-        })
+        body.update(
+            {
+                "version": version_string(),
+                "uptime": int(time.time() - _STARTED),
+                "tmux": tmux.available(),
+                "sessions": len(sessions),
+                "alive": sum(1 for x in sessions if x.mux in panes),
+                "attached": self.clients,
+            }
+        )
         return body
 
     def sessions_view(self) -> list[dict]:
@@ -261,83 +312,106 @@ class Panel:
             busy = bool(pane and working.busy(pane, session.socket, now))
             signal = self._signal(session, pane, cli)
             git = gitinfo.of(session.cwd)
-            out.append({
-                "id": session.id,
-                "name": session.name,
-                "cli": session.cli,
-                "cli_label": cli.label if cli else session.cli,
-                "color": cli.color if cli else "#8b8b8b",
-                "icon": cli.icon if cli else "",
-                "icon_full_color": bool(cli and cli.icon
-                                        and registry_icon_is_colour(cli.icon)),
-                # Whether this CLI draws its own input box, so the panel can
-                # stop drawing a second one under it.
-                "own_input": bool(cli and cli.own_input),
-                "cwd": session.cwd,
-                "project": Path(session.cwd).name or session.cwd,
-                # Git, when this directory is a repo. Cached and filled in
-                # the background so a slow `status` cannot stall the poll.
-                # Empty / zero where there is no repo, no git, or we have
-                # not asked yet.
-                "branch": git["branch"],
-                "dirty": git["dirty"],
-                "folder": session.folder,
-                "mode": session.mode,
-                "modes": list(cli.modes) if cli else [],
-                "mode_key": cli.mode_key if cli else None,
-                "mode_seq": cli.mode_seq if cli else "",
-                "mode_label": cli.mode_label if cli else "",
-                "adopted": session.adopted,
-                "archived": session.archived,
-                "pinned": session.pinned,
-                "draft": session.draft,
-                "created": session.created,
-                "last_seen": session.last_seen,
-                "alive": pane is not None,
-                "attached": bool(pane and pane.attached),
-                # On the alternate screen a full-screen app owns its own scroll,
-                # so the browser forwards the wheel to it instead of scrolling a
-                # pane scrollback that tmux only ever redraws in place.
-                "alt": bool(pane and pane.alternate_on),
-                "command": pane.command if pane else None,
-                # Resident memory of the whole process tree, so you can see
-                # which tab is expensive before deciding what to do with it.
-                "rss": (rss_map.get(pane.pid, 0) * 1024) if pane else 0,
-                "activity": pane.activity if pane else 0,
-                # The pane's real size, so a browser can notice when it has
-                # drifted from what it is drawing. A tmux window has one size
-                # and every client attached to it shares that one — so a second
-                # browser, or a phone, resizes this one's pane out from under
-                # it, and until now nothing ever told it.
-                "cols": pane.width if pane else 0,
-                "rows": pane.height if pane else 0,
-                # Whether the pane produced output just now. The browser turns
-                # a busy->quiet transition into "this one finished", which is
-                # what drives tab flashing and the optional chime. Derived from
-                # tmux's own activity clock, so it works for any CLI without
-                # CLIque knowing anything about it.
-                # Not the raw clock any more: a CLI that animates while it
-                # waits ticks it forever. See clique/working.py — the clock
-                # still decides cheaply, and content decides when the clock
-                # has been saying yes for a while.
-                "busy": busy,
-                # What it last said — but only for a session that is actually
-                # asking for a person. Working sessions change it every
-                # moment, and idle-and-read ones are not asking anything, so
-                # for those it is a capture spent on a line nobody reads.
-                "saying": (attention.saying(session.mux, pane.activity, session.socket)
-                           if pane and signal else ""),
-                # "waiting" or "error", from whichever tier of the attention
-                # ladder could answer. See Panel._signal.
-                "signal": signal,
-                # One word for what the session is doing, for a caller that
-                # wants the answer rather than the ingredients: "stopped" (no
-                # process), "working" (producing output), "waiting"/"error"
-                # (needs a person), or "idle" (up, quiet, nothing pending).
-                "state": ("stopped" if pane is None
-                          else "working" if busy else (signal or "idle")),
-            })
+            out.append(
+                {
+                    "id": session.id,
+                    "name": session.name,
+                    "cli": session.cli,
+                    "cli_label": cli.label if cli else session.cli,
+                    "color": cli.color if cli else "#8b8b8b",
+                    "icon": cli.icon if cli else "",
+                    "icon_full_color": bool(cli and cli.icon and registry_icon_is_colour(cli.icon)),
+                    # Whether this CLI draws its own input box, so the panel can
+                    # stop drawing a second one under it.
+                    "own_input": bool(cli and cli.own_input),
+                    "cwd": session.cwd,
+                    "project": Path(session.cwd).name or session.cwd,
+                    # Git, when this directory is a repo. Cached and filled in
+                    # the background so a slow `status` cannot stall the poll.
+                    # Empty / zero where there is no repo, no git, or we have
+                    # not asked yet.
+                    "branch": git["branch"],
+                    "dirty": git["dirty"],
+                    "folder": session.folder,
+                    "mode": session.mode,
+                    "modes": list(cli.modes) if cli else [],
+                    "mode_key": cli.mode_key if cli else None,
+                    "mode_seq": cli.mode_seq if cli else "",
+                    "mode_label": cli.mode_label if cli else "",
+                    "adopted": session.adopted,
+                    "archived": session.archived,
+                    "pinned": session.pinned,
+                    "draft": session.draft,
+                    "created": session.created,
+                    "last_seen": session.last_seen,
+                    "alive": pane is not None,
+                    "attached": bool(pane and pane.attached),
+                    # On the alternate screen a full-screen app owns its own scroll,
+                    # so the browser forwards the wheel to it instead of scrolling a
+                    # pane scrollback that tmux only ever redraws in place.
+                    "alt": bool(pane and pane.alternate_on),
+                    "command": pane.command if pane else None,
+                    # Resident memory of the whole process tree, so you can see
+                    # which tab is expensive before deciding what to do with it.
+                    "rss": (rss_map.get(pane.pid, 0) * 1024) if pane else 0,
+                    "activity": pane.activity if pane else 0,
+                    # The pane's real size, so a browser can notice when it has
+                    # drifted from what it is drawing. A tmux window has one size
+                    # and every client attached to it shares that one — so a second
+                    # browser, or a phone, resizes this one's pane out from under
+                    # it, and until now nothing ever told it.
+                    "cols": pane.width if pane else 0,
+                    "rows": pane.height if pane else 0,
+                    # Whether the pane produced output just now. The browser turns
+                    # a busy->quiet transition into "this one finished", which is
+                    # what drives tab flashing and the optional chime. Derived from
+                    # tmux's own activity clock, so it works for any CLI without
+                    # CLIque knowing anything about it.
+                    # Not the raw clock any more: a CLI that animates while it
+                    # waits ticks it forever. See clique/working.py — the clock
+                    # still decides cheaply, and content decides when the clock
+                    # has been saying yes for a while.
+                    "busy": busy,
+                    # What it last said — but only for a session that is actually
+                    # asking for a person. Working sessions change it every
+                    # moment, and idle-and-read ones are not asking anything, so
+                    # for those it is a capture spent on a line nobody reads.
+                    "saying": (
+                        attention.saying(session.mux, pane.activity, session.socket)
+                        if pane and signal
+                        else ""
+                    ),
+                    # "waiting" or "error", from whichever tier of the attention
+                    # ladder could answer. See Panel._signal.
+                    "signal": signal,
+                    # One word for what the session is doing, for a caller that
+                    # wants the answer rather than the ingredients: "stopped" (no
+                    # process), "working" (producing output), "waiting"/"error"
+                    # (needs a person), or "idle" (up, quiet, nothing pending).
+                    "state": (
+                        "stopped"
+                        if pane is None
+                        else self._authoritative(session, pane)
+                        or ("working" if busy else (signal or "idle"))
+                    ),
+                }
+            )
         return out
+
+    def _authoritative(self, session, pane) -> str:
+        """The session's own declared state — from a hook or the attention
+        endpoint — when no output has arrived to supersede it, else "".
+
+        This outranks the activity guess wherever a single word for the state
+        is formed, because it is the session *saying* what the busy heuristic is
+        only trying to infer. A spinner that ticks the activity clock forever
+        would otherwise read as "working" while the hook already knows it is
+        waiting on a person; here the hook wins. Stale the moment output lands
+        after it (pane.activity > signal_at), and then the heuristic takes over
+        again — the same freshness test the signal tier already uses."""
+        if pane and session.signal and pane.activity <= session.signal_at:
+            return session.signal
+        return ""
 
     def session_state(self, session) -> str:
         """One word for what a session is doing, the same vocabulary the
@@ -347,6 +421,9 @@ class Panel:
         pane = self.live().get(session.mux)
         if pane is None:
             return "stopped"
+        authoritative = self._authoritative(session, pane)
+        if authoritative:
+            return authoritative
         if working.busy(pane, session.socket):
             return "working"
         cli = self.registry.types().get(session.cli)
@@ -367,13 +444,20 @@ class Panel:
         while True:
             session = self.store.session(session_id)
             if session is None:
-                return {"id": session_id, "state": "gone", "matched": False,
-                        "waited": round(time.time() - start, 1)}
+                return {
+                    "id": session_id,
+                    "state": "gone",
+                    "matched": False,
+                    "waited": round(time.time() - start, 1),
+                }
             state = self.session_state(session)
             if state in wanted or time.time() >= deadline:
-                return {"id": session_id, "state": state,
-                        "matched": state in wanted,
-                        "waited": round(time.time() - start, 1)}
+                return {
+                    "id": session_id,
+                    "state": state,
+                    "matched": state in wanted,
+                    "waited": round(time.time() - start, 1),
+                }
             time.sleep(1.0)
 
     def _signal(self, session, pane, cli) -> str:
@@ -401,15 +485,19 @@ class Panel:
             return ""
         waiting = cli.waiting_patterns if cli else []
         errors = cli.error_patterns if cli else []
-        return attention.detect(session.mux, pane.activity,
-                                waiting, errors, session.socket)
+        return attention.detect(session.mux, pane.activity, waiting, errors, session.socket)
 
     def state(self) -> dict:
         return {
             "version": version_string(),
             "folders": [
-                {"id": f.id, "name": f.name, "color": f.color,
-                 "collapsed": f.collapsed, "order": f.order}
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "color": f.color,
+                    "collapsed": f.collapsed,
+                    "order": f.order,
+                }
                 for f in sorted(self.store.folders, key=lambda f: f.order)
             ],
             "sessions": self.sessions_view(),
@@ -428,6 +516,64 @@ class Panel:
         }
 
     # --------------------------------------------------------------- mutation
+
+    def _self_url(self) -> str:
+        """The panel's own URL a hook running on this box can POST back to.
+
+        Loopback whenever the bind host is a wildcard or loopback, the real
+        host otherwise. Empty until serve() has set the port — which is the
+        signal to skip hook wiring rather than invent a URL nothing answers."""
+        if not self.port:
+            return ""
+        host = self.host
+        if host in ("", "0.0.0.0", "::", "localhost", "127.0.0.1"):  # noqa: S104 — comparison, not a bind
+            host = "127.0.0.1"
+        return f"http://{host}:{self.port}"
+
+    def _hook_bearer(self) -> str:
+        """A persistent write-scoped token the hooks authenticate with.
+
+        Made once and kept beside the token store, so a restart does not orphan
+        the copies already handed to running panes. Write-scoped because setting
+        a session's state is a write, and no narrower — but it only reaches
+        sessions CLIque launched, which already run a shell on this box, so it
+        grants them nothing they could not already do."""
+        if self._hook_token:
+            return self._hook_token
+        path = self.tokens.path.parent / "hook.token"
+        try:
+            raw = path.read_text(encoding="utf-8").strip()
+            if raw and self.tokens.verify(raw):
+                self._hook_token = raw
+                return raw
+        except OSError:
+            pass
+        _token, raw = self.tokens.create("clique-hooks", ["write"])
+        with contextlib.suppress(OSError):
+            path.write_text(raw, encoding="utf-8")
+            path.chmod(0o600)
+        self._hook_token = raw
+        return raw
+
+    def _pane_env(self, session_id: str) -> dict:
+        """The environment every session's pane gets. CLIQUE_SESSION is the id a
+        hook or script reports against; CLIQUE_URL and CLIQUE_TOKEN are where and
+        how. The last two wait on a known port, so nothing is aimed at a URL
+        that is not listening."""
+        env = {"CLIQUE": "1", "CLIQUE_SESSION": session_id}
+        url = self._self_url()
+        if url:
+            env["CLIQUE_URL"] = url
+            env["CLIQUE_TOKEN"] = self._hook_bearer()
+        return env
+
+    def _hooks_argv(self, cli) -> list[str]:
+        """The ``--settings`` flag that wires a hook-speaking CLI to report its
+        own state, or nothing for a CLI that does not speak it (or when there is
+        no URL to report to)."""
+        if not getattr(cli, "hooks", False) or not self._self_url():
+            return []
+        return ["--settings", _hooks_settings(sys.executable)]
 
     def create_session(self, body: dict) -> dict:
         cli_id = body.get("cli") or "shell"
@@ -463,7 +609,11 @@ class Panel:
 
         session_id = new_id()
         argv = self.registry.launch_argv(
-            cli_id, session_id=session_id, name=name, cwd=cwd, mode=mode,
+            cli_id,
+            session_id=session_id,
+            name=name,
+            cwd=cwd,
+            mode=mode,
             cli_session_id=prior,
         )
         cli = self.registry.get(cli_id)
@@ -472,22 +622,31 @@ class Panel:
 
         mux = tmux.mux_name(session_id)
         tmux.bootstrap()
-        tmux.create(mux, cwd, argv, env={
-            "CLIQUE": "1",
-            "CLIQUE_SESSION": session_id,
-        })
-        session = self.store.add_session(Session(
-            id=session_id, name=name, cli=cli_id, cwd=cwd, mux=mux,
-            socket=tmux.SOCKET, mode=mode or cli.default_mode,
-            # Deliberately not auto-filed. A session you started yourself
-            # lands in Ungrouped, at the top, where you will see it — filing
-            # it is a decision made afterwards, if at all. Auto-filing by
-            # directory stays where it earns its keep: adoption, where there
-            # is nobody to ask.
-            folder=body.get("folder") or None,
-            cli_session_id=prior,
-            worktree=worktree,
-        ))
+        tmux.create(
+            mux,
+            cwd,
+            argv + self._hooks_argv(cli),
+            env=self._pane_env(session_id),
+        )
+        session = self.store.add_session(
+            Session(
+                id=session_id,
+                name=name,
+                cli=cli_id,
+                cwd=cwd,
+                mux=mux,
+                socket=tmux.SOCKET,
+                mode=mode or cli.default_mode,
+                # Deliberately not auto-filed. A session you started yourself
+                # lands in Ungrouped, at the top, where you will see it — filing
+                # it is a decision made afterwards, if at all. Auto-filing by
+                # directory stays where it earns its keep: adoption, where there
+                # is nobody to ask.
+                folder=body.get("folder") or None,
+                cli_session_id=prior,
+                worktree=worktree,
+            )
+        )
         return {"id": session.id, "worktree": worktree}
 
     def detect_cli(self, pane) -> str:
@@ -502,9 +661,11 @@ class Panel:
         Nothing here knows anything about any particular CLI. It asks the
         registry which commands it recognises and looks for those.
         """
-        by_command = {cli.command: cli_id
-                      for cli_id, cli in self.registry.types().items()
-                      if cli_id != "shell"}
+        by_command = {
+            cli.command: cli_id
+            for cli_id, cli in self.registry.types().items()
+            if cli_id != "shell"
+        }
         for comm, _args in tmux.descendants(pane.pid):
             if comm in by_command:
                 return by_command[comm]
@@ -535,14 +696,19 @@ class Panel:
                 if self._reconcile(existing, pane, cwd, names):
                     updated.append(existing.name)
                 continue
-            session = self.store.add_session(Session(
-                id=new_id(),
-                name=names.get(pane.mux) or Path(cwd).name or pane.mux,
-                cli=self.detect_cli(pane),
-                cwd=cwd, mux=pane.mux, socket=pane.socket,
-                folder=auto_folder(cwd, self.store.folders),
-                created=float(pane.created), adopted=True,
-            ))
+            session = self.store.add_session(
+                Session(
+                    id=new_id(),
+                    name=names.get(pane.mux) or Path(cwd).name or pane.mux,
+                    cli=self.detect_cli(pane),
+                    cwd=cwd,
+                    mux=pane.mux,
+                    socket=pane.socket,
+                    folder=auto_folder(cwd, self.store.folders),
+                    created=float(pane.created),
+                    adopted=True,
+                )
+            )
             added.append(session.name)
             tmux.lock_size(session.mux, session.socket)
         return {"adopted": added, "updated": updated}
@@ -612,17 +778,24 @@ class Panel:
         Heaviest first, so the memory worth reclaiming is at the top."""
         known = {sess.mux for sess in self.store.sessions}
         now = time.time()
-        loose = [p for p in tmux.list_sessions(tmux.SOCKET, prefix=tmux.PREFIX)
-                 if p.mux not in known
-                 and not p.mux.startswith("sm-view-")
-                 and now - p.created > 120]
+        loose = [
+            p
+            for p in tmux.list_sessions(tmux.SOCKET, prefix=tmux.PREFIX)
+            if p.mux not in known and not p.mux.startswith("sm-view-") and now - p.created > 120
+        ]
         if not loose:
             return []
         rss_map = sysinfo.rss_by_root([p.pid for p in loose])
-        return [{"mux": p.mux, "command": p.command, "pid": p.pid,
-                 "idle": round(now - p.activity),
-                 "rss": rss_map.get(p.pid, 0) * 1024}
-                for p in sorted(loose, key=lambda p: -rss_map.get(p.pid, 0))]
+        return [
+            {
+                "mux": p.mux,
+                "command": p.command,
+                "pid": p.pid,
+                "idle": round(now - p.activity),
+                "rss": rss_map.get(p.pid, 0) * 1024,
+            }
+            for p in sorted(loose, key=lambda p: -rss_map.get(p.pid, 0))
+        ]
 
     def reap_orphans(self, muxes=None) -> dict:
         """Kill leaked sessions and reclaim their memory. With no list, every
@@ -658,8 +831,7 @@ class Panel:
             raise ValueError(f"working directory does not exist: {session.cwd}")
         cli = self.registry.get(session.cli)
         if not cli.installed:
-            raise ValueError(
-                f"{cli.label}: '{cli.command}' is not installed on this box")
+            raise ValueError(f"{cli.label}: '{cli.command}' is not installed on this box")
         prior = session.cli_session_id
         if not prior and cli.resume:
             # Only treat our id as theirs if the first launch handed it over.
@@ -667,14 +839,21 @@ class Panel:
             if "{id}" in tokens or "{uuid}" in tokens:
                 prior = session.id
         argv = self.registry.launch_argv(
-            session.cli, session_id=session.id, name=session.name,
-            cwd=session.cwd, mode=session.mode, cli_session_id=prior,
+            session.cli,
+            session_id=session.id,
+            name=session.name,
+            cwd=session.cwd,
+            mode=session.mode,
+            cli_session_id=prior,
         )
         tmux.bootstrap()
-        tmux.create(session.mux, session.cwd, argv, socket=session.socket, env={
-            "CLIQUE": "1",
-            "CLIQUE_SESSION": session.id,
-        })
+        tmux.create(
+            session.mux,
+            session.cwd,
+            argv + self._hooks_argv(cli),
+            socket=session.socket,
+            env=self._pane_env(session.id),
+        )
         if prior and not session.cli_session_id:
             self.store.update_session(session.id, cli_session_id=prior)
         return {"id": session.id}
@@ -695,7 +874,6 @@ class Panel:
         if session.worktree and gitinfo.worktree_clean(session.worktree):
             removed = gitinfo.remove_worktree(session.worktree)
         return {"deleted": session_id, "worktree_removed": removed}
-
 
 
 class Server(ThreadingHTTPServer):
@@ -826,6 +1004,7 @@ _PEEK_LOCK = threading.Lock()
 
 def _terminal_size(cols, rows) -> tuple[int, int]:
     """Clamp a client-supplied terminal size, tolerating rubbish."""
+
     def one(value, fallback: int, ceiling: int) -> int:
         try:
             return max(2, min(int(value), ceiling))
@@ -860,8 +1039,14 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------------------------------------------------------------- helpers
 
-    def _send(self, status: int, body: bytes, content_type: str,
-              extra: dict[str, str] | None = None, nonce: str = "") -> None:
+    def _send(
+        self,
+        status: int,
+        body: bytes,
+        content_type: str,
+        extra: dict[str, str] | None = None,
+        nonce: str = "",
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -960,7 +1145,7 @@ class Handler(BaseHTTPRequestHandler):
                 return True
             origin = "/".join(referer.split("/")[:3])
         if origin == "null":
-            return False        # an opaque origin is a sandboxed frame, not our page
+            return False  # an opaque origin is a sandboxed frame, not our page
         host = self._fwd_host()
         # Compare host AND port, parsed with urlsplit so [::1] stays ::1 rather
         # than "[". A different *port* of the same host is a different origin —
@@ -971,7 +1156,7 @@ class Handler(BaseHTTPRequestHandler):
         # that matter here.
         try:
             o = urllib.parse.urlsplit(origin)
-            h = urllib.parse.urlsplit("//" + host)   # a Host header carries no scheme
+            h = urllib.parse.urlsplit("//" + host)  # a Host header carries no scheme
         except ValueError:
             return False
         if o.hostname and o.hostname == h.hostname and o.port == h.port:
@@ -1007,8 +1192,9 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Host") or ""
 
     def _secure(self) -> bool:
-        return (self.panel.trust_proxy
-                and self.headers.get("X-Forwarded-Proto", "").lower() == "https")
+        return (
+            self.panel.trust_proxy and self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        )
 
     def _host_ok(self) -> bool:
         """Runs before anything else, including auth.
@@ -1045,8 +1231,7 @@ class Handler(BaseHTTPRequestHandler):
             if _is_public_asset(path):
                 return self._static(path)
             nonce = secrets.token_urlsafe(16)
-            return self._send(200, login_page(nonce=nonce),
-                              "text/html; charset=utf-8", nonce=nonce)
+            return self._send(200, login_page(nonce=nonce), "text/html; charset=utf-8", nonce=nonce)
 
         try:
             if path == "/api/state":
@@ -1083,17 +1268,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(changelog.entries())
             if path == "/api/adoptable":
                 known = {s.mux for s in self.panel.store.sessions}
-                return self._json([p.as_dict() for p in tmux.adoptable()
-                                   if p.mux not in known])
+                return self._json([p.as_dict() for p in tmux.adoptable() if p.mux not in known])
             if path == "/api/orphans":
                 return self._json(self.panel.orphans())
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
             if path == "/api/workspace":
-                return self._json(workspace.look(
-                    query.get("cwd") or "",
-                    [x for x in self.panel.store.sessions
-                     if not x.archived and x.mux in self.panel.live()]))
+                return self._json(
+                    workspace.look(
+                        query.get("cwd") or "",
+                        [
+                            x
+                            for x in self.panel.store.sessions
+                            if not x.archived and x.mux in self.panel.live()
+                        ],
+                    )
+                )
             if path.startswith("/api/sessions/") and path.endswith("/peek"):
                 return self._peek(path.split("/")[3], query.get("lines") or "")
             if path.startswith("/api/sessions/") and path.endswith("/artifacts"):
@@ -1114,7 +1304,8 @@ class Handler(BaseHTTPRequestHandler):
                     timeout = 60.0
                 try:
                     return self._json(
-                        self.panel.wait_for_state(path.split("/")[3], wanted, timeout))
+                        self.panel.wait_for_state(path.split("/")[3], wanted, timeout)
+                    )
                 except KeyError:
                     return self._json({"error": "not found"}, 404)
             if path.startswith("/api"):
@@ -1173,16 +1364,14 @@ class Handler(BaseHTTPRequestHandler):
         with _PEEK_LOCK:
             hit = _PEEKED.get(session.mux)
             if hit and hit[0] == key:
-                return self._json({"lines": hit[1], "alive": True,
-                                   "activity": activity})
+                return self._json({"lines": hit[1], "alive": True, "activity": activity})
 
         try:
             # A generous window, then filtered down to `lines`. Capturing only
             # what is to be shown was wrong once the frame started being
             # dropped: on a pane that is mostly box drawing, eight captured
             # lines can contain one that says anything.
-            text = tmux.capture(session.mux, session.socket,
-                                lines=PEEK_WINDOW, styled=False)
+            text = tmux.capture(session.mux, session.socket, lines=PEEK_WINDOW, styled=False)
         except (tmux.TmuxError, OSError):
             return self._json({"lines": [], "alive": True, "activity": activity})
 
@@ -1264,25 +1453,37 @@ class Handler(BaseHTTPRequestHandler):
                     self._record_failure(who)
                     time.sleep(2.0)
                     nonce = secrets.token_urlsafe(16)
-                    return self._send(429,
-                                      login_page("Too many attempts. Wait a minute.", nonce),
-                                      "text/html; charset=utf-8", nonce=nonce)
+                    return self._send(
+                        429,
+                        login_page("Too many attempts. Wait a minute.", nonce),
+                        "text/html; charset=utf-8",
+                        nonce=nonce,
+                    )
                 # Deliberately slow, and counted: this endpoint is reachable by
                 # anyone who can reach the tunnel, and guessing should be both
                 # expensive and self-limiting.
                 self._record_failure(who)
                 time.sleep(1.0)
                 nonce = secrets.token_urlsafe(16)
-                return self._send(401, login_page("Wrong password.", nonce),
-                                  "text/html; charset=utf-8", nonce=nonce)
+                return self._send(
+                    401,
+                    login_page("Wrong password.", nonce),
+                    "text/html; charset=utf-8",
+                    nonce=nonce,
+                )
             self.panel.failures.pop(who, None)
             token = self.panel.auth.issue()
             cookie = self.panel.auth.cookie_header(token, self._secure())
             # 200 with a landing page, not a 3xx. See auth.LANDING for why a
             # Location header cannot be made correct from inside this process.
             nonce = secrets.token_urlsafe(16)
-            return self._send(200, landing_page(nonce), "text/html; charset=utf-8",
-                              {"Set-Cookie": cookie}, nonce=nonce)
+            return self._send(
+                200,
+                landing_page(nonce),
+                "text/html; charset=utf-8",
+                {"Set-Cookie": cookie},
+                nonce=nonce,
+            )
 
         allowed, reason = self._may_write()
         if not allowed:
@@ -1304,13 +1505,21 @@ class Handler(BaseHTTPRequestHandler):
                 made, why = workspace.make(target)
                 if not made:
                     return self._json({"error": why}, 400)
-                return self._json(workspace.look(
-                    target,
-                    [x for x in self.panel.store.sessions
-                     if not x.archived and x.mux in self.panel.live()]), 201)
+                return self._json(
+                    workspace.look(
+                        target,
+                        [
+                            x
+                            for x in self.panel.store.sessions
+                            if not x.archived and x.mux in self.panel.live()
+                        ],
+                    ),
+                    201,
+                )
             if path == "/api/folders":
-                folder = self.panel.store.add_folder(body.get("name") or "New folder",
-                                                     body.get("color"))
+                folder = self.panel.store.add_folder(
+                    body.get("name") or "New folder", body.get("color")
+                )
                 # The whole record, not just the id. A caller that asked for a
                 # colour has no other way to learn that the one it sent was
                 # refused, and "the API is the whole surface" means a script
@@ -1336,14 +1545,24 @@ class Handler(BaseHTTPRequestHandler):
                 url = str(settings.get("webhook_url") or "")
                 if not url:
                     return self._json({"error": "no webhook URL set"}, 400)
-                notify.post(url, str(settings.get("webhook_secret") or ""), {
-                    "event": "test",
-                    "at": int(time.time()),
-                    "session": {"id": "", "name": "Test", "cli": "", "cli_label": "",
-                                "folder": None, "cwd": ""},
-                    "text": "CLIque is wired up.",
-                    "url": str(settings.get("panel_url") or ""),
-                })
+                notify.post(
+                    url,
+                    str(settings.get("webhook_secret") or ""),
+                    {
+                        "event": "test",
+                        "at": int(time.time()),
+                        "session": {
+                            "id": "",
+                            "name": "Test",
+                            "cli": "",
+                            "cli_label": "",
+                            "folder": None,
+                            "cwd": "",
+                        },
+                        "text": "CLIque is wired up.",
+                        "url": str(settings.get("panel_url") or ""),
+                    },
+                )
                 return self._json({"ok": True})
             if path.startswith("/api/sessions/") and path.endswith("/attention"):
                 return self._attention(path.split("/")[3], body)
@@ -1381,8 +1600,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "no such session"}, 404)
         state = str(body.get("state") or "").strip().lower()
         if state not in ("waiting", "error", "clear"):
-            return self._json(
-                {"error": 'state must be "waiting", "error" or "clear"'}, 400)
+            return self._json({"error": 'state must be "waiting", "error" or "clear"'}, 400)
 
         pane = self.panel.live().get(session.mux)
         # Stamped with the pane's own clock rather than the wall clock, so the
@@ -1438,13 +1656,15 @@ class Handler(BaseHTTPRequestHandler):
         settings = self.panel.store.settings
         if not settings.get("artifacts_show", True):
             return self._json([])
-        return self._json(artifacts.scan(
-            session.cwd,
-            settings.get("artifact_dirs") or [],
-            # Only what appeared while this session has been running. A
-            # directory full of committed images is the project, not the work.
-            since=session.created,
-        ))
+        return self._json(
+            artifacts.scan(
+                session.cwd,
+                settings.get("artifact_dirs") or [],
+                # Only what appeared while this session has been running. A
+                # directory full of committed images is the project, not the work.
+                since=session.created,
+            )
+        )
 
     def _artifact(self, session_id: str, relative: str) -> None:
         """Serve one image out of a session's working directory.
@@ -1525,11 +1745,14 @@ class Handler(BaseHTTPRequestHandler):
         except OSError as exc:
             return self._json({"error": f"could not save: {exc}"}, 500)
 
-        return self._json({
-            "path": str(target),
-            "relative": f"{PASTE_DIR}/{name}",
-            "bytes": len(raw),
-        }, 201)
+        return self._json(
+            {
+                "path": str(target),
+                "relative": f"{PASTE_DIR}/{name}",
+                "bytes": len(raw),
+            },
+            201,
+        )
 
     def _send_input(self, session_id: str, body: dict) -> None:
         session = self.panel.store.session(session_id)
@@ -1538,8 +1761,12 @@ class Handler(BaseHTTPRequestHandler):
         if body.get("key"):
             tmux.send_key(session.mux, body["key"], session.socket)
         else:
-            tmux.send_text(session.mux, body.get("text", ""), session.socket,
-                           enter=bool(body.get("enter", True)))
+            tmux.send_text(
+                session.mux,
+                body.get("text", ""),
+                session.socket,
+                enter=bool(body.get("enter", True)),
+            )
         return self._json({"ok": True})
 
     # --------------------------------------------------------- PATCH / DELETE
@@ -1577,7 +1804,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": bool(updated)}, 200 if updated else 404)
             if len(parts) == 3 and parts[1] == "folders":
                 updated = self.panel.store.update_folder(
-                    parts[2], name=body.get("name"), color=body.get("color"),
+                    parts[2],
+                    name=body.get("name"),
+                    color=body.get("color"),
                     collapsed=body.get("collapsed"),
                 )
                 # The record, for the same reason POST returns it: a colour
@@ -1745,8 +1974,7 @@ class Handler(BaseHTTPRequestHandler):
                 ws.send(data)
 
             try:
-                history = tmux.capture(session.mux, session.socket,
-                                       history_only=True)
+                history = tmux.capture(session.mux, session.socket, history_only=True)
                 if history.strip():
                     outbound(history.replace("\n", "\r\n").encode())
             except tmux.TmuxError:
@@ -1760,13 +1988,13 @@ class Handler(BaseHTTPRequestHandler):
                 tmux.attach_argv(viewer, session.socket),
                 on_output=outbound,
                 on_exit=ws.close,
-                cols=cols, rows=rows,
+                cols=cols,
+                rows=rows,
             )
             bridge.start()
 
             stop = threading.Event()
-            threading.Thread(target=self._keepalive, args=(ws, stop),
-                             daemon=True).start()
+            threading.Thread(target=self._keepalive, args=(ws, stop), daemon=True).start()
             try:
                 while True:
                     message = ws.recv()
@@ -1790,8 +2018,7 @@ class Handler(BaseHTTPRequestHandler):
             with self.panel._lock:
                 self.panel.clients = max(self.panel.clients - 1, 0)
 
-    def _control(self, session, bridge: PtyBridge, payload: bytes,
-                 may_write: bool = True) -> None:
+    def _control(self, session, bridge: PtyBridge, payload: bytes, may_write: bool = True) -> None:
         """Text frames are control; binary frames are keystrokes.
 
         Everything here is attacker-shaped: it is JSON from a socket, so a
@@ -1820,12 +2047,16 @@ class Handler(BaseHTTPRequestHandler):
             if may_write:
                 tmux.resize_window(session.mux, cols, rows, session.socket)
         elif not may_write:
-            return                      # watching is allowed; typing is not
+            return  # watching is allowed; typing is not
         elif kind == "key":
             tmux.send_key(session.mux, str(message.get("key") or ""), session.socket)
         elif kind == "run":
-            tmux.send_text(session.mux, str(message.get("text", "")), session.socket,
-                           enter=bool(message.get("enter", True)))
+            tmux.send_text(
+                session.mux,
+                str(message.get("text", "")),
+                session.socket,
+                enter=bool(message.get("enter", True)),
+            )
 
     @staticmethod
     def _keepalive(ws: WebSocket, stop: threading.Event) -> None:
@@ -1837,6 +2068,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(host: str, port: int, panel: Panel) -> None:
     Handler.panel = panel
+    # So a session's pane can be told where to report its state back to.
+    panel.host, panel.port = host, port
     panel.history.start()
     tmux.bootstrap()
     # A crash leaves viewer sessions behind. They hold no work, so clearing

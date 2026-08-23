@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.50.60 — 2026-08-22 19:42 PDT
+
+**Claude Code sessions report their own state now, instead of being guessed at.**
+CLIque could not always tell "waiting for you" from "running a slow test" — it
+read state from output activity and prompt patterns, and an agent redrawing a
+spinner kept the clock looking busy. A Claude Code session now launches with a
+`--settings` block whose hooks POST its real state to CLIque: Notification and
+Stop mean it yielded and is waiting on you; UserPromptSubmit means you answered
+and it is working again. That authoritative signal outranks the activity guess
+wherever the state is formed — the sidebar ring and the `/wait` endpoint are
+exact, not fuzzy. Nothing to install: the hooks ride in per session via
+`--settings`, so they touch neither your global Claude config nor your repo, and
+they no-op for any session CLIque did not launch. Other CLIs keep the
+pattern-and-activity fallback; `hooks = true` in clis.toml opts a CLI in.
+
 ## 0.50.59 — 2026-08-22 19:06 PDT
 
 **GPU rendering stays on by default, and now knows when to bow out.** WebGL

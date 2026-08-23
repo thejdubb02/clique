@@ -74,7 +74,7 @@ def icon_is_full_colour(filename: str) -> bool:
         return cached[1]
 
     if path.suffix.lower() != ".svg":
-        full = True                        # a raster logo is never a silhouette
+        full = True  # a raster logo is never a silhouette
     else:
         try:
             body = path.read_text(errors="replace")
@@ -124,6 +124,14 @@ class CliType:
     #: Read only when `input_mode` is "auto", which is the default. The two
     #: explicit settings still win.
     own_input: bool = False
+
+    #: Whether this CLI speaks Claude Code's hook protocol, so CLIque can wire
+    #: it to report its own state (working / waiting / done) authoritatively
+    #: instead of guessing from output. When true, sessions are launched with a
+    #: `--settings` block whose Notification/Stop/UserPromptSubmit hooks POST to
+    #: the attention endpoint. Off for everything that does not understand those
+    #: flags — those keep the pattern-and-activity fallback.
+    hooks: bool = False
 
     #: Where to ask whether the service behind this CLI is having a bad day.
     #:
@@ -297,21 +305,15 @@ def _validate(cli: CliType) -> None:
             if not value:
                 raise RegistryError(f"{where}.status: `{key}` is required")
             if not value.startswith("https://"):
-                raise RegistryError(
-                    f"{where}.status.{key}: must be an https:// URL, not {value!r}"
-                )
+                raise RegistryError(f"{where}.status.{key}: must be an https:// URL, not {value!r}")
 
     if cli.icon and ("/" in cli.icon or ".." in cli.icon):
-        raise RegistryError(
-            f"{where}.icon: must be a bare filename in web/icons/, not a path"
-        )
+        raise RegistryError(f"{where}.icon: must be a bare filename in web/icons/, not a path")
 
     # A {mode} with no `modes` list would render empty and hand the CLI a bare
     # flag with no value, which fails in a way that looks like a CLI bug.
     if "mode" in _tokens(cli.args + cli.resume) and not cli.modes:
-        raise RegistryError(
-            f"{where}: uses {{mode}} but declares no `modes` list"
-        )
+        raise RegistryError(f"{where}: uses {{mode}} but declares no `modes` list")
 
 
 def parse(data: dict) -> dict[str, CliType]:
@@ -325,14 +327,23 @@ def parse(data: dict) -> dict[str, CliType]:
         if not isinstance(raw, dict):
             raise RegistryError(f"cli.{cli_id}: expected a table")
         unknown_keys = set(raw) - {
-            "label", "command", "args", "resume", "color",
-            "modes", "mode_key", "mode_label", "icon", "history", "attention",
-            "status", "own_input",
+            "label",
+            "command",
+            "args",
+            "resume",
+            "color",
+            "modes",
+            "mode_key",
+            "mode_label",
+            "icon",
+            "history",
+            "attention",
+            "status",
+            "own_input",
+            "hooks",
         }
         if unknown_keys:
-            raise RegistryError(
-                f"cli.{cli_id}: unknown key(s) {', '.join(sorted(unknown_keys))}"
-            )
+            raise RegistryError(f"cli.{cli_id}: unknown key(s) {', '.join(sorted(unknown_keys))}")
         cli = CliType(
             id=cli_id,
             label=raw.get("label", cli_id),
@@ -345,6 +356,7 @@ def parse(data: dict) -> dict[str, CliType]:
             mode_label=raw.get("mode_label", "{mode} mode"),
             icon=raw.get("icon", ""),
             own_input=bool(raw.get("own_input", False)),
+            hooks=bool(raw.get("hooks", False)),
             status=dict(raw.get("status") or {}),
             history=dict(raw.get("history") or {}),
             attention=dict(raw.get("attention") or {}),
@@ -408,8 +420,7 @@ class Registry:
             raise RegistryError(f"cli.{cli_id}: does not support modes")
         elif mode not in cli.modes:
             raise RegistryError(
-                f"cli.{cli_id}: unknown mode {mode!r}; "
-                f"configured: {', '.join(cli.modes)}"
+                f"cli.{cli_id}: unknown mode {mode!r}; configured: {', '.join(cli.modes)}"
             )
 
         template = cli.resume if (cli_session_id and cli.resume) else cli.args
