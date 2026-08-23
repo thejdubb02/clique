@@ -77,6 +77,7 @@ ICONS: dict[str, str] = {
     "corner-down-left": "send this reply / accept the default (Enter)",
     "megaphone": "broadcast one message to every live session",
     "layout-grid": "the board — sessions by what they are doing",
+    "more-horizontal": "the sidebar overflow menu — folders, adopt, broadcast, board",
 }
 
 _BODY = re.compile(r"<svg[^>]*>(?P<body>.*)</svg>", re.S)

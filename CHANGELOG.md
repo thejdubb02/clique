@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.70 — 2026-08-23 08:44 PDT
+
+**A leaner sidebar header.** The top of the sidebar had grown to eight controls.
+New folder, adopt, broadcast and the board now sit behind a single "⋯" overflow
+menu, leaving the bell, the running-only filter, that menu, settings and the
+collapse chevron on the bar. Nothing is lost — the occasional actions are one
+tap deeper.
+
 ## 0.50.69 — 2026-08-23 08:31 PDT
 
 **Scope the read surface — the state-hook token can no longer read the panel.**

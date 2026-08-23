@@ -5429,16 +5429,23 @@ function wire() {
     openOverflowMenu(ev);
   };
 
-  $("#newFolder").onclick = newFolder;
-  $("#adopt").onclick = adoptSessions;
   $("#activeOnly").onclick = toggleActiveOnly;
+  // Overflow menu for the occasional header actions, so the top bar stays lean.
+  // stopPropagation so the document click-closer does not shut it on this click.
+  $("#moreBtn").onclick = (ev) => {
+    ev.stopPropagation();
+    showMenu(ev, [
+      ["New folder", newFolder],
+      ["Adopt sessions", adoptSessions],
+      ["Broadcast to all", openBroadcast],
+      ["Board", openBoard],
+    ]);
+  };
   $("#inboxBtn").onclick = openInbox;
   $("#inboxClose").onclick = closeInbox;
   $("#inbox").onclick = (ev) => { if (ev.target === $("#inbox")) closeInbox(); };
-  $("#boardBtn").onclick = openBoard;
   $("#boardClose").onclick = closeBoard;
   $("#board").onclick = (ev) => { if (ev.target === $("#board")) closeBoard(); };
-  $("#broadcastBtn").onclick = openBroadcast;
   $("#broadcastClose").onclick = closeBroadcast;
   $("#broadcastScope").onchange = updateBroadcastCount;
   $("#broadcastSend").onclick = sendBroadcast;

@@ -115,7 +115,9 @@ def main() -> int:
             page.evaluate("async () => { await refresh(); }")
             page.wait_for_timeout(400)
 
-            page.locator("#boardBtn").click()
+            page.locator("#moreBtn").click()
+            page.wait_for_timeout(150)
+            page.get_by_role("button", name="Board", exact=True).click()
             page.wait_for_timeout(400)
             res["board_open"] = page.evaluate("() => !document.getElementById('board').hidden")
             # Map each column's label -> the card names it holds.

@@ -292,7 +292,7 @@ def _run(panel) -> int:
         # Icon-only buttons are the ones that fail silently: an icon that did
         # not load leaves a button that is present, clickable and empty.
         for sel, name in [
-            ("#newFolder", "new folder"),
+            ("#moreBtn", "more menu"),
             ("#settingsBtn", "settings"),
             ("#collapse", "hide sidebar"),
             ("#newTab", "new session"),
