@@ -429,7 +429,14 @@ class Store:
         # client — providers are fetched only on demand, keys never in the poll.
         llm = raw.get("llm") if isinstance(raw.get("llm"), dict) else {}
         providers = llm.get("providers")
-        self.llm = {"providers": providers if isinstance(providers, list) else []}
+        routes = llm.get("routes")
+        self.llm = {
+            "providers": providers if isinstance(providers, list) else [],
+            # feature name -> provider id, so different features can run on
+            # different models (the inbox on something cheap-fast, a digest on
+            # something stronger). A feature with no route falls back per-caller.
+            "routes": routes if isinstance(routes, dict) else {},
+        }
         if not raw:
             self._write()
         else:
@@ -716,8 +723,27 @@ class Store:
             if len(kept) == len(providers):
                 return False
             self.llm["providers"] = kept
+            # A route pointing at the deleted provider would dangle; drop it, so
+            # a feature is never wired to a provider that no longer exists.
+            routes = self.llm.get("routes", {})
+            self.llm["routes"] = {f: p for f, p in routes.items() if p != provider_id}
             self._write()
             return True
+
+    def llm_routes(self) -> dict:
+        with self._lock:
+            return dict(self.llm.get("routes", {}))
+
+    def set_route(self, feature: str, provider_id: str | None) -> dict:
+        """Point a feature at a provider, or clear it with a falsy provider_id."""
+        with self._lock:
+            routes = self.llm.setdefault("routes", {})
+            if provider_id:
+                routes[feature] = provider_id
+            else:
+                routes.pop(feature, None)
+            self._write()
+            return dict(routes)
 
     # ---------------------------------------------------------------- folders
 

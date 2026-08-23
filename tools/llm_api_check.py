@@ -225,6 +225,26 @@ def main() -> int:
             == 400
         )
 
+        # Routes: point the inbox feature at this provider, and guard the edges.
+        state2 = json.loads(req(admin, "GET", "/api/llm/providers")[1])
+        res["routes_feature_listed"] = "inbox" in state2.get("features", [])
+        setr = req(admin, "POST", "/api/llm/routes", {"feature": "inbox", "provider_id": pid})
+        res["route_set"] = setr[0] == 200 and json.loads(setr[1])["routes"].get("inbox") == pid
+        res["route_in_list"] = (
+            json.loads(req(admin, "GET", "/api/llm/providers")[1])["routes"].get("inbox") == pid
+        )
+        res["route_unknown_feature_400"] = (
+            req(admin, "POST", "/api/llm/routes", {"feature": "nope", "provider_id": pid})[0] == 400
+        )
+        res["route_unknown_provider_400"] = (
+            req(admin, "POST", "/api/llm/routes", {"feature": "inbox", "provider_id": "lp-nope"})[0]
+            == 400
+        )
+        res["route_readonly_refused"] = (
+            req(readonly, "POST", "/api/llm/routes", {"feature": "inbox", "provider_id": pid})[0]
+            == 403
+        )
+
         # Test an unreachable provider → structured failure, HTTP 200.
         tstatus, traw = req(admin, "POST", f"/api/llm/providers/{pid}/test")
         tbody = json.loads(traw)
@@ -241,6 +261,10 @@ def main() -> int:
             for p in json.loads(req(admin, "GET", "/api/llm/providers")[1])["providers"]
         )
         res["test_missing_404"] = req(admin, "POST", f"/api/llm/providers/{pid}/test")[0] == 404
+        # Deleting the provider drops the route that pointed at it — no dangle.
+        res["route_dropped_on_delete"] = "inbox" not in json.loads(
+            req(admin, "GET", "/api/llm/providers")[1]
+        ).get("routes", {})
     finally:
         proc.terminate()
         subprocess.run(

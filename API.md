@@ -484,6 +484,11 @@ with `key_set` only, and it never rides `/api/state`.
   `{"ok": false, "error"}`. A cheap live probe: decrypts the key in-process,
   sends one bounded completion, returns whether it worked. `404` if unknown.
 - `POST /api/llm/providers/<id>/delete` → `{"ok": true}`, or `404`.
+- `POST /api/llm/routes` — point a feature at a provider. Body `{feature,
+  provider_id}`; an absent/empty `provider_id` clears the route. `feature` is one
+  of the names in `GET /api/llm/providers`'s `features` list (currently
+  `inbox`). Returns `{"routes": {...}}`. Deleting a provider drops any route to
+  it. Write scope.
 
 Outbound calls refuse a `base_url` that resolves to a cloud-metadata /
 link-local address or (by default) an internal-network host; loopback stays

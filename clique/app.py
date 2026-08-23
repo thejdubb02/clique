@@ -562,11 +562,36 @@ class Panel:
             raise ValueError(f"encryption is unavailable — {secretbox.SecretsUnavailable.HINT}")
         return secretbox.encrypt(key, self._secret_key_path())
 
+    #: Features that can be pointed at a specific provider. Grows as the
+    #: BYOK features land (digest, copilot, …); the inbox is the first.
+    _ROUTE_FEATURES = ("inbox",)
+
     def llm_list(self) -> dict:
         return {
             "providers": [self._redact_provider(p) for p in self.store.llm_providers()],
+            "routes": self.store.llm_routes(),
+            "features": list(self._ROUTE_FEATURES),
             "encryption": secretbox.available(),
         }
+
+    def llm_set_route(self, feature: str, provider_id: str | None) -> dict:
+        feature = str(feature or "").strip().lower()
+        if feature not in self._ROUTE_FEATURES:
+            raise ValueError(f"unknown feature: {feature!r}")
+        if provider_id and not self.store.provider(provider_id):
+            raise ValueError("no such provider")
+        return {"routes": self.store.set_route(feature, provider_id or None)}
+
+    def _provider_for(self, feature: str) -> dict | None:
+        """The provider a feature should use: its route if set, else the only
+        provider when there is exactly one, else None (the caller decides)."""
+        pid = self.store.llm_routes().get(feature)
+        if pid:
+            routed = self.store.provider(pid)
+            if routed:
+                return routed
+        providers = self.store.llm_providers()
+        return providers[0] if len(providers) == 1 else None
 
     def llm_create(self, body: dict) -> dict:
         fields = self._provider_fields(body)
@@ -1766,6 +1791,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.reap_orphans(body.get("muxes")))
             if path == "/api/llm/providers":
                 return self._json(self.panel.llm_create(body), 201)
+            if path == "/api/llm/routes":
+                return self._json(
+                    self.panel.llm_set_route(body.get("feature"), body.get("provider_id"))
+                )
             if path.startswith("/api/llm/providers/"):
                 parts = path.split("/")
                 provider_id = parts[4]
