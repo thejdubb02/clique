@@ -29,6 +29,13 @@ classifiers = [
   "Topic :: Utilities",
 ]
 
+# The one opt-in extra. Base CLIque stays dependency-free; storing a
+# bring-your-own-key provider secret needs real authenticated encryption, and
+# the stdlib has no cipher — so `pip install 'clique-panel[llm]'` pulls in one
+# vetted crypto library, and only for operators who actually use that feature.
+[project.optional-dependencies]
+llm = ["cryptography>=41"]
+
 [project.urls]
 Homepage = "https://github.com/thejdubb02/clique"
 Changelog = "https://github.com/thejdubb02/clique/blob/main/CHANGELOG.md"
