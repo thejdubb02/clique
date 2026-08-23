@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.50.61 — 2026-08-22 19:57 PDT
+
+**A "needs you" inbox — see who is waiting, and answer from anywhere.** A bell in
+the header carries a count of the sessions waiting on you (a question, an error,
+or one that just finished), and the browser tab title carries it too — "(3)
+CLIque" — so a backgrounded tab says it at a glance. Open the bell for the list,
+most-urgent first, and answer right there without opening the pane: type a reply,
+or send it empty to accept the highlighted default (which is how a Claude Code
+permission prompt says yes). It is one sheet, touch-sized, so the same answer
+works from a phone. Built on the authoritative state from 0.50.60 and the send
+path that already existed — no new endpoints.
+
 ## 0.50.60 — 2026-08-22 19:42 PDT
 
 **Claude Code sessions report their own state now, instead of being guessed at.**

@@ -398,6 +398,133 @@ function saveWorkspace(now) {
   workspaceTimer = setTimeout(push, 600);
 }
 
+/* ----------------------------------------------------------------- the inbox */
+
+/* Who needs you, and a way to answer without leaving the phone.
+ *
+ * "Needs you" is the authoritative signal (a session asking a question or
+ * stopped on an error) plus the finished-and-unopened case. workState already
+ * folds those into asking / error / unseen, so this is a filter over it, not a
+ * second opinion. Most urgent first: a question or an error outranks one that
+ * finished quietly, and within a tier the most recently active is on top. */
+function needsYou(s) {
+  const w = workState(s);
+  return w === "asking" || w === "error" || w === "unseen";
+}
+
+const INBOX_RANK = { asking: 0, error: 0, unseen: 1 };
+
+function inboxItems() {
+  return state.sessions
+    .filter(needsYou)
+    .sort((a, b) =>
+      (INBOX_RANK[workState(a)] - INBOX_RANK[workState(b)])
+      || (b.activity || 0) - (a.activity || 0));
+}
+
+/* The tab title carries the count, so a backgrounded tab says it at a glance —
+ * the "(3)" an unread mail tab uses, which every browser already renders. */
+function updateTitle() {
+  const n = state.sessions.filter(needsYou).length;
+  document.title = n ? `(${n}) CLIque` : "CLIque";
+}
+
+function renderInbox() {
+  const items = inboxItems();
+  const badge = $("#inboxCount");
+  badge.textContent = String(items.length);
+  badge.hidden = items.length === 0;
+  $("#inboxBtn").classList.toggle("lit", items.length > 0);
+  // Refresh the open sheet in place — but never while a reply is being typed
+  // into it, which re-rendering would wipe.
+  const typing = document.activeElement
+    && document.activeElement.classList.contains("inbox-reply");
+  if (!$("#inbox").hidden && !typing) fillInbox(items);
+}
+
+function openInbox() {
+  fillInbox(inboxItems());
+  $("#inbox").hidden = false;
+}
+
+function closeInbox() {
+  $("#inbox").hidden = true;
+}
+
+function fillInbox(items) {
+  const list = $("#inboxList");
+  list.textContent = "";
+  $("#inboxEmpty").hidden = items.length > 0;
+  for (const s of items) list.appendChild(inboxRow(s));
+}
+
+function inboxRow(s) {
+  const w = workState(s);
+  const row = document.createElement("div");
+  row.className = "inbox-row work-" + w;
+
+  // Tapping the row jumps to the full session.
+  const open = document.createElement("button");
+  open.className = "inbox-open";
+  open.title = "Open this session";
+  open.onclick = () => { closeInbox(); openSession(s.id); };
+
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  dot.dataset.work = w;
+  open.appendChild(dot);
+
+  const meta = document.createElement("span");
+  meta.className = "inbox-meta";
+  const name = document.createElement("span");
+  name.className = "inbox-name";
+  name.textContent = s.name || s.id;
+  const sub = document.createElement("span");
+  sub.className = "inbox-sub";
+  sub.textContent = WORK_WORDS[w] + (s.saying ? " · " + s.saying : "");
+  meta.append(name, sub);
+  open.appendChild(meta);
+  row.appendChild(open);
+
+  // Answer without opening the pane: type a reply, or send it empty to accept
+  // the highlighted default — which is how a Claude Code permission prompt, and
+  // most y/n prompts, say yes.
+  const bar = document.createElement("div");
+  bar.className = "inbox-answer";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "inbox-reply";
+  input.placeholder = "Reply, or send empty to accept…";
+  input.autocomplete = "off";
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); answerSession(s.id, input); }
+  };
+  const send = document.createElement("button");
+  send.className = "inbox-send hdr-btn";
+  send.title = "Send (empty accepts the default)";
+  send.innerHTML = '<svg class="ico" aria-hidden="true"><use href="#i-corner-down-left"/></svg>';
+  send.onclick = () => answerSession(s.id, input);
+  bar.append(input, send);
+  row.appendChild(bar);
+
+  return row;
+}
+
+async function answerSession(id, input) {
+  const text = (input.value || "").trim();
+  const body = text ? { text, enter: true } : { key: "Enter" };
+  const s = session(id);
+  const who = s ? s.name : "session";
+  try {
+    await api("api/sessions/" + id + "/send", { method: "POST", body: JSON.stringify(body) });
+    input.value = "";
+    toast(text ? `Replied to "${who}"` : `Sent to "${who}"`);
+    setTimeout(refresh, 400);   // let the state settle, then re-rank the inbox
+  } catch (err) {
+    toast(`Could not reach "${who}" — ${err.message || err}`, true);
+  }
+}
+
 async function refresh() {
   try {
     state = await api("api/state");
@@ -418,6 +545,8 @@ async function refresh() {
   renderTree();
   renderTabs();
   renderStats();
+  renderInbox();
+  updateTitle();
   renderServices();
   renderVersion();
   loadOrphans();
@@ -4969,6 +5098,9 @@ function wire() {
   $("#newFolder").onclick = newFolder;
   $("#adopt").onclick = adoptSessions;
   $("#activeOnly").onclick = toggleActiveOnly;
+  $("#inboxBtn").onclick = openInbox;
+  $("#inboxClose").onclick = closeInbox;
+  $("#inbox").onclick = (ev) => { if (ev.target === $("#inbox")) closeInbox(); };
   applyActiveOnly();
 
   $("#wtToggle").onchange = () => {

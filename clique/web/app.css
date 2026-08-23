@@ -1505,3 +1505,55 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 #modal .wt-check { display: flex; align-items: center; gap: 8px; margin: 0;
                    cursor: pointer; color: var(--fg); }
 #modal .wt-check input { width: auto; margin: 0; }
+
+/* --------------------------------------------------------------- the inbox */
+
+/* The count of who needs you, on the bell in the header. Amber, because that
+   is the colour "needs an answer" already speaks everywhere else. Hidden at
+   zero — a badge that is always there stops meaning anything. */
+.hdr-btn { position: relative; }
+.hdr-badge {
+  position: absolute; top: -2px; right: -2px; min-width: 15px; height: 15px;
+  padding: 0 3px; box-sizing: border-box;
+  border-radius: 8px; background: var(--warn); color: var(--bg);
+  font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
+}
+#inboxBtn.lit { color: var(--warn); }
+
+#inboxList { display: flex; flex-direction: column; gap: 8px; }
+
+/* One waiting session: a row you can tap to jump to, and an answer bar so you
+   never have to. The left edge takes the state's colour, the same language the
+   sidebar and tabs already speak. */
+.inbox-row {
+  border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+  box-shadow: inset 3px 0 0 var(--warn); overflow: hidden;
+}
+.inbox-row.work-error { box-shadow: inset 3px 0 0 var(--critical); }
+.inbox-row.work-unseen { box-shadow: inset 3px 0 0 var(--accent); }
+
+.inbox-open {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 9px 11px; background: none; border: 0; cursor: pointer;
+  color: var(--fg); font: inherit; text-align: left;
+}
+.inbox-open:hover { background: var(--row); }
+.inbox-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.inbox-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-sub {
+  font-size: 12px; color: var(--dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.inbox-answer {
+  display: flex; gap: 6px; align-items: center;
+  padding: 8px 11px; border-top: 1px solid var(--line);
+}
+.inbox-reply {
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; color: var(--fg);
+  background: var(--field); border: 1px solid var(--line); border-radius: 4px;
+  padding: 6px 8px;
+}
+.inbox-reply:focus { outline: none; border-color: var(--accent); }
+.inbox-send { flex: 0 0 auto; }
+.inbox-send:hover { color: var(--accent); }
