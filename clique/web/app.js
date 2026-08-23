@@ -1517,7 +1517,7 @@ function sessionMenu(ev, s) {
   showMenu(ev, [
     [s.alive ? "Open" : "Start again", () => openSession(s.id)],
     ...(cliHasTranscript(s.cli) ? [["View conversation", () => openTranscript(s)]] : []),
-    ...(s.branch ? [["Review changes", () => openDiff(s)]] : []),
+    ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
     ["Rename", () => renameSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
      *

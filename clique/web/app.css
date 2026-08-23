@@ -838,7 +838,7 @@ button.primary { background: var(--accent); color: var(--on-accent); }
    working, the full ring to a question, the pulse colour to unseen. Only
    the movement stops. */
 @media (prefers-reduced-motion: reduce) {
-  .cli-status::after, .tab.attention::after { animation: none; }
+  .cli-status::after, .tab.attention::after, #inboxBtn.lit .ico { animation: none; }
 }
 
 /* ------------------------------------------------------------ stats history */
@@ -1519,6 +1519,29 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
   font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
 }
 #inboxBtn.lit { color: var(--warn); }
+/* The badge overhangs the bell's right edge, so the 2px header gap alone leaves
+   it crowding the next button. Give the bell its own clearance. */
+#inboxBtn { margin-right: 7px; }
+
+/* When something is waiting, the bell rings — briefly, then rests for a good
+   while, and again. A once-and-done flash is missed if you glanced away; a
+   constant shake is noise you learn to ignore. So the wiggle lives in the last
+   sliver of a long loop: a second of ringing every ~16s. Pivots at the top,
+   like a bell hung from its crown. Only when lit, and only the glyph moves so
+   the badge holds still. */
+@keyframes bell-ring {
+  0%, 90%, 100% { transform: rotate(0); }
+  91% { transform: rotate(13deg); }
+  92.5% { transform: rotate(-11deg); }
+  94% { transform: rotate(8deg); }
+  95.5% { transform: rotate(-6deg); }
+  97% { transform: rotate(3deg); }
+  98.5% { transform: rotate(-1deg); }
+}
+#inboxBtn.lit .ico {
+  transform-origin: top center;
+  animation: bell-ring 16s ease-in-out infinite;
+}
 
 #inboxList { display: flex; flex-direction: column; gap: 8px; }
 

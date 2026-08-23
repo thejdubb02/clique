@@ -128,12 +128,14 @@ thinking or tool calls. Empty for a CLI whose history is prompts-only.
 ### `GET /api/sessions/<id>/diff`
 
 What the session's agent has changed but not committed, for review —
-`{repo, name, diff, empty, untracked_hidden}`. `diff` is git's own unified diff:
-tracked changes (`git diff HEAD`, staged and unstaged together) plus new files
-git is not yet tracking, shown as all-additions and capped, with any beyond the
-cap named in `untracked_hidden`. `empty` is true for a clean checkout; `repo` is
-false when the working directory is not a git repository (then there is no
-`diff`). Computed on demand, not on the poll.
+`{repo, name, diff, empty, truncated, untracked_hidden}`. `diff` is git's own
+unified diff: tracked changes (against HEAD, or the empty tree in a repo with no
+commit yet — staged and unstaged together) plus new files git is not yet
+tracking, shown as all-additions and capped, with any beyond the cap named in
+`untracked_hidden`. The whole diff is capped by size too; `truncated` is true
+when it was cut. `empty` is true for a clean checkout; `repo` is false when the
+working directory is not a git repository (then there is no `diff`) — and, being
+git's answer, also false if git times out. Computed on demand, not on the poll.
 
 ### `GET /api/sessions/<id>/wait`
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.50.63 — 2026-08-22 20:33 PDT
+
+**Security hardening of the new state hooks and review diff, and bell polish.**
+An independent audit of 0.50.60–0.50.62 turned up one issue that mattered and
+several worth fixing:
+
+- **The state-hook token is now `attention`-scoped, not `write`.** It lives in
+  every session's environment, and a `write` token there was a real hole — an
+  agent, or a prompt-injected one, could read it and spawn a shell or drive
+  another session. The new scope permits only the status nudge to the attention
+  endpoint; verified that `/send` and `/api/sessions` refuse it.
+- **The review diff is bounded and complete.** Total size is capped so a giant
+  file cannot freeze the page; new files inside a brand-new directory now show
+  (via `git ls-files -z`, which also fixes spaced and unicode names); and a repo
+  with no commit yet shows its first staged work.
+- **`hook.token` is written 0600 at creation**, not chmod-ed a beat later.
+- **"Review changes" shows for a dirty detached HEAD**, not only a named branch.
+
+The bell also gets a touch more space from the filter button and now rings for a
+second every ~16s while something is waiting — quiet under reduced-motion.
+
 ## 0.50.62 — 2026-08-22 20:13 PDT
 
 **Review what an agent changed, and comment straight back to it.** A session in a

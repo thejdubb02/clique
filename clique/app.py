@@ -531,13 +531,15 @@ class Panel:
         return f"http://{host}:{self.port}"
 
     def _hook_bearer(self) -> str:
-        """A persistent write-scoped token the hooks authenticate with.
+        """A persistent, narrowly-scoped token the state hooks authenticate with.
 
-        Made once and kept beside the token store, so a restart does not orphan
-        the copies already handed to running panes. Write-scoped because setting
-        a session's state is a write, and no narrower — but it only reaches
-        sessions CLIque launched, which already run a shell on this box, so it
-        grants them nothing they could not already do."""
+        This token lives in every session's environment, so its scope is the
+        whole of its safety: ``attention`` only, which permits a status nudge to
+        the attention endpoint and nothing else. A prompt-injected agent that
+        reads it cannot spawn a shell or drive another session — the escalation
+        a ``write`` token here would have handed it. Made once and kept beside
+        the token store (created with 0600, not chmod-ed after) so a restart
+        does not orphan the copies already handed to running panes."""
         if self._hook_token:
             return self._hook_token
         path = self.tokens.path.parent / "hook.token"
@@ -548,10 +550,13 @@ class Panel:
                 return raw
         except OSError:
             pass
-        _token, raw = self.tokens.create("clique-hooks", ["write"])
+        _token, raw = self.tokens.create("clique-hooks", ["attention"])
+        # Restricted at creation, never world-readable for a window: the raw
+        # token is the sensitive half (the store keeps only its hash).
         with contextlib.suppress(OSError):
-            path.write_text(raw, encoding="utf-8")
-            path.chmod(0o600)
+            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(raw)
         self._hook_token = raw
         return raw
 
@@ -1501,9 +1506,21 @@ class Handler(BaseHTTPRequestHandler):
                 nonce=nonce,
             )
 
-        allowed, reason = self._may_write()
-        if not allowed:
-            return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
+        # /attention is the one write a state hook makes, and its token is scoped
+        # to exactly that — so an `attention`-scoped bearer is let through here
+        # and nowhere else. Every other write, and any other token, still faces
+        # the full write-and-same-origin gate below.
+        token = self._bearer
+        attention_only = (
+            path.startswith("/api/sessions/")
+            and path.endswith("/attention")
+            and token is not None
+            and token.allows("attention")
+        )
+        if not attention_only:
+            allowed, reason = self._may_write()
+            if not allowed:
+                return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
 
         try:
             body = self._body()

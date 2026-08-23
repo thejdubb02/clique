@@ -17,7 +17,7 @@ written down rather than discovered.
 | **Host allowlist** | Rejects any `Host` we do not answer to, **before auth or any handler**. |
 | **Password** | Mandatory. Stored as an scrypt hash; the process cannot recover the plaintext. |
 | **Session cookie** | HMAC-signed, `HttpOnly`, `SameSite=Lax`, `Secure` behind HTTPS, 30-day TTL. |
-| **API tokens** | Separate credential for agents, scoped read or read/write, revocable individually. |
+| **API tokens** | Separate credential for agents, scoped read, read/write, or `attention`-only, revocable individually. |
 | **Origin checks** | On every state-changing request *and* on the WebSocket upgrade. |
 
 ## The four attacks this is actually built against
@@ -66,6 +66,13 @@ reason not to). Mode 0600.
   of names and dates, not working keys. Minted with
   `python3 -m clique token create`, never through the API: an endpoint that
   mints credentials turns any other hole into permanent access.
+- **State-hook token** — `hook.token` (0600), a single persistent token handed
+  to every launched session in its environment so a state hook can report to
+  `/api/sessions/<id>/attention`. It is `attention`-scoped: it permits *only*
+  that status nudge, so an agent that reads its own `$CLIQUE_TOKEN` — or a
+  prompt-injected one — cannot spawn a shell or drive another session with it.
+  It is shared across panes, not per-session, so it is not individually
+  attributable; that is the honest limit of it.
 
 ## Where we are stronger than the tool we replaced
 
@@ -93,6 +100,11 @@ reason not to). Mode 0600.
   credentials files, and `Content-Disposition: attachment` with `nosniff` for
   anything HTML or SVG. Codeman's implementation is the reference.
 - **No audit log.** Who logged in, from where, and when is not recorded.
+- **The review diff shows untracked files.** `GET …/diff` needs only read
+  scope and renders untracked, non-gitignored files in full — so an `.env` the
+  agent left sitting in the working tree is visible to a read-only viewer.
+  Gitignored files are never shown. Reasonable for a single-user tool; worth
+  knowing before sharing a read-only link.
 - **No multi-user model**, deliberately — this is one person's tool.
 
 ## Reporting

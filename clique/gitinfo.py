@@ -28,9 +28,12 @@ _pending: set[str] = set()
 def _git(cwd: Path, *args: str) -> str | None:
     """A git command in ``cwd``, or None if git cannot answer."""
     try:
-        done = subprocess.run(                       # noqa: S603 — argv list, no shell
-            ["git", "-C", str(cwd), *args],          # noqa: S607 — git from PATH, as documented
-            capture_output=True, text=True, timeout=TIMEOUT, check=False,
+        done = subprocess.run(  # noqa: S603 — argv list, no shell
+            ["git", "-C", str(cwd), *args],  # noqa: S607 — git from PATH, as documented
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -164,7 +167,7 @@ def add_worktree(repo: str, branch: str) -> tuple[str | None, str]:
         return None, f"{path} already exists and is not a worktree"
     path.parent.mkdir(parents=True, exist_ok=True)
     made = _git(Path(repo), "worktree", "add", "-b", branch, str(path))
-    if made is None:                       # branch may already exist
+    if made is None:  # branch may already exist
         made = _git(Path(repo), "worktree", "add", str(path), branch)
     if made is None:
         return None, f"git could not create a worktree for {branch!r}"
@@ -187,7 +190,7 @@ def _main_worktree(path: str) -> str | None:
         return None
     for line in out.splitlines():
         if line.startswith("worktree "):
-            return line[len("worktree "):].strip()
+            return line[len("worktree ") :].strip()
     return None
 
 
@@ -204,6 +207,16 @@ def remove_worktree(path: str) -> bool:
 #: contents shown, so a forgotten node_modules is a bounded list, not a download.
 MAX_UNTRACKED = 50
 
+#: Hard ceiling on the diff shipped to the browser: enough for a real review,
+#: bounded so one giant file (a build artifact, a lockfile, a video the agent
+#: dropped in) cannot spike server memory or freeze the page — which renders a
+#: node per line. Past this the diff is cut with a marker.
+MAX_DIFF_BYTES = 400_000
+
+#: The empty tree, for diffing a repository that has no commit yet so its staged
+#: work still shows.
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
 #: Diffs are read on demand, not on the poll, and can be large — give git longer
 #: than the sidebar's one-second budget.
 DIFF_TIMEOUT = 5.0
@@ -213,9 +226,12 @@ def _git_diff(cwd: Path, *args: str) -> str:
     """Like ``_git`` but for diff: keep stdout even when git exits 1, which is
     how ``git diff --no-index`` (and ``--exit-code``) report that files differ."""
     try:
-        done = subprocess.run(                       # noqa: S603 — argv list, no shell
-            ["git", "-C", str(cwd), *args],          # noqa: S607 — git from PATH
-            capture_output=True, text=True, timeout=DIFF_TIMEOUT, check=False,
+        done = subprocess.run(  # noqa: S603 — argv list, no shell
+            ["git", "-C", str(cwd), *args],  # noqa: S607 — git from PATH
+            capture_output=True,
+            text=True,
+            timeout=DIFF_TIMEOUT,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -225,31 +241,43 @@ def _git_diff(cwd: Path, *args: str) -> str:
 def diff(cwd: str) -> dict | None:
     """The uncommitted changes in a session's checkout, as one unified diff.
 
-    Tracked changes are ``git diff HEAD`` — staged and unstaged together, which
-    is everything the agent has done since the last commit. Files git is not yet
-    tracking are shown as all-additions, because a file the agent just wrote is
-    the most important thing to review; they are capped at ``MAX_UNTRACKED`` so a
-    stray dependency directory cannot turn a review into a download. ``None``
-    when the directory is not a git repository."""
+    Tracked changes are ``git diff`` against HEAD — staged and unstaged together,
+    everything the agent has done since the last commit; against the empty tree
+    for a repository with no commit yet, so its first staged work still shows.
+    Files git is not yet tracking are added as all-additions, listed one by one
+    (so files inside a brand-new directory are not hidden behind one folder
+    entry) and capped at ``MAX_UNTRACKED``. The whole thing is capped again at
+    ``MAX_DIFF_BYTES`` so a giant file cannot turn a review into a download.
+    ``None`` when the directory is not a git repository."""
     path = Path(cwd)
     if _git(path, "rev-parse", "--show-toplevel") is None:
         return None
+    # `git diff HEAD` errors in a repo with no commit; diff the empty tree there.
+    base = "HEAD" if _git(path, "rev-parse", "--verify", "-q", "HEAD") else EMPTY_TREE
     parts = []
-    tracked = _git_diff(path, "-c", "core.quotepath=false", "diff", "HEAD")
+    tracked = _git_diff(path, "-c", "core.quotepath=false", "diff", base)
     if tracked.strip():
         parts.append(tracked)
-    untracked = [
-        line[3:] for line in (_git(path, "status", "--porcelain") or "").splitlines()
-        if line.startswith("?? ")
-    ]
+    # -z gives NUL-separated, un-quoted, individual file paths — no folder
+    # collapsing and no escaping to misparse, unlike `status --porcelain`.
+    listed = _git(path, "ls-files", "--others", "--exclude-standard", "-z") or ""
+    untracked = [name for name in listed.split("\0") if name]
     shown = untracked[:MAX_UNTRACKED]
     for name in shown:
-        one = _git_diff(path, "diff", "--no-index", "--", "/dev/null", name)
+        one = _git_diff(
+            path, "-c", "core.quotepath=false", "diff", "--no-index", "--", "/dev/null", name
+        )
         if one.strip():
             parts.append(one)
     full = "\n".join(parts)
+    encoded = full.encode("utf-8", "replace")
+    truncated = len(encoded) > MAX_DIFF_BYTES
+    if truncated:
+        full = encoded[:MAX_DIFF_BYTES].decode("utf-8", "ignore")
+        full += "\n\n… diff truncated — too large to show in full.\n"
     return {
         "diff": full,
         "untracked_hidden": untracked[MAX_UNTRACKED:],
+        "truncated": truncated,
         "empty": not full.strip(),
     }

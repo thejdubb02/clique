@@ -35,7 +35,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 PREFIX = "mxp_"
-SCOPES = ("read", "write")
+#: `read` sees state, `write` does everything a write can. `attention` is the
+#: narrow one the state hooks get: it permits only POST .../attention (a status
+#: nudge), so a token that lives in every session's environment cannot spawn a
+#: shell or drive another session even if it leaks.
+SCOPES = ("read", "write", "attention")
 
 
 @dataclass
@@ -89,7 +93,8 @@ class TokenStore:
             raw = []
         self.tokens = [
             Token(**{k: v for k, v in t.items() if k in Token.__annotations__})
-            for t in raw if isinstance(t, dict)
+            for t in raw
+            if isinstance(t, dict)
         ]
         try:
             self._mtime = self.path.stat().st_mtime
@@ -162,8 +167,13 @@ class TokenStore:
     def listing(self) -> list[dict]:
         """Safe to show: names and dates, never a hash."""
         return [
-            {"id": t.id, "name": t.name, "scopes": t.scopes,
-             "created": t.created, "last_used": t.last_used}
+            {
+                "id": t.id,
+                "name": t.name,
+                "scopes": t.scopes,
+                "created": t.created,
+                "last_used": t.last_used,
+            }
             for t in sorted(self.tokens, key=lambda t: t.created)
         ]
 
