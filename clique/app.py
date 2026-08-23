@@ -654,6 +654,33 @@ class Panel:
         )
         return {"id": session.id, "worktree": worktree}
 
+    def broadcast(self, body: dict) -> dict:
+        """Send one message to every live session at once, optionally scoped to a
+        folder. The thing a cockpit driving many agents most wants: one
+        instruction, everyone hears it. Text goes in as a typed prompt (Enter by
+        default, so a boxed CLI submits it); a `key` sends a single keypress to
+        all instead. Dead sessions are skipped — nothing to type into — and one
+        session's failure does not sink the rest."""
+        folder = body.get("folder") or None
+        key = str(body.get("key") or "")
+        text = str(body.get("text", ""))
+        enter = bool(body.get("enter", True))
+        sent = []
+        for session in self.store.sessions:
+            if folder and session.folder != folder:
+                continue
+            if not tmux.exists(session.mux, session.socket):
+                continue
+            try:
+                if key:
+                    tmux.send_key(session.mux, key, session.socket)
+                else:
+                    tmux.send_text(session.mux, text, session.socket, enter=enter)
+                sent.append(session.id)
+            except tmux.TmuxError:
+                pass
+        return {"count": len(sent), "sent": sent}
+
     def detect_cli(self, pane) -> str:
         """Which registered CLI is running in this pane.
 
@@ -1528,6 +1555,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.create_session(body), 201)
             if path == "/api/sessions/adopt":
                 return self._json(self.panel.adopt())
+            if path == "/api/broadcast":
+                return self._json(self.panel.broadcast(body))
             if path == "/api/orphans/reap":
                 return self._json(self.panel.reap_orphans(body.get("muxes")))
             if path == "/api/workspace":

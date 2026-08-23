@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.64 — 2026-08-22 21:14 PDT
+
+**Broadcast: one message to every session at once.** The clearest form of "one
+cockpit driving many" — a megaphone in the header opens a composer, you type an
+instruction (or leave it empty to send a bare Enter, a "carry on" to all), pick
+all sessions or one folder, and it is typed into every live session in one go.
+It shows how many it will reach before you send. New endpoint `POST
+/api/broadcast` (write-scoped), reusing the existing per-session send path; dead
+sessions are skipped and one session failing does not sink the rest.
+
 ## 0.50.63 — 2026-08-22 20:33 PDT
 
 **Security hardening of the new state hooks and review diff, and bell polish.**

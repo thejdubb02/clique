@@ -227,6 +227,17 @@ stopped.
 Text is typed into the pane; `enter` decides whether it is submitted. `key`
 sends a single key by tmux name instead.
 
+### `POST /api/broadcast`
+
+```json
+{"text": "pull main and re-run the tests", "enter": true, "folder": "f-abc"}
+{"key": "Enter"}
+```
+
+The same send, to every live session at once — one instruction, everyone hears
+it. `folder` (optional) scopes it to one folder; omit it for all. Dead sessions
+are skipped. Returns `{count, sent}` — how many received it, and their ids.
+
 ### `POST /api/sessions/<id>/paste`
 
 ```json

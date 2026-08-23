@@ -398,6 +398,61 @@ function saveWorkspace(now) {
   workspaceTimer = setTimeout(push, 600);
 }
 
+/* -------------------------------------------------------------- broadcast */
+
+/* One message to every live session at once — the clearest expression of "one
+ * cockpit driving many". Scoped to a folder or the lot; empty text sends a bare
+ * Enter to everyone (a "carry on"). The count is shown before you commit, so a
+ * broadcast is never a surprise. */
+function broadcastTargets(folder) {
+  return state.sessions.filter((s) => s.alive && (!folder || s.folder === folder));
+}
+
+function updateBroadcastCount() {
+  const folder = $("#broadcastScope").value || "";
+  const n = broadcastTargets(folder).length;
+  $("#broadcastCount").textContent = n === 1 ? "1 live session" : `${n} live sessions`;
+  $("#broadcastSend").disabled = n === 0;
+}
+
+function openBroadcast() {
+  const sel = $("#broadcastScope");
+  sel.textContent = "";
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "All sessions";
+  sel.appendChild(all);
+  for (const f of (state.folders || []).filter((x) => x.id.startsWith("f-"))) {
+    const o = document.createElement("option");
+    o.value = f.id;
+    o.textContent = f.name;
+    sel.appendChild(o);
+  }
+  updateBroadcastCount();
+  $("#broadcast").hidden = false;
+  $("#broadcastText").focus();
+}
+
+function closeBroadcast() {
+  $("#broadcast").hidden = true;
+}
+
+async function sendBroadcast() {
+  const folder = $("#broadcastScope").value || "";
+  const body = { text: $("#broadcastText").value, enter: true };
+  if (folder) body.folder = folder;
+  try {
+    const r = await api("api/broadcast", { method: "POST", body: JSON.stringify(body) });
+    const n = r && r.count;
+    toast(`Sent to ${n} session${n === 1 ? "" : "s"}`);
+    $("#broadcastText").value = "";
+    closeBroadcast();
+    setTimeout(refresh, 400);
+  } catch (err) {
+    toast("Could not broadcast — " + (err.message || err), true);
+  }
+}
+
 /* ----------------------------------------------------------------- the inbox */
 
 /* Who needs you, and a way to answer without leaving the phone.
@@ -5225,6 +5280,11 @@ function wire() {
   $("#inboxBtn").onclick = openInbox;
   $("#inboxClose").onclick = closeInbox;
   $("#inbox").onclick = (ev) => { if (ev.target === $("#inbox")) closeInbox(); };
+  $("#broadcastBtn").onclick = openBroadcast;
+  $("#broadcastClose").onclick = closeBroadcast;
+  $("#broadcastScope").onchange = updateBroadcastCount;
+  $("#broadcastSend").onclick = sendBroadcast;
+  $("#broadcast").onclick = (ev) => { if (ev.target === $("#broadcast")) closeBroadcast(); };
   $("#diffClose").onclick = closeDiff;
   $("#diffSend").onclick = sendDiffComment;
   $("#diff").onclick = (ev) => { if (ev.target === $("#diff")) closeDiff(); };

@@ -1618,3 +1618,17 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 }
 #diffComment:focus { outline: none; border-color: var(--accent); }
 #diffSend { flex: 0 0 auto; align-self: stretch; white-space: nowrap; }
+
+/* --------------------------------------------------------------- broadcast */
+
+#broadcastText {
+  width: 100%; box-sizing: border-box; resize: vertical; margin-top: 8px;
+  font: inherit; font-size: 13px; color: var(--fg); background: var(--field);
+  border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px;
+}
+#broadcastText:focus { outline: none; border-color: var(--accent); }
+.broadcast-foot {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+}
+.broadcast-foot #broadcastCount { flex: 1; font-size: 12px; }
+#broadcastSend:disabled { opacity: .5; cursor: not-allowed; }

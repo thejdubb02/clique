@@ -69,6 +69,8 @@
   <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0" /><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>
   <!-- send this reply / accept the default (Enter) -->
   <symbol id="i-corner-down-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4v7a4 4 0 0 1-4 4H4" /><path d="m9 10-5 5 5 5" /></symbol>
+  <!-- broadcast one message to every live session -->
+  <symbol id="i-megaphone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /><path d="M8 6v8" /></symbol>
 </svg>
 <!-- icons:end -->
 
@@ -82,6 +84,7 @@
       <button id="activeOnly" class="hdr-btn" title="Show only running sessions" aria-pressed="false"><svg class="ico" aria-hidden="true"><use href="#i-filter"/></svg></button>
       <button id="newFolder" class="hdr-btn" title="New folder"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
       <button id="adopt" class="hdr-btn" title="Adopt sessions from another tool"><svg class="ico" aria-hidden="true"><use href="#i-download"/></svg></button>
+      <button id="broadcastBtn" class="hdr-btn" title="Broadcast to every session"><svg class="ico" aria-hidden="true"><use href="#i-megaphone"/></svg></button>
       <button id="settingsBtn" class="hdr-btn" title="Settings"><svg class="ico" aria-hidden="true"><use href="#i-settings"/></svg></button>
       <button id="collapse" class="hdr-btn" title="Hide sidebar (Ctrl+B)"><svg class="ico" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
     </header>
@@ -280,6 +283,25 @@
         </span>
       </figcaption>
     </figure>
+  </div>
+</div>
+
+<div id="broadcast" hidden>
+  <div class="sheet">
+    <header class="sheet-head">
+      <h2>Broadcast</h2>
+      <button type="button" id="broadcastClose" class="hdr-btn" title="Close"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </header>
+    <p class="note">One message, typed into every live session at once. Empty and
+       sent, it just presses Enter everywhere — a "carry on" to all.</p>
+    <label class="field">Send to
+      <select id="broadcastScope"></select>
+    </label>
+    <textarea id="broadcastText" rows="3" placeholder="Message to send to every session…"></textarea>
+    <div class="broadcast-foot">
+      <span id="broadcastCount" class="dim"></span>
+      <button type="button" id="broadcastSend">Send to all</button>
+    </div>
   </div>
 </div>
 
