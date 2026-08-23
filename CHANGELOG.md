@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.50.58 — 2026-08-22 18:06 PDT
+
+**Smoother terminals: GPU rendering, and output batched to the frame.** Three
+changes to how panes draw, each felt most with many live sessions at once.
+
+- **A WebGL renderer, with a canvas-then-DOM fallback.** The cell grid now
+  repaints on the client's GPU wherever the browser offers a WebGL2 context —
+  far less CPU than the canvas renderer with a dozen panes open. A phone, a VM
+  or a remote context that refuses or loses the GPU drops to canvas, and then to
+  the built-in DOM renderer; WebGL is used where it works and never required.
+- **One write per frame, not one per network packet.** A flood of output — a
+  `yes` loop, a giant diff, a screen cleared and redrawn — used to mean hundreds
+  of parser-and-render passes a second. The bytes are now coalesced and handed
+  to the terminal once per animation frame: same output, a fraction of the work,
+  and the scroll jank goes with it.
+- **Off-screen transcript turns are skipped.** A long transcript only lays out
+  and paints the turns in view (`content-visibility`), so opening a big one is
+  quick no matter its length.
+
+All safe because closing a tab now disposes the renderer before the terminal
+(0.50.57) — the same fix that made it possible to turn WebGL back on.
+
 ## 0.50.57 — 2026-08-22 16:59 PDT
 
 **Closing a tab now really closes it, and Kill really kills.** The renderer addon

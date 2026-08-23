@@ -3133,10 +3133,61 @@ function toggleFollow() {
   if (activeId) setFollow(activeId, !following(activeId));
 }
 
-/* Everything written while detached lands in the buffer as usual; the only
- * correction is putting the viewport back afterwards. That has to happen in
- * the write callback, because it is the first moment the new lines exist. */
+/* WebGL first (GPU), canvas next (CPU full-repaint), DOM last (built in). All
+ * guarded: the addons are vendored, and a WebGL2 context can be refused. */
+function attachRenderer(term) {
+  if (window.WebglAddon) {
+    try {
+      const webgl = new WebglAddon.WebglAddon();
+      // A lost GPU context — a tab backgrounded on a phone, a driver reset —
+      // would otherwise freeze the pane. Drop to canvas the moment it happens.
+      webgl.onContextLoss(() => {
+        try { webgl.dispose(); } catch (e) { /* already gone */ }
+        if (term._cliqueRenderer === webgl) term._cliqueRenderer = null;
+        attachCanvas(term);
+      });
+      term.loadAddon(webgl);
+      term._cliqueRenderer = webgl;
+      return;
+    } catch (err) {
+      /* no WebGL2 here — fall through to canvas */
+    }
+  }
+  attachCanvas(term);
+}
+
+function attachCanvas(term) {
+  if (!window.CanvasAddon) return;   // the DOM renderer stays
+  try {
+    const canvas = new CanvasAddon.CanvasAddon();
+    term.loadAddon(canvas);
+    term._cliqueRenderer = canvas;
+  } catch (err) {
+    /* the DOM renderer stays */
+  }
+}
+
+/* Server output is coalesced onto one write per animation frame, not one per
+ * WebSocket frame. A build that floods — a `yes` loop, a giant diff, a screen
+ * cleared and redrawn fast — can deliver hundreds of small frames a second,
+ * and writing each on arrival is hundreds of parser+render passes a second:
+ * that is the scroll jank you feel with many live panes. Queue the bytes and
+ * flush the whole burst in one write next frame — xterm keeps its own order,
+ * we just hand it more at once. Everything written while detached lands in the
+ * buffer as usual; the viewport correction — once per flush now, not per
+ * frame — runs in the write callback, the first moment the new lines exist. */
 function writeOut(entry, id, data) {
+  (entry.wq || (entry.wq = [])).push(data);
+  if (!entry.wqRAF) entry.wqRAF = requestAnimationFrame(() => flushWrites(entry, id));
+}
+
+function flushWrites(entry, id) {
+  entry.wqRAF = 0;
+  if (entry.closing) return;            // the term may already be disposed
+  const q = entry.wq;
+  if (!q || !q.length) return;
+  entry.wq = [];
+  const data = q.length === 1 ? q[0] : coalesceChunks(q);
   if (entry.follow !== false) return entry.term.write(data);
   entry.term.write(data, () => {
     const buf = entry.term.buffer.active;
@@ -3148,6 +3199,23 @@ function writeOut(entry, id, data) {
     }
     if (id === activeId) renderFollow();
   });
+}
+
+/* Terminal output arrives as binary frames (arraybuffer -> Uint8Array); a
+ * string only turns up if the server sends a text frame, which it does not.
+ * Concatenate a run of byte chunks into one buffer, join a run of strings,
+ * and in the mixed case (effectively never) encode the strings so it is still
+ * a single write. */
+function coalesceChunks(chunks) {
+  if (chunks.every((c) => typeof c === "string")) return chunks.join("");
+  const enc = new TextEncoder();
+  const parts = chunks.map((c) => (typeof c === "string" ? enc.encode(c) : c));
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
 }
 
 /* A paused pane and a dead one look identical, so the badge has to carry both
@@ -3339,6 +3407,7 @@ function closeTab(id, silent, killing) {
   const entry = terms.get(id);
   if (entry) {
     entry.closing = true;
+    try { if (entry.wqRAF) cancelAnimationFrame(entry.wqRAF); } catch (err) { /* nothing queued */ }
     try { if (entry.ws) entry.ws.close(); } catch (err) { /* already closing */ }
     // Dispose the renderer addon while the terminal is still whole; disposing
     // it inside term.dispose() throws and used to abort the whole teardown.
@@ -3512,39 +3581,24 @@ async function attachNow(id) {
 
   term.open(host);
 
-  /* A real renderer, rather than the fallback one.
+  /* A real renderer, not the DOM fallback — and the GPU where the client has
+   * one.
    *
-   * xterm's default is the DOM renderer: one element per run of text, which
-   * is why a screen that redraws underneath a live selection — an interactive
-   * menu being arrowed through, say — can leave fragments of the old text
-   * behind. It is not a font problem and it is not a width problem; it is
-   * stale nodes. The canvas renderer repaints the whole cell grid every
-   * frame, so there is nothing left over to see.
+   * xterm's default DOM renderer draws one element per run of text, so a
+   * screen that redraws underneath a live selection — an interactive menu
+   * being arrowed through — leaves fragments of the old text behind. Stale
+   * nodes, not a font or width problem. A full-repaint renderer has nothing
+   * left over to show. WebGL does that repaint on the client's GPU, a real
+   * win with a dozen live panes; but a phone, a VM or a remote context can
+   * refuse or silently lose a WebGL2 context, so it cannot be *required*. The
+   * chain is WebGL -> canvas -> DOM: the GPU if it will, a CPU full-repaint if
+   * not, and the built-in DOM renderer if even that is refused. Whatever
+   * attaches is kept on the term so closeTab can dispose it before the
+   * terminal — a renderer disposed inside term.dispose() throws and used to
+   * abort the teardown, which was the tab that would not close.
    *
-   * Canvas rather than WebGL, deliberately. WebGL is faster and it needs a GPU
-   * context that a phone, a VM or a remote session can refuse or lose, and
-   * this panel is meant to be opened from anywhere. Canvas has no such
-   * dependency and is still a full repaint.
-   *
-   * Loaded after `open` because it attaches to the element the terminal has
-   * just created, and guarded because it is vendored — if the file is missing
-   * or the browser refuses a 2d context, the DOM renderer is still there and
-   * a terminal that renders imperfectly beats no terminal at all.
-   */
-  if (window.CanvasAddon) {
-    try {
-      const canvas = new CanvasAddon.CanvasAddon();
-      term.loadAddon(canvas);
-      // Kept so closeTab can dispose the renderer *before* the terminal. A
-      // renderer addon disposed as part of term.dispose() tries to restore the
-      // DOM renderer against an already-torn-down linkifier and throws — which
-      // was aborting closeTab mid-teardown: the tab that would not close and
-      // the kill that never fired after it.
-      term._cliqueRenderer = canvas;
-    } catch (err) {
-      /* falls back to the DOM renderer on its own */
-    }
-  }
+   * After `open` because it binds to the element the terminal just made. */
+  attachRenderer(term);
 
   // A hidden tab must not measure the pane and then claim that size. The
   // constructor already matched the shared window, which is what history

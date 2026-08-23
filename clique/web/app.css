@@ -1481,7 +1481,11 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
    Turns down the page, newest at the bottom, the way the session itself ran. */
 #fileTurns { overflow-y: auto; max-height: 68vh; display: flex;
              flex-direction: column; gap: 12px; padding: 4px 2px; }
-#fileTurns .turn { display: flex; flex-direction: column; gap: 3px; }
+/* A long transcript is hundreds of tall turns; content-visibility skips the
+   layout and paint of the ones off-screen (a large render win), and the
+   intrinsic-size estimate keeps the scrollbar honest before they are seen. */
+#fileTurns .turn { display: flex; flex-direction: column; gap: 3px;
+  content-visibility: auto; contain-intrinsic-size: auto 90px; }
 #fileTurns .who { font-size: 10px; font-weight: 700; text-transform: uppercase;
                   letter-spacing: .06em; }
 #fileTurns .turn.user .who { color: var(--accent); }
