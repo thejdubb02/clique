@@ -388,6 +388,10 @@ function saveWorkspace(now) {
       localStorage.setItem("clique.ws." + winId, JSON.stringify(
         { tabs: body.open_tabs, active: body.active_tab, ts: Date.now() }));
     } catch (err) { /* storage full or blocked: the server copy still saves */ }
+    // Only the primary window (the earliest-opened, or the only one) writes the
+    // SHARED server workspace — the seed a fresh single window restores from — so
+    // a clean second window never overwrites it with its own empty strip.
+    if (winPeers.size > 1 && windowLabel(winId) !== 1) return;
     // Not saveSettings(): that repaints the tree, the tabs and every open
     // terminal, and this fires on every step of a tab drag.
     // keepalive: a closing tab otherwise aborts the fetch, which is how
@@ -504,6 +508,34 @@ function pruneWinWorkspaces() {
   } catch (err) { /* storage blocked */ }
 }
 
+// Closing a window hands its open tabs to the remaining one, so a window's work
+// is collected rather than dropped. Exactly one window adopts — the primary
+// (label 1 of those still open) — reading the gone window's own remembered strip
+// from localStorage. Scheduled behind a short grace so a *reload* (the same
+// window back in a moment) is not mistaken for a close.
+const winCollectTimers = new Map();
+function scheduleCollect(id) {
+  if (winCollectTimers.has(id)) return;
+  winCollectTimers.set(id, setTimeout(() => {
+    winCollectTimers.delete(id);
+    collectFromWindow(id);
+  }, 2500));
+}
+function collectFromWindow(id) {
+  if (winPeers.has(id)) return;          // it came back: a reload, not a close
+  if (windowLabel(winId) !== 1) return;  // one window adopts, the primary
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("clique.ws." + id) || "null"); }
+  catch (err) { saved = null; }
+  try { localStorage.removeItem("clique.ws." + id); } catch (err) { /* fine */ }
+  const tabs = (saved && Array.isArray(saved.tabs) ? saved.tabs : [])
+    .filter((tid) => !openTabs.includes(tid) && session(tid));
+  if (!tabs.length) return;
+  for (const tid of tabs) openSession(tid);
+  flashWindow();
+  toast(`Collected ${tabs.length} tab${tabs.length === 1 ? "" : "s"} from a closed window`);
+}
+
 if (winBus) {
   winBus.onmessage = (ev) => {
     const m = ev.data || {};
@@ -518,14 +550,14 @@ if (winBus) {
     if (!m.id || m.id === winId) return;
     if (m.t === "join") { winSee(m.id, m.joined); winSend({ t: "ping", id: winId, joined: winJoined }); }
     else if (m.t === "ping") { winSee(m.id, m.joined); }
-    else if (m.t === "leave") { winPeers.delete(m.id); }
+    else if (m.t === "leave") { winPeers.delete(m.id); scheduleCollect(m.id); }
     renderWinTag();
   };
   winSend({ t: "join", id: winId, joined: winJoined });
   setInterval(() => {
     const now = Date.now();
     for (const [id, p] of [...winPeers]) {
-      if (id !== winId && now - p.seen > 8000) winPeers.delete(id);
+      if (id !== winId && now - p.seen > 12000) { winPeers.delete(id); scheduleCollect(id); }
     }
     winSend({ t: "ping", id: winId, joined: winJoined });
     renderWinTag();
@@ -939,13 +971,23 @@ async function bootWorkspace() {
   if (!workspaceRestored) return;
 
   const want = pendingWorkspace || { tabs: [], active: "" };
-  // Prefer this window's own remembered strip (from a previous visit) over the
-  // shared server workspace, so two windows do not collapse into one set.
   let wantTabs = want.tabs, wantActive = want.active;
+  let seenBefore = false;
   try {
     const local = JSON.parse(localStorage.getItem("clique.ws." + winId) || "null");
-    if (local && Array.isArray(local.tabs)) { wantTabs = local.tabs; wantActive = local.active || ""; }
+    if (local && Array.isArray(local.tabs)) {
+      // A window we have been in before: restore its own remembered strip.
+      wantTabs = local.tabs; wantActive = local.active || ""; seenBefore = true;
+    }
   } catch (err) { /* fall back to the server workspace */ }
+  if (!seenBefore) {
+    // A fresh window. If another is already open, start CLEAN — a second screen
+    // is a second desk, not a copy of the first — and let the person move the
+    // tabs they want across. Give presence a moment to answer first.
+    winSend({ t: "join", id: winId, joined: winJoined });
+    await new Promise((ok) => setTimeout(ok, 450));
+    if (otherWindows().length > 0) { wantTabs = []; wantActive = ""; }
+  }
   openTabs = wantTabs.filter((id) => session(id));
   const pick = (wantActive && openTabs.includes(wantActive))
     ? wantActive

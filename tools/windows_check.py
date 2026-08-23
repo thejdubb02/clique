@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Two browser windows find each other and hand a session between them.
+"""Two browser windows: open clean, hand sessions across, collect on close.
 
-Same-origin windows talk over a BroadcastChannel (no server) so a session's tab
-can be moved from one window to another — one monitor to the next. This drives
-two real pages in one browser (which is what shares the channel) and checks the
-whole path: presence, the window-number chip, the "Move to … window" menu item,
-and that a move actually opens the session in the target and closes it in the
-source.
+Same-origin windows talk over a BroadcastChannel (no server), so a session's tab
+can move between windows — one monitor to the next. This drives two real pages
+in one browser (which is what shares the channel) and checks the whole handoff:
+
+- a first window restores the shared workspace; a *second* window opens CLEAN,
+  so a second screen is a fresh desk, not a copy of the first;
+- presence, the window-number chip, and the "Move to … window" menu item;
+- a move opens the session in the target and closes it in the source;
+- closing a window collects its tabs into the remaining (primary) window.
 
 Needs the Playwright venv:
 
@@ -38,6 +41,9 @@ def main() -> int:
             "id"
         ]
         vc._api("/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "bravo"})
+        # Seed the shared workspace with one tab, as a prior single window would.
+        vc._api("/api/settings", "PATCH", {"open_tabs": [alpha], "active_tab": alpha})
+
         with sync_playwright() as play:
             browser = play.chromium.launch()
             ctx = browser.new_context(viewport={"width": 1200, "height": 760})
@@ -46,25 +52,30 @@ def main() -> int:
                 [{"name": COOKIE_NAME, "value": auth.issue(), "domain": "127.0.0.1", "path": "/"}]
             )
             errs: list[str] = []
+
+            # Window 1 opens first and restores the seeded strip.
             p1 = ctx.new_page()
             p1.on("pageerror", lambda e: errs.append("p1:" + str(e)))
+            p1.goto(vc.BASE, wait_until="networkidle")
+            for _ in range(30):
+                if p1.evaluate("() => openTabs.length") > 0:
+                    break
+                time.sleep(0.2)
+            res["primary_restores_seed"] = p1.evaluate("(id) => openTabs.includes(id)", alpha)
+
+            # Window 2 opens second and should start CLEAN.
             p2 = ctx.new_page()
             p2.on("pageerror", lambda e: errs.append("p2:" + str(e)))
-            p1.goto(vc.BASE, wait_until="networkidle")
             p2.goto(vc.BASE, wait_until="networkidle")
-
-            def peers(p) -> int:
-                return p.evaluate("() => winPeers.size")
-
-            for _ in range(40):
-                if peers(p1) >= 2 and peers(p2) >= 2:
-                    break
-                time.sleep(0.25)
-
-            res["presence_both_see_two"] = peers(p1) >= 2 and peers(p2) >= 2
-            l1 = p1.evaluate("() => windowLabel(winId)")
-            l2 = p2.evaluate("() => windowLabel(winId)")
-            res["labels_distinct"] = {l1, l2} == {1, 2}
+            time.sleep(2.0)
+            res["secondary_opens_clean"] = p2.evaluate("() => openTabs.length") == 0
+            res["presence_both_see_two"] = (
+                p2.evaluate("() => winPeers.size") >= 2 and p1.evaluate("() => winPeers.size") >= 2
+            )
+            res["labels_distinct"] = {
+                p1.evaluate("() => windowLabel(winId)"),
+                p2.evaluate("() => windowLabel(winId)"),
+            } == {1, 2}
             res["chip_shown_both"] = p1.evaluate(
                 "() => !document.getElementById('winTag').hidden"
             ) and p2.evaluate("() => !document.getElementById('winTag').hidden")
@@ -72,19 +83,22 @@ def main() -> int:
                 p1.evaluate("(id) => windowMoveItems(session(id)).length", alpha) == 1
             )
 
+            # Move alpha from window 1 to window 2.
             w2 = p2.evaluate("() => winId")
-            p1.evaluate("(id) => openSession(id)", alpha)
-            time.sleep(0.6)
-            had_before = p1.evaluate("(id) => openTabs.includes(id)", alpha)
             p1.evaluate("([id, w]) => moveSessionToWindow(id, w)", [alpha, w2])
             time.sleep(1.0)
-            res["source_released"] = had_before and not p1.evaluate(
-                "(id) => openTabs.includes(id)", alpha
-            )
-            res["target_received"] = p2.evaluate("(id) => openTabs.includes(id)", alpha)
-            res["target_flashed"] = p2.evaluate(
+            res["move_source_released"] = not p1.evaluate("(id) => openTabs.includes(id)", alpha)
+            res["move_target_received"] = p2.evaluate("(id) => openTabs.includes(id)", alpha)
+            res["move_target_flashed"] = p2.evaluate(
                 "() => document.body.classList.contains('win-flash')"
             )
+
+            # Close window 2 — window 1 (primary) collects its tab back.
+            time.sleep(0.7)  # let window 2 persist its strip
+            p2.close()
+            time.sleep(3.5)  # leave + collect grace
+            res["collect_on_close"] = p1.evaluate("(id) => openTabs.includes(id)", alpha)
+
             res["no_console_errors"] = not errs
             if errs:
                 res["errors"] = errs[:4]

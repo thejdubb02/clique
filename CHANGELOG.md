@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.50.75 — 2026-08-23 14:11 PDT
+
+**A second window opens clean, and closing one collects its tabs.** Opening the
+panel in a second window on the same computer used to clone the first window's
+strip. Now, when another window is already open, a fresh one starts empty — a
+second screen is a fresh desk — and you move over just the sessions you want.
+Close a window and its open tabs are handed to the remaining (primary) window
+rather than dropped, on a short grace so a reload is never mistaken for a close.
+Each window still remembers its own strip across a reload, and only the primary
+window writes the shared workspace, so a clean window never wipes the seed a
+fresh single window restores from.
+
 ## 0.50.74 — 2026-08-23 13:59 PDT
 
 **Move a session to another browser window.** Open the panel in two windows —
