@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.66 — 2026-08-22 21:33 PDT
+
+**See what a session has spent.** A "Usage" action on any session that keeps a
+transcript (Claude) reads its own log and totals the tokens — input, output, and
+the two cache figures — across every assistant message, shown as a monospace
+breakdown. Read on demand, never on the poll, via a new
+`GET /api/sessions/<id>/usage`. A session with nothing logged yet, or a CLI that
+keeps no usage, says so plainly.
+
 ## 0.50.65 — 2026-08-22 21:24 PDT
 
 **The inbox tells "wants approval" apart from "asked you something".** A Claude

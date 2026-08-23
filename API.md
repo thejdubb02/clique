@@ -125,6 +125,14 @@ its own. Read from the CLI's own transcript, bounded to a tail (never the whole
 file), and only the typed turns: user prompts and the assistant's prose, not its
 thinking or tool calls. Empty for a CLI whose history is prompts-only.
 
+### `GET /api/sessions/<id>/usage`
+
+Tokens a session has spent, summed from its own transcript —
+`{name, cli, tokens: {input, output, cache_read, cache_creation, total}, messages, has_data}`.
+`has_data` is false for a CLI that keeps no usage (only Claude's dashed-dir
+transcript carries it) or one with nothing logged yet. Read on demand, not on
+the poll.
+
 ### `GET /api/sessions/<id>/diff`
 
 What the session's agent has changed but not committed, for review —

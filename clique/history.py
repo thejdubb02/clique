@@ -93,7 +93,8 @@ def _epoch(stamp: str) -> float:
 
 
 def _decode_dashed(
-    name: str, roots: tuple[str, ...] = ("/root", "/home", "/tmp", "/opt", "/srv")  # noqa: S108 — a list of path prefixes to decode against, not a temp file
+    name: str,
+    roots: tuple[str, ...] = ("/root", "/home", "/tmp", "/opt", "/srv"),  # noqa: S108 — a list of path prefixes to decode against, not a temp file
 ) -> str:
     """Turn `-home-you-projects-app` back into `/home/you/projects/app`.
 
@@ -158,7 +159,7 @@ def _first_prompt(path: Path) -> tuple[str, str, str]:
         if not title and record.get("aiTitle"):
             title = str(record["aiTitle"])[:MAX_LABEL].strip()
             if cwd:
-                break   # everything worth having; the rest is transcript
+                break  # everything worth having; the rest is transcript
         if label or record.get("type") != "user" or record.get("isSidechain"):
             continue
         text = _text_of(record.get("message"))
@@ -254,7 +255,7 @@ def _tail_lines(path: Path, cap: int) -> list[str]:
         with open(path, "rb") as fh:
             if size > cap:
                 fh.seek(size - cap)
-                fh.readline()          # discard the line the seek landed inside
+                fh.readline()  # discard the line the seek landed inside
             data = fh.read()
     except OSError:
         return []
@@ -370,15 +371,17 @@ class History:
             except OSError:
                 continue
             for sid, (prompt, when) in first.items():
-                out.append(Conversation(
-                    cli=cli_id,
-                    cli_session_id=sid,
-                    cwd=cwd,
-                    label=" ".join(prompt.split())[:120],
-                    updated=when,
-                    size=0,
-                    branch="",
-                ))
+                out.append(
+                    Conversation(
+                        cli=cli_id,
+                        cli_session_id=sid,
+                        cwd=cwd,
+                        label=" ".join(prompt.split())[:120],
+                        updated=when,
+                        size=0,
+                        branch="",
+                    )
+                )
         return out
 
     # -------------------------------------------------------------- prompts
@@ -400,8 +403,9 @@ class History:
             return None
         return matches[0] if matches else None
 
-    def session_transcript(self, cli: str, session_id: str,
-                           cap: int = 800_000, max_turns: int = 300) -> list[dict]:
+    def session_transcript(
+        self, cli: str, session_id: str, cap: int = 800_000, max_turns: int = 300
+    ) -> list[dict]:
         """The recent conversation for one session, oldest turn first — the
         scroll-back a CLI that draws over the alternate screen keeps none of.
         Bounded to the tail of the transcript, and to the typed turns: user
@@ -433,6 +437,44 @@ class History:
                 turns.append({"role": role, "text": text})
         return turns[-max_turns:]
 
+    def session_usage(self, cli: str, session_id: str) -> dict:
+        """Tokens a session has spent, summed from its own transcript.
+
+        Each assistant message a CLI logs carries a ``usage`` block — input,
+        output, and the two cache figures. We add them across the whole file.
+        Read on demand (never on the poll), so the cost is paid only when asked.
+        Only the dashed-dir transcript (Claude) carries usage; anything else,
+        and a session with none yet, comes back ``has_data: false`` with zeros."""
+        totals = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
+        keys = {
+            "input_tokens": "input",
+            "output_tokens": "output",
+            "cache_read_input_tokens": "cache_read",
+            "cache_creation_input_tokens": "cache_creation",
+        }
+        messages = 0
+        path = self._transcript_path(cli, session_id) if session_id else None
+        if path:
+            try:
+                with path.open(encoding="utf-8", errors="replace") as handle:
+                    for line in handle:
+                        try:
+                            rec = json.loads(line)
+                        except ValueError:
+                            continue
+                        if rec.get("type") != "assistant":
+                            continue
+                        usage = (rec.get("message") or {}).get("usage") or {}
+                        if not usage:
+                            continue
+                        messages += 1
+                        for src, dst in keys.items():
+                            totals[dst] += int(usage.get(src, 0) or 0)
+            except OSError:
+                pass
+        grand = sum(totals.values())
+        return {"tokens": {**totals, "total": grand}, "messages": messages, "has_data": grand > 0}
+
     def prompts(self, limit: int = PROMPT_LIMIT, force: bool = False) -> list[dict]:
         """Individual prompts across every CLI that keeps a history, newest first.
 
@@ -442,8 +484,7 @@ class History:
         list is not fifty rows of "yes", capped so a search stays fast.
         """
         with self._plock:
-            if (not force and self._pcache is not None
-                    and time.time() - self._pat < CACHE_SECONDS):
+            if not force and self._pcache is not None and time.time() - self._pat < CACHE_SECONDS:
                 return self._pcache[:limit]
             rows: list[dict] = []
             for cli_id, cli in self.registry.types().items():
@@ -505,10 +546,15 @@ class History:
                         prompt = str(row.get("prompt") or "").strip()
                         if not prompt or row.get("is_bash"):
                             continue
-                        out.append(self._prompt_row(
-                            cli_id, cwd, prompt,
-                            _epoch(str(row.get("timestamp") or "")),
-                            str(row.get("session_id") or "")))
+                        out.append(
+                            self._prompt_row(
+                                cli_id,
+                                cwd,
+                                prompt,
+                                _epoch(str(row.get("timestamp") or "")),
+                                str(row.get("session_id") or ""),
+                            )
+                        )
             except OSError:
                 continue
         return out
@@ -553,15 +599,23 @@ class History:
                     record = json.loads(line)
                 except ValueError:
                     continue
-                if (not isinstance(record, dict) or record.get("type") != "user"
-                        or record.get("isSidechain")):
+                if (
+                    not isinstance(record, dict)
+                    or record.get("type") != "user"
+                    or record.get("isSidechain")
+                ):
                     continue
                 text = _prompt_text(record.get("message"))
                 if not text:
                     continue
                 cwd = str(record.get("cwd") or "") or decoded
-                out.append(self._prompt_row(
-                    cli_id, cwd, text,
-                    _epoch(str(record.get("timestamp") or "")) or mtime,
-                    transcript.stem))
+                out.append(
+                    self._prompt_row(
+                        cli_id,
+                        cwd,
+                        text,
+                        _epoch(str(record.get("timestamp") or "")) or mtime,
+                        transcript.stem,
+                    )
+                )
         return out

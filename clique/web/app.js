@@ -1606,6 +1606,7 @@ function sessionMenu(ev, s) {
   showMenu(ev, [
     [s.alive ? "Open" : "Start again", () => openSession(s.id)],
     ...(cliHasTranscript(s.cli) ? [["View conversation", () => openTranscript(s)]] : []),
+    ...(cliHasTranscript(s.cli) ? [["Usage", () => openUsage(s)]] : []),
     ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
     ["Rename", () => renameSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
@@ -2795,6 +2796,54 @@ async function sendDiffComment() {
   } catch (err) {
     toast(`Could not reach "${who}" — ${err.message || err}`, true);
   }
+}
+
+/* What a session has spent, read from its own transcript on demand. Reuses the
+ * file sheet — same "here is something about this session" surface as the
+ * conversation, and the numbers line up in its monospace pre. */
+async function openUsage(s) {
+  fileSession = s.id;
+  fileAsked = " usage:" + s.id;
+  $("#fileTitle").textContent = (s.name || "Session") + " — usage";
+  $("#filePath").textContent = "token usage";
+  $("#fileText").hidden = true; $("#fileText").textContent = "";
+  $("#fileImg").hidden = true; $("#fileImg").removeAttribute("src");
+  $("#fileTurns").hidden = true; $("#fileTurns").textContent = "";
+  $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading…";
+  $("#file").hidden = false;
+  let data;
+  try {
+    data = await api("api/sessions/" + encodeURIComponent(s.id) + "/usage");
+  } catch (err) {
+    if (fileSession === s.id) $("#fileNote").textContent = "Could not read usage.";
+    return;
+  }
+  if (fileSession !== s.id) return;
+  showUsage(data);
+}
+
+function showUsage(data) {
+  const note = $("#fileNote");
+  const box = $("#fileText");
+  $("#fileTurns").hidden = true;
+  $("#fileImg").hidden = true;
+  if (!data || !data.has_data) {
+    box.hidden = true;
+    note.hidden = false;
+    note.textContent = "No token usage recorded for this session yet.";
+    return;
+  }
+  const t = data.tokens;
+  const n = (x) => (x || 0).toLocaleString();
+  note.hidden = true;
+  box.hidden = false;
+  box.textContent =
+    `${n(t.total)} tokens total\n\n`
+    + `  input           ${n(t.input)}\n`
+    + `  output          ${n(t.output)}\n`
+    + `  cache read      ${n(t.cache_read)}\n`
+    + `  cache creation  ${n(t.cache_creation)}\n\n`
+    + `across ${n(data.messages)} assistant message${data.messages === 1 ? "" : "s"}`;
 }
 
 async function openTranscript(s) {

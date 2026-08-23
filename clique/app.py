@@ -1343,6 +1343,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._transcript(path.split("/")[3])
             if path.startswith("/api/sessions/") and path.endswith("/diff"):
                 return self._diff(path.split("/")[3])
+            if path.startswith("/api/sessions/") and path.endswith("/usage"):
+                return self._usage(path.split("/")[3])
             if path.startswith("/api/sessions/") and path.endswith("/wait"):
                 wanted = {w for w in (query.get("for") or "idle").split(",") if w}
                 try:
@@ -1386,6 +1388,17 @@ class Handler(BaseHTTPRequestHandler):
         if info is None:
             return self._json({"repo": False, "name": session.name})
         return self._json({"repo": True, "name": session.name, **info})
+
+    def _usage(self, session_id: str) -> None:
+        """Tokens a session has spent, from its own transcript. `has_data` is
+        false for a CLI that keeps no usage (or none logged yet); the transcript
+        id is the one we resumed, or our own — the same rule as /transcript."""
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "not found"}, 404)
+        tid = session.cli_session_id or session.id
+        data = self.panel.conversations.session_usage(session.cli, tid)
+        return self._json({"name": session.name, "cli": session.cli, **data})
 
     def _peek(self, session_id: str, want: str) -> None:
         """The last few lines of a pane, without opening it.
