@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.71 — 2026-08-23 08:56 PDT
+
+**Broadcast to a chosen set, not just everyone.** The broadcast sheet now lists
+the live sessions as a checklist grouped by folder — tick "All live sessions", a
+whole folder, or any handful, and the count and the Send button follow the
+selection. A new optional `ids` on `POST /api/broadcast` restricts the send to
+an explicit list of session ids; `folder` and all-sessions still work as before.
+
 ## 0.50.70 — 2026-08-23 08:44 PDT
 
 **A leaner sidebar header.** The top of the sidebar had grown to eight controls.

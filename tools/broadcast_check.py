@@ -121,6 +121,12 @@ def main() -> int:
         res["folder_count"] = r_folder.get("count")
         res["a_got_folder"] = "bcast-FOLDER" in pane(a)
         res["b_got_folder"] = "bcast-FOLDER" in pane(b)  # should be False
+
+        r_ids = api("/api/broadcast", "POST", {"text": "echo bcast-IDS", "enter": True, "ids": [b]})
+        time.sleep(1.0)
+        res["ids_count"] = r_ids.get("count")
+        res["b_got_ids"] = "bcast-IDS" in pane(b)
+        res["a_got_ids"] = "bcast-IDS" in pane(a)  # should be False
     finally:
         proc.terminate()
         subprocess.run(
@@ -136,9 +142,12 @@ def main() -> int:
         and res.get("folder_count") == 1
         and res.get("a_got_folder")
         and res.get("b_got_folder") is False
+        and res.get("ids_count") == 1
+        and res.get("b_got_ids")
+        and res.get("a_got_ids") is False
     )
     for key, value in res.items():
-        want_false = key == "b_got_folder"
+        want_false = key in ("b_got_folder", "a_got_ids")
         good = (value is False) if want_false else bool(value)
         print(f"  {'ok  ' if good else 'FAIL'} {key}: {value}")
     print("broadcast_check:", "PASS" if ok else "FAIL")

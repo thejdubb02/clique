@@ -1650,6 +1650,27 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 }
 .broadcast-foot #broadcastCount { flex: 1; font-size: 12px; }
 #broadcastSend:disabled { opacity: .5; cursor: not-allowed; }
+.bc-targets { margin-top: 10px; }
+.bc-master {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  padding: 2px 2px 8px; border-bottom: 1px solid var(--line);
+}
+.bc-list {
+  max-height: 40vh; overflow-y: auto; margin-top: 4px;
+  display: flex; flex-direction: column;
+}
+.bc-group-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 700; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .04em; padding: 9px 2px 3px;
+}
+.bc-item {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  padding: 4px 2px 4px 22px; border-radius: 4px; cursor: pointer;
+}
+.bc-item:hover { background: var(--row); }
+.bc-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-master input, .bc-group-cb, .bc-item-cb { cursor: pointer; accent-color: var(--accent); }
 
 /* Approve / Deny on a permission prompt in the inbox. */
 .inbox-approve, .inbox-deny {

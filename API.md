@@ -247,12 +247,14 @@ not. `count: 1` is the same as a plain create.
 
 ```json
 {"text": "pull main and re-run the tests", "enter": true, "folder": "f-abc"}
+{"text": "carry on", "ids": ["a1b2c3d4", "e5f6a7b8"]}
 {"key": "Enter"}
 ```
 
 The same send, to every live session at once — one instruction, everyone hears
-it. `folder` (optional) scopes it to one folder; omit it for all. Dead sessions
-are skipped. Returns `{count, sent}` — how many received it, and their ids.
+it. Narrow it with `folder` (one folder) or `ids` (an explicit list of session
+ids); omit both for all. Dead sessions are skipped. Returns `{count, sent}` —
+how many received it, and their ids.
 
 ### `POST /api/sessions/<id>/paste`
 

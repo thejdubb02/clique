@@ -307,9 +307,10 @@
     </header>
     <p class="note">One message, typed into every live session at once. Empty and
        sent, it just presses Enter everywhere — a "carry on" to all.</p>
-    <label class="field">Send to
-      <select id="broadcastScope"></select>
-    </label>
+    <div class="bc-targets">
+      <label class="bc-master"><input type="checkbox" id="broadcastAll"> All live sessions</label>
+      <div id="broadcastList" class="bc-list"></div>
+    </div>
     <textarea id="broadcastText" rows="3" placeholder="Message to send to every session…"></textarea>
     <div class="broadcast-foot">
       <span id="broadcastCount" class="dim"></span>

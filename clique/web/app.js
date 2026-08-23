@@ -475,30 +475,100 @@ function boardCard(s) {
  * cockpit driving many". Scoped to a folder or the lot; empty text sends a bare
  * Enter to everyone (a "carry on"). The count is shown before you commit, so a
  * broadcast is never a surprise. */
-function broadcastTargets(folder) {
-  return state.sessions.filter((s) => s.alive && (!folder || s.folder === folder));
+function broadcastChecks() {
+  return [...document.querySelectorAll("#broadcastList .bc-item-cb")];
+}
+
+function broadcastSelectedIds() {
+  return broadcastChecks().filter((cb) => cb.checked).map((cb) => cb.value);
+}
+
+// A folder header is on when all its sessions are, indeterminate when only some.
+function syncBroadcastGroup(group) {
+  const gcb = group.querySelector(".bc-group-cb");
+  const items = [...group.querySelectorAll(".bc-item-cb")];
+  const on = items.filter((cb) => cb.checked).length;
+  gcb.checked = on === items.length && on > 0;
+  gcb.indeterminate = on > 0 && on < items.length;
+}
+
+function syncBroadcastMaster() {
+  const all = broadcastChecks();
+  const on = all.filter((cb) => cb.checked).length;
+  const master = $("#broadcastAll");
+  master.checked = on === all.length && on > 0;
+  master.indeterminate = on > 0 && on < all.length;
 }
 
 function updateBroadcastCount() {
-  const folder = $("#broadcastScope").value || "";
-  const n = broadcastTargets(folder).length;
-  $("#broadcastCount").textContent = n === 1 ? "1 live session" : `${n} live sessions`;
-  $("#broadcastSend").disabled = n === 0;
+  const total = broadcastChecks().length;
+  const n = broadcastSelectedIds().length;
+  $("#broadcastCount").textContent =
+    total === 0 ? "no live sessions" : `${n} of ${total} selected`;
+  const send = $("#broadcastSend");
+  send.disabled = n === 0;
+  send.textContent = n > 0 && n === total ? "Send to all" : `Send to ${n}`;
+}
+
+// A checklist of the live sessions, grouped by folder. Tick all of them, a whole
+// folder, or any handful — the count and the folder headers track the selection.
+function renderBroadcastTargets() {
+  const host = $("#broadcastList");
+  host.textContent = "";
+  const live = state.sessions.filter((s) => s.alive);
+  const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
+  const groups = [];
+  for (const f of folders) {
+    const items = live.filter((s) => s.folder === f.id);
+    if (items.length) groups.push({ name: f.name, items });
+  }
+  const loose = live.filter((s) => !folders.some((f) => f.id === s.folder));
+  if (loose.length) groups.push({ name: "Ungrouped", items: loose });
+
+  for (const g of groups) {
+    const group = document.createElement("div");
+    group.className = "bc-group";
+    const head = document.createElement("label");
+    head.className = "bc-group-head";
+    const gcb = document.createElement("input");
+    gcb.type = "checkbox";
+    gcb.className = "bc-group-cb";
+    gcb.onchange = () => {
+      for (const cb of group.querySelectorAll(".bc-item-cb")) cb.checked = gcb.checked;
+      syncBroadcastMaster();
+      updateBroadcastCount();
+    };
+    const gname = document.createElement("span");
+    gname.textContent = g.name;
+    head.append(gcb, gname);
+    group.appendChild(head);
+    for (const s of g.items) {
+      const row = document.createElement("label");
+      row.className = "bc-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "bc-item-cb";
+      cb.value = s.id;
+      cb.checked = true;
+      cb.onchange = () => {
+        syncBroadcastGroup(group);
+        syncBroadcastMaster();
+        updateBroadcastCount();
+      };
+      const nm = document.createElement("span");
+      nm.className = "bc-item-name";
+      nm.textContent = s.name || s.id;
+      row.append(cb, nm);
+      group.appendChild(row);
+    }
+    syncBroadcastGroup(group);
+    host.appendChild(group);
+  }
 }
 
 function openBroadcast() {
-  const sel = $("#broadcastScope");
-  sel.textContent = "";
-  const all = document.createElement("option");
-  all.value = "";
-  all.textContent = "All sessions";
-  sel.appendChild(all);
-  for (const f of (state.folders || []).filter((x) => x.id.startsWith("f-"))) {
-    const o = document.createElement("option");
-    o.value = f.id;
-    o.textContent = f.name;
-    sel.appendChild(o);
-  }
+  renderBroadcastTargets();
+  syncBroadcastMaster();
   updateBroadcastCount();
   $("#broadcast").hidden = false;
   $("#broadcastText").focus();
@@ -509,9 +579,9 @@ function closeBroadcast() {
 }
 
 async function sendBroadcast() {
-  const folder = $("#broadcastScope").value || "";
-  const body = { text: $("#broadcastText").value, enter: true };
-  if (folder) body.folder = folder;
+  const ids = broadcastSelectedIds();
+  if (!ids.length) return;
+  const body = { ids, text: $("#broadcastText").value, enter: true };
   try {
     const r = await api("api/broadcast", { method: "POST", body: JSON.stringify(body) });
     const n = r && r.count;
@@ -5447,7 +5517,13 @@ function wire() {
   $("#boardClose").onclick = closeBoard;
   $("#board").onclick = (ev) => { if (ev.target === $("#board")) closeBoard(); };
   $("#broadcastClose").onclick = closeBroadcast;
-  $("#broadcastScope").onchange = updateBroadcastCount;
+  $("#broadcastAll").onchange = () => {
+    const on = $("#broadcastAll").checked;
+    for (const cb of broadcastChecks()) cb.checked = on;
+    for (const g of document.querySelectorAll("#broadcastList .bc-group")) syncBroadcastGroup(g);
+    $("#broadcastAll").indeterminate = false;
+    updateBroadcastCount();
+  };
   $("#broadcastSend").onclick = sendBroadcast;
   $("#broadcast").onclick = (ev) => { if (ev.target === $("#broadcast")) closeBroadcast(); };
   $("#diffClose").onclick = closeDiff;

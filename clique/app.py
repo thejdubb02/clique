@@ -696,18 +696,23 @@ class Panel:
         return {"created": created, "errors": errors}
 
     def broadcast(self, body: dict) -> dict:
-        """Send one message to every live session at once, optionally scoped to a
-        folder. The thing a cockpit driving many agents most wants: one
+        """Send one message to every live session at once, optionally narrowed to
+        a folder or to an explicit list of session ids (`ids`). The thing a
+        cockpit driving many agents most wants: one
         instruction, everyone hears it. Text goes in as a typed prompt (Enter by
         default, so a boxed CLI submits it); a `key` sends a single keypress to
         all instead. Dead sessions are skipped — nothing to type into — and one
         session's failure does not sink the rest."""
         folder = body.get("folder") or None
+        ids = body.get("ids")
+        only = {str(i) for i in ids} if isinstance(ids, list) else None
         key = str(body.get("key") or "")
         text = str(body.get("text", ""))
         enter = bool(body.get("enter", True))
         sent = []
         for session in self.store.sessions:
+            if only is not None and session.id not in only:
+                continue
             if folder and session.folder != folder:
                 continue
             if not tmux.exists(session.mux, session.socket):
