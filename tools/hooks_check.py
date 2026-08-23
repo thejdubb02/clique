@@ -55,7 +55,11 @@ def main() -> int:
     cfg = json.loads(_hooks_settings(sys.executable))["hooks"]
     settings_ok = (
         {"Notification", "Stop", "UserPromptSubmit"} <= set(cfg)
-        and "waiting" in cfg["Stop"][0]["hooks"][0]["command"]
+        # Stop is a turn boundary, not a request — it clears rather than nagging.
+        and "clear" in cfg["Stop"][0]["hooks"][0]["command"]
+        and "waiting" not in cfg["Stop"][0]["hooks"][0]["command"]
+        # A genuine wait still reports waiting, via the idle/permission Notification.
+        and "waiting" in cfg["Notification"][1]["hooks"][0]["command"]
         and "clear" in cfg["UserPromptSubmit"][0]["hooks"][0]["command"]
         and str(HOOK) in cfg["Notification"][0]["hooks"][0]["command"]
     )

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.72 — 2026-08-23 09:12 PDT
+
+**A finished turn no longer reads as "needs an answer."** Claude Code's `Stop`
+hook fires at the end of *every* turn, and it was reporting `waiting` — the same
+signal a real question raises — so an autonomous session that had merely finished
+a turn showed up in the inbox as needing you. `Stop` now clears instead: a
+genuine wait still surfaces, from the idle Notification (~60s of no input) or a
+permission prompt, and a finished-but-unopened turn shows as "finished — not
+opened yet" rather than "needs an answer".
+
 ## 0.50.71 — 2026-08-23 08:56 PDT
 
 **Broadcast to a chosen set, not just everyone.** The broadcast sheet now lists

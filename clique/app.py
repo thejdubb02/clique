@@ -66,9 +66,12 @@ HOOK = Path(__file__).parent / "hook.py"
 def _hooks_settings(python: str) -> str:
     """A Claude Code ``--settings`` JSON string that wires the state hooks.
 
-    Notification and Stop mean the session yielded — it is waiting on the
-    person. UserPromptSubmit means the person answered — it is working again,
-    so clear. Each event runs the reporter with the state as its one argument;
+    A permission or idle Notification means the session is genuinely waiting on
+    the person. Stop only means a turn ended — for an autonomous session that is
+    a boundary, not a request — so it *clears* rather than nagging; a real wait
+    still surfaces from the idle Notification (~60s of no input) or the pane
+    heuristic. UserPromptSubmit means the person answered — working again, so
+    clear. Each event runs the reporter with the state as its one argument;
     the reporter reads the pane's ``CLIQUE_*`` env and POSTs it to the
     attention endpoint. Loaded with ``--settings`` so it merges on top of the
     user's own Claude config for these sessions and touches nothing on disk."""
@@ -89,7 +92,7 @@ def _hooks_settings(python: str) -> str:
                 {"matcher": "permission_prompt", "hooks": [cmd("waiting", "permission")]},
                 {"matcher": "idle_prompt", "hooks": [cmd("waiting", "idle")]},
             ],
-            "Stop": [{"hooks": [cmd("waiting", "idle")]}],
+            "Stop": [{"hooks": [cmd("clear")]}],
             "UserPromptSubmit": [{"hooks": [cmd("clear")]}],
         }
     }
