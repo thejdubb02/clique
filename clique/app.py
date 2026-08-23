@@ -500,7 +500,7 @@ class Panel:
         errors = cli.error_patterns if cli else []
         return attention.detect(session.mux, pane.activity, waiting, errors, session.socket)
 
-    def state(self) -> dict:
+    def state(self, *, reveal_urls: bool = False) -> dict:
         return {
             "version": version_string(),
             "folders": [
@@ -524,7 +524,7 @@ class Panel:
             # so a read-only token was receiving it — and with it the ability
             # to forge a signature the receiver trusts. Whether one is set is
             # all the UI ever needed to know.
-            "settings": redacted(self.store.settings),
+            "settings": redacted(self.store.settings, reveal_urls=reveal_urls),
             "stats": sysinfo.snapshot(self.clients),
         }
 
@@ -1038,12 +1038,22 @@ PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest")
 #: boolean so the UI can say "configured" without ever holding the value.
 SECRET_SETTINGS = ("webhook_secret",)
 
+#: URL settings whose path can itself carry a credential — a Discord/Slack/ntfy
+#: webhook token lives in the URL. Shown to the cookie operator who set them,
+#: withheld from API tokens: the panel cannot tell a token reading back its own
+#: config from one exfiltrating it, and a read-only token should see neither.
+URL_SETTINGS = ("webhook_url",)
 
-def redacted(settings: dict) -> dict:
+
+def redacted(settings: dict, *, reveal_urls: bool = False) -> dict:
     out = dict(settings)
     for key in SECRET_SETTINGS:
         out[f"{key}_set"] = bool(out.get(key))
         out[key] = ""
+    for key in URL_SETTINGS:
+        out[f"{key}_set"] = bool(out.get(key))
+        if not reveal_urls:
+            out[key] = ""
     return out
 
 
@@ -1254,6 +1264,20 @@ class Handler(BaseHTTPRequestHandler):
             return False, "cross-origin request refused"
         return True, ""
 
+    def _may_read(self) -> bool:
+        """Read access: a cookie session, or a bearer carrying read or write.
+
+        The ``attention``-only hook token lives in every session's environment,
+        so a prompt-injected agent can read it. It is shut out here — it may
+        report a status to POST /attention and nothing else. Every operator
+        token carries ``read`` (tokens default to read+write, and even
+        ``--read-only`` keeps read), so this narrows the read surface to exactly
+        the hook token it was meant to exclude."""
+        if self._cookie_authed:
+            return True
+        token = self._bearer
+        return bool(token and (token.allows("read") or token.allows("write")))
+
     def _fwd_host(self) -> str:
         """The host the browser reached us on. A forwarded host is believed only
         behind a trusted proxy; otherwise Host is the truth and X-Forwarded-Host
@@ -1298,7 +1322,7 @@ class Handler(BaseHTTPRequestHandler):
         # anonymous caller is and is not told.
         if path == "/healthz":
             return self._json(self.panel.health(self._authed))
-        if not self._authed:
+        if not self._may_read():
             if path.startswith("/api"):
                 return self._json({"error": "unauthorized"}, 401)
             if _is_public_asset(path):
@@ -1308,7 +1332,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             if path == "/api/state":
-                return self._json(self.panel.state())
+                return self._json(self.panel.state(reveal_urls=self._cookie_authed))
             if path == "/api/stats":
                 return self._json(sysinfo.snapshot(self.panel.clients))
             if path == "/api/stats/history":
@@ -1575,7 +1599,13 @@ class Handler(BaseHTTPRequestHandler):
                 )
             self.panel.failures.pop(who, None)
             token = self.panel.auth.issue()
-            cookie = self.panel.auth.cookie_header(token, self._secure())
+            # Secure whenever the external leg is TLS. A forged X-Forwarded-Proto
+            # can only *restrict* where the cookie is sent (https-only), never
+            # leak it, so honour it without requiring CLIQUE_TRUST_PROXY — a
+            # tunnel operator often has not set that even though the browser
+            # reached us over https.
+            over_tls = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+            cookie = self.panel.auth.cookie_header(token, self._secure() or over_tls)
             # 200 with a landing page, not a 3xx. See auth.LANDING for why a
             # Location header cannot be made correct from inside this process.
             nonce = secrets.token_urlsafe(16)
@@ -1913,7 +1943,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.panel.services.ensure()
                 # Redact on the way out too: GET already hides webhook_secret,
                 # and PATCH returning it raw handed a write token the secret.
-                return self._json(redacted(updated))
+                return self._json(redacted(updated, reveal_urls=self._cookie_authed))
             if len(parts) == 3 and parts[1] == "sessions":
                 # Only fields the caller actually sent. `folder: null` is a
                 # real value (drag to Ungrouped), so "absent" and "null" have
@@ -1976,8 +2006,10 @@ class Handler(BaseHTTPRequestHandler):
         self.panel.failures.setdefault(who, []).append(time.time())
 
     def _fail(self, exc: Exception) -> None:
+        # Full traceback to the server's stderr only; the client gets a generic
+        # line, because str(exc) on an OSError carries absolute host paths.
         traceback.print_exc()
-        self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+        self._json({"error": "internal error"}, 500)
 
     # -------------------------------------------------------------- terminal
 
@@ -2000,7 +2032,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin is not None and not self._same_origin():
             return self._send(403, b"cross-site websocket blocked", "text/plain")
 
-        if not self._authed:
+        if not self._may_read():
             return self._send(401, b"unauthorized", "text/plain")
 
         # A cookie without an Origin header is not a browser. Every browser

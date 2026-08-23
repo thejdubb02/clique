@@ -20,11 +20,14 @@ from pathlib import Path
 #: we just will not dump it into the browser.
 TEXT_CAP = 256 * 1024
 
-#: A public/self-hosted deployment sets CLIQUE_FENCE_READS=1: a read may not then
-#: escape the session's working directory, and may not touch an obvious
-#: credential file even inside it. Default deployments keep the trusted-local
-#: behaviour — anyone past the auth gate already has a shell as this user.
-_FENCE = os.environ.get("CLIQUE_FENCE_READS", "").strip().lower() in ("1", "true", "yes")
+#: File-preview reads are fenced by default: a read may not escape the session's
+#: working directory, and may not touch an obvious credential file even inside
+#: it. A trusted-local deployment can opt out with CLIQUE_FENCE_READS=0, which
+#: makes any absolute path an agent prints clickable again — anyone past the
+#: auth gate there already has a shell as this user. On by default because the
+#: project ships public for strangers to self-host behind a tunnel, where that
+#: assumption does not hold.
+_FENCE = os.environ.get("CLIQUE_FENCE_READS", "1").strip().lower() not in ("0", "false", "no", "off")
 _BLOCKED_FILES = frozenset((
     "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".env", ".netrc",
     ".pgpass", ".htpasswd", "credentials", ".git-credentials",

@@ -481,8 +481,11 @@ def send_text(mux: str, text: str, socket: str | None = SOCKET, *, enter: bool =
 
 
 def send_key(mux: str, key: str, socket: str | None = SOCKET) -> None:
-    """Send a named key (``S-Tab``, ``C-c``, ``Escape``) rather than literal text."""
-    _run(["send-keys", "-t", _pane_target(mux), key], socket)
+    """Send a named key (``S-Tab``, ``C-c``, ``Escape``) rather than literal text.
+
+    ``--`` ends option parsing, so a key beginning with ``-`` is read as a key
+    name and never as a ``send-keys`` flag."""
+    _run(["send-keys", "-t", _pane_target(mux), "--", key], socket)
 
 
 def capture(

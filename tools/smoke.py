@@ -153,9 +153,24 @@ def main() -> int:
           files.inspect(str(tmp), "sub")["kind"] == "dir")
     check("missing stays missing, not an error",
           files.inspect(str(tmp), "nope.md")["kind"] == "missing")
+    # Reads are fenced to the session directory by default now, so climbing out
+    # with `..` is refused. Opting out (CLIQUE_FENCE_READS=0) restores the old
+    # trusted-local behaviour where the path simply resolves.
     climbed = files.inspect(str(tmp / "sub"), "../note.md")
-    check(".. is resolved, not refused",
-          climbed["kind"] == "text" and climbed["text"] == "hello\n", climbed)
+    check(".. outside the session dir is refused by the default fence",
+          climbed["kind"] == "missing", climbed)
+    (tmp / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    check("the fence blocks a credential file even inside the dir",
+          files.inspect(str(tmp), ".env")["kind"] == "missing",
+          files.inspect(str(tmp), ".env"))
+    _saved_fence = files._FENCE
+    try:
+        files._FENCE = False
+        opened = files.inspect(str(tmp / "sub"), "../note.md")
+        check(".. resolves again when the fence is off",
+              opened["kind"] == "text" and opened["text"] == "hello\n", opened)
+    finally:
+        files._FENCE = _saved_fence
     big = files.inspect(str(tmp), "big.txt")
     check("caps the text it will dump in a browser",
           big["truncated"] and len(big["text"]) == files.TEXT_CAP, big["size"])

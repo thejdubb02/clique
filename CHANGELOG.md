@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.50.69 — 2026-08-23 08:31 PDT
+
+**Scope the read surface — the state-hook token can no longer read the panel.**
+The `attention`-scoped token handed to every session (so a state hook can report
+its own status) was accepted across the whole read surface: `GET /api/*` and the
+`/ws` attach checked only that *a* token was valid, never its scope. An agent
+that read its own `$CLIQUE_TOKEN` — including a prompt-injected one — could with
+it stream another session's live terminal, read every past prompt and
+transcript, and read arbitrary host files. Reads now require a `read` scope (a
+cookie counts); that token reaches only `POST …/attention`, the one thing it is
+for. Nothing legitimate read with it. Proven by `tools/scope_check.py`.
+
+Also hardened: file previews are now fenced to the session's working directory
+by default (credential files blocked; opt out with `CLIQUE_FENCE_READS=0`);
+`webhook_url` is withheld from API tokens, since its path can itself be a
+credential, while the cookie operator still sees it; `git worktree` and `tmux
+send-keys` gain `--` guards so a `-`-leading branch or key cannot inject a flag;
+the session cookie is `Secure` whenever the request arrived over HTTPS, even
+without `CLIQUE_TRUST_PROXY`; and a 500 no longer echoes internal paths.
+
+**Modal sheets render as modals again.** The board, broadcast, inbox and
+review-changes sheets shipped without their overlay rule and drew as unstyled
+full-width strips at the foot of the page — the board fell entirely below the
+fold, so its button looked dead. They now open centred over a backdrop like
+every other dialog, guarded by `tools/overlays_check.py`.
+
 ## 0.50.68 — 2026-08-22 21:54 PDT
 
 **Start a fleet in one click.** The new-session form takes a "How many" count now

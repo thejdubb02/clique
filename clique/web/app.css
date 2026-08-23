@@ -1619,6 +1619,24 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 #diffComment:focus { outline: none; border-color: var(--accent); }
 #diffSend { flex: 0 0 auto; align-self: stretch; white-space: nowrap; }
 
+/* ---- Centered modal sheets --------------------------------------------------
+ * inbox, diff, board and broadcast are overlay dialogs like #settings / #keys,
+ * but shipped without the overlay rule — so they rendered unstyled in normal
+ * flow at the foot of the page (the board fell entirely below the fold). This
+ * is that rule: a scrim fixed to the viewport, centring the .sheet card. Toast
+ * (z-index 70) still sits above them. */
+#inbox, #diff, #board, #broadcast {
+  position: fixed; inset: 0; z-index: 65;
+  background: var(--scrim);
+  display: grid; place-items: center; padding: 24px;
+}
+#inbox .sheet, #broadcast .sheet { width: min(560px, 94vw); }
+#inbox .sheet, #board .sheet, #broadcast .sheet {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px; max-height: 84vh; overflow: auto;
+  display: flex; flex-direction: column; box-shadow: 0 18px 48px var(--shadow);
+}
+
 /* --------------------------------------------------------------- broadcast */
 
 #broadcastText {

@@ -161,14 +161,18 @@ def add_worktree(repo: str, branch: str) -> tuple[str | None, str]:
     is made; if it already exists it is checked out instead. Returns
     ``(None, reason)`` if git refuses."""
     path = worktree_path(repo, branch)
+    if branch.startswith("-"):
+        return None, f"branch name may not start with '-': {branch!r}"
     if path.exists():
         if (path / ".git").exists():
             return str(path), ""
         return None, f"{path} already exists and is not a worktree"
     path.parent.mkdir(parents=True, exist_ok=True)
-    made = _git(Path(repo), "worktree", "add", "-b", branch, str(path))
+    # `--` before the positionals so a branch name like `--force` is taken as a
+    # ref, never parsed as a `git worktree add` option.
+    made = _git(Path(repo), "worktree", "add", "-b", branch, "--", str(path))
     if made is None:  # branch may already exist
-        made = _git(Path(repo), "worktree", "add", str(path), branch)
+        made = _git(Path(repo), "worktree", "add", "--", str(path), branch)
     if made is None:
         return None, f"git could not create a worktree for {branch!r}"
     return str(path), ""

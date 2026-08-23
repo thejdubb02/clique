@@ -16,7 +16,7 @@ written down rather than discovered.
 | **Tunnel** | Tailscale Serve, Caddy, or nginx terminates TLS. CLIque itself never binds the public internet. |
 | **Host allowlist** | Rejects any `Host` we do not answer to, **before auth or any handler**. |
 | **Password** | Mandatory. Stored as an scrypt hash; the process cannot recover the plaintext. |
-| **Session cookie** | HMAC-signed, `HttpOnly`, `SameSite=Lax`, `Secure` behind HTTPS, 30-day TTL. |
+| **Session cookie** | HMAC-signed, `HttpOnly`, `SameSite=Lax`, `Secure` whenever the request arrived over HTTPS (incl. behind a TLS tunnel), 30-day TTL. |
 | **API tokens** | Separate credential for agents, scoped read, read/write, or `attention`-only, revocable individually. |
 | **Origin checks** | On every state-changing request *and* on the WebSocket upgrade. |
 
@@ -68,11 +68,15 @@ reason not to). Mode 0600.
   mints credentials turns any other hole into permanent access.
 - **State-hook token** — `hook.token` (0600), a single persistent token handed
   to every launched session in its environment so a state hook can report to
-  `/api/sessions/<id>/attention`. It is `attention`-scoped: it permits *only*
-  that status nudge, so an agent that reads its own `$CLIQUE_TOKEN` — or a
-  prompt-injected one — cannot spawn a shell or drive another session with it.
-  It is shared across panes, not per-session, so it is not individually
-  attributable; that is the honest limit of it.
+  `/api/sessions/<id>/attention`. It is `attention`-scoped, and the scopes are
+  enforced on *both* sides: every `GET /api/*` and the `/ws` attach require a
+  `read` scope, every write requires `write`. So this token reaches only that
+  one status nudge — an agent that reads its own `$CLIQUE_TOKEN`, or a
+  prompt-injected one, cannot spawn a shell, drive another session, or read
+  another session's terminal, transcript, or the host's files with it. It is
+  shared across panes, not per-session, so it is not individually attributable
+  and cannot prove which session a nudge is *for*: an agent can still spoof
+  another session's status dot. That is the honest limit of it.
 
 ## Where we are stronger than the tool we replaced
 
@@ -95,10 +99,13 @@ reason not to). Mode 0600.
   Codeman keeps server-side opaque tokens and can drop one. *Worth adopting.*
 - **No schema validation library.** Input is clamped and filtered by hand.
   It is careful, but Zod-style declarative validation is harder to get wrong.
-- **No file routes yet.** When upload/download lands, it needs `realpath`
-  containment checked *after* resolution, a blocklist for `.env`, `.ssh`,
-  credentials files, and `Content-Disposition: attachment` with `nosniff` for
-  anything HTML or SVG. Codeman's implementation is the reference.
+- **File previews are fenced, but the fence has an opt-out.** `GET …/file`
+  previews a path an agent printed. By default it is fenced to the session's
+  working directory (`realpath` containment *after* resolution, plus a
+  blocklist for `.env`, `.ssh`, and credentials files); a trusted-local
+  deployment can opt out with `CLIQUE_FENCE_READS=0`. Paste and artifact routes
+  contain to the working tree unconditionally and serve with `nosniff`.
+  Arbitrary upload/download is still not offered.
 - **No audit log.** Who logged in, from where, and when is not recorded.
 - **The review diff shows untracked files.** `GET …/diff` needs only read
   scope and renders untracked, non-gitignored files in full — so an `.env` the

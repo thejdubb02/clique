@@ -558,7 +558,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `service_status` | bool | Ask the provider behind a running CLI whether it is having a bad day. The only outbound requests CLIque makes without being told to — see **Service status** below. On by default |
 | `clock_24h` | bool | 24-hour clock. Not derived from the locale — people read one format at work and another at home |
 | `clock_zone` | IANA zone | Clock on the empty pane, e.g. `Europe/Lisbon`. Validated against the system zone database; a name that is not real is dropped rather than stored, because `Intl` throws on one. Blank means the browser's own |
-| `webhook_url` | url | Where to POST session events. `http`/`https` only; anything else is stored as `""` |
+| `webhook_url` | url | Where to POST session events. `http`/`https` only; anything else is stored as `""`. **Withheld from API tokens** — `/api/state` returns it as `""` plus a `webhook_url_set` boolean for a token caller (a Discord/Slack URL path is itself a credential); the cookie operator who set it still sees the value |
 | `webhook_secret` | string | Signs each request as `X-CLIque-Signature`. **Write-only** — `/api/state` returns it as `""` plus a `webhook_secret_set` boolean, so a read-only token cannot lift it and forge a signature. Send `""` to remove one |
 | `panel_url` | url | This panel's public address, included so a notification can link back |
 | `artifacts_show` | bool | List the images a session makes |
