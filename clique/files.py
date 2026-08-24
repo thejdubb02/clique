@@ -21,28 +21,86 @@ from pathlib import Path
 TEXT_CAP = 256 * 1024
 
 #: File-preview reads are fenced by default: a read may not escape the session's
-#: working directory, and may not touch an obvious credential file even inside
-#: it. A trusted-local deployment can opt out with CLIQUE_FENCE_READS=0, which
-#: makes any absolute path an agent prints clickable again — anyone past the
-#: auth gate there already has a shell as this user. On by default because the
-#: project ships public for strangers to self-host behind a tunnel, where that
-#: assumption does not hold.
-_FENCE = os.environ.get("CLIQUE_FENCE_READS", "1").strip().lower() not in ("0", "false", "no", "off")
-_BLOCKED_FILES = frozenset((
-    "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".env", ".netrc",
-    ".pgpass", ".htpasswd", "credentials", ".git-credentials",
-))
-_BLOCKED_DIRS = frozenset((".ssh", ".aws", ".gnupg", ".gcloud", ".kube", ".docker"))
+#: working directory. A trusted-local deployment can opt out with
+#: CLIQUE_FENCE_READS=0, which makes any absolute path an agent prints clickable
+#: again — anyone past the auth gate there already has a shell as this user. On
+#: by default because the project ships public for strangers to self-host behind
+#: a tunnel, where that assumption does not hold.
+_FENCE = os.environ.get("CLIQUE_FENCE_READS", "1").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+    "off",
+)
+
+#: Credential and key material never makes sense to preview through a click, and
+#: serving one is the same mistake whether or not the directory fence is on — so
+#: this block is enforced *unconditionally*, independent of CLIQUE_FENCE_READS.
+#: A blocked read simply looks "missing", the same as any path we will not open.
+_BLOCKED_NAMES = frozenset(
+    (
+        "id_rsa",
+        "id_ed25519",
+        "id_ecdsa",
+        "id_dsa",
+        ".netrc",
+        ".pgpass",
+        ".htpasswd",
+        "credentials",
+        ".git-credentials",
+        ".npmrc",
+        ".pypirc",
+        ".dockercfg",
+        ".terraformrc",
+        ".bw-session",
+    )
+)
+#: Private-key and keystore material, matched by extension.
+_BLOCKED_EXTS = frozenset((".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"))
+#: Whole directories whose every file is a credential.
+_BLOCKED_DIRS = frozenset(
+    (
+        ".ssh",
+        ".aws",
+        ".gnupg",
+        ".gcloud",
+        ".kube",
+        ".docker",
+        ".azure",
+        ".terraform",
+        ".vault",
+    )
+)
+
+
+def _is_credential(target: Path) -> bool:
+    """A path that holds secrets and must never be served through a preview.
+
+    Names and key extensions are matched on the *resolved* path, so a symlink
+    with an innocent name that points at ``~/.ssh/id_rsa`` is caught both by its
+    real name and by the ``.ssh`` in its resolved parents. ``.env`` matches its
+    whole family (``.env.local``, ``.env.production``); a template like
+    ``.env.example`` is swept up too, which costs only a preview you can still
+    open in the shell.
+    """
+    name = target.name.lower()
+    if name in _BLOCKED_NAMES or name.startswith(".env"):
+        return True
+    if target.suffix.lower() in _BLOCKED_EXTS:
+        return True
+    return bool({p.lower() for p in target.parts} & _BLOCKED_DIRS)
 
 
 def _fence(cwd: str, target: Path) -> None:
+    """Directory containment: a read may not resolve outside the session's cwd.
+
+    Checked *after* resolution so a symlink cannot smuggle a path out — both
+    sides are real paths here. This is the part CLIQUE_FENCE_READS toggles; the
+    credential block above is not.
+    """
     base = Path(cwd).resolve()
     if target != base and base not in target.parents:
         raise ValueError("outside the session directory")
-    if {p.lower() for p in target.parts} & _BLOCKED_DIRS:
-        raise ValueError("blocked directory")
-    if target.name.lower() in _BLOCKED_FILES:
-        raise ValueError("blocked file")
 
 
 #: A printed path with a compiler-style suffix: ``src/app.js:42`` or
@@ -81,6 +139,8 @@ def resolve(cwd: str, raw: str) -> Path:
     else:
         path = Path(text)
         target = path.resolve() if path.is_absolute() else (Path(cwd) / path).resolve()
+    if _is_credential(target):
+        raise ValueError("blocked credential file")
     if _FENCE:
         _fence(cwd, target)
     return target

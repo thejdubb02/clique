@@ -54,49 +54,64 @@ def main() -> int:
     stripped = {k: v for k, v in os.environ.items() if k != "CLIQUE_TMUX_SOCKET"}
     default_socket = subprocess.run(
         [sys.executable, "-c", "from clique import tmux; print(tmux.SOCKET)"],
-        capture_output=True, text=True, cwd=str(ROOT), env=stripped)
-    check("the engine defaults to its own socket",
-          default_socket.stdout.strip() == "clique", default_socket.stdout)
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=stripped,
+    )
+    check(
+        "the engine defaults to its own socket",
+        default_socket.stdout.strip() == "clique",
+        default_socket.stdout,
+    )
     named = subprocess.run(
         [sys.executable, "-c", "from clique import tmux; print(tmux.SOCKET)"],
-        capture_output=True, text=True, cwd=str(ROOT),
-        env={**os.environ, "CLIQUE_TMUX_SOCKET": "clique-env-check"})
-    check("CLIQUE_TMUX_SOCKET is how a test gets a different one",
-          named.stdout.strip() == "clique-env-check", named.stdout)
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env={**os.environ, "CLIQUE_TMUX_SOCKET": "clique-env-check"},
+    )
+    check(
+        "CLIQUE_TMUX_SOCKET is how a test gets a different one",
+        named.stdout.strip() == "clique-env-check",
+        named.stdout,
+    )
     sandbox = "/tmp/clique-state-home-test"
     state_out = subprocess.run(
-        [sys.executable, "-c",
-         "from clique.__main__ import default_state_path; print(default_state_path())"],
-        capture_output=True, text=True, cwd=str(ROOT),
-        env={**os.environ, "CLIQUE_HOME": sandbox})
-    check("a test home does not inherit the live state file",
-          state_out.stdout.strip() == sandbox + "/state.json",
-          state_out.stdout.strip() or state_out.stderr[-200:])
+        [
+            sys.executable,
+            "-c",
+            "from clique.__main__ import default_state_path; print(default_state_path())",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env={**os.environ, "CLIQUE_HOME": sandbox},
+    )
+    check(
+        "a test home does not inherit the live state file",
+        state_out.stdout.strip() == sandbox + "/state.json",
+        state_out.stdout.strip() or state_out.stderr[-200:],
+    )
 
     print("boxed CLIs do not steal the mouse from the browser")
     filt = termstrip.boxed_stream()
-    check("plain text is untouched",
-          filt.feed(b"hello") == b"hello")
-    check("mouse tracking on is hidden",
-          filt.feed(b"\x1b[?1000h\x1b[?1006hhi") == b"hi")
-    check("mouse tracking off is hidden too",
-          filt.feed(b"\x1b[?1000lbye") == b"bye")
-    check("bracketed paste stays when mixed with mouse",
-          filt.feed(b"\x1b[?1000;2004h") == b"\x1b[?2004h")
-    check("colour is not a mouse code",
-          filt.feed(b"\x1b[31mred") == b"\x1b[31mred")
+    check("plain text is untouched", filt.feed(b"hello") == b"hello")
+    check("mouse tracking on is hidden", filt.feed(b"\x1b[?1000h\x1b[?1006hhi") == b"hi")
+    check("mouse tracking off is hidden too", filt.feed(b"\x1b[?1000lbye") == b"bye")
+    check(
+        "bracketed paste stays when mixed with mouse",
+        filt.feed(b"\x1b[?1000;2004h") == b"\x1b[?2004h",
+    )
+    check("colour is not a mouse code", filt.feed(b"\x1b[31mred") == b"\x1b[31mred")
     split = termstrip.boxed_stream()
     check("a split sequence is held", split.feed(b"\x1b[?100") == b"")
     check("and dropped once it completes", split.feed(b"0hOK") == b"OK")
-    check("the alt screen switch is hidden",
-          filt.feed(b"\x1b[?1049hview") == b"view")
-    check("wiping scrollback is hidden",
-          filt.feed(b"\x1b[3Jkeep") == b"keep")
-    check("a visible clear still happens",
-          filt.feed(b"\x1b[2J") == b"\x1b[2J")
+    check("the alt screen switch is hidden", filt.feed(b"\x1b[?1049hview") == b"view")
+    check("wiping scrollback is hidden", filt.feed(b"\x1b[3Jkeep") == b"keep")
+    check("a visible clear still happens", filt.feed(b"\x1b[2J") == b"\x1b[2J")
     passthrough = termstrip.StreamFilter()
-    check("a shell keeps mouse tracking",
-          passthrough.feed(b"\x1b[?1000h") == b"\x1b[?1000h")
+    check("a shell keeps mouse tracking", passthrough.feed(b"\x1b[?1000h") == b"\x1b[?1000h")
 
     print("registry")
     # The same file the app resolves to, asked for the same way. Naming the
@@ -111,22 +126,31 @@ def main() -> int:
     argv = reg.launch_argv("shell", session_id="a" * 32, name="smoke", cwd="/tmp")
     # argv[0] is the *resolved* path, not the bare name: a CLI installed
     # outside the service's PATH still has to launch. This is what grok needed.
-    check("renders argv with a resolved binary",
-          argv[0].endswith("/bash") and Path(argv[0]).is_file(), argv)
+    check(
+        "renders argv with a resolved binary",
+        argv[0].endswith("/bash") and Path(argv[0]).is_file(),
+        argv,
+    )
     check("detects an installed CLI", types["shell"].installed)
-    check("reports a missing CLI as absent",
-          not any(c.installed for c in types.values() if c.command == "definitely-not-here"),
-          "")
+    check(
+        "reports a missing CLI as absent",
+        not any(c.installed for c in types.values() if c.command == "definitely-not-here"),
+        "",
+    )
 
     from clique.registry import parse as parse_registry
+
     absent = parse_registry({"cli": {"nope": {"command": "definitely-not-here-9x"}}})["nope"]
-    check("resolve() returns None for a binary that is not here",
-          absent.resolve() is None and not absent.installed)
+    check(
+        "resolve() returns None for a binary that is not here",
+        absent.resolve() is None and not absent.installed,
+    )
 
     print("files")
     # A click on a printed path is a filesystem read, so these are real files
     # in a throwaway directory, not mocks.
     import tempfile
+
     png = (
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00"
         b"\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc``"
@@ -141,52 +165,95 @@ def main() -> int:
     check("strips a compiler suffix", files.clean("src/app.js:42:7") == "src/app.js")
     check("strips trailing punctuation", files.clean("docs/foo.md.") == "docs/foo.md")
     text = files.inspect(str(tmp), "note.md")
-    check("reads a relative text file",
-          text["kind"] == "text" and text["text"] == "hello\n", text)
-    check("and a :line suffix still finds it",
-          files.inspect(str(tmp), "note.md:12")["kind"] == "text")
-    check("an image is an image from its bytes",
-          files.inspect(str(tmp), "shot.png")["kind"] == "image")
-    check("a nul in the first block is binary",
-          files.inspect(str(tmp), "bin.dat")["kind"] == "binary")
-    check("a directory is a directory",
-          files.inspect(str(tmp), "sub")["kind"] == "dir")
-    check("missing stays missing, not an error",
-          files.inspect(str(tmp), "nope.md")["kind"] == "missing")
+    check("reads a relative text file", text["kind"] == "text" and text["text"] == "hello\n", text)
+    check(
+        "and a :line suffix still finds it", files.inspect(str(tmp), "note.md:12")["kind"] == "text"
+    )
+    check(
+        "an image is an image from its bytes",
+        files.inspect(str(tmp), "shot.png")["kind"] == "image",
+    )
+    check(
+        "a nul in the first block is binary", files.inspect(str(tmp), "bin.dat")["kind"] == "binary"
+    )
+    check("a directory is a directory", files.inspect(str(tmp), "sub")["kind"] == "dir")
+    check(
+        "missing stays missing, not an error",
+        files.inspect(str(tmp), "nope.md")["kind"] == "missing",
+    )
     # Reads are fenced to the session directory by default now, so climbing out
     # with `..` is refused. Opting out (CLIQUE_FENCE_READS=0) restores the old
     # trusted-local behaviour where the path simply resolves.
     climbed = files.inspect(str(tmp / "sub"), "../note.md")
-    check(".. outside the session dir is refused by the default fence",
-          climbed["kind"] == "missing", climbed)
-    (tmp / ".env").write_text("SECRET=1\n", encoding="utf-8")
-    check("the fence blocks a credential file even inside the dir",
-          files.inspect(str(tmp), ".env")["kind"] == "missing",
-          files.inspect(str(tmp), ".env"))
+    check(
+        ".. outside the session dir is refused by the default fence",
+        climbed["kind"] == "missing",
+        climbed,
+    )
+    # Credential and key material is refused even inside the session dir, and by
+    # its whole family / key extensions — .env.local and a .pem, not just .env.
+    for secret in (".env", ".env.local", "server.pem", ".bw-session", ".npmrc"):
+        (tmp / secret).write_text("SECRET=1\n", encoding="utf-8")
+        check(
+            f"a credential file is refused: {secret}",
+            files.inspect(str(tmp), secret)["kind"] == "missing",
+            files.inspect(str(tmp), secret),
+        )
+    # Realpath containment: a symlink inside the dir that resolves outside it is
+    # refused, because resolution happens before the containment check.
+    outside = Path(tempfile.mkdtemp(prefix="clique-outside-"))
+    (outside / "secret.txt").write_text("out\n", encoding="utf-8")
+    try:
+        (tmp / "escape").symlink_to(outside / "secret.txt")
+        check(
+            "a symlink resolving outside the session dir is refused",
+            files.inspect(str(tmp), "escape")["kind"] == "missing",
+            files.inspect(str(tmp), "escape"),
+        )
+    except OSError:
+        pass  # a filesystem without symlinks — skip rather than fail
+    finally:
+        shutil.rmtree(outside, ignore_errors=True)
     _saved_fence = files._FENCE
     try:
         files._FENCE = False
         opened = files.inspect(str(tmp / "sub"), "../note.md")
-        check(".. resolves again when the fence is off",
-              opened["kind"] == "text" and opened["text"] == "hello\n", opened)
+        check(
+            ".. resolves again when the fence is off",
+            opened["kind"] == "text" and opened["text"] == "hello\n",
+            opened,
+        )
+        # ...but the credential block is not the fence: it holds regardless.
+        check(
+            "a credential is still refused with the fence off",
+            files.inspect(str(tmp), ".env")["kind"] == "missing",
+        )
     finally:
         files._FENCE = _saved_fence
     big = files.inspect(str(tmp), "big.txt")
-    check("caps the text it will dump in a browser",
-          big["truncated"] and len(big["text"]) == files.TEXT_CAP, big["size"])
+    check(
+        "caps the text it will dump in a browser",
+        big["truncated"] and len(big["text"]) == files.TEXT_CAP,
+        big["size"],
+    )
     shutil.rmtree(tmp, ignore_errors=True)
 
     print("gitinfo")
     import tempfile
+
     gitinfo.clear()
     plain = Path(tempfile.mkdtemp(prefix="clique-git-plain-"))
-    check("a directory that is not a repo says nothing",
-          gitinfo.probe(str(plain))["branch"] == ""
-          and gitinfo.probe(str(plain))["dirty"] == 0)
+    check(
+        "a directory that is not a repo says nothing",
+        gitinfo.probe(str(plain))["branch"] == "" and gitinfo.probe(str(plain))["dirty"] == 0,
+    )
     repo = Path(tempfile.mkdtemp(prefix="clique-git-repo-"))
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(repo), "symbolic-ref", "HEAD",
-                    "refs/heads/visual"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "symbolic-ref", "HEAD", "refs/heads/visual"],
+        check=True,
+        capture_output=True,
+    )
     info = gitinfo.probe(str(repo))
     check("an empty repo still has a branch", info["branch"] == "visual", info)
     check("and is clean", info["dirty"] == 0, info)
@@ -196,8 +263,7 @@ def main() -> int:
     gitinfo.clear()
     started = time.time()
     gitinfo.of(str(repo))
-    check("the sidebar read returns without waiting on git",
-          time.time() - started < 0.25)
+    check("the sidebar read returns without waiting on git", time.time() - started < 0.25)
     got = {"branch": "", "dirty": 0}
     deadline = time.time() + 3
     while time.time() < deadline:
@@ -205,8 +271,7 @@ def main() -> int:
         if got["branch"] == "visual":
             break
         time.sleep(0.05)
-    check("and the next read has the branch",
-          got["branch"] == "visual" and got["dirty"] == 1, got)
+    check("and the next read has the branch", got["branch"] == "visual" and got["dirty"] == 1, got)
     shutil.rmtree(plain, ignore_errors=True)
     shutil.rmtree(repo, ignore_errors=True)
 
@@ -216,24 +281,28 @@ def main() -> int:
     tmux._run(["set-option", "-g", "history-limit", "2000"], SOCKET)
     tmux.bootstrap(SOCKET, history_limit=9000)
     again = tmux._run(["show-options", "-g", "history-limit"], SOCKET)
-    check("a second bootstrap updates global options",
-          "9000" in again, again.strip())
+    check("a second bootstrap updates global options", "9000" in again, again.strip())
 
     sid = "1234abcd-0000-0000-0000-000000000000"
     mux = tmux.mux_name(sid)
     check("name is short and ours", mux == "sm-1234abcd", mux)
 
-    tmux.create(mux, "/tmp", ["bash", "--norc", "-i"], socket=SOCKET,
-                env={"CLIQUE": "1", "CLIQUE_SESSION": sid})
+    tmux.create(
+        mux,
+        "/tmp",
+        ["bash", "--norc", "-i"],
+        socket=SOCKET,
+        env={"CLIQUE": "1", "CLIQUE_SESSION": sid},
+    )
     check("session exists", tmux.exists(mux, SOCKET))
     size_opt = tmux._run(["show-window-options", "-t", mux, "window-size"], SOCKET)
-    check("the window does not autoscale from attach",
-          "manual" in size_opt, size_opt.strip())
+    check("the window does not autoscale from attach", "manual" in size_opt, size_opt.strip())
     tmux._run(["set-window-option", "-t", mux, "window-size", "latest"], SOCKET)
     tmux.bootstrap(SOCKET, history_limit=9000)
     relocked = tmux._run(["show-window-options", "-t", mux, "window-size"], SOCKET)
-    check("a restart relocks windows born before the option",
-          "manual" in relocked, relocked.strip())
+    check(
+        "a restart relocks windows born before the option", "manual" in relocked, relocked.strip()
+    )
 
     panes = tmux.list_sessions(SOCKET)
     check("lists one session", len(panes) == 1, panes)
@@ -252,8 +321,9 @@ def main() -> int:
     tmux.send_text(mux, nasty, SOCKET)
     time.sleep(1.2)
     out = tmux.capture(mux, SOCKET, styled=False)
-    check("literal text survives send-keys",
-          "quote\" ; semi $VAR {brace} Enter C-c" in out, out[-120:])
+    check(
+        "literal text survives send-keys", 'quote" ; semi $VAR {brace} Enter C-c' in out, out[-120:]
+    )
 
     for i in range(40):
         tmux.send_text(mux, f"echo line{i}", SOCKET)
@@ -261,8 +331,10 @@ def main() -> int:
     scroll = tmux.capture(mux, SOCKET, lines=5000, styled=False)
     check("scrollback survives past the visible frame", "line0" in scroll and "line39" in scroll)
 
-    check("attach argv targets our socket",
-          tmux.attach_argv(mux, SOCKET)[:4] == ["tmux", "-L", SOCKET, "attach-session"])
+    check(
+        "attach argv targets our socket",
+        tmux.attach_argv(mux, SOCKET)[:4] == ["tmux", "-L", SOCKET, "attach-session"],
+    )
 
     print("guards")
     try:
@@ -318,8 +390,9 @@ def main() -> int:
     check("link-local v6 too", not allow("http://[fe80::1]/x"))
     check("file: is not a webhook", not allow("file:///etc/passwd"))
     check("nor is gopher:", not allow("gopher://example.com/1"))
-    check("a name that does not resolve is refused",
-          not allow("http://clique-no-such-host.invalid/x"))
+    check(
+        "a name that does not resolve is refused", not allow("http://clique-no-such-host.invalid/x")
+    )
     check("and so is nonsense", not allow("not a url at all"))
 
     print("the prompt box decides itself")
@@ -335,17 +408,32 @@ def main() -> int:
     # clique/working.py exists: a redraw counts as output, so a CLI that
     # animates while it waits ticks the clock forever. Two panes that tick it
     # identically, one of which is doing nothing.
-    tmux.create("sm-still", "/tmp", ["bash", "-c",
-        "while true; do printf '\\033[H\\033[2Jwaiting > '; sleep 0.4; done"], socket=SOCKET)
-    tmux.create("sm-moving", "/tmp", ["bash", "-c",
-        "i=0; while true; do i=$((i+1)); printf '\\033[H\\033[2Jline %s\\n' $i; sleep 0.4; done"],
-        socket=SOCKET)
+    tmux.create(
+        "sm-still",
+        "/tmp",
+        ["bash", "-c", "while true; do printf '\\033[H\\033[2Jwaiting > '; sleep 0.4; done"],
+        socket=SOCKET,
+    )
+    tmux.create(
+        "sm-moving",
+        "/tmp",
+        [
+            "bash",
+            "-c",
+            "i=0; while true; do i=$((i+1)); printf '\\033[H\\033[2Jline %s\\n' $i; sleep 0.4; done",
+        ],
+        socket=SOCKET,
+    )
     time.sleep(1.0)
     panes = {p.mux: p for p in tmux.list_sessions(SOCKET)}
-    check("both panes tick the activity clock",
-          all(time.time() - panes[n].activity < 2 for n in ("sm-still", "sm-moving")))
-    check("and both are called working at first",
-          working.busy(panes["sm-still"], SOCKET) and working.busy(panes["sm-moving"], SOCKET))
+    check(
+        "both panes tick the activity clock",
+        all(time.time() - panes[n].activity < 2 for n in ("sm-still", "sm-moving")),
+    )
+    check(
+        "and both are called working at first",
+        working.busy(panes["sm-still"], SOCKET) and working.busy(panes["sm-moving"], SOCKET),
+    )
 
     # Polled rather than sampled once, because "unchanged" is not a property
     # of one observation — the first capture after SETTLE has nothing to
@@ -360,13 +448,14 @@ def main() -> int:
         if not verdicts["sm-still"]:
             break
         time.sleep(2)
-    check("a pane redrawing the same screen settles to not working",
-          not verdicts["sm-still"])
+    check("a pane redrawing the same screen settles to not working", not verdicts["sm-still"])
     check("a pane whose output changes stays working", verdicts["sm-moving"])
 
     working.forget(set())
-    check("and everything about a session that is gone is dropped",
-          not working._since and not working._seen)
+    check(
+        "and everything about a session that is gone is dropped",
+        not working._since and not working._seen,
+    )
     for name in ("sm-still", "sm-moving"):
         tmux.kill(name, SOCKET)
 
@@ -374,45 +463,78 @@ def main() -> int:
     # These have to fire for a CLI with no [attention] table — that is how
     # Codex, Cursor, Gemini and the rest surface a permission prompt without
     # CLIque knowing anything about those vendors.
-    check("(y/n) is a question",
-          attention.verdict_text("Allow this command (y/n)", [], []) == "waiting")
-    check("a capitalised default (Y/n) is too",
-          attention.verdict_text("Apply this change? (Y/n)", [], []) == "waiting")
-    check("a [y/N] bracket prompt is",
-          attention.verdict_text("Overwrite the file [y/N]", [], []) == "waiting")
-    check("a short question-mark line is",
-          attention.verdict_text("Do you want to continue?", [], []) == "waiting")
-    check("a Codex-style permission question is",
-          attention.verdict_text("Allow Codex to run `npm test`?", [], []) == "waiting")
-    check("a numbered choice is",
-          attention.verdict_text("  ❯ 1. Allow\n    2. Deny", [], []) == "waiting")  # noqa: RUF001
-    check("a menu drawn with another pointer glyph is",
-          attention.verdict_text("  › 2. No, keep it", [], []) == "waiting")  # noqa: RUF001
-    check("an arrow-key menu hint is",
-          attention.verdict_text("Choose one: (Use arrow keys)", [], []) == "waiting")
-    check("a traceback is an error, not a question",
-          attention.verdict_text("Traceback (most recent call last):\n  File",
-                                 [], []) == "error")
+    check(
+        "(y/n) is a question",
+        attention.verdict_text("Allow this command (y/n)", [], []) == "waiting",
+    )
+    check(
+        "a capitalised default (Y/n) is too",
+        attention.verdict_text("Apply this change? (Y/n)", [], []) == "waiting",
+    )
+    check(
+        "a [y/N] bracket prompt is",
+        attention.verdict_text("Overwrite the file [y/N]", [], []) == "waiting",
+    )
+    check(
+        "a short question-mark line is",
+        attention.verdict_text("Do you want to continue?", [], []) == "waiting",
+    )
+    check(
+        "a Codex-style permission question is",
+        attention.verdict_text("Allow Codex to run `npm test`?", [], []) == "waiting",
+    )
+    check(
+        "a numbered choice is",
+        attention.verdict_text("  ❯ 1. Allow\n    2. Deny", [], []) == "waiting",  # noqa: RUF001
+    )
+    check(
+        "a menu drawn with another pointer glyph is",
+        attention.verdict_text("  › 2. No, keep it", [], []) == "waiting",  # noqa: RUF001
+    )
+    check(
+        "an arrow-key menu hint is",
+        attention.verdict_text("Choose one: (Use arrow keys)", [], []) == "waiting",
+    )
+    check(
+        "a traceback is an error, not a question",
+        attention.verdict_text("Traceback (most recent call last):\n  File", [], []) == "error",
+    )
     # False positives are the failure mode that erodes trust in the inbox, so
     # the finished-turn shapes that actually caused one must stay silent.
-    check("ordinary output is neither",
-          attention.verdict_text("wrote 12 files\nrunning tests", [], []) == "")
-    check("a finished-turn summary is not a question",
-          attention.verdict_text("● Done — 109.3 GB back, verified on disk", [], []) == "")
-    check("a spinner status line is not a question",
-          attention.verdict_text("✻ Sautéed for 9m 17s · 1 shell still running", [], []) == "")
-    check("a bare prompt glyph is not a question",
-          attention.verdict_text("❯", [], []) == "")  # noqa: RUF001
-    check("a plain numbered list is not a menu",
-          attention.verdict_text("1. First step\n2. Second step", [], []) == "")
-    check("a ternary in code is not a question",
-          attention.verdict_text("  const x = ok ? 1 : 2;", [], []) == "")
-    check("a long prose line ending in ? is not a prompt",
-          attention.verdict_text(
-              "this is a long explanatory sentence that trails off into a "
-              "rhetorical question aimed straight at the reader?", [], []) == "")
+    check(
+        "ordinary output is neither",
+        attention.verdict_text("wrote 12 files\nrunning tests", [], []) == "",
+    )
+    check(
+        "a finished-turn summary is not a question",
+        attention.verdict_text("● Done — 109.3 GB back, verified on disk", [], []) == "",
+    )
+    check(
+        "a spinner status line is not a question",
+        attention.verdict_text("✻ Sautéed for 9m 17s · 1 shell still running", [], []) == "",
+    )
+    check("a bare prompt glyph is not a question", attention.verdict_text("❯", [], []) == "")  # noqa: RUF001
+    check(
+        "a plain numbered list is not a menu",
+        attention.verdict_text("1. First step\n2. Second step", [], []) == "",
+    )
+    check(
+        "a ternary in code is not a question",
+        attention.verdict_text("  const x = ok ? 1 : 2;", [], []) == "",
+    )
+    check(
+        "a long prose line ending in ? is not a prompt",
+        attention.verdict_text(
+            "this is a long explanatory sentence that trails off into a "
+            "rhetorical question aimed straight at the reader?",
+            [],
+            [],
+        )
+        == "",
+    )
 
     print("service status")
+
     # The two things that make this feature honest rather than a widget: it
     # only ever asks about a CLI you actually have running, and it says
     # nothing at all when everyone is up.
@@ -425,8 +547,10 @@ def main() -> int:
         registry = reg
 
     svc = services.Services(_Panel())
-    _Store.sessions = [SimpleNamespace(cli="claude", id="s1"),
-                       SimpleNamespace(cli="shell", id="s2")]
+    _Store.sessions = [
+        SimpleNamespace(cli="claude", id="s1"),
+        SimpleNamespace(cli="shell", id="s2"),
+    ]
     asked = sorted(svc.wanted())
     check("asks only about CLIs with a tab open", asked == ["claude"], asked)
     check("and never about one with no feed", "shell" not in asked, asked)
@@ -441,31 +565,59 @@ def main() -> int:
     # A reading is only shown while it is a problem and while it is fresh.
     now = int(time.time())
     svc._seen = {
-        "claude": {"cli": "claude", "label": "Claude Code", "indicator": "none",
-                   "description": "All Systems Operational", "url": "", "checked": now},
+        "claude": {
+            "cli": "claude",
+            "label": "Claude Code",
+            "indicator": "none",
+            "description": "All Systems Operational",
+            "url": "",
+            "checked": now,
+        },
     }
     check("an operational service is not news", svc.snapshot() == [], svc.snapshot())
     svc._seen["claude"]["indicator"] = "major"
     check("a real outage is", len(svc.snapshot()) == 1, svc.snapshot())
     svc._seen["claude"]["checked"] = now - services.STALE - 1
-    check("and a reading nobody could refresh goes quiet rather than stale",
-          svc.snapshot() == [], svc.snapshot())
+    check(
+        "and a reading nobody could refresh goes quiet rather than stale",
+        svc.snapshot() == [],
+        svc.snapshot(),
+    )
 
     # Worst first, so the bar leads with the thing that matters.
     svc._seen = {
-        "a": {"cli": "a", "label": "A", "indicator": "minor", "description": "",
-              "url": "", "checked": now},
-        "b": {"cli": "b", "label": "B", "indicator": "critical", "description": "",
-              "url": "", "checked": now},
+        "a": {
+            "cli": "a",
+            "label": "A",
+            "indicator": "minor",
+            "description": "",
+            "url": "",
+            "checked": now,
+        },
+        "b": {
+            "cli": "b",
+            "label": "B",
+            "indicator": "critical",
+            "description": "",
+            "url": "",
+            "checked": now,
+        },
     }
-    check("worst first", [r["cli"] for r in svc.snapshot()] == ["b", "a"],
-          [r["cli"] for r in svc.snapshot()])
+    check(
+        "worst first",
+        [r["cli"] for r in svc.snapshot()] == ["b", "a"],
+        [r["cli"] for r in svc.snapshot()],
+    )
 
     # The fetcher refuses the same addresses the webhook refuses.
-    check("a status feed cannot be pointed at cloud metadata",
-          services.read("http://169.254.169.254/api/v2/status.json") is None)
-    check("nor at a host that does not resolve",
-          services.read("https://clique-no-such-host.invalid/api/v2/status.json") is None)
+    check(
+        "a status feed cannot be pointed at cloud metadata",
+        services.read("http://169.254.169.254/api/v2/status.json") is None,
+    )
+    check(
+        "nor at a host that does not resolve",
+        services.read("https://clique-no-such-host.invalid/api/v2/status.json") is None,
+    )
 
     print("front end")
     # There is no build step, which is the point — and it also means nothing
@@ -478,21 +630,23 @@ def main() -> int:
     else:
         for name in ("app.js", "themes.js"):
             script = ROOT / "clique" / "web" / name
-            done = subprocess.run([node, "--check", str(script)],
-                                  capture_output=True, text=True)
-            check(f"{name} parses", done.returncode == 0,
-                  done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "")
+            done = subprocess.run([node, "--check", str(script)], capture_output=True, text=True)
+            check(
+                f"{name} parses",
+                done.returncode == 0,
+                done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "",
+            )
 
         # The decisions inside app.js, tested without a browser. See
         # tools/frontend_check.js for why that is possible without a build.
-        done = subprocess.run([node, str(ROOT / "tools" / "frontend_check.js")],
-                              capture_output=True, text=True)
+        done = subprocess.run(
+            [node, str(ROOT / "tools" / "frontend_check.js")], capture_output=True, text=True
+        )
         for line in done.stdout.splitlines():
             if line.strip().startswith(("ok", "FAIL")):
                 print("  " + line.strip())
         tally = done.stdout.strip().splitlines()[-1] if done.stdout.strip() else "no output"
-        check(f"front-end logic: {tally}", done.returncode == 0,
-              done.stderr.strip()[:200])
+        check(f"front-end logic: {tally}", done.returncode == 0, done.stderr.strip()[:200])
 
     print("the unit that keeps sessions alive")
     # One line in a file nobody reads, and the entire promise of the product
@@ -500,17 +654,25 @@ def main() -> int:
     # unit's cgroup, and the tmux server is a child of the panel — so with the
     # default, upgrading CLIque kills every session it exists to protect.
     unit = (ROOT / "deploy" / "clique.service").read_text()
-    check("the service unit does not take tmux down with it",
-          "KillMode=process" in unit,
-          "KillMode is missing — a restart will kill every session")
+    check(
+        "the service unit does not take tmux down with it",
+        "KillMode=process" in unit,
+        "KillMode is missing — a restart will kill every session",
+    )
 
     print("icons")
     # The sprite is generated, and a hand-edit or a half-finished rename would
     # otherwise show up as an invisible button rather than a failure.
-    done = subprocess.run([sys.executable, str(ROOT / "tools" / "build_icons.py"), "--check"],
-                          capture_output=True, text=True)
-    check("the sprite matches the icon list", done.returncode == 0,
-          (done.stderr or done.stdout).strip()[:120])
+    done = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "build_icons.py"), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    check(
+        "the sprite matches the icon list",
+        done.returncode == 0,
+        (done.stderr or done.stdout).strip()[:120],
+    )
 
     page = (ROOT / "clique" / "web" / "index.html").read_text()
     script = (ROOT / "clique" / "web" / "app.js").read_text()
@@ -531,8 +693,9 @@ def main() -> int:
     # show up as an invisible control on somebody's light theme.
     block = page.split("<!-- icons:start -->", 1)[1].split("<!-- icons:end -->", 1)[0]
     painted = set(re.findall(r'(?:fill|stroke)="([^"]+)"', block))
-    check("no icon carries a colour of its own",
-          painted <= {"none", "currentColor"}, sorted(painted))
+    check(
+        "no icon carries a colour of its own", painted <= {"none", "currentColor"}, sorted(painted)
+    )
 
     print("mounted under a path prefix")
     # CLIque is documented as running behind `tailscale serve` at /clique,

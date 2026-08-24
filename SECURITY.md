@@ -113,13 +113,17 @@ reason not to). Mode 0600.
   Codeman keeps server-side opaque tokens and can drop one. *Worth adopting.*
 - **No schema validation library.** Input is clamped and filtered by hand.
   It is careful, but Zod-style declarative validation is harder to get wrong.
-- **File previews are fenced, but the fence has an opt-out.** `GET …/file`
-  previews a path an agent printed. By default it is fenced to the session's
-  working directory (`realpath` containment *after* resolution, plus a
-  blocklist for `.env`, `.ssh`, and credentials files); a trusted-local
-  deployment can opt out with `CLIQUE_FENCE_READS=0`. Paste and artifact routes
-  contain to the working tree unconditionally and serve with `nosniff`.
-  Arbitrary upload/download is still not offered.
+- **File previews are fenced, and never serve a credential.** `GET …/file`
+  previews a path an agent printed. Directory containment is `realpath` *after*
+  resolution — a symlink cannot smuggle a path out of the session's working
+  directory — and can be opted out on a trusted-local box with
+  `CLIQUE_FENCE_READS=0`. The credential blocklist is *not* part of that
+  opt-out: `.env` and its whole family (`.env.local`, …), private-key material
+  (`.pem`/`.key`/`.p12`), token dotfiles (`.npmrc`, `.pypirc`, `.bw-session`),
+  and whole credential directories (`.ssh`, `.aws`, `.gnupg`, …) are refused
+  whether or not the fence is on. Paste and artifact routes contain to the
+  working tree unconditionally and serve with `nosniff`. Arbitrary
+  upload/download is still not offered.
 - **No audit log.** Who logged in, from where, and when is not recorded.
 - **The review diff shows untracked files.** `GET …/diff` needs only read
   scope and renders untracked, non-gitignored files in full — so an `.env` the

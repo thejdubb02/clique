@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.79 — 2026-08-24 10:47 PDT
+
+**A file preview never hands back a secret.** The click-to-preview that reads a
+path an agent printed already stayed inside the session's directory; now the
+credential block stands on its own — enforced whether or not that directory
+fence is on — and it covers what actually sits on a dev box: `.env` and its
+variants, private keys (`.pem`/`.key`/`.p12`), token files like `.npmrc`,
+`.pypirc` and `.bw-session`, and whole credential folders (`.ssh`, `.aws`, …).
+Containment now resolves symlinks before deciding, so a link inside the
+directory can't point out of it to escape the fence.
+
 ## 0.50.78 — 2026-08-24 10:32 PDT
 
 **A stopped-on-error session now stands out.** A session waiting on you already
