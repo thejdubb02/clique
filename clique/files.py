@@ -12,6 +12,7 @@ ordinary case of an agent printing an absolute path.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from pathlib import Path
@@ -144,6 +145,42 @@ def resolve(cwd: str, raw: str) -> Path:
     if _FENCE:
         _fence(cwd, target)
     return target
+
+
+#: The most an in-browser edit may write back. Generous next to the 256 KB read
+#: cap — the editor only ever opens a file that read whole, never a truncated one
+#: — but bounded, because this is what turns a text box into a write to disk.
+EDIT_CAP = 2 * 1024 * 1024
+
+
+def write(cwd: str, raw: str, text: str) -> int:
+    """Save edited text back to a path the pane pointed at.
+
+    The gate is a read's gate, reused whole: ``resolve`` refuses a credential
+    file and — with the fence on — anything that resolves outside the session's
+    directory, symlinks followed. On top of that a save only ever *overwrites an
+    existing regular file*: it will not create one, and it will not touch a
+    directory or a device. Written atomically (temp then rename) so a failure
+    mid-write cannot leave a half-file, with the file's own mode preserved.
+    """
+    target = resolve(cwd, raw)  # raises ValueError on a credential / an escape
+    data = text.encode("utf-8")
+    if len(data) > EDIT_CAP:
+        raise ValueError("too large to save from here")
+    if not target.is_file():
+        raise ValueError("not an editable file")
+    mode = target.stat().st_mode & 0o777
+    tmp = target.with_name(target.name + ".clique-save")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, target)
+    except OSError:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
+    return len(data)
 
 
 def inspect(cwd: str, raw: str) -> dict:

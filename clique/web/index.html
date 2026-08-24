@@ -269,11 +269,15 @@
     </div>
     <p class="note" id="fileNote" hidden></p>
     <pre id="fileText" hidden></pre>
+    <textarea id="fileEdit" class="file-edit" spellcheck="false" hidden></textarea>
     <div id="fileTurns" hidden></div>
     <img id="fileImg" alt="" hidden>
     <div class="file-foot">
       <code id="filePath"></code>
       <span class="art-acts">
+        <button type="button" id="fileEditBtn" hidden>Edit</button>
+        <button type="button" id="fileSave" class="primary" hidden>Save</button>
+        <button type="button" id="fileCancel" hidden>Cancel</button>
         <button type="button" id="fileSend">Send path</button>
         <button type="button" id="fileCopy">Copy path</button>
       </span>

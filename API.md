@@ -408,6 +408,16 @@ anyone who can reach the panel already has a shell as this user.
 `truncated` is true when there is more. `?raw=1` on an image returns the
 bytes, typed from magic, same as an artifact.
 
+### `POST /api/sessions/<id>/file` — `{path, text}`
+
+Save edited text back to a file. Write scope. The path is resolved and fenced
+exactly as the read is — a credential file and (with the fence on) anything
+that resolves outside the session's directory are refused, symlinks followed —
+and a save only ever **overwrites an existing regular file** (never creates one,
+never a directory or device). Atomic (temp then rename), the file's mode
+preserved, capped at 2 MB. Returns `{"ok": true, "bytes": n}`; a refused or
+too-large save is a `400` with a reason.
+
 A compiler-style suffix (`foo.py:12` or `foo.py:12:4`) is stripped. This is
 not an editor.
 

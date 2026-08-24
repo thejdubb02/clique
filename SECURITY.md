@@ -126,7 +126,11 @@ reason not to). Mode 0600.
   and whole credential directories (`.ssh`, `.aws`, `.gnupg`, …) are refused
   whether or not the fence is on. Paste and artifact routes contain to the
   working tree unconditionally and serve with `nosniff`. Arbitrary
-  upload/download is still not offered.
+  upload/download is still not offered. **Editing** (`POST …/file`, write scope)
+  saves through the *same* `resolve` gate — so it cannot escape the directory or
+  overwrite a credential — and only ever overwrites an existing regular file,
+  atomically, mode preserved, capped at 2 MB; it never creates a file, and the
+  `attention`-only hook token in every pane cannot reach it.
 - **No audit log.** Who logged in, from where, and when is not recorded.
 - **The review diff shows untracked files.** `GET …/diff` needs only read
   scope and renders untracked, non-gitignored files in full — so an `.env` the

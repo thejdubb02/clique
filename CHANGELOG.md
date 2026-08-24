@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.87 — 2026-08-24 12:37 PDT
+
+**Edit files in place.** Open a text file from a session — click a path, or the
+file sheet — and there's now an Edit button: change it and Save writes it back to
+disk (Ctrl/Cmd+S saves, Esc backs out). It's held to the same fence as the
+viewer: only files inside the session's own directory, never a credential like
+`.env` or a key, and only files that already exist — so an edit can't wander off
+or overwrite a secret, and it can't create files. A big file that was only shown
+in part can't be edited (you'd save back a fraction of it), and the write is
+atomic with the file's permissions preserved.
+
 ## 0.50.86 — 2026-08-24 12:19 PDT
 
 **Undo a stop.** Stopping a session now leaves a one-click "Undo" in the corner

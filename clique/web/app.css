@@ -1319,6 +1319,16 @@ a.give-value { color: var(--accent); }
   padding: 12px; font-size: 12px; line-height: 1.45;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* The editor stands in for the preview in the same spot, same look, so Edit is
+   a mode switch rather than a new window. */
+.file-edit {
+  width: 100%; box-sizing: border-box; height: 60vh; resize: vertical;
+  margin: 0 0 12px; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--accent); border-radius: 6px; padding: 12px;
+  font-family: var(--mono, monospace); font-size: 12px; line-height: 1.45;
+  tab-size: 4;
+}
+.file-edit:focus { outline: none; }
 #fileImg { max-width: 100%; max-height: 60vh; object-fit: contain;
            border-radius: 6px; background: var(--bg); display: block;
            margin: 0 auto 12px; }

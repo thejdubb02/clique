@@ -236,6 +236,43 @@ def main() -> int:
         big["truncated"] and len(big["text"]) == files.TEXT_CAP,
         big["size"],
     )
+
+    # files.write: the same gate as a read, plus overwrite-existing-only.
+    (tmp / "note.md").chmod(0o640)
+    n = files.write(str(tmp), "note.md", "edited\n")
+    check(
+        "saves edited text back to an existing file",
+        n == 7 and (tmp / "note.md").read_text() == "edited\n",
+    )
+    check("preserves the file's mode on save", ((tmp / "note.md").stat().st_mode & 0o777) == 0o640)
+
+    def _refused(reason, *args):
+        try:
+            files.write(*args)
+        except (ValueError, OSError):
+            return True
+        return False
+
+    check("save refuses a credential file", _refused("cred", str(tmp), ".env", "x"))
+    check(
+        "save refuses outside the session dir",
+        _refused("escape", str(tmp / "sub"), "../note.md", "x"),
+    )
+    check("save will not create a new file", _refused("new", str(tmp), "brand-new.md", "x"))
+    check("save refuses a directory", _refused("dir", str(tmp), "sub", "x"))
+    outside2 = Path(tempfile.mkdtemp(prefix="clique-outside2-"))
+    (outside2 / "keep.txt").write_text("out\n", encoding="utf-8")
+    try:
+        (tmp / "esc").symlink_to(outside2 / "keep.txt")
+        check(
+            "save refuses a symlink that resolves out of the dir",
+            _refused("symesc", str(tmp), "esc", "hacked"),
+        )
+        check("and the symlink target is untouched", (outside2 / "keep.txt").read_text() == "out\n")
+    except OSError:
+        pass  # no symlinks on this fs — skip
+    finally:
+        shutil.rmtree(outside2, ignore_errors=True)
     shutil.rmtree(tmp, ignore_errors=True)
 
     print("tokens")

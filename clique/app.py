@@ -1843,6 +1843,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if path.startswith("/api/sessions/") and path.endswith("/send"):
                 return self._send_input(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/file"):
+                return self._file_write(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/paste"):
                 return self._paste_image(path.split("/")[3], body)
             if path == "/api/webhook/test":
@@ -1933,6 +1935,29 @@ class Handler(BaseHTTPRequestHandler):
         if not session:
             return self._json({"error": "no such session"}, 404)
         return self._json(files.inspect(session.cwd, asked))
+
+    def _file_write(self, session_id: str, body: dict) -> None:
+        """Save edited text back to a file, behind the write gate.
+
+        The path is resolved and fenced exactly as a read is (`files.write` reuses
+        `files.resolve`), so a save cannot escape the session directory or touch a
+        credential file, and only ever overwrites an existing regular file. The
+        write scope is already enforced by the gate above — an `attention`-only
+        hook token, which every pane carries, cannot reach here."""
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        text = body.get("text")
+        asked = str(body.get("path") or "")
+        if not isinstance(text, str):
+            return self._json({"error": "text is required"}, 400)
+        try:
+            written = files.write(session.cwd, asked, text)
+        except ValueError as exc:
+            return self._json({"error": str(exc)}, 400)
+        except OSError:
+            return self._json({"error": "could not save the file"}, 500)
+        return self._json({"ok": True, "bytes": written})
 
     def _file_raw(self, session_id: str, asked: str) -> None:
         """The bytes of an image the pane pointed at."""

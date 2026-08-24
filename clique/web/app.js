@@ -3216,6 +3216,8 @@ function wireLinks(term, sessionId) {
  * person already has, and opening it is what Send path is for. */
 let fileAsked = "";
 let fileSession = "";
+let currentFile = null;   // the info the file sheet last rendered, for editing
+let fileEditing = false;
 
 function filePathNow() {
   return ($("#filePath").textContent || fileAsked || "").trim();
@@ -3518,12 +3520,75 @@ function showFile(info) {
     note.hidden = false;
     note.textContent = "Nothing at that path from this session’s directory.";
   }
+
+  // Editing rides the preview: only an untruncated text file offers Edit (a
+  // truncated one would save back a fraction of itself), and never a directory,
+  // image, or credential — the server refuses those regardless.
+  currentFile = info;
+  fileEditing = false;
+  $("#fileEdit").hidden = true;
+  $("#fileSave").hidden = true;
+  $("#fileCancel").hidden = true;
+  $("#fileEditBtn").hidden = !fileEditable(info);
+  $("#fileSend").hidden = false;
+  $("#fileCopy").hidden = false;
+}
+
+function fileEditable(info) {
+  return !!(info && info.kind === "text" && !info.truncated && info.path);
+}
+
+function startFileEdit() {
+  if (!fileEditable(currentFile)) return;
+  fileEditing = true;
+  const ta = $("#fileEdit");
+  ta.value = currentFile.text || "";
+  ta.hidden = false;
+  $("#fileText").hidden = true;
+  $("#fileNote").hidden = true;
+  for (const sel of ["#fileEditBtn", "#fileSend", "#fileCopy"]) $(sel).hidden = true;
+  $("#fileSave").hidden = false;
+  $("#fileCancel").hidden = false;
+  ta.focus();
+}
+
+function cancelFileEdit() {
+  fileEditing = false;
+  $("#fileEdit").hidden = true;
+  if (currentFile) showFile(currentFile);   // back to the preview we came from
+}
+
+async function saveFileEdit() {
+  if (!fileEditing || !currentFile) return;
+  const text = $("#fileEdit").value;
+  const save = $("#fileSave");
+  save.disabled = true;
+  try {
+    await api("api/sessions/" + encodeURIComponent(fileSession) + "/file", {
+      method: "POST",
+      body: JSON.stringify({ path: currentFile.path || fileAsked, text }),
+    });
+    // Reflect what is now on disk, then drop back to the preview.
+    currentFile = { ...currentFile, text, size: new TextEncoder().encode(text).length };
+    fileEditing = false;
+    $("#fileEdit").hidden = true;
+    showFile(currentFile);
+    toast("Saved " + (currentFile.name || "file"));
+  } catch (err) {
+    toast("Could not save — " + (err.message || err), true);
+  } finally {
+    save.disabled = false;
+  }
 }
 
 function closeFileSheet() {
   $("#file").hidden = true;
   $("#fileImg").removeAttribute("src");
   $("#fileText").textContent = "";
+  $("#fileEdit").hidden = true;
+  $("#fileEdit").value = "";
+  fileEditing = false;
+  currentFile = null;
   fileAsked = "";
   fileSession = "";
 }
@@ -6213,6 +6278,14 @@ function wire() {
   $("#fileCopy").onclick = () => {
     const path = filePathNow();
     if (path) copyText(path).then(() => toast("Path copied"));
+  };
+  $("#fileEditBtn").onclick = startFileEdit;
+  $("#fileSave").onclick = saveFileEdit;
+  $("#fileCancel").onclick = cancelFileEdit;
+  // Ctrl/Cmd+S saves from inside the editor; Escape backs out to the preview.
+  $("#fileEdit").onkeydown = (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "s") { ev.preventDefault(); saveFileEdit(); }
+    else if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); cancelFileEdit(); }
   };
 
   // Capture phase: xterm handles paste on its own textarea, so this has to see
