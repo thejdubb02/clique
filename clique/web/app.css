@@ -1731,17 +1731,34 @@ body.win-flash::after {
  * flow at the foot of the page (the board fell entirely below the fold). This
  * is that rule: a scrim fixed to the viewport, centring the .sheet card. Toast
  * (z-index 70) still sits above them. */
-#inbox, #diff, #board, #broadcast {
+#inbox, #diff, #board, #broadcast, #confirmSheet {
   position: fixed; inset: 0; z-index: 65;
   background: var(--scrim);
   display: grid; place-items: center; padding: 24px;
 }
+#confirmSheet { z-index: 80; }   /* it can open over another sheet */
 #inbox .sheet, #broadcast .sheet { width: min(560px, 94vw); }
-#inbox .sheet, #board .sheet, #broadcast .sheet {
+#inbox .sheet, #board .sheet, #broadcast .sheet, #confirmSheet .sheet {
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 16px; max-height: 84vh; overflow: auto;
   display: flex; flex-direction: column; box-shadow: 0 18px 48px var(--shadow);
 }
+
+/* --------------------------------------------------------------- confirm */
+
+#confirmSheet .sheet.confirm { width: min(440px, 94vw); }
+.confirm-detail {
+  margin: 4px 0 14px; padding: 9px 11px; border-radius: 6px;
+  background: var(--field); border: 1px solid var(--line);
+  font-family: var(--mono, monospace); font-size: 12px; color: var(--fg);
+  white-space: pre-wrap; word-break: break-all; max-height: 30vh; overflow: auto;
+}
+.confirm-foot { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-foot button {
+  font: inherit; padding: 7px 14px; border-radius: 4px; cursor: pointer;
+  background: var(--field); color: var(--fg); border: 1px solid var(--line);
+}
+.confirm-foot button.danger { background: var(--err); color: var(--on-accent); border-color: var(--err); }
 
 /* --------------------------------------------------------------- broadcast */
 

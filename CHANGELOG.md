@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.82 — 2026-08-24 11:42 PDT
+
+**A confirm before a command that looks destructive.** Send or broadcast
+something matching a short list of catastrophic patterns — `rm -rf /`, `mkfs`, a
+force-push, `drop database` — and CLIque asks once before it goes, showing you
+the exact command. It's a guard against a fat-fingered slip, not a block: the
+pane still has a shell, and everyday `rm -rf ./build` is left alone on purpose,
+because a guard that cries wolf gets switched off. The pattern list, and the
+whole feature, are yours to edit or turn off in Settings → Notifications →
+Command safety.
+
 ## 0.50.81 — 2026-08-24 11:18 PDT
 
 **Lock a session read-only while you read it.** Reviewing a pane on a phone —

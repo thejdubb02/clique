@@ -332,6 +332,21 @@
   </div>
 </div>
 
+<div id="confirmSheet" hidden>
+  <div class="sheet confirm">
+    <header class="sheet-head">
+      <h2 id="confirmTitle">Are you sure?</h2>
+      <button type="button" id="confirmCancel" class="hdr-btn" title="Cancel"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </header>
+    <p class="note" id="confirmMsg"></p>
+    <pre id="confirmDetail" class="confirm-detail" hidden></pre>
+    <div class="confirm-foot">
+      <button type="button" id="confirmNo">Cancel</button>
+      <button type="button" id="confirmOk" class="danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <div id="inbox" hidden>
   <div class="sheet">
     <header class="sheet-head">
@@ -526,6 +541,18 @@
          but a CLI pausing to think looks the same as one that is done — raise
          the delay if it fires too eagerly.</p>
       <button type="button" id="testChime">Test the chime</button>
+
+      <h3>Command safety</h3>
+      <label class="check"><input type="checkbox" id="setConfirmDestructive">
+        Ask before sending a command that looks destructive</label>
+      <p class="note">A one-click confirm before a matching command is sent from
+         the prompt or a broadcast — a guard against a fat-fingered
+         <code>rm -rf /</code>, not a block; the pane still has a shell. Match
+         strings are plain text, one per line, case-insensitive. The defaults are
+         the catastrophic ones — everyday <code>rm -rf ./build</code> is left
+         alone on purpose, because a guard that cries wolf gets switched off.</p>
+      <textarea id="setDestructivePatterns" rows="6" spellcheck="false"
+                placeholder="one match string per line"></textarea>
 
       <h3>Service status</h3>
       <label class="check"><input type="checkbox" id="setServices">

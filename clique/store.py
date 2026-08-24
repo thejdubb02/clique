@@ -174,6 +174,31 @@ DEFAULT_SETTINGS = {
     #: enough to feel immediate, long enough that a CLI pausing to think does
     #: not read as done.
     "notify_idle_seconds": 4,
+    #: A one-click confirm before a command that matches one of the patterns
+    #: below is sent from the prompt box or a broadcast. Not a block, and not a
+    #: guarantee — the pane still has a shell — but a guard against the
+    #: fat-fingered catastrophe. Patterns are plain, case-insensitive substrings
+    #: (a string in a list, the same shape as every other pattern here — never a
+    #: regex to mis-write), editable in Settings. The defaults are the
+    #: catastrophic-and-rarely-meant ones; everyday `rm -rf ./build` is
+    #: deliberately not among them, because a guard that cries wolf is turned off.
+    "confirm_destructive": True,
+    "destructive_patterns": [
+        "rm -rf /",
+        "rm -rf ~",
+        "rm -rf $HOME",
+        "rm -fr /",
+        "mkfs",
+        "of=/dev/",
+        "> /dev/sd",
+        "> /dev/nvme",
+        ":(){",
+        "git push --force",
+        "git push -f",
+        "git reset --hard",
+        "drop database",
+        "drop table",
+    ],
     #: The workspace: which sessions have a tab, in what order, and which one
     #: you were looking at. On the server with everything else a person chose,
     #: because losing it is the expensive kind of loss — twelve panes reopened
@@ -344,6 +369,22 @@ def _clean_ids(value, limit: int = 200) -> list[str]:
         text = str(raw or "")[:64]
         if text and text not in out:
             out.append(text)
+    return out
+
+
+def _clean_patterns(value) -> list[str]:
+    """Match strings for the destructive-command confirm: trimmed, deduped,
+    bounded. Plain substrings, so nothing here is compiled or executed — a
+    hostile settings write is at worst a list of harmless strings."""
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for raw in value:
+        text = str(raw or "").strip()[:120]
+        if text and text not in out:
+            out.append(text)
+        if len(out) >= 100:
+            break
     return out
 
 
@@ -611,6 +652,8 @@ class Store:
                     self.settings[key] = str(value or "")[:64]
                 elif key == "snippets":
                     self.settings[key] = _clean_snippets(value)
+                elif key == "destructive_patterns":
+                    self.settings[key] = _clean_patterns(value)
                 elif key.startswith("css_"):
                     self.settings[key] = str(value or "")[:MAX_CSS_CHARS]
                 elif key == "webhook_url":

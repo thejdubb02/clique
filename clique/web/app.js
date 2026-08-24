@@ -92,6 +92,58 @@ function hintReviewLocked() {
         { label: "Unlock", run: () => toggleReviewLock(activeId) });
 }
 
+/* A confirm before a command that looks destructive is sent. The patterns are
+ * plain, case-insensitive substrings from settings — never a regex to mis-write
+ * or a shell to guess at — and this only ever returns which one matched; the
+ * decision is the caller's. */
+function destructiveHit(text) {
+  if (!state.settings || state.settings.confirm_destructive === false) return "";
+  const hay = String(text || "").toLowerCase();
+  for (const p of (state.settings.destructive_patterns || [])) {
+    const needle = String(p || "").toLowerCase().trim();
+    if (needle && hay.includes(needle)) return p;
+  }
+  return "";
+}
+
+/* A promise-based confirm sheet: resolves true on the primary button, false on
+ * cancel, the X, the backdrop, or Escape — so the safe answer is the easy one.
+ * There is deliberately no Enter-to-confirm: this exists to make a reflex pause,
+ * and a muscle-memory Enter that confirmed it would defeat the whole point. */
+let _confirmResolve = null;
+let _confirmKeyHandler = null;
+function confirmAction({ title, message, detail = "", okLabel = "Confirm", danger = false }) {
+  return new Promise((resolve) => {
+    if (_confirmResolve) closeConfirm(false);   // never strand an earlier one
+    _confirmResolve = resolve;
+    $("#confirmTitle").textContent = title || "Are you sure?";
+    $("#confirmMsg").textContent = message || "";
+    const det = $("#confirmDetail");
+    det.hidden = !detail;
+    det.textContent = detail || "";
+    const ok = $("#confirmOk");
+    ok.textContent = okLabel;
+    ok.classList.toggle("danger", !!danger);
+    $("#confirmSheet").hidden = false;
+    $("#confirmNo").focus();   // cancel is where the keyboard lands
+    _confirmKeyHandler = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault(); e.stopPropagation(); closeConfirm(false);
+    };
+    document.addEventListener("keydown", _confirmKeyHandler, true);
+  });
+}
+function closeConfirm(result) {
+  if ($("#confirmSheet").hidden) return;
+  $("#confirmSheet").hidden = true;
+  if (_confirmKeyHandler) {
+    document.removeEventListener("keydown", _confirmKeyHandler, true);
+    _confirmKeyHandler = null;
+  }
+  const r = _confirmResolve; _confirmResolve = null;
+  if (r) r(!!result);
+}
+
 /* Unread: this pane has produced output since you last looked at it.
  *
  * Flashing says *something happened*; this says *what you have not seen*, and
@@ -785,7 +837,10 @@ function closeBroadcast() {
 async function sendBroadcast() {
   const ids = broadcastSelectedIds();
   if (!ids.length) return;
-  const body = { ids, text: $("#broadcastText").value, enter: true };
+  const text = $("#broadcastText").value;
+  // The blast radius makes the guard matter most here — one command into many.
+  if (!await okToSend(text, `${ids.length} session${ids.length === 1 ? "" : "s"}`)) return;
+  const body = { ids, text, enter: true };
   try {
     const r = await api("api/broadcast", { method: "POST", body: JSON.stringify(body) });
     const n = r && r.count;
@@ -4767,9 +4822,23 @@ function expandInBox(box) {
 
 /* --------------------------------------------------------------- input bar */
 
+/* True to go ahead: either nothing matched, or the confirm was accepted. */
+async function okToSend(text, whoLabel) {
+  const hit = destructiveHit(text);
+  if (!hit) return true;
+  return confirmAction({
+    title: "This looks destructive",
+    message: `Matched “${hit}”. Send it to ${whoLabel}?`,
+    detail: String(text).trim(),
+    okLabel: "Send anyway", danger: true,
+  });
+}
+
 async function run(text) {
   if (!text.trim() || !activeId) return;
   if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
+  const who = session(activeId);
+  if (!await okToSend(text, `“${who ? who.name : "this session"}”`)) return;
   for (let i = 0; i < repeat; i++) {
     if (!control({ type: "run", text, enter: true })) {
       await api(`api/sessions/${activeId}/send`, {
@@ -4790,6 +4859,7 @@ async function runShell(text) {
   const current = session(activeId);
   if (!current) return;
   if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
+  if (!await okToSend(text, "a shell for this directory")) return;
   let shell = state.sessions.find(
     (s) => s.cli === "shell" && s.cwd === current.cwd && s.alive);
   if (!shell) {
@@ -5563,6 +5633,11 @@ function openSettings() {
   $("#setFlash").checked = s.notify_flash !== false;
   $("#setServices").checked = s.service_status !== false;
   $("#setSound").checked = !!s.notify_sound;
+  $("#setConfirmDestructive").checked = s.confirm_destructive !== false;
+  // Not repainted mid-edit: a poll landing while you type would jump the cursor.
+  if (document.activeElement !== $("#setDestructivePatterns")) {
+    $("#setDestructivePatterns").value = (s.destructive_patterns || []).join("\n");
+  }
   $("#setIdle").value = s.notify_idle_seconds || 4;
   $("#outIdle").textContent = s.notify_idle_seconds || 4;
 
@@ -5802,6 +5877,13 @@ function wire() {
   $("#setServices").onchange = (ev) =>
     saveSettings({ service_status: ev.target.checked }).then(renderServices);
   $("#setSound").onchange = (ev) => saveSettings({ notify_sound: ev.target.checked });
+  $("#setConfirmDestructive").onchange = (ev) =>
+    saveSettings({ confirm_destructive: ev.target.checked });
+  // On blur, like the artifact dirs: a half-typed pattern is not a setting.
+  $("#setDestructivePatterns").onblur = (ev) =>
+    saveSettings({
+      destructive_patterns: ev.target.value.split("\n").map((x) => x.trim()).filter(Boolean),
+    });
   $("#testChime").onclick = chime;
 
   // Sliders paint live and save on release: saving per pixel would be a
@@ -5958,6 +6040,10 @@ function wire() {
   $("#run").onclick = () => run($("#prompt").value);
   $("#runShell").onclick = () => runShell($("#prompt").value);
   $("#reviewLock").onclick = () => toggleReviewLock(activeId);
+  $("#confirmOk").onclick = () => closeConfirm(true);
+  $("#confirmNo").onclick = () => closeConfirm(false);
+  $("#confirmCancel").onclick = () => closeConfirm(false);
+  $("#confirmSheet").onclick = (ev) => { if (ev.target === $("#confirmSheet")) closeConfirm(false); };
   $("#repPlus").onclick = () => setRepeat(repeat + 1);
   $("#repMinus").onclick = () => setRepeat(repeat - 1);
 

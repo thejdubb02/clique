@@ -581,6 +581,8 @@ front of you (sidebar width, sidebar shown or hidden).
 | `notify_flash` | bool | Flash a tab whose session finished |
 | `notify_sound` | bool | Off by default: a room with twenty agents would be unbearable |
 | `notify_idle_seconds` | 2–120 | Quiet before a session counts as finished |
+| `confirm_destructive` | bool | Ask for a one-click confirm before a command matching `destructive_patterns` is sent from the prompt or a broadcast. A guard, not a block. On by default |
+| `destructive_patterns` | list of strings | Plain, case-insensitive match substrings (never regex — nothing here is compiled or executed); trimmed, deduplicated, capped at 100 × 120 chars. Defaults to the catastrophic-and-rarely-meant commands (`rm -rf /`, `mkfs`, force-push, `drop database`, …); everyday `rm -rf ./build` is deliberately excluded |
 | `open_tabs` | list of session ids | The workspace: which sessions have a tab, in order. Deduplicated, order preserved |
 | `active_tab` | session id | Which one was in front |
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
