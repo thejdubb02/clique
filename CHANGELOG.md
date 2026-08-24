@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.50.84 — 2026-08-24 12:10 PDT
+
+**A clear × in the session search.** Type to filter the sidebar and a small ×
+appears at the right of the box; click it to clear the search and see every
+session again. It stays hidden while the box is empty.
+
 ## 0.50.83 — 2026-08-24 11:58 PDT
 
 **Sessions name themselves from your first prompt.** Spin up a shell in a

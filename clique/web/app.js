@@ -1508,6 +1508,13 @@ function toggleActiveOnly() {
   renderTree();   // the fingerprint carries activeOnly, so this rebuilds
 }
 
+/* The clear × shows only when the search box has something in it. */
+function syncQClear() {
+  const btn = $("#qClear");
+  const q = $("#q");
+  if (btn && q) btn.hidden = q.value === "";
+}
+
 function renderTree() {
   const tree = $("#tree");
 
@@ -5816,7 +5823,14 @@ function renderSnippetRows() {
 /* ------------------------------------------------------------------- wiring */
 
 function wire() {
-  $("#q").oninput = renderTree;
+  $("#q").oninput = () => { syncQClear(); renderTree(); };
+  $("#qClear").onclick = () => {
+    const q = $("#q");
+    q.value = "";
+    syncQClear();
+    renderTree();
+    q.focus();
+  };
   $("#newTab").onclick = openModal;
   $("#settingsBtn").onclick = openSettings;
   $("#whatsNew").onclick = () => showChangelog(baseVersion(state.version));
