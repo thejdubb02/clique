@@ -1472,7 +1472,7 @@ function treeFingerprint() {
     ago(x.created), x.cli_session_id || "",
   ].join("\x1f")).join("\x1e");
   const folders = (state.folders || []).map((f) =>
-    [f.id, f.name, f.color, f.collapsed ? 1 : 0].join("\x1f")).join("\x1e");
+    [f.id, f.name, f.color, f.emoji || "", f.collapsed ? 1 : 0].join("\x1f")).join("\x1e");
   const hist = (resumable || []).map((c) => [
     c.cli_session_id || "", c.label, c.cwd, c.folder || "",
     ago(c.updated), c.repeats || 1, c.cli || "",
@@ -1608,7 +1608,9 @@ function renderTree() {
     const editable = !group.pinned && group.id.startsWith("f-");
     head.innerHTML =
       `<span class="caret">${icon(group.collapsed ? "chevron-right" : "chevron-down")}</span>` +
-      `<i class="dot" style="background:${cssColor(group.color)}"></i>` +
+      (group.emoji
+        ? `<span class="folder-emoji" aria-hidden="true">${escapeHtml(group.emoji)}</span>`
+        : `<i class="dot" style="background:${cssColor(group.color)}"></i>`) +
       `<span class="name">${escapeHtml(group.name)}</span>` +
       (editable ? `<button class="folder-edit" title="Rename, recolor or delete">${icon("pencil")}</button>` : "") +
       `<span class="count">${shown.length}` +
@@ -2293,6 +2295,16 @@ function folderMenu(ev, folder) {
   ev.stopPropagation();
   showMenu(ev, [
     ["Change color", () => colorPicker(ev, folder)],
+    [folder.emoji ? "Change emoji (or clear)" : "Set an emoji", async () => {
+      // A plain prompt: paste or type an emoji, or leave it blank to go back to
+      // the colour dot. Bounded and escaped on the server and on render.
+      const emoji = prompt("Emoji for this folder (blank to clear)", folder.emoji || "");
+      if (emoji === null) return;   // cancelled, as distinct from cleared
+      await api("api/folders/" + folder.id, {
+        method: "PATCH", body: JSON.stringify({ emoji: emoji.trim() }),
+      });
+      refresh();
+    }],
     ["Rename folder", async () => {
       const name = prompt("Folder name", folder.name);
       if (name) {

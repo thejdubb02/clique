@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.50.88 — 2026-08-24 13:15 PDT
+
+**Folders can wear an emoji.** A folder's menu now has "Set an emoji" — give a
+folder a 🚀 or a 🐛 in place of its colour dot, for faster recognition down the
+sidebar. Leave it blank to go back to the dot.
+
 ## 0.50.87 — 2026-08-24 12:37 PDT
 
 **Edit files in place.** Open a text file from a session — click a path, or the

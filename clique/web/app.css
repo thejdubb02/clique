@@ -150,6 +150,10 @@ body {
 }
 .folder-head .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-head .count { font-size: 10px; opacity: .75; }
+/* An emoji in the dot's slot: a hair wider, since a glyph needs more room than
+   a 7px dot, so the names still line up whichever a folder uses. */
+.folder-head .folder-emoji { flex: 0 0 auto; width: 13px; text-align: center;
+                             font-size: 12px; line-height: 1; }
 
 /* Editing a folder was right-click only, which is not a thing anyone finds.
    The pencil appears on hover and opens the same menu. It holds its space

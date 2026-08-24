@@ -641,6 +641,7 @@ class Panel:
                     "id": f.id,
                     "name": f.name,
                     "color": f.color,
+                    "emoji": f.emoji,
                     "collapsed": f.collapsed,
                     "order": f.order,
                 }
@@ -2143,6 +2144,7 @@ class Handler(BaseHTTPRequestHandler):
                     parts[2],
                     name=body.get("name"),
                     color=body.get("color"),
+                    emoji=body.get("emoji"),
                     collapsed=body.get("collapsed"),
                 )
                 # The record, for the same reason POST returns it: a colour

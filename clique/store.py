@@ -280,6 +280,8 @@ class Folder:
     id: str
     name: str
     color: str = "#8b8b8b"
+    #: An optional emoji shown in place of the colour dot. Empty = the dot.
+    emoji: str = ""
     match: list[str] = field(default_factory=list)
     collapsed: bool = False
     order: int = 0
@@ -821,6 +823,10 @@ class Store:
                     continue
                 if key == "color":
                     value = colour(value, found.color)
+                elif key == "emoji":
+                    # Display text, escaped on render — bounded, not parsed. A
+                    # couple of code points plus their variation selectors / ZWJ.
+                    value = str(value or "").strip()[:16]
                 setattr(found, key, value)
             self._write()
             return found
