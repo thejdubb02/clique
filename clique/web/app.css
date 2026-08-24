@@ -459,6 +459,25 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
 .runsplit button:last-child { border-radius: 0 4px 4px 0; border-left: 1px solid var(--line); }
 button.primary { background: var(--accent); color: var(--on-accent); }
 
+/* Read-only review lock. The button lights amber when on — the "hold, don't
+   touch" colour the waiting states use, not the accent that means active — and
+   the whole input surface reads as closed: the prompt dims and cannot be typed
+   into, Run/Shell go dead, and the terminal wears a corner tag so a pane that
+   swallows your keys says why. */
+#reviewLock { flex: 0 0 auto; align-self: center; }
+#reviewLock.on { color: var(--warn); background: var(--row); }
+#inputbar.locked #prompt { opacity: .55; cursor: not-allowed; }
+#inputbar.locked .runsplit button { opacity: .5; cursor: not-allowed; }
+#termwrap.review-locked::after {
+  content: "read-only"; position: absolute; top: 8px; right: 12px; z-index: 5;
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 3px 8px;
+  border-radius: 999px; background: var(--panel); color: var(--warn);
+  border: 1px solid var(--warn); pointer-events: none;
+}
+/* A locked session carries a small lock on its tab, so you can see which panes
+   are held read-only without opening each. */
+.tab.locked .label::after { content: " \1F512"; font-size: 9px; opacity: .8; }
+
 /* -------------------------------------------------------------------- modal */
 
 #modal { position: fixed; inset: 0; background: var(--scrim); display: grid;

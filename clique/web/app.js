@@ -58,6 +58,40 @@ let viewsCollapsed = new Set(["__archived"]);
 const wasBusy = new Map();
 const attention = new Set();   // session ids waiting to be looked at
 
+/* Sessions held read-only for review: the prompt, the mobile keys, and live
+ * terminal typing are all withheld, so reading a pane — scrolling its output,
+ * resting a thumb on the glass — cannot accidentally send anything into it.
+ * Browser-local and per-session, remembered across reloads. */
+let reviewLocked = new Set((() => {
+  try {
+    const v = JSON.parse(localStorage.getItem("clique.reviewLocked") || "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch (e) { return []; }
+})());
+function reviewLockedOf(id) { return !!id && reviewLocked.has(id); }
+function persistReviewLocked() {
+  try { localStorage.setItem("clique.reviewLocked", JSON.stringify([...reviewLocked])); }
+  catch (e) { /* private mode: the lock still holds for this window */ }
+}
+function toggleReviewLock(id) {
+  id = id || activeId;
+  if (!id) return;
+  if (reviewLocked.has(id)) reviewLocked.delete(id);
+  else reviewLocked.add(id);
+  persistReviewLocked();
+  renderInputBar();
+  renderTabs();
+  if (id === activeId && !reviewLocked.has(id)) $("#prompt").focus();
+}
+let _lockHintAt = 0;
+function hintReviewLocked() {
+  const now = Date.now();
+  if (now - _lockHintAt < 3000) return;   // one nudge, not one per keystroke
+  _lockHintAt = now;
+  toast("Locked for review — unlock to type", false,
+        { label: "Unlock", run: () => toggleReviewLock(activeId) });
+}
+
 /* Unread: this pane has produced output since you last looked at it.
  *
  * Flashing says *something happened*; this says *what you have not seen*, and
@@ -2017,6 +2051,8 @@ function sessionMenu(ev, s) {
     ...windowMoveItems(s),
     [s.archived ? "Unarchive" : "Archive", () => setArchived(s, !s.archived)],
     [s.pinned ? "Unpin from top" : "Pin to top", () => setPinned(s, !s.pinned)],
+    [reviewLockedOf(s.id) ? "Unlock (read-only)" : "Lock read-only for review",
+     () => toggleReviewLock(s.id)],
     [s.alive ? "Kill session" : "Delete session", () => killSession(s), true],
   ]);
 }
@@ -2325,6 +2361,7 @@ function tabsFingerprint() {
     return [
       id, s.name, s.alive ? 1 : 0, workState(s),
       unread(s) ? 1 : 0, attention.has(id) ? 1 : 0,
+      reviewLockedOf(id) ? 1 : 0,
       s.cwd || "", s.signal || "", s.cli || "",
     ].join("\x1f");
   }).join("\x1e") + "\x1d" + (activeId || "");
@@ -2353,6 +2390,7 @@ function renderTabs() {
       (s.busy ? " busy" : "") + (unread(s) ? " unread" : "") +
       (workState(s) === "asking" ? " asking" : "") +
       (workState(s) === "error" ? " error" : "") +
+      (reviewLockedOf(id) ? " locked" : "") +
       (attention.has(id) ? " attention" : "");
     /* A mark nobody can name is a mark nobody trusts.
      *
@@ -2610,6 +2648,29 @@ function renderInputBar() {
   }
   $("#inputbar").hidden = !wants && pill.hidden;
   $("#inputbar").classList.toggle("pill-only", !wants && !pill.hidden);
+
+  // Read-only review: the prompt goes untypeable, Run/Shell go dead, and the
+  // lock lights — so the state, and the way out of it, is one control.
+  const locked = reviewLockedOf(activeId);
+  $("#inputbar").classList.toggle("locked", locked);
+  const box = $("#prompt");
+  if (box) {
+    box.readOnly = locked;
+    box.placeholder = locked ? "Locked for review — unlock to type"
+                             : "Type a prompt, or a shell command…";
+  }
+  for (const sel of ["#run", "#runShell"]) {
+    const el = $(sel); if (el) el.disabled = locked;
+  }
+  const lb = $("#reviewLock");
+  if (lb) {
+    lb.classList.toggle("on", locked);
+    lb.setAttribute("aria-pressed", locked ? "true" : "false");
+    lb.title = locked ? "Read-only — click to unlock and type"
+                      : "Lock read-only for review";
+  }
+  const tw = $("#termwrap");
+  if (tw) tw.classList.toggle("review-locked", locked);
 
   $("#empty").style.display = activeId ? "none" : "grid";
   if (!activeId) renderEmpty();
@@ -2978,7 +3039,9 @@ function openLink(url, newWindow) {
 }
 
 function sendPaneKey(sessionId, key) {
-  const entry = terms.get(sessionId || activeId);
+  const target = sessionId || activeId;
+  if (reviewLockedOf(target)) { hintReviewLocked(); return false; }
+  const entry = terms.get(target);
   if (!entry || !entry.ws || entry.ws.readyState !== 1) return false;
   entry.ws.send(JSON.stringify({ type: "key", key: key }));
   return true;
@@ -4609,6 +4672,8 @@ async function attachNow(id) {
   const send = (text) => paneSend(entry, text);
 
   term.onData((data) => {
+    // Read-only review: swallow the keystroke rather than send it, and say why.
+    if (reviewLockedOf(id)) { hintReviewLocked(); return; }
     /* Snippets work in the CLI's own input field too, because CLIque owns
      * the pseudo-terminal — an expansion is simply typed into the pane. We
      * track what has been typed since the last Enter so we know how many
@@ -4704,6 +4769,7 @@ function expandInBox(box) {
 
 async function run(text) {
   if (!text.trim() || !activeId) return;
+  if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
   for (let i = 0; i < repeat; i++) {
     if (!control({ type: "run", text, enter: true })) {
       await api(`api/sessions/${activeId}/send`, {
@@ -4723,6 +4789,7 @@ async function runShell(text) {
    * prompt box and having it land in a shell would be worse than either. */
   const current = session(activeId);
   if (!current) return;
+  if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
   let shell = state.sessions.find(
     (s) => s.cli === "shell" && s.cwd === current.cwd && s.alive);
   if (!shell) {
@@ -5377,6 +5444,11 @@ function noticeFinished(sessions) {
   const live = new Set(sessions.map((x) => x.id));
   for (const id of [...wasBusy.keys()]) if (!live.has(id)) wasBusy.delete(id);
   for (const id of [...attention]) if (!live.has(id)) attention.delete(id);
+  // A lock on a session that no longer exists is stale; a reaped-but-kept
+  // session still has a record here, so its lock survives a resume.
+  let unlockedAny = false;
+  for (const id of [...reviewLocked]) if (!live.has(id)) { reviewLocked.delete(id); unlockedAny = true; }
+  if (unlockedAny) persistReviewLocked();
 
   for (const session of sessions) {
     const before = wasBusy.get(session.id) || false;
@@ -5885,6 +5957,7 @@ function wire() {
   };
   $("#run").onclick = () => run($("#prompt").value);
   $("#runShell").onclick = () => runShell($("#prompt").value);
+  $("#reviewLock").onclick = () => toggleReviewLock(activeId);
   $("#repPlus").onclick = () => setRepeat(repeat + 1);
   $("#repMinus").onclick = () => setRepeat(repeat - 1);
 

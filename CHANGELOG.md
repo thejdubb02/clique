@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.81 — 2026-08-24 11:18 PDT
+
+**Lock a session read-only while you read it.** Reviewing a pane on a phone —
+scrolling its output, resting a thumb on the glass — could send a stray
+keystroke straight into the agent. A new lock (the lock button beside Run, or
+the session menu) holds back *all* input to that session: the prompt, Run and
+Shell, the on-screen keys, and live terminal typing. The tab shows a small lock,
+the terminal wears a "read-only" tag so a swallowed keystroke says why, and it
+is per-session and remembered across reloads — unlock when you want to type
+again.
+
 ## 0.50.80 — 2026-08-24 11:01 PDT
 
 **Each session gets its own hook token.** The token a state hook uses to report

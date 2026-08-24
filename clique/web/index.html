@@ -75,6 +75,8 @@
   <symbol id="i-layout-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></symbol>
   <!-- the sidebar overflow menu — folders, adopt, broadcast, board -->
   <symbol id="i-more-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+  <!-- a session held read-only for review — input is blocked -->
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
 </svg>
 <!-- icons:end -->
 
@@ -184,6 +186,8 @@
       </div>
       <button type="button" id="draftMove" class="hdr-btn draft-move" hidden
               title="Move this draft to another session"></button>
+      <button type="button" id="reviewLock" class="hdr-btn" aria-pressed="false"
+              title="Lock read-only for review"><svg class="ico" aria-hidden="true"><use href="#i-lock"/></svg></button>
       <div class="runsplit">
         <button id="run" class="primary">Run</button>
         <button id="runShell" title="Run in a shell session for this directory">Shell</button>
