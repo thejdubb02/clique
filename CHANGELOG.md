@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.85 — 2026-08-24 12:14 PDT
+
+**Duplicate a session.** A session's menu (right-click, or long-press on a
+phone) now has "Duplicate — same directory, fresh CLI": a second, independent
+agent on the same work — same folder, same directory, same CLI, its own process.
+Handy for running two approaches side by side, or a shell alongside the agent
+working the same repo. It shares the source's directory as-is; making a fresh
+git worktree is still the separate choice in New Session.
+
 ## 0.50.84 — 2026-08-24 12:10 PDT
 
 **A clear × in the session search.** Type to filter the sidebar and a small ×

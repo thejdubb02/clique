@@ -2102,6 +2102,7 @@ function sessionMenu(ev, s) {
     ...(cliHasTranscript(s.cli) ? [["Usage", () => openUsage(s)]] : []),
     ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
     ["Rename", () => renameSession(s)],
+    ["Duplicate — same directory, fresh CLI", () => duplicateSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
      * There is no drag on a phone, which made half the sidebar's organisation
@@ -2308,6 +2309,30 @@ function folderMenu(ev, folder) {
       refresh();
     }, true],
   ]);
+}
+
+/* A second agent on the same work: same directory, folder and CLI, its own
+ * fresh process. Everything create_session already accepts, so there is no new
+ * endpoint — the source's own fields, handed back in. It shares whatever the
+ * source's cwd is (a worktree included); making a *new* worktree is the other
+ * gesture, in New Session. The copied name is a starting point — auto-title
+ * renames it from the first prompt if it was still a generic one. */
+async function duplicateSession(s) {
+  try {
+    const created = await api("api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        cli: s.cli, cwd: s.cwd,
+        folder: s.folder || undefined,
+        name: s.name, mode: s.mode || undefined,
+      }),
+    });
+    await refresh();
+    openSession(created.id);
+    toast(`Forked “${s.name}”`);
+  } catch (err) {
+    toast(`Could not duplicate — ${err.message || err}`, true);
+  }
 }
 
 async function renameSession(s) {
