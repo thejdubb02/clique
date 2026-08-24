@@ -4822,6 +4822,30 @@ function expandInBox(box) {
 
 /* --------------------------------------------------------------- input bar */
 
+/* Give an untouched session a name from the first thing you send it, so a tray
+ * of "tmp" and "shell" turns into the work you're actually doing. Only ever
+ * fills in a name that is still auto-derived — the directory basename, the CLI,
+ * or empty — so the moment you name one yourself this leaves it alone; and the
+ * rename makes the name no longer auto, so it is one-shot by construction. */
+function autoTitleFrom(text) {
+  const first = String(text || "").split("\n")[0].replace(/\s+/g, " ").trim();
+  return first.split(" ").slice(0, 8).join(" ").slice(0, 48).replace(/[\s.,;:!?]+$/, "");
+}
+function maybeAutoTitle(sessionId, text) {
+  const s = session(sessionId);
+  if (!s) return;
+  const base = (s.cwd || "").split("/").filter(Boolean).pop() || "";
+  const isAuto = !s.name || s.name === base || s.name === s.cli || s.name === s.cli_label;
+  if (!isAuto) return;
+  const title = autoTitleFrom(text);
+  if (title.replace(/\s/g, "").length < 6 || title === s.name) return;  // too thin to name by
+  s.name = title;   // locally first, so the sidebar turns over on the keystroke
+  renderTree();
+  // If the write fails, the next poll simply restores the server's name.
+  api("api/sessions/" + sessionId, { method: "PATCH", body: JSON.stringify({ name: title }) })
+    .catch(() => {});
+}
+
 /* True to go ahead: either nothing matched, or the confirm was accepted. */
 async function okToSend(text, whoLabel) {
   const hit = destructiveHit(text);
@@ -4846,6 +4870,7 @@ async function run(text) {
       });
     }
   }
+  maybeAutoTitle(activeId, text);
   $("#prompt").value = "";
   saveDraft(true);   // sent, so there is no longer a draft
   setRepeat(1);

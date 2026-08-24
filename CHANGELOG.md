@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.83 — 2026-08-24 11:58 PDT
+
+**Sessions name themselves from your first prompt.** Spin up a shell in a
+directory and it starts out called "tmp"; send your first real prompt and it
+renames itself to what you're actually doing — so a tray of "tmp" and "shell"
+becomes the work in front of you. It only ever fills in a name that was
+auto-generated: the moment you name a session yourself, this leaves it alone,
+and a one-word "y" won't trigger it.
+
 ## 0.50.82 — 2026-08-24 11:42 PDT
 
 **A confirm before a command that looks destructive.** Send or broadcast
