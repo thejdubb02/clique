@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.86 — 2026-08-24 12:19 PDT
+
+**Undo a stop.** Stopping a session now leaves a one-click "Undo" in the corner
+— start it again right where you were, instead of hunting for the greyed-out
+row. (Closing a tab already just detaches and keeps the session running;
+stopping is the explicit, confirmed one, and even that keeps the record and its
+draft.)
+
 ## 0.50.85 — 2026-08-24 12:14 PDT
 
 **Duplicate a session.** A session's menu (right-click, or long-press on a

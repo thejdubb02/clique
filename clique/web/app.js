@@ -2420,6 +2420,12 @@ async function killSession(s) {
       if (res && res.alive) {
         toast(`"${s.name}" would not stop.`, true,
               { label: "Try again", run: () => killSession(session(s.id) || s) });
+      } else {
+        // Stopped for real. The record and its draft survive, so "undo" is just
+        // starting it again — one click, rather than hunting for the greyed row.
+        // A resumable CLI comes back where it was; a shell starts fresh in place.
+        toast(`Stopped “${s.name}”.`, false,
+              { label: "Undo", run: () => openSession(s.id) });
       }
     } catch (err) {
       toast(`Could not stop "${s.name}" — it may still be running.`, true,
