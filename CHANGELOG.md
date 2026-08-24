@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.78 — 2026-08-24 10:32 PDT
+
+**A stopped-on-error session now stands out.** A session waiting on you already
+turns its name bold; a session that stopped on an error wore only the small ring
+on its icon — so the one state you most want to catch was the quietest thing in
+the list. Now an errored session shows a bold name in the "something broke"
+colour, in both its tab and the sidebar, exactly as loud as one asking a
+question.
+
 ## 0.50.77 — 2026-08-23 16:13 PDT
 
 **Bring your own model keys.** A new **Models** tab in Settings lets you add any

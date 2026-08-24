@@ -12,7 +12,7 @@ from pathlib import Path
 #: Semver, bumped with every release-worthy change and shown in the sidebar.
 #: Minor for features, patch for fixes. The version alone is not enough to
 #: identify a build during active development, which is what build_id is for.
-__version__ = "0.50.77"
+__version__ = "0.50.78"
 
 
 @lru_cache(maxsize=1)
@@ -24,9 +24,10 @@ def build_id() -> str:
     """
     try:
         result = subprocess.run(
-            ["git", "-C", str(Path(__file__).resolve().parents[1]),
-             "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=5,
+            ["git", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             return result.stdout.strip()

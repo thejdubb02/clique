@@ -864,6 +864,11 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 .session.attention .name { color: var(--warn); font-weight: 600; }
 .tab.asking .label { font-weight: 600; color: var(--warn); }
 .session.asking .name { color: var(--warn); font-weight: 600; }
+/* An error is as much "needs you" as a question, and used to wear only the
+   small ring — the one state you most want to catch was the least visible in
+   a long list. Same name emphasis as asking, in the critical colour. */
+.tab.error .label { font-weight: 600; color: var(--critical); }
+.session.error .name { color: var(--critical); font-weight: 600; }
 @keyframes nudge { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 
 /* Reduced motion keeps every state distinguishable — the arc still points to

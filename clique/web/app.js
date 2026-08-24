@@ -1711,6 +1711,7 @@ function sessionRow(s) {
     (s.alive ? "" : " dead") + (s.busy ? " busy" : "") +
     (unread(s) ? " unread" : "") +
     (workState(s) === "asking" ? " asking" : "") +
+    (workState(s) === "error" ? " error" : "") +
     (s.pinned ? " pinned" : "") +
     (attention.has(s.id) ? " attention" : "");
   row.draggable = true;
@@ -2351,6 +2352,7 @@ function renderTabs() {
     tab.className = "tab" + (id === activeId ? " active" : "") +
       (s.busy ? " busy" : "") + (unread(s) ? " unread" : "") +
       (workState(s) === "asking" ? " asking" : "") +
+      (workState(s) === "error" ? " error" : "") +
       (attention.has(id) ? " attention" : "");
     /* A mark nobody can name is a mark nobody trusts.
      *
