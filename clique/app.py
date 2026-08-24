@@ -163,8 +163,6 @@ class Panel:
         #: skipped rather than pointed at a guess (e.g. under a test Panel).
         self.host = ""
         self.port = 0
-        #: The persistent token the hooks authenticate with, made on first use.
-        self._hook_token = ""
         #: Past conversations, discovered on demand and cached. Deliberately
         #: NOT `self.history` — that name was already the cpu/memory series,
         #: and taking it silently replaced the stats endpoint's backing object
@@ -678,34 +676,24 @@ class Panel:
             host = "127.0.0.1"
         return f"http://{host}:{self.port}"
 
-    def _hook_bearer(self) -> str:
-        """A persistent, narrowly-scoped token the state hooks authenticate with.
+    def _session_bearer(self, session_id: str) -> str:
+        """A per-session, ``attention``-only token for this pane's environment.
 
-        This token lives in every session's environment, so its scope is the
-        whole of its safety: ``attention`` only, which permits a status nudge to
-        the attention endpoint and nothing else. A prompt-injected agent that
-        reads it cannot spawn a shell or drive another session — the escalation
-        a ``write`` token here would have handed it. Made once and kept beside
-        the token store (created with 0600, not chmod-ed after) so a restart
-        does not orphan the copies already handed to running panes."""
-        if self._hook_token:
-            return self._hook_token
-        path = self.tokens.path.parent / "hook.token"
-        try:
-            raw = path.read_text(encoding="utf-8").strip()
-            if raw and self.tokens.verify(raw):
-                self._hook_token = raw
-                return raw
-        except OSError:
-            pass
-        _token, raw = self.tokens.create("clique-hooks", ["attention"])
-        # Restricted at creation, never world-readable for a window: the raw
-        # token is the sensitive half (the store keeps only its hash).
-        with contextlib.suppress(OSError):
-            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(raw)
-        self._hook_token = raw
+        Each session gets its own, bound to its id, so a token a prompt-injected
+        agent reads out of its *own* environment can nudge only its session's
+        state — never another's. This is the whole of its safety, together with
+        the scope: ``attention`` permits a status nudge and nothing else, so it
+        cannot spawn a shell or drive a session even for its own id.
+
+        Re-minted here — revoking any stale token for this id first — so a
+        resumed session never leaves an old one valid, and revoked outright when
+        the session is deleted. Nothing persists the raw token: the store keeps
+        only its hash, and the live copy lives in the pane's environment, which
+        survives a panel restart on its own."""
+        self.tokens.revoke_session(session_id)
+        _token, raw = self.tokens.create(
+            f"hook:{session_id[:8]}", ["attention"], session=session_id
+        )
         return raw
 
     def _pane_env(self, session_id: str) -> dict:
@@ -717,7 +705,7 @@ class Panel:
         url = self._self_url()
         if url:
             env["CLIQUE_URL"] = url
-            env["CLIQUE_TOKEN"] = self._hook_bearer()
+            env["CLIQUE_TOKEN"] = self._session_bearer(session_id)
         return env
 
     def _hooks_argv(self, cli) -> list[str]:
@@ -1080,6 +1068,9 @@ class Panel:
         if tmux.exists(session.mux, session.socket):
             tmux.kill(session.mux, session.socket, force=session.adopted)
         self.store.remove_session(session_id)
+        # The session's own hook token dies with it, so a copy read out of the
+        # (now gone) pane's environment is inert.
+        self.tokens.revoke_session(session_id)
         # A worktree we made is ours to clean up -- but never at the cost of
         # someone's uncommitted work: if the checkout is dirty it stays, and so
         # does the branch, rather than deleting changes out from under them.
@@ -1771,6 +1762,10 @@ class Handler(BaseHTTPRequestHandler):
             and path.endswith("/attention")
             and token is not None
             and token.allows("attention")
+            # A session-bound hook token may nudge only its own session. An
+            # unbound attention token (an operator-minted one, or a legacy pane
+            # from before per-session tokens) is still accepted for any session.
+            and (not token.session or token.session == path.split("/")[3])
         )
         if not attention_only:
             allowed, reason = self._may_write()

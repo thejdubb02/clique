@@ -238,6 +238,29 @@ def main() -> int:
     )
     shutil.rmtree(tmp, ignore_errors=True)
 
+    print("tokens")
+    from clique.tokens import TokenStore
+
+    tok_dir = Path(tempfile.mkdtemp(prefix="clique-tokens-"))
+    store = TokenStore(tok_dir / "tokens.json")
+    op, _ = store.create("an-operator-token", ["read", "write"])
+    bound, _ = store.create("hook:abc", ["attention"], session="sess-1")
+    check("a bound token records its session", bound.session == "sess-1")
+    check("an operator token has no session", op.session == "")
+    check(
+        "per-session tokens are hidden from the operator listing",
+        [t["id"] for t in store.listing()] == [op.id],
+    )
+    check(
+        "revoke_session drops the bound token and reports it",
+        store.revoke_session("sess-1") == 1 and all(t.session != "sess-1" for t in store.tokens),
+    )
+    check(
+        "revoke_session on an unknown session drops nothing",
+        store.revoke_session("nope") == 0 and len(store.tokens) == 1,
+    )
+    shutil.rmtree(tok_dir, ignore_errors=True)
+
     print("gitinfo")
     import tempfile
 

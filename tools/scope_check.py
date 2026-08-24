@@ -112,6 +112,27 @@ def req(token: str, method: str, path: str, body=None) -> tuple[int, str]:
         return e.code, e.read().decode("utf-8", "replace")
 
 
+def _pane_token(sid: str) -> str:
+    """The per-session attention token, read from the pane's own environment.
+
+    It is no longer written to a shared file: each session gets its own, handed
+    to its pane via `tmux new-session -e`, so this is where a hook would find it.
+    """
+    mux = "sm-" + sid.replace("-", "")[:8]
+    for _ in range(40):
+        out = subprocess.run(
+            ["tmux", "-L", SOCKET, "show-environment", "-t", mux, "CLIQUE_TOKEN"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if out.startswith("CLIQUE_TOKEN="):
+            val = out.split("=", 1)[1].strip()
+            if val:
+                return val
+        time.sleep(0.25)
+    return ""
+
+
 def main() -> int:
     proc, admin, readonly = _panel()
     NOTE.write_text("hi\n", encoding="utf-8")
@@ -122,19 +143,12 @@ def main() -> int:
                 1
             ]
         )["id"]
-        # Creating the session writes the shared attention token to hook.token.
-        # The file is truncated then written, so a read can briefly catch it
-        # empty — keep polling until a non-empty token lands, not just until the
-        # file exists (that empty window was a flake under load).
-        attn = ""
-        for _ in range(40):
-            try:
-                attn = (HOME / "hook.token").read_text().strip()
-            except OSError:
-                attn = ""
-            if attn:
-                break
-            time.sleep(0.25)
+        # Each session carries its own attention token in its pane environment.
+        attn = _pane_token(sid)
+        # A second session, to prove one session's token cannot nudge another.
+        sid2 = json.loads(
+            req(admin, "POST", "/api/sessions", {"cli": "shell", "cwd": "/tmp", "name": "other"})[1]
+        )["id"]
         req(admin, "PATCH", "/api/settings", {"webhook_url": "https://hooks.example.com/T/abc123"})
         time.sleep(0.3)
 
@@ -157,13 +171,19 @@ def main() -> int:
         res["attn_ws_401"] = req(attn, "GET", f"/ws?id={sid}")[0] == 401
         res["readonly_ws_passes_auth"] = req(readonly, "GET", f"/ws?id={sid}")[0] == 400
 
-        # ...but it still does its one job, and still cannot write.
+        # ...but it still does its one job for its OWN session, and cannot write.
         res["attn_attention_ok"] = (
             req(attn, "POST", f"/api/sessions/{sid}/attention", {"state": "waiting"})[0] == 200
         )
         res["attn_create_refused"] = (
             req(attn, "POST", "/api/sessions", {"cli": "shell", "cwd": "/tmp", "name": "x"})[0]
             == 403
+        )
+        # A session-bound token is refused when aimed at a *different* session:
+        # a token exfiltrated from one pane cannot spoof another's state.
+        res["attn_bound_to_own_session"] = bool(attn) and (
+            req(attn, "POST", f"/api/sessions/{sid2}/attention", {"state": "error"})[0]
+            in (401, 403)
         )
 
         # webhook_url is withheld from a token; only whether one is set.

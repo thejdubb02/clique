@@ -138,7 +138,11 @@ def main() -> int:
         # A shell session (not busy long) + the reporter with its pane env.
         sid = api("/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "report"})["id"]
         time.sleep(1.0)
-        htok = (HOME / "hook.token").read_text().strip()
+        # The reporter authenticates with this session's OWN token, read from its
+        # pane environment (there is no shared hook.token any more).
+        smux = "sm-" + sid.replace("-", "")[:8]
+        senv = _run(["tmux", "-L", SOCKET, "show-environment", "-t", smux, "CLIQUE_TOKEN"]).stdout
+        htok = senv.split("=", 1)[1].strip() if "=" in senv else ""
         henv = dict(os.environ, CLIQUE_SESSION=sid, CLIQUE_URL=BASE, CLIQUE_TOKEN=htok)
 
         def state():

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.80 — 2026-08-24 11:01 PDT
+
+**Each session gets its own hook token.** The token a state hook uses to report
+"waiting" / "error" used to be one shared secret sitting in every session's
+environment — so a token read out of one agent's pane could nudge *any* other
+session's status. Now every session is handed its own, bound to its id: it can
+report only its own state, is re-minted when the session resumes, and is revoked
+outright when the session is deleted. A token exfiltrated from one pane can no
+longer speak for another, and it dies with the session that held it.
+
 ## 0.50.79 — 2026-08-24 10:47 PDT
 
 **A file preview never hands back a secret.** The click-to-preview that reads a

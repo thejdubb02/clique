@@ -48,6 +48,11 @@ class Token:
     name: str
     hash: str
     scopes: list[str] = field(default_factory=lambda: ["read", "write"])
+    #: When set, this token is bound to one session: its `attention` writes are
+    #: accepted only for that session, and it is revoked when the session dies.
+    #: Empty for the operator tokens minted by `token create`, which are not
+    #: tied to any session.
+    session: str = ""
     created: float = 0.0
     last_used: float = 0.0
 
@@ -113,18 +118,25 @@ class TokenStore:
         with contextlib.suppress(OSError):
             self._mtime = self.path.stat().st_mtime
 
-    def create(self, name: str, scopes: list[str] | None = None) -> tuple[Token, str]:
-        """Mint a token. The plaintext is returned once and never stored."""
-        with self._lock:
-            return self._create(name, scopes)
+    def create(
+        self, name: str, scopes: list[str] | None = None, session: str = ""
+    ) -> tuple[Token, str]:
+        """Mint a token. The plaintext is returned once and never stored.
 
-    def _create(self, name: str, scopes: list[str] | None) -> tuple[Token, str]:
+        Pass ``session`` to bind the token to one session — used for the
+        per-session ``attention`` token that lives in that pane's environment.
+        """
+        with self._lock:
+            return self._create(name, scopes, session)
+
+    def _create(self, name: str, scopes: list[str] | None, session: str = "") -> tuple[Token, str]:
         raw = PREFIX + secrets.token_urlsafe(32)
         token = Token(
             id="tk_" + secrets.token_hex(4),
             name=name.strip()[:60] or "unnamed",
             hash=_digest(raw),
             scopes=[s for s in (scopes or list(SCOPES)) if s in SCOPES] or ["read"],
+            session=session,
             created=time.time(),
         )
         self.tokens.append(token)
@@ -139,6 +151,21 @@ class TokenStore:
             self.tokens.remove(found)
             self._write()
             return True
+
+    def revoke_session(self, session_id: str) -> int:
+        """Revoke every token bound to a session. Its own hook token then dies
+        with it, so a token exfiltrated from a pane stops working the moment the
+        session is gone (or its pane is re-minted). Returns how many were dropped.
+        """
+        if not session_id:
+            return 0
+        with self._lock:
+            keep = [t for t in self.tokens if t.session != session_id]
+            dropped = len(self.tokens) - len(keep)
+            if dropped:
+                self.tokens = keep
+                self._write()
+            return dropped
 
     def verify(self, raw: str | None) -> Token | None:
         """Match a presented token. Constant-time, and it records the use."""
@@ -165,7 +192,9 @@ class TokenStore:
         return None
 
     def listing(self) -> list[dict]:
-        """Safe to show: names and dates, never a hash."""
+        """Safe to show: names and dates, never a hash. Per-session hook tokens
+        are left out — they are minted and revoked automatically with their
+        session, so there is nothing for an operator to manage."""
         return [
             {
                 "id": t.id,
@@ -175,6 +204,7 @@ class TokenStore:
                 "last_used": t.last_used,
             }
             for t in sorted(self.tokens, key=lambda t: t.created)
+            if not t.session
         ]
 
     def touch(self) -> None:

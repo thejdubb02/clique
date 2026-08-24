@@ -111,15 +111,21 @@ def main() -> int:
     proc, admin, readonly = _panel()
     res: dict[str, object] = {}
     try:
+        # A session's own attention token, read from its pane environment, to
+        # prove that token is shut out of the provider surface too.
         attn = ""
-        # Creating a session writes hook.token; we need the attention token it
-        # mints to prove that token is shut out of the provider surface too.
-        req(admin, "POST", "/api/sessions", {"cli": "shell", "cwd": "/tmp", "name": "t"})
+        tsid = json.loads(
+            req(admin, "POST", "/api/sessions", {"cli": "shell", "cwd": "/tmp", "name": "t"})[1]
+        )["id"]
+        tmux_target = "sm-" + tsid.replace("-", "")[:8]
         for _ in range(40):
-            try:
-                attn = (HOME / "hook.token").read_text().strip()
-            except OSError:
-                attn = ""
+            out = subprocess.run(
+                ["tmux", "-L", SOCKET, "show-environment", "-t", tmux_target, "CLIQUE_TOKEN"],
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            if out.startswith("CLIQUE_TOKEN="):
+                attn = out.split("=", 1)[1].strip()
             if attn:
                 break
             time.sleep(0.25)

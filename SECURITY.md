@@ -66,17 +66,20 @@ reason not to). Mode 0600.
   of names and dates, not working keys. Minted with
   `python3 -m clique token create`, never through the API: an endpoint that
   mints credentials turns any other hole into permanent access.
-- **State-hook token** — `hook.token` (0600), a single persistent token handed
-  to every launched session in its environment so a state hook can report to
-  `/api/sessions/<id>/attention`. It is `attention`-scoped, and the scopes are
-  enforced on *both* sides: every `GET /api/*` and the `/ws` attach require a
-  `read` scope, every write requires `write`. So this token reaches only that
-  one status nudge — an agent that reads its own `$CLIQUE_TOKEN`, or a
-  prompt-injected one, cannot spawn a shell, drive another session, or read
-  another session's terminal, transcript, or the host's files with it. It is
-  shared across panes, not per-session, so it is not individually attributable
-  and cannot prove which session a nudge is *for*: an agent can still spoof
-  another session's status dot. That is the honest limit of it.
+- **State-hook token** — a per-session, `attention`-scoped token handed to each
+  launched session in its own environment (`$CLIQUE_TOKEN`) so a state hook can
+  report to `/api/sessions/<id>/attention`. The scopes are enforced on *both*
+  sides: every `GET /api/*` and the `/ws` attach require a `read` scope, every
+  write requires `write`. So this token reaches only that one status nudge — an
+  agent that reads its own `$CLIQUE_TOKEN`, or a prompt-injected one, cannot
+  spawn a shell, drive a session, or read a terminal, transcript, or host file
+  with it. And because each session's token is **bound to its session id**, a
+  token exfiltrated from one pane can nudge only *its own* status — not another
+  session's. It is minted fresh when the pane is created (re-minted on resume)
+  and revoked when the session is deleted, so it is individually revocable and
+  dies with the session that held it. Tokens on panes launched before this model
+  existed are unbound and still accepted for any session, until those sessions
+  are recreated.
 - **BYOK model keys** — optional, and off unless you add one. A provider's key
   is encrypted at rest with AES-256-GCM before it is written; the data key is a
   separate `0600` `secret.key` under `$CLIQUE_HOME`, so lifting `state.json`
