@@ -1883,6 +1883,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._upload_file(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/checkpoint"):
                 return self._checkpoint(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/export"):
+                return self._export_scrollback(path.split("/")[3], body)
             if path == "/api/storage/purge":
                 freed = files.purge_shares(tuple(self._share_cwds()))
                 return self._json({"ok": True, **freed})
@@ -2207,6 +2209,51 @@ class Handler(BaseHTTPRequestHandler):
                 "branch": snap["branch"],
                 "shortstat": snap["shortstat"],
                 "empty": snap["empty"],
+            },
+            201,
+        )
+
+    def _export_scrollback(self, session_id: str, body: dict) -> None:
+        """Write the session's scrollback to a timestamped text file.
+
+        tmux already holds the history; this captures it unstyled (a clean log,
+        no colour codes) and drops it under `.clique-exports/`, so a run can be
+        kept, searched or shared after the fact. 400 when there is nothing to
+        capture, which is what a session that is not running looks like: no pane
+        to read."""
+        session = self.panel.store.session(session_id)
+        if not session or not session.cwd:
+            return self._json({"error": "no such session"}, 404)
+        text = tmux.capture(session.mux, session.socket, lines=50000, styled=False)
+        if not text.strip():
+            return self._json({"error": "nothing to export"}, 400)
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        header = (
+            "# CLIque scrollback export\n"
+            f"# session {session.name} ({session.cli})\n"
+            f"# {session.cwd}\n"
+            f"# {stamp} UTC\n\n"
+        )
+        content = header + text
+        if not content.endswith("\n"):
+            content += "\n"
+        outdir = Path(session.cwd) / ".clique-exports"
+        try:
+            outdir.mkdir(parents=True, exist_ok=True)
+            target = outdir / f"scrollback-{stamp}-{secrets.token_hex(3)}.txt"
+            target.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            return self._json({"error": f"could not save: {exc}"}, 500)
+        try:
+            rel = str(target.relative_to(Path(session.cwd).resolve()))
+        except ValueError:
+            rel = target.name
+        return self._json(
+            {
+                "path": str(target),
+                "relative": rel,
+                "bytes": len(content.encode("utf-8")),
+                "lines": text.count("\n") + 1,
             },
             201,
         )

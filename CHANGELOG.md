@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.50.94 — 2026-08-25 16:56 PDT
+
+**Export a session's scrollback to a file.** The command palette has a new
+"Export scrollback to a file": it writes the whole tmux history for the session
+in front to a timestamped `.txt` under `.clique-exports/`, as a clean log with no
+colour codes, ready to keep, grep or share. It carries a short header (the
+session, its directory and the time) and reports how many lines it saved. A
+session that is not running has no pane to read, so it says there is nothing to
+export rather than writing an empty file.
+
 ## 0.50.93 — 2026-08-25 16:47 PDT
 
 **A status line for the session in front.** A thin strip under the tabs now

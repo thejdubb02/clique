@@ -293,6 +293,14 @@ changes — and returns `{path, relative, head, branch, shortstat, empty}`. `400
 when the directory is not a git repository. A record, not a lock: it captures
 state, it does not freeze it.
 
+### `POST /api/sessions/<id>/export`
+
+Write the session's scrollback to a timestamped text file. tmux holds the
+history; this captures it unstyled (a clean log, no colour codes) and drops it
+under `<cwd>/.clique-exports/`, returning `{path, relative, bytes, lines}`. `400`
+when there is nothing to capture (a session that is not running has no pane to
+read).
+
 ### `GET /api/storage`
 
 Returns `{files, bytes, cleanup_days}` — how much the scratch folders

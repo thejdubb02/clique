@@ -2363,6 +2363,20 @@ async function checkpointSession(s) {
   }
 }
 
+/* Dump the session's whole scrollback to a timestamped .txt under
+ * .clique-exports/, so a run can be kept, searched or shared after the fact.
+ * tmux holds the history; the server captures it unstyled. */
+async function exportScrollback(s) {
+  try {
+    const r = await api(`api/sessions/${encodeURIComponent(s.id)}/export`, {
+      method: "POST", body: "{}",
+    });
+    toast(`Scrollback saved: ${r.relative} (${r.lines} lines)`);
+  } catch (err) {
+    toast(`Could not export: ${err.message || err}`, true);
+  }
+}
+
 async function renameSession(s) {
   const row = document.querySelector(`.session[data-id="${s.id}"]`);
   if (row) return renameInline(row, s);
@@ -7131,6 +7145,8 @@ function paletteCommands() {
         () => { copyPaneSelection() || copyPaneVisible(); });
     add("Copy the last 50 lines", "The recent output, scrollback and all — no dragging",
         () => copyPaneLast(50));
+    add("Export scrollback to a file", "The whole history to a timestamped .txt in the session's folder",
+        () => exportScrollback(current));
     add("Focus the terminal", current.name, focusTerminal);
     add(following(current.id) ? "Scroll lock — stop following output"
                               : "Follow output again",
