@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.90 — 2026-08-25 16:02 PDT
+
+**The socket list for adopting a predecessor's sessions is configurable.** When
+CLIque takes over sessions left running by an older tool, it scanned a fixed set
+of tmux sockets. That set is now a default you can override with
+`CLIQUE_FOREIGN_SOCKETS` (a comma-separated list), for a box whose predecessor
+ran under a different name. The stale `muxpanel` entry — this tool's own name
+before the rename, with nothing left running on it — is dropped from the default.
+
 ## 0.50.89 — 2026-08-25 15:14 PDT
 
 **Drop a file onto the window.** Drag an image, a PDF, a log — anything named —

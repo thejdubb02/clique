@@ -44,15 +44,21 @@ HISTORY_LIMIT = 20000
 TIMEOUT = 10
 
 _FIELDS = (
-    "session_name", "session_created", "session_attached", "session_windows",
+    "session_name",
+    "session_created",
+    "session_attached",
+    "session_windows",
     # Both clocks, because they measure different things and only one of them
     # is the one anyone means. `session_activity` moves when a *client* does
     # something — attaching, detaching, a keystroke — and stands still while a
     # detached session produces output for an hour. `window_activity` is the
     # one that tracks the pane. Reading only the first is why a session with no
     # browser attached never looked busy and never went unread.
-    "session_activity", "window_activity",
-    "pane_pid", "pane_current_path", "pane_current_command",
+    "session_activity",
+    "window_activity",
+    "pane_pid",
+    "pane_current_path",
+    "pane_current_command",
     # Which session group this belongs to, if any. Viewers are grouped onto
     # the session they show, and this is the only way to tell that a browser
     # watching through a viewer means the underlying session is being watched.
@@ -61,7 +67,8 @@ _FIELDS = (
     # second browser — or a phone — resizes this one's pane, and a client that
     # is drawing at a different size gets a screen padded out with dots. This
     # is what lets a browser notice.
-    "window_width", "window_height",
+    "window_width",
+    "window_height",
     # Whether the pane is on the alternate screen right now — a full-screen app
     # (Claude, Grok, an editor) is, a shell at a prompt is not. It decides where
     # a wheel tick should go: the app's own scroll, or the pane's scrollback.
@@ -99,10 +106,16 @@ class Pane:
 
     def as_dict(self) -> dict:
         return {
-            "mux": self.mux, "socket": self.socket, "created": self.created,
-            "attached": self.attached, "windows": self.windows,
-            "activity": self.activity, "pid": self.pid, "cwd": self.cwd,
-            "command": self.command, "group": self.group,
+            "mux": self.mux,
+            "socket": self.socket,
+            "created": self.created,
+            "attached": self.attached,
+            "windows": self.windows,
+            "activity": self.activity,
+            "pid": self.pid,
+            "cwd": self.cwd,
+            "command": self.command,
+            "group": self.group,
         }
 
 
@@ -146,7 +159,11 @@ def _run(
     argv = _argv(socket, args)
     try:
         proc = subprocess.run(
-            argv, capture_output=True, text=True, timeout=timeout, check=False,
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
         )
     except subprocess.TimeoutExpired as exc:
         raise TmuxError(f"tmux timed out after {timeout}s: {' '.join(args[:2])}") from exc
@@ -165,18 +182,37 @@ def _global_options(history_limit: int) -> list[str]:
     return [
         # Keep the server alive with no sessions, so these options survive
         # killing the last one and a reattach does not race a cold server.
-        "set-option", "-g", "exit-empty", "off",
-        ";", "set-option", "-g", "history-limit", str(history_limit),
+        "set-option",
+        "-g",
+        "exit-empty",
+        "off",
+        ";",
+        "set-option",
+        "-g",
+        "history-limit",
+        str(history_limit),
         # A CLI's bell should not steal focus in a browser tab, and we render
         # our own tab bar, so tmux's status line is duplicate chrome.
-        ";", "set-option", "-g", "status", "off",
-        ";", "set-option", "-g", "bell-action", "none",
+        ";",
+        "set-option",
+        "-g",
+        "status",
+        "off",
+        ";",
+        "set-option",
+        "-g",
+        "bell-action",
+        "none",
         # Global `latest` is a tmux 3.4 constraint: `window-size manual` on
         # the server makes `new-session -d` crash it ("server exited
         # unexpectedly") because a detached session has no client to size
         # from. Each window is then locked to `manual` in `lock_size` —
         # attaching a viewer cannot move it; only `resize-window` can.
-        ";", "set-option", "-g", "window-size", "latest",
+        ";",
+        "set-option",
+        "-g",
+        "window-size",
+        "latest",
     ]
 
 
@@ -222,8 +258,7 @@ def lock_size(mux: str, socket: str | None = SOCKET) -> None:
     cannot punch dots into the pane you are looking at.
     """
     with contextlib.suppress(TmuxError, OSError):
-        _run(["set-window-option", "-t", _session_target(mux),
-              "window-size", "manual"], socket)
+        _run(["set-window-option", "-t", _session_target(mux), "window-size", "manual"], socket)
 
 
 def lock_existing(socket: str | None = SOCKET) -> None:
@@ -304,8 +339,9 @@ def resize_window(mux: str, cols: int, rows: int, socket: str | None = SOCKET) -
     if cols < 20 or rows < 8:
         return
     with contextlib.suppress(TmuxError, OSError):
-        _run(["resize-window", "-t", _session_target(mux),
-              "-x", str(cols), "-y", str(rows)], socket)
+        _run(
+            ["resize-window", "-t", _session_target(mux), "-x", str(cols), "-y", str(rows)], socket
+        )
 
 
 def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> list[Pane]:
@@ -334,19 +370,26 @@ def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> lis
             continue
         if name.startswith(VIEW_PREFIX) and prefix != VIEW_PREFIX:
             continue  # plumbing, not a session anyone opened
-        panes.append(Pane(
-            mux=name, socket=socket,
-            created=int(parts[1] or 0), attached=parts[2] == "1",
-            windows=int(parts[3] or 1),
-            # The later of the two: a client interacting and a pane producing
-            # output are both activity, and whichever happened last is the
-            # answer to "when did anything happen here".
-            activity=max(int(parts[4] or 0), int(parts[5] or 0)),
-            pid=int(parts[6] or 0), cwd=parts[7], command=parts[8],
-            group=parts[9],
-            width=int(parts[10] or 0), height=int(parts[11] or 0),
-            alternate_on=parts[12] == "1",
-        ))
+        panes.append(
+            Pane(
+                mux=name,
+                socket=socket,
+                created=int(parts[1] or 0),
+                attached=parts[2] == "1",
+                windows=int(parts[3] or 1),
+                # The later of the two: a client interacting and a pane producing
+                # output are both activity, and whichever happened last is the
+                # answer to "when did anything happen here".
+                activity=max(int(parts[4] or 0), int(parts[5] or 0)),
+                pid=int(parts[6] or 0),
+                cwd=parts[7],
+                command=parts[8],
+                group=parts[9],
+                width=int(parts[10] or 0),
+                height=int(parts[11] or 0),
+                alternate_on=parts[12] == "1",
+            )
+        )
     return panes
 
 
@@ -370,7 +413,9 @@ def descendants(pid: int, depth: int = 4) -> list[tuple[str, str]]:
         try:
             out = subprocess.run(
                 ["ps", "-o", "pid=,comm=,args=", "--ppid", ",".join(map(str, frontier))],
-                capture_output=True, text=True, timeout=TIMEOUT,
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT,
             ).stdout
         except (OSError, subprocess.SubprocessError):
             return found
@@ -537,13 +582,17 @@ def attached_via_viewers(socket: str | None = SOCKET) -> set[str]:
     return watching
 
 
-#: Where Codeman keeps its sessions. Verified on this box: it runs its own
-#: servers too, so the default socket is not where its work lives.
 #: Sockets that belong to another tool, scanned so its sessions can be taken
-#: over rather than abandoned. "muxpanel" is this tool's own former name —
-#: sessions started before the rename live on that socket and are still
-#: running, so they are adoptable rather than lost.
-FOREIGN_SOCKETS = ("codeman", "codeman-grok", "muxpanel")
+#: over rather than abandoned — Codeman runs its own tmux servers, so its work
+#: lives on these named sockets, not the default one. Set CLIQUE_FOREIGN_SOCKETS
+#: (a comma-separated list) to point at a differently-named predecessor on
+#: another box. The former "muxpanel" socket is gone from the default: that was
+#: this tool's own name before the rename, and nothing runs on it any more.
+FOREIGN_SOCKETS = tuple(
+    s.strip()
+    for s in (os.environ.get("CLIQUE_FOREIGN_SOCKETS") or "codeman,codeman-grok").split(",")
+    if s.strip()
+)
 
 
 def adoptable(

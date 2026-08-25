@@ -485,7 +485,9 @@ compares tmux's activity clock against.
 ### `POST /api/sessions/adopt`
 
 Takes over every adoptable tmux session found. Safe to run twice — it repairs
-earlier runs rather than duplicating them.
+earlier runs rather than duplicating them. The sockets scanned for adoptable
+work default to a predecessor tool's (`codeman`, `codeman-grok`); set
+`CLIQUE_FOREIGN_SOCKETS` to a comma-separated list to override.
 
 ### `POST /api/orphans/reap`
 
