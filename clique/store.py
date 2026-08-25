@@ -89,7 +89,7 @@ MARKER_MODES = ("both", "icon", "color", "none")
 #: Monospace stacks the pane is allowed to ask for. Each id maps to a CSS
 #: fallback chain in the browser, so a font missing on this OS still lines
 #: up instead of going proportional. Unknown ids are dropped, not stored.
-FONT_FAMILIES = ("system", "menlo", "consolas", "ubuntu", "courier")
+FONT_FAMILIES = ("system", "menlo", "consolas", "ubuntu", "courier", "nerd")
 
 DEFAULT_SETTINGS = {
     "marker_default": "both",

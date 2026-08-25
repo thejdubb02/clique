@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.91 — 2026-08-25 16:25 PDT
+
+**A Nerd Font option for the terminal.** Many agent CLIs draw powerline arrows
+and little icons from the Unicode Private Use Area, and an ordinary monospace
+font leaves those as empty boxes. Settings → Terminal font now has a **Nerd
+Font** choice that uses whichever one you have installed — JetBrainsMono,
+FiraCode, Hack, Meslo and friends — and still falls back to a real monospace so
+the grid never goes proportional if you have none. The picker note says where to
+get one. (Shipping a font in the package is a heavier, later step; this makes the
+box-glyph problem fixable today for anyone who installs one.)
+
 ## 0.50.90 — 2026-08-25 16:02 PDT
 
 **The socket list for adopting a predecessor's sessions is configurable.** When

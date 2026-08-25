@@ -5576,6 +5576,12 @@ const FONT_FAMILIES = [
     stack: '"Ubuntu Mono", "DejaVu Sans Mono", "Liberation Mono", Consolas, Menlo, monospace' },
   { id: "courier",  label: "Courier",
     stack: '"Courier New", Courier, monospace' },
+  // The powerline arrows and icons a lot of agent CLIs draw live in the
+  // Private Use Area, which ordinary monospace fonts leave as tofu boxes. A
+  // Nerd Font carries them; this picks whichever one you have installed and
+  // still falls back to a real monospace so the grid holds if you have none.
+  { id: "nerd",     label: "Nerd Font (if installed)",
+    stack: '"JetBrainsMono Nerd Font", "FiraCode Nerd Font", "Hack Nerd Font", "MesloLGS NF", "CaskaydiaCove Nerd Font", "Symbols Nerd Font", ui-monospace, Menlo, "DejaVu Sans Mono", monospace' },
 ];
 const FONT_MIN = 9;
 const FONT_MAX = 28;
