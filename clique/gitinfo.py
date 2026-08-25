@@ -285,3 +285,31 @@ def diff(cwd: str) -> dict | None:
         "truncated": truncated,
         "empty": not full.strip(),
     }
+
+
+def checkpoint(cwd: str) -> dict | None:
+    """A before-you-run snapshot of a checkout's state.
+
+    The current HEAD and branch, plus the uncommitted diff (reusing :func:`diff`,
+    so it is bounded and includes untracked files) with a ``--stat`` summary and
+    a one-line ``--shortstat``. It reads git only — writing the record to a file
+    is the caller's job. ``None`` when ``cwd`` is not a git repository."""
+    path = Path(cwd)
+    if _git(path, "rev-parse", "--show-toplevel") is None:
+        return None
+    has_head = bool(_git(path, "rev-parse", "--verify", "-q", "HEAD"))
+    head = (_git(path, "rev-parse", "--short", "HEAD") or "").strip() if has_head else ""
+    branch = (_git(path, "symbolic-ref", "--short", "HEAD") or "").strip() or "detached"
+    base = "HEAD" if has_head else EMPTY_TREE
+    stat = _git_diff(path, "-c", "core.quotepath=false", "diff", base, "--stat").rstrip()
+    shortstat = _git_diff(path, "diff", base, "--shortstat").strip()
+    detail = diff(cwd) or {}
+    return {
+        "head": head,
+        "branch": branch,
+        "stat": stat,
+        "shortstat": shortstat,
+        "diff": detail.get("diff", ""),
+        "empty": bool(detail.get("empty", True)),
+        "truncated": bool(detail.get("truncated", False)),
+    }

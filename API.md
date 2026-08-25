@@ -283,6 +283,16 @@ escape the session directory. A drop **never overwrites** — a colliding name
 gets a ` (1)` suffix, and the write is an exclusive create. Cap 10 MB, `413`
 over it. Behind the write gate.
 
+### `POST /api/sessions/<id>/checkpoint`
+
+Save a before-you-run snapshot of the session's git checkout: the current HEAD
+and branch, plus the uncommitted diff (staged, unstaged and untracked, bounded
+the same way `/diff` is) with a `--stat` summary. Written to a timestamped file
+under `<cwd>/.clique-checkpoints/` — `git apply -R <file>` reverses the recorded
+changes — and returns `{path, relative, head, branch, shortstat, empty}`. `400`
+when the directory is not a git repository. A record, not a lock: it captures
+state, it does not freeze it.
+
 ### `GET /api/storage`
 
 Returns `{files, bytes, cleanup_days}` — how much the scratch folders

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.92 — 2026-08-25 16:32 PDT
+
+**Checkpoint a repo before you let an agent loose.** A new **Checkpoint** action
+on any session in a git repo (long-press / right-click the row) saves the current
+HEAD, branch and the full uncommitted diff to a timestamped file under
+`.clique-checkpoints/`. Afterwards you can see exactly what the agent changed —
+or `git apply -R` the file to walk it back. It's a record, not a lock: it
+captures the state, it doesn't freeze the tree. The saved diff includes untracked
+files and is bounded the same way the review diff is, so one giant file can't
+turn a checkpoint into a download.
+
 ## 0.50.91 — 2026-08-25 16:25 PDT
 
 **A Nerd Font option for the terminal.** Many agent CLIs draw powerline arrows

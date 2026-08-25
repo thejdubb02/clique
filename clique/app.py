@@ -1881,6 +1881,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._paste_image(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/upload"):
                 return self._upload_file(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/checkpoint"):
+                return self._checkpoint(path.split("/")[3], body)
             if path == "/api/storage/purge":
                 freed = files.purge_shares(tuple(self._share_cwds()))
                 return self._json({"ok": True, **freed})
@@ -2159,6 +2161,55 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             rel = target.name
         return self._json({"path": str(target), "relative": rel, "bytes": len(raw)}, 201)
+
+    def _checkpoint(self, session_id: str, body: dict) -> None:
+        """Save a before-you-run snapshot of the session's git checkout.
+
+        A record, not a lock. `gitinfo.checkpoint` reads the current HEAD, branch
+        and uncommitted diff; this writes them to a timestamped file under
+        `.clique-checkpoints/` so you can see — or `git apply -R` — exactly what
+        an agent changed after you turned it loose. 400 when the directory is not
+        a git repository."""
+        session = self.panel.store.session(session_id)
+        if not session or not session.cwd:
+            return self._json({"error": "no such session"}, 404)
+        snap = gitinfo.checkpoint(session.cwd)
+        if snap is None:
+            return self._json({"error": "not a git repository"}, 400)
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        head = snap["head"] or "unborn"
+        lines = [
+            f"# CLIque checkpoint — {stamp} UTC",
+            f"# branch {snap['branch']}, HEAD {head}",
+            f"# {snap['shortstat'] or 'no uncommitted changes'}",
+            "# Uncommitted changes are below; `git apply -R <this file>` undoes them.",
+            "",
+        ]
+        if snap["stat"]:
+            lines += [snap["stat"], ""]
+        text = "\n".join(lines) + (snap["diff"] or "")
+        cpdir = Path(session.cwd) / ".clique-checkpoints"
+        try:
+            cpdir.mkdir(parents=True, exist_ok=True)
+            target = cpdir / f"checkpoint-{stamp}-{secrets.token_hex(3)}.diff"
+            target.write_text(text, encoding="utf-8")
+        except OSError as exc:
+            return self._json({"error": f"could not save: {exc}"}, 500)
+        try:
+            rel = str(target.relative_to(Path(session.cwd).resolve()))
+        except ValueError:
+            rel = target.name
+        return self._json(
+            {
+                "path": str(target),
+                "relative": rel,
+                "head": head,
+                "branch": snap["branch"],
+                "shortstat": snap["shortstat"],
+                "empty": snap["empty"],
+            },
+            201,
+        )
 
     def _share_cwds(self) -> set:
         """Every working directory that might hold shared files, deduped.

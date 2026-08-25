@@ -2103,6 +2103,7 @@ function sessionMenu(ev, s) {
     ...(cliHasTranscript(s.cli) ? [["View conversation", () => openTranscript(s)]] : []),
     ...(cliHasTranscript(s.cli) ? [["Usage", () => openUsage(s)]] : []),
     ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
+    ...(s.branch ? [["Checkpoint — save HEAD + current diff", () => checkpointSession(s)]] : []),
     ["Rename", () => renameSession(s)],
     ["Duplicate — same directory, fresh CLI", () => duplicateSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
@@ -2344,6 +2345,21 @@ async function duplicateSession(s) {
     toast(`Forked “${s.name}”`);
   } catch (err) {
     toast(`Could not duplicate — ${err.message || err}`, true);
+  }
+}
+
+/* Save the repo's state before you let an agent loose: the current HEAD and
+ * the uncommitted diff go to a file under .clique-checkpoints/, so afterwards
+ * you can see — or reverse — exactly what it changed. A record, not a lock. */
+async function checkpointSession(s) {
+  try {
+    const r = await api(`api/sessions/${encodeURIComponent(s.id)}/checkpoint`, {
+      method: "POST", body: "{}",
+    });
+    const what = r.shortstat || "no uncommitted changes";
+    toast(`Checkpoint saved — ${r.relative} (HEAD ${r.head}, ${what})`);
+  } catch (err) {
+    toast(`Could not checkpoint — ${err.message || err}`, true);
   }
 }
 
