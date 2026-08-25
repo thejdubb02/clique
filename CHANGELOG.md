@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.50.93 — 2026-08-25 16:47 PDT
+
+**A status line for the session in front.** A thin strip under the tabs now
+shows, for whichever session you have open: the process it is running, its
+working directory, the git branch (with a count of changed files), how long it
+has been up, and how long it has been quiet. Every one of those facts already
+rode on the sidebar's poll; this lines them up for the one session you are
+actually looking at, so the state you care about is on screen without reading
+the row. It updates on the same three-second poll and hides itself when nothing
+is open.
+
 ## 0.50.92 — 2026-08-25 16:32 PDT
 
 **Checkpoint a repo before you let an agent loose.** A new **Checkpoint** action

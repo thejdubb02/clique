@@ -2498,6 +2498,7 @@ function renderTabs() {
     applyCliTint();
     packTabs();
     renderInputBar();
+    renderSessionLine();   // its facts (branch, activity, uptime) change on the poll, not with the tab set
     return;
   }
   tabsFp = fp;
@@ -2577,6 +2578,41 @@ function renderTabs() {
   applyCliTint();
   packTabs();
   renderInputBar();
+  renderSessionLine();
+}
+
+/* The status line under the tabs: what the session in front is doing, at a
+ * glance. Its process, where, which branch, how long it has been up and how
+ * long it has been quiet. Every fact already rides on the session in the 3s
+ * poll (and renderTabs runs on that poll and on every tab switch), so this
+ * needs no clock of its own. Hidden when nothing is open. */
+function renderSessionLine() {
+  const el = $("#sessionline");
+  if (!el) return;
+  const s = activeId ? session(activeId) : null;
+  if (!s) { el.hidden = true; el.textContent = ""; return; }
+  const proc = s.alive ? (s.command || s.cli_label || s.cli || "running") : "stopped";
+  const dot =
+    !s.alive ? "off"
+    : s.state === "error" ? "err"
+    : (s.state === "asking" || s.state === "waiting") ? "wait"
+    : "ok";
+  const parts = [
+    `<span class="sl-proc"><i class="sl-dot ${dot}"></i>${escapeHtml(proc)}</span>`,
+    `<span class="sl-cwd" title="${escapeHtml(s.cwd || "")}">${escapeHtml(s.project || s.cwd || "")}</span>`,
+  ];
+  if (s.branch) {
+    const dirty = s.dirty ? ` · <span class="git-dirty">${s.dirty} changed</span>` : "";
+    parts.push(`<span class="sl-branch">${escapeHtml(s.branch)}${dirty}</span>`);
+  }
+  const tail = [];
+  const up = ago(s.created);
+  if (up) tail.push(`up ${up}`);
+  const seen = ago(s.activity);
+  if (seen) tail.push(`quiet ${seen}`);
+  if (tail.length) parts.push(`<span class="sl-tail">${escapeHtml(tail.join(" · "))}</span>`);
+  el.innerHTML = parts.join("");
+  el.hidden = false;
 }
 
 /* Keep every tab on screen, or behind a control that is itself on screen.
