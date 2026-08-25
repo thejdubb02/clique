@@ -197,6 +197,7 @@ class Panel:
         self.history = sysinfo.History()
         self._last_reap = 0.0
         self._last_idle_reap = 0.0
+        self._last_sweep = 0.0
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ views
@@ -230,6 +231,7 @@ class Panel:
         # something that should not exist.
         self._reap_viewers(tuple(sockets))
         self._reap_idle(panes)
+        self._sweep_shares()
         return panes
 
     def _reap_viewers(self, sockets: tuple[str | None, ...]) -> None:
@@ -276,6 +278,29 @@ class Panel:
                 continue  # do not interrupt work in progress
             with contextlib.suppress(tmux.TmuxError):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
+
+    def _sweep_shares(self) -> None:
+        """Prune old dropped/pasted files from every session's scratch folders.
+
+        Rides the sidebar poll like the viewer reap, but on an hourly throttle:
+        this is housekeeping, not something anyone is waiting on. Off unless the
+        operator has set an age in Settings — the default is 0 and stays a no-op,
+        because deleting someone's files behind their back is not a default. Only
+        ever touches files inside a .clique-drops / .claude-images folder."""
+        try:
+            days = int(self.store.settings.get("drop_cleanup_days", 0) or 0)
+        except (TypeError, ValueError):
+            return
+        if days <= 0:
+            return
+        now = time.time()
+        with self._lock:
+            if now - self._last_sweep < 3600:
+                return
+            self._last_sweep = now
+        cwds = {s.cwd for s in self.store.sessions if s.cwd}
+        with contextlib.suppress(OSError):
+            files.prune_shares(tuple(cwds), days)
 
     def health(self, detailed: bool = False) -> dict:
         """A monitor's-eye view of the panel.
@@ -1504,6 +1529,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.orphans())
             if path == "/api/llm/providers":
                 return self._json(self.panel.llm_list())
+            if path == "/api/storage":
+                usage = files.shares_usage(tuple(self._share_cwds()))
+                usage["cleanup_days"] = int(
+                    self.panel.store.settings.get("drop_cleanup_days", 0) or 0
+                )
+                return self._json(usage)
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
             if path == "/api/workspace":
@@ -1848,6 +1879,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._file_write(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/paste"):
                 return self._paste_image(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/upload"):
+                return self._upload_file(path.split("/")[3], body)
+            if path == "/api/storage/purge":
+                freed = files.purge_shares(tuple(self._share_cwds()))
+                return self._json({"ok": True, **freed})
             if path == "/api/webhook/test":
                 # Every webhook UI needs this and the reason is always the
                 # same: you paste a URL and you want to know it works now, not
@@ -2090,6 +2126,47 @@ class Handler(BaseHTTPRequestHandler):
             },
             201,
         )
+
+    def _upload_file(self, session_id: str, body: dict) -> None:
+        """Write a dropped file into the session's directory and say where.
+
+        The drag-and-drop sibling of `_paste_image`: a paste is a nameless image,
+        a drop is a named file of any kind — a PDF, a log, a spreadsheet — that
+        the agent then opens by the path this hands back. The name is the user's,
+        so it is reduced to a safe basename and put through the same credential
+        and directory gate a read is (`files.store_upload` reuses the read gate):
+        a drop cannot escape the session directory, overwrite an existing file,
+        or land a credential name."""
+        session = self.panel.store.session(session_id)
+        if not session:
+            return self._json({"error": "no such session"}, 404)
+        try:
+            raw = base64.b64decode(body.get("data") or "", validate=True)
+        except (ValueError, binascii.Error):
+            return self._json({"error": "not valid base64"}, 400)
+        if not raw:
+            return self._json({"error": "empty file"}, 400)
+        if len(raw) > files.UPLOAD_CAP:
+            return self._json({"error": "file too large"}, 413)
+        try:
+            target = files.store_upload(session.cwd, str(body.get("name") or ""), raw)
+        except ValueError as exc:
+            return self._json({"error": str(exc)}, 400)
+        except OSError as exc:
+            return self._json({"error": f"could not save: {exc}"}, 500)
+        try:
+            rel = str(target.relative_to(Path(session.cwd).resolve()))
+        except ValueError:
+            rel = target.name
+        return self._json({"path": str(target), "relative": rel, "bytes": len(raw)}, 201)
+
+    def _share_cwds(self) -> set:
+        """Every working directory that might hold shared files, deduped.
+
+        Archived sessions included on purpose: their scratch files are on disk
+        just the same, and the storage readout and its purge would be lying if
+        they ignored them."""
+        return {s.cwd for s in self.panel.store.sessions if s.cwd}
 
     def _send_input(self, session_id: str, body: dict) -> None:
         session = self.panel.store.session(session_id)

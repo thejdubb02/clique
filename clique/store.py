@@ -145,6 +145,13 @@ DEFAULT_SETTINGS = {
     #: Only a session that can be resumed, that no browser is looking at, and
     #: that is not busy is ever reaped. 0 turns it off.
     "reap_idle_hours": 6,
+    #: Auto-delete dropped/pasted files older than this many days from each
+    #: session's scratch folders (.clique-drops, .claude-images) — nothing else
+    #: on disk is ever touched. Off by default (0): a share is your file, and it
+    #: is not this panel's place to delete your files behind your back until you
+    #: ask it to. Turn it on in Settings and pick the age. The manual purge and
+    #: the storage readout work whether this is on or off.
+    "drop_cleanup_days": 0,
     #: "auto" lets each CLI decide: a CLI that draws its own input box gets no
     #: second box under it, and one that does not — a shell, a readline tool —
     #: keeps the panel's, which is also the only place Run, the repeat counter
@@ -702,6 +709,9 @@ class Store:
                 elif key == "reap_idle_hours":
                     with contextlib.suppress(TypeError, ValueError):
                         self.settings[key] = max(0, min(int(value), 720))
+                elif key == "drop_cleanup_days":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(0, min(int(value), 365))
                 else:
                     # Coerced to the shape of its own default.
                     #

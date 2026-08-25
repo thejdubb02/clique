@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import time
 from pathlib import Path
 
 #: How much text the sheet will hold. Bigger than that is still copyable;
@@ -230,3 +231,157 @@ def inspect(cwd: str, raw: str) -> dict:
     out["truncated"] = size > TEXT_CAP
     out["text"] = sample.decode("utf-8", errors="replace")
     return out
+
+
+# --------------------------------------------------------------- dropped files
+
+#: The most a dropped file may be. Matches the paste ceiling: a screenshot or a
+#: typical document, not a way to stream a video through a base64 JSON body.
+UPLOAD_CAP = 10 * 1024 * 1024
+
+#: Where a dropped file lands, inside the session's own working directory, under
+#: its own name — so the CLI can open it by a relative path and it travels with
+#: the project. Its own folder rather than the project root so a drop cannot
+#: quietly shadow a real source file, and so housekeeping has one place to sweep.
+DROP_DIR = ".clique-drops"
+
+#: The scratch folders: dropped files here, nameless pastes in .claude-images.
+#: These, and only these, are what the sweep and the storage readout treat as
+#: reclaimable. Nothing outside them is ever counted or auto-deleted.
+SHARE_DIRS = (DROP_DIR, ".claude-images")
+
+#: What survives a dropped filename: letters, digits, and the punctuation a real
+#: name uses. Everything else — path separators, control bytes, the lot — is
+#: collapsed to ``_``, so what is left can only ever be a basename.
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9._ ()\-]+")
+
+
+def safe_name(raw: str) -> str:
+    """A dropped file's name, reduced to something that can only be a basename.
+
+    The browser sends the name the file had on someone's disk; we keep the parts
+    that read back as the same file and drop everything that could turn it into a
+    path. Separators and ``..`` are gone by construction — the result has no
+    slash — so the worst a hostile name can do is be ugly. A name that reduces to
+    nothing, or to dots, becomes a fixed fallback rather than an empty write.
+    """
+    name = os.path.basename(str(raw or "").replace("\\", "/").strip())
+    name = _SAFE_NAME.sub("_", name)[:128].strip()
+    if name in ("", ".", "..") or set(name) <= {"."}:
+        return "dropped-file"
+    return name
+
+
+def store_upload(cwd: str, filename: str, data: bytes) -> Path:
+    """Write a dropped file into ``<cwd>/.clique-drops`` under a safe, free name.
+
+    The security is a read's, reused: the sanitised basename is checked by
+    ``_is_credential`` (so a ``.env`` or a key name is refused, fence or no fence)
+    and — with the fence on — ``_fence`` proves the resolved path stays inside the
+    session directory, symlinked drop-dir included. A drop never overwrites: a
+    colliding name gets a `` (1)`` suffix, and the write is an *exclusive* create,
+    so even a racing collision cannot clobber an existing file.
+    """
+    if len(data) > UPLOAD_CAP:
+        raise ValueError("too large to drop in")
+    name = safe_name(filename)
+    drops = Path(cwd) / DROP_DIR
+    target = (drops / name).resolve()
+    if _is_credential(target):
+        raise ValueError("blocked credential file")
+    if _FENCE:
+        _fence(cwd, target)
+    drops.mkdir(parents=True, exist_ok=True)
+    stem, suffix, parent = target.stem, target.suffix, target.parent
+    n = 0
+    while True:
+        candidate = target if n == 0 else parent / f"{stem} ({n}){suffix}"
+        try:
+            fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            n += 1
+            if n > 9999:
+                raise ValueError("too many files by that name") from None
+            continue
+        break
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    except OSError:
+        with contextlib.suppress(OSError):
+            candidate.unlink()
+        raise
+    return candidate
+
+
+def _iter_share_files(cwds):
+    """Every regular file sitting directly in a scratch folder, across sessions.
+
+    One scandir per folder, no recursion, symlinks never followed: a share is a
+    flat drop of files, and the sweep must not chase a link out of the folder it
+    is meant to be tidying. Skips anything it cannot read rather than raising —
+    housekeeping does not get to take the panel down.
+    """
+    for cwd in cwds:
+        for name in SHARE_DIRS:
+            directory = Path(cwd) / name
+            try:
+                entries = list(os.scandir(directory))
+            except OSError:
+                continue
+            for entry in entries:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        yield entry
+                except OSError:
+                    continue
+
+
+def shares_usage(cwds) -> dict:
+    """How much the scratch folders hold: a file count and a byte total."""
+    count = 0
+    total = 0
+    for entry in _iter_share_files(cwds):
+        with contextlib.suppress(OSError):
+            total += entry.stat(follow_symlinks=False).st_size
+            count += 1
+    return {"files": count, "bytes": total}
+
+
+def prune_shares(cwds, older_than_days: int) -> int:
+    """Delete scratch files older than a cutoff. Returns how many were removed.
+
+    Off — a no-op — when the age is zero or less, because "off" is the default
+    and a share is the user's own file until they ask for it to expire.
+    """
+    if older_than_days <= 0:
+        return 0
+    cutoff = time.time() - older_than_days * 86400
+    removed = 0
+    for entry in _iter_share_files(cwds):
+        try:
+            if entry.stat(follow_symlinks=False).st_mtime < cutoff:
+                os.unlink(entry.path)
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+def purge_shares(cwds) -> dict:
+    """Delete every scratch file now. The button behind the storage readout.
+
+    Returns the count and bytes freed. Only ever the flat contents of a scratch
+    folder — never the folder, never anything nested, never a followed symlink.
+    """
+    count = 0
+    total = 0
+    for entry in _iter_share_files(cwds):
+        try:
+            size = entry.stat(follow_symlinks=False).st_size
+            os.unlink(entry.path)
+            count += 1
+            total += size
+        except OSError:
+            continue
+    return {"files": count, "bytes": total}

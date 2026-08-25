@@ -627,6 +627,24 @@
       <p class="note">This is the other half of pasting a screenshot. That gets
          an image to an agent; this brings one back, because a terminal has no
          way to draw a picture.</p>
+
+      <h3>Shared files</h3>
+      <p class="note">Drop a file — an image, a PDF, a log — anywhere on the
+         window and it lands in the open session’s <code>.clique-drops</code>
+         folder, with its path dropped into your prompt for the agent to open.
+         Pasted screenshots go beside them. Both stay on this box so the CLI can
+         actually read them; this is where you keep that from piling up.</p>
+      <p class="note" id="storageUsage">Checking what’s stored…</p>
+      <label class="check"><input type="checkbox" id="setDropCleanup">
+        Auto-delete shared files older than
+        <input type="number" id="setDropCleanupDays" min="1" max="365" step="1"
+               class="days-inline" disabled> days</label>
+      <p class="note">Off by default — a shared file is your file, and it is not
+         the panel’s place to delete it until you say so. Turn this on and old
+         drops and pastes clear themselves; anything newer, and anything outside
+         those two folders, is never touched.</p>
+      <button type="button" id="purgeShares">Clear shared files now</button>
+      <span class="note" id="purgeResult"></span>
     </section>
 
     <section class="pane" data-pane="css" hidden>
@@ -790,6 +808,14 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
 </div>
 
 <div id="offline" hidden>Lost the panel. Retrying…</div>
+<div id="dropveil" hidden aria-hidden="true">
+  <div class="dropveil-card">
+    <svg class="ic" aria-hidden="true"><use href="#i-arrow-down-to-line"/></svg>
+    <div class="dropveil-msg">Drop to add to this session</div>
+    <div class="dropveil-sub">Lands in the session folder; the path goes to your prompt.</div>
+  </div>
+</div>
+
 <div id="toast" hidden></div>
 
 <div id="menu" hidden></div>

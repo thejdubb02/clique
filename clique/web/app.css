@@ -1864,3 +1864,37 @@ body.win-flash::after {
   margin-top: 4px; font-size: 11px; color: var(--dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ----------------------------------------------------------- file drop veil */
+
+/* Shown while a file is dragged over the window. Purely a hint: pointer-events
+   are off so every drag event passes through to the document handler and the
+   veil can never become the drop target itself — which is also what stops the
+   flicker of dragleave firing as the cursor crosses onto it. */
+#dropveil {
+  position: fixed; inset: 0; z-index: 75; pointer-events: none;
+  display: grid; place-items: center; padding: 24px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--scrim));
+  outline: 3px dashed var(--accent); outline-offset: -14px;
+}
+#dropveil .dropveil-card {
+  text-align: center; color: var(--fg);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 22px 28px; box-shadow: 0 18px 48px var(--shadow);
+}
+#dropveil .ic { display: block; width: 30px; height: 30px; margin: 0 auto; color: var(--accent); }
+#dropveil .dropveil-msg { margin-top: 6px; font-size: 15px; font-weight: 600; }
+#dropveil .dropveil-sub { margin-top: 3px; font-size: 12px; color: var(--dim); }
+/* No session to drop into: still say what is happening, but do not promise a
+   landing spot that is not there. */
+#dropveil.nosess { background: var(--scrim); outline-color: var(--dim); }
+#dropveil.nosess .ic { color: var(--dim); }
+
+/* ------------------------------------------------------------ shared storage */
+.days-inline {
+  width: 3.4em; margin: 0 4px; padding: 2px 4px;
+  background: var(--field); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 3px; font: inherit;
+}
+.days-inline:disabled { opacity: .5; }
+#storageUsage { font-variant-numeric: tabular-nums; }

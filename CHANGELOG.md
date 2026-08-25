@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.50.89 — 2026-08-25 15:14 PDT
+
+**Drop a file onto the window.** Drag an image, a PDF, a log — anything named —
+anywhere onto CLIque and it lands in the open session's `.clique-drops` folder,
+with its path dropped into your prompt for the agent to open. It's the
+drag-and-drop sibling of pasting a screenshot, but for files with names, and it
+carries the same guard as everything else that touches disk here: the name is
+reduced to a plain basename (no wandering out of the directory), a credential
+name like `.env` or a key is refused, and a drop never overwrites — a name that
+collides gets a ` (1)`. Sidebar and tab drags are untouched; only a real file
+drag lights up the drop target.
+
+**Keep shared files from piling up.** Settings → Images now shows how much your
+dropped and pasted files are using, with a **Clear shared files** button, and an
+optional auto-delete of anything older than a number of days you pick. It's
+**off by default** — a shared file is your file — and it only ever touches the
+`.clique-drops` and `.claude-images` scratch folders, never your project. This
+is the answer to "won't drops fill the disk": they stay local so the CLI can
+actually read them, and this is the broom.
+
 ## 0.50.88 — 2026-08-24 13:15 PDT
 
 **Folders can wear an emoji.** A folder's menu now has "Set an emoji" — give a

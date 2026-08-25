@@ -2849,6 +2849,50 @@ async function pasteImages(items) {
   return true;
 }
 
+/* The biggest file a drop will send. Mirrors the server's UPLOAD_CAP so an
+ * oversize file is refused before it is read and base64'd into memory, not
+ * after a 200 MB round trip that was always going to be rejected. */
+const DROP_CAP = 10 * 1024 * 1024;
+
+/* Dropping a file onto the window.
+ *
+ * The drag-and-drop sibling of image paste: a pasted screenshot has no name, a
+ * dropped file does — a PDF, a log, a spreadsheet. The bytes go to the open
+ * session's working directory under the file's own name, and what comes back is
+ * a path the CLI can open, dropped into the prompt exactly like a paste. Every
+ * coding CLI already knows how to read a file, so this needs to know nothing
+ * about any of them.
+ */
+async function dropFiles(list) {
+  const s = session(activeId);
+  if (!s) { toast("Open a session first, then drop the file onto it.", true); return; }
+  const files = [...list].filter(Boolean);
+  if (!files.length) return;
+  for (const file of files) {
+    if (file.size > DROP_CAP) {
+      toast(`${file.name} is too big to drop in (limit ${Math.round(DROP_CAP / 1048576)} MB).`, true);
+      continue;
+    }
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      // Chunked for the same reason paste is: a naive spread into
+      // String.fromCharCode blows the argument limit at ~100k bytes.
+      let binary = "";
+      for (let i = 0; i < buf.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      }
+      const saved = await api(`api/sessions/${s.id}/upload`, {
+        method: "POST",
+        body: JSON.stringify({ name: file.name, data: btoa(binary) }),
+      });
+      const where = deliverPath(saved.path);
+      toast(`Saved ${saved.relative} — the path is in ${where}`);
+    } catch (err) {
+      toast(`Could not save ${file.name}: ${err.message}`, true);
+    }
+  }
+}
+
 /* The pane with nothing in it.
  *
  * It used to say "No session open", which is the one thing the empty pane
@@ -2872,6 +2916,7 @@ const TIPS = [
   "Closing a tab does not kill the session — tmux and the CLI carry on without you.",
   "Ctrl/Cmd + K jumps between sessions. Type > for commands, @ for sessions, ~ for past conversations.",
   "Paste a screenshot with Ctrl/Cmd + V — it lands in the session's own folder and the path goes where you were typing.",
+  "Drag a file — an image, a PDF, a log — onto the window to hand it to the open session; its path lands in your prompt.",
   "Scroll up and the view detaches from the stream. The badge says how far behind you are.",
   "Alt + 1 to 9 switches tabs. The pane owns every other key, on purpose.",
   "A ring turning means working. A steady pulse means it is waiting for you.",
@@ -5700,6 +5745,29 @@ async function saveSettings(changes) {
   renderTabs();
 }
 
+function fmtSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
+  if (n < 1024 * 1024 * 1024) return (n / 1048576).toFixed(1) + " MB";
+  return (n / 1073741824).toFixed(2) + " GB";
+}
+
+/* The storage readout in Settings → Images. Fetched when the sheet opens and
+ * after a purge, not on the poll: it scandirs every session's scratch folders,
+ * which is cheap but not free, and nothing about it changes second to second. */
+async function refreshStorage() {
+  const line = $("#storageUsage");
+  if (!line) return;
+  try {
+    const u = await api("api/storage");
+    line.textContent = u.files
+      ? `${u.files} shared file${u.files === 1 ? "" : "s"} using ${fmtSize(u.bytes || 0)} on disk.`
+      : "No shared files stored right now.";
+  } catch {
+    line.textContent = "Could not read storage usage.";
+  }
+}
+
 function openSettings() {
   const s = state.settings;
   renderSupport();   // About is one click away, so the list has to be there
@@ -5770,6 +5838,12 @@ function openSettings() {
   if (document.activeElement !== $("#setArtDirs")) {
     $("#setArtDirs").value = (s.artifact_dirs || []).join("\n");
   }
+  const cleanupDays = Number(s.drop_cleanup_days || 0);
+  $("#setDropCleanup").checked = cleanupDays > 0;
+  const daysBox = $("#setDropCleanupDays");
+  daysBox.disabled = cleanupDays <= 0;
+  if (document.activeElement !== daysBox) daysBox.value = cleanupDays > 0 ? cleanupDays : 14;
+  refreshStorage();
   $("#setFlash").checked = s.notify_flash !== false;
   $("#setServices").checked = s.service_status !== false;
   $("#setSound").checked = !!s.notify_sound;
@@ -6019,6 +6093,40 @@ function wire() {
   $("#setArtDirs").onblur = (ev) => {
     saveSettings({ artifact_dirs: ev.target.value.split("\n") });
     pollArtifacts();
+  };
+  // The toggle carries the days field: unchecked stores 0 (off); checked stores
+  // whatever the field says, defaulting to 14 the first time it is switched on.
+  $("#setDropCleanup").onchange = (ev) => {
+    const box = $("#setDropCleanupDays");
+    box.disabled = !ev.target.checked;
+    const days = Math.max(1, Math.min(365, Number(box.value) || 14));
+    box.value = days;
+    saveSettings({ drop_cleanup_days: ev.target.checked ? days : 0 });
+  };
+  $("#setDropCleanupDays").onchange = (ev) => {
+    if (!$("#setDropCleanup").checked) return;   // off: the number is inert
+    const days = Math.max(1, Math.min(365, Number(ev.target.value) || 14));
+    ev.target.value = days;
+    saveSettings({ drop_cleanup_days: days });
+  };
+  $("#purgeShares").onclick = async () => {
+    const ok = await confirmAction({
+      title: "Clear shared files?",
+      message: "Delete every dropped and pasted file from all sessions’ scratch folders now.",
+      detail: "Only .clique-drops and .claude-images are touched — your project files are left alone. This cannot be undone.",
+      okLabel: "Clear them",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const r = await api("api/storage/purge", { method: "POST", body: "{}" });
+      toast(r.files
+        ? `Cleared ${r.files} file${r.files === 1 ? "" : "s"}, freed ${fmtSize(r.bytes || 0)}.`
+        : "Nothing to clear.");
+      refreshStorage();
+    } catch (err) {
+      toast("Could not clear: " + err.message, true);
+    }
   };
   $("#setFlash").onchange = (ev) => saveSettings({ notify_flash: ev.target.checked });
   $("#setServices").onchange = (ev) =>
@@ -6325,6 +6433,59 @@ function wire() {
     ev.stopPropagation();
     pasteImages(items);
   }, true);
+
+  /* Dropping a file onto the window.
+   *
+   * Only an OS file drag is ours: a drag carrying "Files" in its types. The
+   * sidebar and the tab strip drag their own items to reorder them and those
+   * never carry Files, so the guard below leaves that gesture completely alone.
+   * A depth counter rides dragenter/dragleave because those fire on every child
+   * crossed, not once for the window; the veil's pointer-events:none keeps the
+   * cursor from ever "leaving" onto the veil, so the count stays honest. */
+  const veil = $("#dropveil");
+  let dragDepth = 0;
+  const isFileDrag = (ev) => {
+    const t = ev.dataTransfer && ev.dataTransfer.types;
+    return Boolean(t) && [...t].includes("Files");
+  };
+  const showVeil = () => {
+    if (!veil) return;
+    const none = !activeId;
+    veil.classList.toggle("nosess", none);
+    veil.querySelector(".dropveil-msg").textContent =
+      none ? "Open a session first" : "Drop to add to this session";
+    veil.querySelector(".dropveil-sub").textContent = none
+      ? "A dropped file needs a session to land in."
+      : "Lands in the session folder; the path goes to your prompt.";
+    veil.hidden = false;
+  };
+  const hideVeil = () => { dragDepth = 0; if (veil) veil.hidden = true; };
+  document.addEventListener("dragenter", (ev) => {
+    if (!isFileDrag(ev)) return;
+    ev.preventDefault();
+    dragDepth++;
+    showVeil();
+  });
+  document.addEventListener("dragover", (ev) => {
+    if (!isFileDrag(ev)) return;
+    ev.preventDefault();               // required, or the browser blocks the drop
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = activeId ? "copy" : "none";
+  });
+  document.addEventListener("dragleave", (ev) => {
+    if (!isFileDrag(ev)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0 && veil) veil.hidden = true;
+  });
+  document.addEventListener("drop", (ev) => {
+    if (!isFileDrag(ev)) return;
+    ev.preventDefault();
+    hideVeil();
+    const dropped = ev.dataTransfer && ev.dataTransfer.files;
+    if (dropped && dropped.length) dropFiles(dropped);
+  }, true);
+  // A drag that ends off-window (Escape, or a drop somewhere else) leaves the
+  // veil up otherwise, because no drop or final dragleave ever reaches us.
+  window.addEventListener("dragend", hideVeil);
 
   document.onclick = (ev) => {
     const menu = $("#menu");

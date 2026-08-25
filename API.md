@@ -267,6 +267,35 @@ The type is sniffed from the bytes rather than trusted from the name, the cap
 is 10 MB, and containment is checked after symlink resolution — the write can
 only ever land inside that directory.
 
+### `POST /api/sessions/<id>/upload`
+
+```json
+{"data": "<base64>", "name": "contract.pdf"}
+```
+
+The drag-and-drop sibling of `/paste`: a named file of any kind — a PDF, a log,
+a spreadsheet — dropped onto the window. Writes into `<cwd>/.clique-drops` under
+a **sanitised basename** (path separators and `..` reduced away, so a name can
+only ever be a basename) and returns `{path, relative, bytes}`. The name is put
+through the same credential-and-fence gate a read is: a credential name (`.env`,
+`id_rsa`, a key) is refused, and with `CLIQUE_FENCE_READS` on the write cannot
+escape the session directory. A drop **never overwrites** — a colliding name
+gets a ` (1)` suffix, and the write is an exclusive create. Cap 10 MB, `413`
+over it. Behind the write gate.
+
+### `GET /api/storage`
+
+Returns `{files, bytes, cleanup_days}` — how much the scratch folders
+(`.clique-drops`, `.claude-images`) hold across every session, and the current
+auto-cleanup age. Nothing outside those folders is counted.
+
+### `POST /api/storage/purge`
+
+Deletes **every** file in those scratch folders now, across all sessions, and
+returns `{ok, files, bytes}` freed. Only ever the flat contents of a scratch
+folder — never the folder, never anything nested, never a followed symlink, and
+never a project file. Behind the write gate.
+
 ### `POST /api/webhook/test`
 
 Fires one `test` event at the configured webhook immediately. `400` if no URL
@@ -585,6 +614,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `history_in_sidebar` | bool | Past conversations listed under live sessions. **Off by default** — a month of work is several hundred of them, and at that ratio the sidebar stops showing what is running. The palette still searches all of it |
 | `history_days` | int | How far back the sidebar goes when the above is on. Default 14. Does not limit the palette |
 | `reap_idle_hours` | int | Stop an idle session's process after this many hours to free its memory, greying its tab; clicking it resumes exactly where it was. Only a resumable session no browser is attached to and that is not busy is reaped. Default 6; `0` turns it off; clamped to 720 |
+| `drop_cleanup_days` | int | Auto-delete dropped/pasted files older than this many days from the scratch folders (`.clique-drops`, `.claude-images`); nothing else on disk is touched. **Off by default (`0`)** — a share is your file. Clamped to 365. The manual purge and the storage readout work whether this is on or off |
 | `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it. The mode pill is never hidden by this |
 | `css_both`, `css_panel`, `css_terminal` | string | Custom CSS, applied in that order |
 | `snippets` | list | `{"trigger", "label", "text"}`; malformed entries are dropped here rather than becoming a render error later |
