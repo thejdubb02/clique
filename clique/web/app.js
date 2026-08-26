@@ -2119,6 +2119,7 @@ function sessionMenu(ev, s) {
     [s.pinned ? "Unpin from top" : "Pin to top", () => setPinned(s, !s.pinned)],
     [reviewLockedOf(s.id) ? "Unlock (read-only)" : "Lock read-only for review",
      () => toggleReviewLock(s.id)],
+    ...(s.alive ? [["Interrupt (Ctrl-C)", () => sendKey(s.id, "C-c", "Paused")]] : []),
     [s.alive ? "Kill session" : "Delete session", () => killSession(s), true],
   ]);
 }
@@ -7147,6 +7148,10 @@ function paletteCommands() {
         () => copyPaneLast(50));
     add("Export scrollback to a file", "The whole history to a timestamped .txt in the session's folder",
         () => exportScrollback(current));
+    if (current.alive) {
+      add("Interrupt (Ctrl-C)", "Send Ctrl-C to pause what the session is doing",
+          () => sendKey(current.id, "C-c", "Paused"));
+    }
     add("Focus the terminal", current.name, focusTerminal);
     add(following(current.id) ? "Scroll lock — stop following output"
                               : "Follow output again",

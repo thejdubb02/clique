@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.95 — 2026-08-25 17:01 PDT
+
+**A soft interrupt for a running session.** "Interrupt (Ctrl-C)" is now on the
+session menu (long-press or right-click the row) and in the command palette. It
+sends Ctrl-C to the session in front, the gentle way to stop what an agent or a
+command is doing without killing the session or the tmux window behind it. The
+work stops and the session drops back to idle, ready for the next thing.
+
 ## 0.50.94 — 2026-08-25 16:56 PDT
 
 **Export a session's scrollback to a file.** The command palette has a new
