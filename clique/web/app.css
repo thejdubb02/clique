@@ -1939,3 +1939,20 @@ body.win-flash::after {
 #sessionline .sl-branch { flex: none; }
 #sessionline .git-dirty { color: var(--warn); }
 #sessionline .sl-tail { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* Zen mode: the terminal and the prompt, nothing else. Everything else folds
+   away; the prompt bar stays so you can still drive the session. */
+#zenExit { display: none; }
+body.zen #sidebar,
+body.zen #tabbar,
+body.zen #sessionline,
+body.zen #statusbar { display: none !important; }
+body.zen #zenExit {
+  display: inline-flex; align-items: center; gap: 6px;
+  position: fixed; top: 10px; right: 12px; z-index: 62;
+  padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  background: var(--panel); color: var(--dim);
+  border: 1px solid var(--line); font: inherit; font-size: 12px;
+  opacity: .5; transition: opacity .15s ease;
+}
+body.zen #zenExit:hover { opacity: 1; color: var(--fg); }

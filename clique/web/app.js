@@ -2416,6 +2416,16 @@ async function saveNote(andClose) {
 }
 function closeNote() { $("#noteSheet").hidden = true; _noteFor = null; }
 
+/* Zen mode: fold away the sidebar, tabs and status bars, leaving the terminal
+ * and the prompt. Hiding the chrome resizes the pane, so refit tmux once the
+ * layout has settled. The corner button (or the palette) brings it all back. */
+function toggleZen(on) {
+  const now = document.body.classList.toggle("zen", on);
+  requestAnimationFrame(() => { try { refitAll(); } catch (err) { /* nothing laid out yet */ } });
+  if (now) { const e = terms.get(activeId); if (e && e.term) e.term.focus(); }
+  return now;
+}
+
 async function renameSession(s) {
   const row = document.querySelector(`.session[data-id="${s.id}"]`);
   if (row) return renameInline(row, s);
@@ -6497,6 +6507,7 @@ function wire() {
   $("#art").onclick = (ev) => {
     if (ev.target === $("#art")) closeArtifacts();          // the backdrop
   };
+  $("#zenExit").onclick = () => toggleZen(false);
   $("#noteSave").onclick = () => saveNote(false);
   $("#noteClose").onclick = () => saveNote(true);
   $("#noteSheet").onclick = (ev) => { if (ev.target.id === "noteSheet") saveNote(true); };
@@ -7202,6 +7213,8 @@ function paletteCommands() {
     add("Notes for this session", "A sidecar .md to jot context, a to-do, or where you left off",
         () => openNote(current));
     add("Focus the terminal", current.name, focusTerminal);
+    add(document.body.classList.contains("zen") ? "Exit zen mode" : "Zen mode",
+        "Hide everything but the terminal and the prompt", () => toggleZen());
     add(following(current.id) ? "Scroll lock — stop following output"
                               : "Follow output again",
         "Ctrl+Shift+L · scrolling up does it too", toggleFollow);

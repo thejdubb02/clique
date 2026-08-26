@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.97 — 2026-08-25 18:55 PDT
+
+**Zen mode.** "Zen mode" in the command palette folds away the sidebar, the tabs
+and the status bars, leaving just the terminal and the prompt for when you want
+to be heads-down in one session. A quiet button in the corner (or the palette
+again) brings everything back. The pane refits to the reclaimed space, so the CLI
+uses the full width while you are in it.
+
 ## 0.50.96 — 2026-08-25 18:48 PDT
 
 **Per-session notes.** Every session now has a scratchpad, on its menu (and in
