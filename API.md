@@ -301,6 +301,14 @@ under `<cwd>/.clique-exports/`, returning `{path, relative, bytes, lines}`. `400
 when there is nothing to capture (a session that is not running has no pane to
 read).
 
+### `GET /api/sessions/<id>/note` and `POST /api/sessions/<id>/note`
+
+A per-session scratchpad note. `GET` returns `{note}` (empty string when there is
+none). `POST` with `{note}` saves it, or deletes it when the text is empty.
+Stored as a sidecar `.md` file under the panel's home (`<CLIQUE_HOME>/notes/`),
+keyed by session id, so a note never lands as an untracked file in the project it
+is about. Capped at 100 KB (`413` over it).
+
 ### `GET /api/storage`
 
 Returns `{files, bytes, cleanup_days}` — how much the scratch folders

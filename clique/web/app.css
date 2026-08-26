@@ -1752,18 +1752,28 @@ body.win-flash::after {
  * flow at the foot of the page (the board fell entirely below the fold). This
  * is that rule: a scrim fixed to the viewport, centring the .sheet card. Toast
  * (z-index 70) still sits above them. */
-#inbox, #diff, #board, #broadcast, #confirmSheet {
+#inbox, #diff, #board, #broadcast, #confirmSheet, #noteSheet {
   position: fixed; inset: 0; z-index: 65;
   background: var(--scrim);
   display: grid; place-items: center; padding: 24px;
 }
 #confirmSheet { z-index: 80; }   /* it can open over another sheet */
 #inbox .sheet, #broadcast .sheet { width: min(560px, 94vw); }
-#inbox .sheet, #board .sheet, #broadcast .sheet, #confirmSheet .sheet {
+#inbox .sheet, #board .sheet, #broadcast .sheet, #confirmSheet .sheet, #noteSheet .sheet {
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 16px; max-height: 84vh; overflow: auto;
   display: flex; flex-direction: column; box-shadow: 0 18px 48px var(--shadow);
 }
+#noteSheet .note-sheet { width: min(640px, 94vw); }
+#noteText {
+  width: 100%; min-height: 46vh; resize: vertical; box-sizing: border-box;
+  margin: 4px 0 12px; padding: 10px 12px; border-radius: 6px;
+  background: var(--field); color: var(--fg); border: 1px solid var(--line);
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
+  line-height: 1.5;
+}
+#noteText:focus { outline: none; border-color: var(--accent); }
+#noteStatus { margin-right: auto; align-self: center; }
 
 /* --------------------------------------------------------------- confirm */
 

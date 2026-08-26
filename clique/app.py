@@ -64,6 +64,10 @@ WEB = Path(__file__).parent / "web"
 #: Standard-library only, so any python can run it as a plain script.
 HOOK = Path(__file__).parent / "hook.py"
 
+#: A per-session note is a scratchpad, not a document store. Bounded so a paste
+#: gone wrong cannot write an unbounded file under the panel's home.
+NOTE_CAP = 100_000
+
 
 def _hooks_settings(python: str) -> str:
     """A Claude Code ``--settings`` JSON string that wires the state hooks.
@@ -1535,6 +1539,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.panel.store.settings.get("drop_cleanup_days", 0) or 0
                 )
                 return self._json(usage)
+            if path.startswith("/api/sessions/") and path.endswith("/note"):
+                return self._get_note(path.split("/")[3])
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
             if path == "/api/workspace":
@@ -1885,6 +1891,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._checkpoint(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/export"):
                 return self._export_scrollback(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/note"):
+                return self._save_note(path.split("/")[3], body)
             if path == "/api/storage/purge":
                 freed = files.purge_shares(tuple(self._share_cwds()))
                 return self._json({"ok": True, **freed})
@@ -2257,6 +2265,40 @@ class Handler(BaseHTTPRequestHandler):
             },
             201,
         )
+
+    def _note_path(self, session_id: str) -> Path:
+        """Where a session's note lives: a sidecar `.md` under the panel's home,
+        keyed by session id. Kept out of the project directory on purpose, so a
+        note never shows up as an untracked file in the repo it is about."""
+        return self.panel.store.path.parent / "notes" / f"{session_id}.md"
+
+    def _get_note(self, session_id: str) -> None:
+        if not self.panel.store.session(session_id):
+            return self._json({"error": "no such session"}, 404)
+        path = self._note_path(session_id)
+        try:
+            note = path.read_text(encoding="utf-8") if path.is_file() else ""
+        except OSError:
+            note = ""
+        return self._json({"note": note})
+
+    def _save_note(self, session_id: str, body: dict) -> None:
+        """Save (or, when emptied, delete) a session's sidecar note."""
+        if not self.panel.store.session(session_id):
+            return self._json({"error": "no such session"}, 404)
+        note = str(body.get("note") or "")
+        if len(note.encode("utf-8")) > NOTE_CAP:
+            return self._json({"error": "note too long"}, 413)
+        path = self._note_path(session_id)
+        try:
+            if note.strip():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(note, encoding="utf-8")
+            elif path.exists():
+                path.unlink()  # an emptied note is a deleted note
+        except OSError as exc:
+            return self._json({"error": f"could not save: {exc}"}, 500)
+        return self._json({"ok": True, "bytes": len(note.encode("utf-8"))})
 
     def _share_cwds(self) -> set:
         """Every working directory that might hold shared files, deduped.

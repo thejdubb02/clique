@@ -2105,6 +2105,7 @@ function sessionMenu(ev, s) {
     ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
     ...(s.branch ? [["Checkpoint — save HEAD + current diff", () => checkpointSession(s)]] : []),
     ["Rename", () => renameSession(s)],
+    ["Notes", () => openNote(s)],
     ["Duplicate — same directory, fresh CLI", () => duplicateSession(s)],
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
@@ -2377,6 +2378,43 @@ async function exportScrollback(s) {
     toast(`Could not export: ${err.message || err}`, true);
   }
 }
+
+/* A per-session note: a scratchpad that persists as a sidecar .md under the
+ * panel's home, so context, a to-do, or where you left off survives a reload
+ * and a restart without landing in the project's git status. */
+let _noteFor = null;
+async function openNote(s) {
+  if (!s) return;
+  _noteFor = s.id;
+  $("#noteTitle").textContent = `Notes: ${s.name}`;
+  const ta = $("#noteText");
+  ta.value = "";
+  $("#noteStatus").textContent = "Loading...";
+  $("#noteSheet").hidden = false;
+  ta.focus();
+  try {
+    const r = await api(`api/sessions/${encodeURIComponent(s.id)}/note`);
+    if (_noteFor === s.id) { ta.value = r.note || ""; $("#noteStatus").textContent = ""; }
+  } catch (err) {
+    if (_noteFor === s.id) $("#noteStatus").textContent = "Could not load";
+  }
+}
+async function saveNote(andClose) {
+  const id = _noteFor;
+  if (!id) return;
+  const note = $("#noteText").value;
+  try {
+    await api(`api/sessions/${encodeURIComponent(id)}/note`, {
+      method: "POST", body: JSON.stringify({ note }),
+    });
+    $("#noteStatus").textContent = "Saved";
+    if (andClose) closeNote();
+  } catch (err) {
+    // Keep the sheet open on failure so the text is never lost.
+    $("#noteStatus").textContent = `Could not save: ${err.message || err}`;
+  }
+}
+function closeNote() { $("#noteSheet").hidden = true; _noteFor = null; }
 
 async function renameSession(s) {
   const row = document.querySelector(`.session[data-id="${s.id}"]`);
@@ -6459,6 +6497,15 @@ function wire() {
   $("#art").onclick = (ev) => {
     if (ev.target === $("#art")) closeArtifacts();          // the backdrop
   };
+  $("#noteSave").onclick = () => saveNote(false);
+  $("#noteClose").onclick = () => saveNote(true);
+  $("#noteSheet").onclick = (ev) => { if (ev.target.id === "noteSheet") saveNote(true); };
+  $("#noteText").addEventListener("keydown", (ev) => {
+    // Esc and Cmd/Ctrl+Enter both save and close; a note is never lost to a stray key.
+    if (ev.key === "Escape" || (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey))) {
+      ev.preventDefault(); ev.stopPropagation(); saveNote(true);
+    }
+  });
   $("#fileClose").onclick = closeFileSheet;
   $("#file").onclick = (ev) => {
     if (ev.target === $("#file")) closeFileSheet();
@@ -7152,6 +7199,8 @@ function paletteCommands() {
       add("Interrupt (Ctrl-C)", "Send Ctrl-C to pause what the session is doing",
           () => sendKey(current.id, "C-c", "Paused"));
     }
+    add("Notes for this session", "A sidecar .md to jot context, a to-do, or where you left off",
+        () => openNote(current));
     add("Focus the terminal", current.name, focusTerminal);
     add(following(current.id) ? "Scroll lock — stop following output"
                               : "Follow output again",

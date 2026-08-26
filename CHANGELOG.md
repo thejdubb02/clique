@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50.96 — 2026-08-25 18:48 PDT
+
+**Per-session notes.** Every session now has a scratchpad, on its menu (and in
+the command palette) as "Notes". Jot what a session is for, a to-do, or where you
+left off, and it persists across reloads and restarts. It is saved as a sidecar
+Markdown file under the panel's home, keyed by the session, so it never turns up
+as an untracked file in the project it is about. Emptying a note deletes it, and
+Esc or Cmd/Ctrl+Enter saves and closes.
+
 ## 0.50.95 — 2026-08-25 17:01 PDT
 
 **A soft interrupt for a running session.** "Interrupt (Ctrl-C)" is now on the
