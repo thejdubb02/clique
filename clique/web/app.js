@@ -5805,8 +5805,24 @@ async function attachNow(id) {
 
     send(data);
   });
-  term.onResize(({ cols, rows }) => {
+  term.onResize(() => {
     if (entry.kicking) return;     // paintPane's one-column nudge is not a resize
+    if (entry.relaying) return;    // our own fit; it reports once it settles
+
+    /* The grid changed shape without the box changing, so the ResizeObserver
+     * that normally drives a re-layout never fires. It matters because a boxed
+     * CLI's zoom is computed from its column count: leave it alone and the
+     * scale stays the one that suited the grid we no longer have. That is what
+     * a second browser does to this one. It resizes the shared tmux window,
+     * this pane's grid follows, the scale does not, and the terminal ends up
+     * drawn at half size in a full-width box with xterm's scrollbar floating
+     * in the open space where the picture stopped. */
+    entry.relaying = true;
+    try { layoutPane(entry); } finally { entry.relaying = false; }
+
+    // Report where it settled, not the size that came in: laying out may have
+    // fitted again on top of it.
+    const cols = entry.term.cols, rows = entry.term.rows;
     if (id !== activeId) return;   // a hidden tab must not resize the window
     if (document.hidden || !document.hasFocus()) return;
     if (!claimable(cols, rows)) return;

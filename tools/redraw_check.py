@@ -285,6 +285,41 @@ def main() -> int:
             if fill <= 0.9:
                 print(f"       boxed pane covered {fill:.0%} of its box with the panel open")
 
+            # Two browsers, one session, different window sizes. Only one of
+            # them owns the shared tmux window, and the other's grid changes
+            # under it without its box moving. Nothing recomputed the zoom on
+            # that path, so the loser drew at the scale that suited the grid it
+            # used to have: a half-size picture in a full-width box, with
+            # xterm's scrollbar floating where the picture stopped.
+            second = ctx.new_page()
+            second.goto(BASE, wait_until="domcontentloaded")
+            second.wait_for_timeout(700)
+            second.set_viewport_size({"width": 760, "height": 620})
+            second.evaluate("async (id) => { await refresh(); await openSession(id); }", bid)
+            second.wait_for_timeout(2000)
+            page.bring_to_front()
+            page.wait_for_timeout(1500)
+
+            def underfill(pg):
+                """Fraction of the pane's width the picture actually covers."""
+                return pg.evaluate(
+                    """(id) => {
+                      const e = terms.get(id);
+                      if (!e || !e.term || !e.term.element) return 0;
+                      const w = e.term.element.getBoundingClientRect().width;
+                      return e.el.clientWidth ? w / e.el.clientWidth : 0;
+                    }""",
+                    bid,
+                )
+
+            wide_fill, small_fill = underfill(page), underfill(second)
+            res["both_panes_fill_their_width"] = wide_fill > 0.9 and small_fill > 0.9
+            if not res["both_panes_fill_their_width"]:
+                print(f"       widths covered: first {wide_fill:.0%}, second {small_fill:.0%}")
+            second.screenshot(path="/tmp/clique-redraw/second-browser.png")
+            second.close()
+            page.wait_for_timeout(500)
+
             # The repaint reaches tmux, finds this browser's own client, and
             # finds nothing on the session itself — so it cannot hit anyone else.
             views = [s.mux for s in tmux_mod.list_sessions(SOCKET, prefix=tmux_mod.VIEW_PREFIX)]

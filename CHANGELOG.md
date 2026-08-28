@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.51.9 — 2026-08-28 14:42 PDT
+
+**A second browser no longer leaves the first one drawn at half size.** A tmux
+window has one size, shared by everyone attached to it, so when another browser
+resizes it this pane's grid changes underneath. The box does not move, so the
+observer that normally triggers a re-layout never fired, and a boxed CLI's zoom
+is worked out from its column count: the scale stayed the one that suited a
+grid we no longer had. The pane ended up a half-width picture in a full-width
+box, with the terminal's scrollbar floating in the open space where the picture
+stopped. Measured at 47% of the pane's width before this, above 90% after.
+
+The grid changing is now a reason to lay the pane out again, and the size
+reported back to tmux is where the layout settled rather than the size that
+came in. `tools/redraw_check.py` opens a second, smaller browser on the same
+session and asserts both panes fill their width.
+
 ## 0.51.8 — 2026-08-28 14:34 PDT
 
 **The terminal can no longer paint over the side panel.** A boxed CLI keeps its
