@@ -386,9 +386,12 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 #load .v { min-width: 5ch; text-align: right; }
 #clients .v { min-width: 2ch; text-align: right; }
 #clients { cursor: help; }
-/* Swap keeps its column even at zero, so it appearing does not shove the
-   tabs. Hidden-as-invisible, not hidden-as-gone. */
-#swap.is-off, #temp.is-off { visibility: hidden; }
+/* A stat with nothing honest to say is not drawn at all. It used to be held
+   invisible so that swap appearing would not shove the row sideways, but that
+   traded a rare nudge for a permanent hole: most VMs have no temperature
+   sensor and no swap in use, so the bar carried two blank columns forever.
+   Gone, not invisible — the row closes up. */
+#stats .stat.is-off { display: none; }
 /* Each stat carries its own dot, coloured by that stat's own pressure and set
    inline from renderStats. No default background here: an unset dot would show
    a stale colour for the moment before the first poll lands. */

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.51.7 — 2026-08-28 13:39 PDT
+
+**A resource the machine cannot report closes up instead of leaving a hole.**
+Swap and temperature were held invisible rather than removed, so a box with no
+sensor and no swap in use carried two blank columns in the bottom bar forever,
+and the readings either side of them sat oddly far apart. That was trading a
+permanent gap for a nudge that almost never happens. They are gone now when
+there is nothing to say, and drawn again the moment there is.
+
 ## 0.51.6 — 2026-08-28 13:32 PDT
 
 **A boxed CLI fills its pane when the side panel is open.** Claude, Grok and

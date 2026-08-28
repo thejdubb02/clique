@@ -383,6 +383,41 @@ def _run(panel) -> int:
             {"before": before, "after": after},
         )
 
+        # A stat the machine cannot report is gone, not blank. Most VMs have no
+        # temperature sensor and no swap in use, and holding those columns open
+        # left two permanent holes in the row.
+        gaps = page.evaluate(
+            """() => {
+              const q = (s) => document.querySelector(s);
+              const swap = q('#swap'), temp = q('#temp');
+              swap.classList.add('is-off');
+              temp.classList.add('is-off');
+              const load = q('#load').getBoundingClientRect();
+              const up = q('#uptime').getBoundingClientRect();
+              const cpu = q('#cpu').getBoundingClientRect();
+              const mem = q('#mem').getBoundingClientRect();
+              return {
+                off: temp.getBoundingClientRect().width + swap.getBoundingClientRect().width,
+                between: up.left - load.right,
+                normal: mem.left - cpu.right,
+              };
+            }"""
+        )
+        check("a stat with no reading takes no width", gaps["off"] < 1, gaps)
+        check(
+            "and leaves no gap where it was",
+            abs(gaps["between"] - gaps["normal"]) < 1,
+            gaps,
+        )
+        shown = page.evaluate(
+            """() => {
+              const temp = document.querySelector('#temp');
+              temp.classList.remove('is-off');
+              return temp.getBoundingClientRect().width;
+            }"""
+        )
+        check("a stat that comes back is drawn again", shown > 10, shown)
+
         print("the theme reached the terminal")
         sessions = page.locator(f'.session[data-id="{mine}"]')
         if sessions.count():

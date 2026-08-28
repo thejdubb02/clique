@@ -1273,8 +1273,9 @@ function renderStats() {
             Number(disk.free_gb ?? 0).toFixed(1) + "G free",
             `disk ${disk.percent ?? 0}% used`);
 
-  // Any swap in use means memory pressure already happened. The column stays
-  // even at zero, so it appearing does not shove the tabs sideways.
+  // Any swap in use means memory pressure already happened. A box using none
+  // does not get a column for it — the row closes up rather than holding a
+  // blank the width of "SWAP —.–G".
   const swap = st.swap || {};
   const swapEl = $("#swap");
   if (swapEl) {
@@ -1285,7 +1286,8 @@ function renderStats() {
   }
 
   // Temperature, only when the machine actually has a sensor. Like swap, the
-  // column hides itself when there is nothing honest to say (most VMs).
+  // column is gone rather than blank when there is nothing honest to say,
+  // which on most VMs is always.
   const temp = st.temp || {};
   const tempEl = $("#temp");
   if (tempEl) {
