@@ -1595,7 +1595,10 @@ function renderTree() {
    * you make afterwards — so it has to be somewhere you can see without
    * scrolling past every folder you already have. */
   const unfiled = live.filter((s) => !running.includes(s) && !filed(s));
-  if (unfiled.length) {
+  // With a query up, Ungrouped is drawn even when nothing live is in it: the
+  // thing being searched for is often a session that was closed, and its
+  // history row has nowhere else to appear.
+  if (unfiled.length || query) {
     groups.push({ id: "__unfiled", name: "Ungrouped", color: "#8b8b8b",
                   collapsed: viewsCollapsed.has("__unfiled"), sessions: unfiled });
   }
@@ -1620,7 +1623,12 @@ function renderTree() {
     // Pinned sessions float to the top of their group, above recency. A stable
     // sort keeps the order within the pinned, and within the rest.
     shown.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-    if ((query || activeOnly) && !shown.length) continue;
+    /* History counts towards whether this group has anything to show. Worked
+     * out here rather than after the skip below, because a search whose only
+     * match is a session you closed yesterday used to drop the whole group
+     * before its history was ever consulted, and the search came up empty. */
+    const hist = group.collapsed && !query ? [] : historyRows(group, query);
+    if ((query || activeOnly) && !shown.length && !hist.length) continue;
 
     const head = document.createElement("div");
     /* A folder holding the session you are looking at says so, whether it is
@@ -1674,7 +1682,7 @@ function renderTree() {
 
     if (group.collapsed && !query) continue;
     for (const s of shown) tree.appendChild(sessionRow(s));
-    for (const row of historyRows(group, query)) tree.appendChild(row);
+    for (const row of hist) tree.appendChild(row);
   }
 
   const dots = $("#railDots");
@@ -6845,13 +6853,22 @@ function renderSnippetRows() {
 
 function wire() {
   $("#q").oninput = () => { syncQClear(); renderTree(); };
-  $("#qClear").onclick = () => {
+  const clearSearch = () => {
     const q = $("#q");
+    if (q.value === "") return;
     q.value = "";
     syncQClear();
     renderTree();
     q.focus();
   };
+  /* On the press, not the click. A click only fires when the press and the
+   * release land on the same element, and on a target this size a pixel of
+   * drift put the release on the input instead — which is why it read as
+   * "the x works if you hold still and not otherwise". preventDefault keeps
+   * the caret in the box instead of moving focus to the button. onclick stays
+   * for the keyboard, and clearing an empty box does nothing. */
+  $("#qClear").onpointerdown = (ev) => { ev.preventDefault(); clearSearch(); };
+  $("#qClear").onclick = clearSearch;
   $("#newTab").onclick = openModal;
   $("#settingsBtn").onclick = openSettings;
   $("#whatsNew").onclick = () => showChangelog(baseVersion(state.version));

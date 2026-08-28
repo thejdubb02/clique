@@ -116,17 +116,22 @@ body {
 
 .search { padding: 8px; background: var(--panel); position: relative; }
 .search input {
-  width: 100%; padding: 5px 26px 5px 8px; font: inherit;   /* room for the clear × */
+  width: 100%; padding: 5px 34px 5px 8px; font: inherit;   /* room for the clear × */
   background: var(--field); color: var(--fg);
   border: 1px solid transparent; border-radius: 3px;
 }
 .search input:focus { outline: none; border-color: var(--accent); }
 /* A clear × on the right, shown only when there is something to clear. */
+/* 26px square, not a 17px glyph: this is a target a thumb or a moving mouse
+   has to land on, and the old one was small enough to miss. */
 .q-clear {
-  position: absolute; top: 50%; right: 14px; transform: translateY(-50%);
+  position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+  width: 26px; height: 26px; display: grid; place-items: center;
   border: 0; background: none; color: var(--dim); cursor: pointer;
-  font-size: 16px; line-height: 1; padding: 0 4px; border-radius: 3px;
+  font-size: 16px; line-height: 1; padding: 0; border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
 }
+.q-clear:active { background: var(--row); color: var(--fg); }
 .q-clear:hover { color: var(--fg); }
 
 .tree { flex: 1; overflow-y: auto; padding-bottom: 12px; }

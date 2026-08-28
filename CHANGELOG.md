@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.51.4 — 2026-08-28 12:26 PDT
+
+**Search reaches past history, not just live sessions.** With the running-only
+filter on, a search already looked past it to find a stopped session. It stopped
+short of the past conversations in the sidebar: a folder whose only match was
+something you closed yesterday was dropped before its history was ever read, and
+Ungrouped was not drawn at all when nothing live was sitting in it. Both now
+count towards what a search can find.
+
+**The clear x in the search box works on the first try.** It was a 17 pixel
+glyph, and a click only counts when the press and the release land on the same
+thing, so a mouse that moved a little between the two did nothing. It is a 26
+pixel target now and it fires on the press, which is also what makes it usable
+with a thumb.
+
 ## 0.51.3 — 2026-08-28 11:58 PDT
 
 **Notes no longer lose an edit when you switch session.** A note saves shortly
