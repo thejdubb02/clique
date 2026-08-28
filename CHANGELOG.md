@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.51.8 — 2026-08-28 14:34 PDT
+
+**The terminal can no longer paint over the side panel.** A boxed CLI keeps its
+own grid and is scaled to fit the pane, and that scale is worked out from a
+measured character cell. A fraction of a pixel of error there, multiplied by a
+couple of hundred columns, put the right edge of the terminal on top of the
+panel. Nothing in the pane legitimately draws outside its box, so the box
+clips now, and the check asks the question the overlap answered wrongly: just
+inside the panel's edge, is the panel what a click would land on.
+
 ## 0.51.7 — 2026-08-28 13:39 PDT
 
 **A resource the machine cannot report closes up instead of leaving a hole.**

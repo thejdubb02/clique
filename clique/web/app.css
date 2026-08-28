@@ -400,7 +400,14 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 
 /* ----------------------------------------------------------------- terminal */
 
-#termwrap { flex: 1; position: relative; min-height: 0; background: var(--bg); }
+/* Clipped, because the pane is the one thing here that is not laid out by
+   CSS. A boxed CLI keeps its own grid and is scaled to fit, and the scale is
+   computed from a measured character cell — so a fraction of a pixel of error,
+   multiplied by a couple of hundred columns, put the right edge of the
+   terminal on top of the side panel. Nothing legitimately draws outside this
+   box, and a terminal is a fixed viewport, so clipping loses nothing. */
+#termwrap { flex: 1; position: relative; min-height: 0; overflow: hidden;
+            background: var(--bg); }
 #terminal { position: absolute; inset: 0; padding: 6px 8px; }
 #terminal.hidden { visibility: hidden; }
 /* Inactive panes stay painted (opacity, not visibility) so Chrome cannot

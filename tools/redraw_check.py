@@ -251,6 +251,33 @@ def main() -> int:
             res["boxed_zooms_for_panel"] = zoomed
             fill = boxed_fill()
             res["boxed_fills_height_with_panel"] = fill > 0.9
+            spill = page.evaluate(
+                """(id) => {
+                  const e = terms.get(id);
+                  const term = e.term.element.getBoundingClientRect();
+                  const box = e.el.getBoundingClientRect();
+                  return {right: term.right - box.right, bottom: term.bottom - box.bottom};
+                }""",
+                bid,
+            )
+            res["zoomed_pane_stays_in_its_box"] = spill["right"] <= 1 and spill["bottom"] <= 1
+            # The question the overlap answered wrongly: just inside the
+            # panel's left edge, is the panel what the pointer would hit?
+            res["panel_is_not_covered_by_the_pane"] = page.evaluate(
+                """() => {
+                  const panel = document.querySelector('#panelBody')
+                    || document.querySelector('#sidepanel');
+                  if (!panel) return false;
+                  const r = panel.getBoundingClientRect();
+                  const hits = [8, r.height / 2, r.height - 8].map((dy) => {
+                    const el = document.elementFromPoint(r.left + 6, r.top + dy);
+                    return Boolean(el && !el.closest('#termwrap'));
+                  });
+                  return hits.every(Boolean);
+                }"""
+            )
+            if not res["zoomed_pane_stays_in_its_box"]:
+                print(f"       zoomed pane spills {spill} px past its box")
             page.screenshot(path="/tmp/clique-redraw/boxed-panel-open.png")
             page.evaluate("() => closePanel()")
             page.wait_for_timeout(400)
