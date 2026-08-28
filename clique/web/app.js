@@ -5298,11 +5298,18 @@ function layoutPane(entry) {
   if (!entry || !entry.term || !entry.fit) return;
   const boxed = sessionOwnsInput(entry.id);
   const cell = paneCellPx(entry.term);
-  const scale = paneZoomScale(
-    entry.el.clientWidth, entry.el.clientHeight,
-    entry.term.cols, entry.term.rows, cell.w, cell.h);
+  const scale = paneWidthScale(entry.el.clientWidth, entry.term.cols, cell.w);
   if (paneShouldZoom(boxed, scale)) {
     applyPaneZoom(entry.term, scale);
+    // Shrinking the picture shrinks every cell with it, so more rows fit in
+    // the height than did before, and the pane has to take them. Without
+    // this the panel opened, the grid scaled down to clear it, and the
+    // bottom fifth of the terminal went dead black. Columns are left exactly
+    // where they are: keeping them is the entire reason this zooms.
+    const fitRows = Math.floor(entry.el.clientHeight / (cell.h * scale));
+    if (fitRows >= 4 && fitRows !== entry.term.rows) {
+      try { entry.term.resize(entry.term.cols, fitRows); } catch (err) { /* not laid out yet */ }
+    }
     return;
   }
   applyPaneZoom(entry.term, 1);
@@ -8218,13 +8225,18 @@ function paneCellPx(term) {
   return { w: size * 0.6, h: size * 1.2 };
 }
 
-function paneZoomScale(availW, availH, cols, rows, cellW, cellH) {
-  if (availW < 2 || availH < 2 || cols < 1 || rows < 1 || cellW < 1 || cellH < 1) {
-    return 1;
-  }
-  const needW = cols * cellW, needH = rows * cellH;
-  if (needW <= availW && needH <= availH) return 1;
-  return Math.min(availW / needW, availH / needH);
+/* How far a boxed CLI's picture has to shrink to clear the pane's width.
+ *
+ * Width alone, deliberately. The zoom exists to protect the *columns*:
+ * narrowing the grid is what stacks a boxed CLI's prompt, and rows are free to
+ * follow the box like any other terminal's. Letting the height vote used to
+ * trap the pane — taking the rows the zoom had freed made the grid taller than
+ * its box, which read as a fresh reason to keep zooming, so closing the panel
+ * never gave the full size back. */
+function paneWidthScale(availW, cols, cellW) {
+  if (availW < 2 || cols < 1 || cellW < 1) return 1;
+  const need = cols * cellW;
+  return need <= availW ? 1 : availW / need;
 }
 
 function paneShouldZoom(boxed, scale) {

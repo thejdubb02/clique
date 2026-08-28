@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.51.6 — 2026-08-28 13:32 PDT
+
+**A boxed CLI fills its pane when the side panel is open.** Claude, Grok and
+Gemini draw their own prompt box, and narrowing the grid under them stacks it,
+so CLIque shrinks the picture to clear the panel instead of taking columns
+away. Shrinking the picture shrinks every cell with it, which frees up rows the
+pane was never taking: the terminal sat in the top of its box covering about
+two thirds of the height, with a dead black band underneath it. It takes those
+rows now, and tells tmux about them.
+
+**And it gives the size back when the panel closes.** The zoom was decided on
+the pane's width and height together, so once the extra rows were taken the
+grid was taller than its box, which read as a fresh reason to keep zooming.
+The zoom is decided on width alone now, which is the only thing it was ever
+protecting.
+
+`tools/redraw_check.py` grew the case, against a boxed stand-in rather than a
+paid CLI: it measured 68% coverage before this and asserts better than 90%
+now, opening and closing.
+
 ## 0.51.5 — 2026-08-28 13:23 PDT
 
 **The pane settles on a frame instead of a stopwatch.** Opening the side panel,

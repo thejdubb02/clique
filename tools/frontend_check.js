@@ -313,13 +313,13 @@ console.log("zoom a boxed pane instead of wrapping it");
 {
   const code = region("const PANE_ZOOM_MIN", "function paneForceSelectMods");
   const {
-    paneZoomScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN,
+    paneWidthScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN,
   } = new Function(code +
-    "; return { paneZoomScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN };")();
+    "; return { paneWidthScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN };")();
   check("room to spare is no zoom",
-        paneZoomScale(800, 400, 80, 24, 8, 16) === 1);
+        paneWidthScale(800, 80, 8) === 1);
   check("half the width zooms to half",
-        Math.abs(paneZoomScale(320, 400, 80, 24, 8, 16) - 0.5) < 0.01);
+        Math.abs(paneWidthScale(320, 80, 8) - 0.5) < 0.01);
   check("a boxed CLI at half size zooms",
         paneShouldZoom(true, 0.5));
   check("a shell never zooms",

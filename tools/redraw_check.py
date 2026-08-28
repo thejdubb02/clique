@@ -52,9 +52,29 @@ COUNT_SETTLES = """() => {
 }"""
 
 
+def _catalogue() -> None:
+    """The packaged CLIs plus a boxed stand-in.
+
+    Claude, Grok and Gemini draw their own prompt box, and that is the shape
+    the pane zoom exists for. This is that shape without opening a paid CLI
+    inside a check.
+    """
+    body = (ROOT / "clique" / "config" / "clis.toml").read_text(encoding="utf-8")
+    body += (
+        "\n[cli.boxed]\n"
+        'label      = "Boxed"\n'
+        f"command    = {sys.executable!r}\n"
+        f"args       = [{str(ROOT / 'tools' / 'fake_boxed_cli.py')!r}]\n"
+        'color      = "#6b7280"\n'
+        "own_input  = true\n"
+    )
+    (HOME / "clis.toml").write_text(body, encoding="utf-8")
+
+
 def _panel() -> subprocess.Popen:
     shutil.rmtree(HOME, ignore_errors=True)
     HOME.mkdir(parents=True)
+    _catalogue()
     env = dict(os.environ, CLIQUE_HOME=str(HOME), CLIQUE_TMUX_SOCKET=SOCKET)
     subprocess.run(
         [sys.executable, "-m", "clique", "password"],
@@ -95,6 +115,7 @@ def main() -> int:
 
     shutil.rmtree(WORK, ignore_errors=True)
     WORK.mkdir(parents=True)
+    Path("/tmp/clique-redraw").mkdir(exist_ok=True)
 
     proc = _panel()
     res: dict[str, object] = {}
@@ -137,6 +158,18 @@ def main() -> int:
                     sid,
                 )
 
+            def rows() -> int:
+                return page.evaluate(
+                    "(id) => { const e = terms.get(id); return e && e.term ? e.term.rows : 0; }",
+                    sid,
+                )
+
+            def tmux_rows() -> int:
+                out = tmux_mod._run(
+                    ["list-windows", "-t", f"={mux}", "-F", "#{window_height}"], SOCKET
+                )
+                return int(out.split()[0]) if out.split() else 0
+
             def tmux_cols() -> int:
                 # list-windows, not display-message: the latter wants a client
                 # and there is none on the session itself, only on the view.
@@ -145,18 +178,21 @@ def main() -> int:
                 )
                 return int(out.split()[0]) if out.split() else 0
 
-            wide = cols()
-            res["terminal_opened"] = wide > 40 and bool(mux)
-            res["tmux_matches_at_rest"] = tmux_cols() == wide
+            wide, tall = cols(), rows()
+            res["terminal_opened"] = wide > 40 and tall > 10 and bool(mux)
+            res["tmux_matches_at_rest"] = (tmux_cols(), tmux_rows()) == (wide, tall)
 
             # One toggle, one settle — and the columns it lands on are the ones
             # tmux is painting, not the ones the pane had before the panel.
             page.evaluate(COUNT_SETTLES)
             page.evaluate("() => openPanel('notes')")
             page.wait_for_timeout(250)
-            narrow = cols()
+            narrow, narrow_rows = cols(), rows()
             res["panel_narrows_pane"] = narrow < wide
-            res["tmux_matches_with_panel"] = tmux_cols() == narrow
+            res["tmux_matches_with_panel"] = (tmux_cols(), tmux_rows()) == (narrow, narrow_rows)
+            # The pane keeps its full height when the panel takes width off it.
+            res["panel_keeps_pane_height"] = narrow_rows == tall
+            page.screenshot(path="/tmp/clique-redraw/panel-open.png")
             res["one_settle_per_toggle"] = page.evaluate("() => window.__settles") == 1
 
             # A settle is a frame, not a timer. Two frames is well inside the
@@ -172,10 +208,61 @@ def main() -> int:
             res["rapid_toggle_settles_once"] = page.evaluate("() => window.__settles") == 1
             res["rapid_toggle_ends_wide"] = cols() == wide and tmux_cols() == wide
 
+            # A boxed CLI keeps its columns and zooms the picture instead of
+            # refitting, because narrowing the grid is what stacks its prompt.
+            # Zooming to fit the width shrinks the cells, so the pane has to
+            # take the rows that frees up or it sits in the top of its box with
+            # a dead band underneath — the bug this whole section exists for.
+            bid = page.evaluate(
+                """async (cwd) => {
+                  const r = await fetch('/api/sessions', {method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({cli:'boxed', cwd, name:'boxed'})});
+                  const id = (await r.json()).id;
+                  await refresh(); await openSession(id); return id;
+                }""",
+                str(WORK),
+            )
+            page.wait_for_timeout(1800)
+            res["boxed_is_boxed"] = page.evaluate("(id) => sessionOwnsInput(id)", bid)
+
+            def boxed_fill() -> float:
+                """How much of the pane's height the terminal actually covers."""
+                return page.evaluate(
+                    """(id) => {
+                      const e = terms.get(id);
+                      if (!e || !e.term || !e.term.element) return 0;
+                      const painted = e.term.element.getBoundingClientRect().height;
+                      return e.el.clientHeight ? painted / e.el.clientHeight : 0;
+                    }""",
+                    bid,
+                )
+
+            res["boxed_fills_height_at_rest"] = boxed_fill() > 0.9
+            page.evaluate("() => openPanel('notes')")
+            page.wait_for_timeout(400)
+            zoomed = page.evaluate(
+                """(id) => {
+                  const e = terms.get(id);
+                  return (e.term.element.style.transform || '').includes('scale');
+                }""",
+                bid,
+            )
+            res["boxed_zooms_for_panel"] = zoomed
+            fill = boxed_fill()
+            res["boxed_fills_height_with_panel"] = fill > 0.9
+            page.screenshot(path="/tmp/clique-redraw/boxed-panel-open.png")
+            page.evaluate("() => closePanel()")
+            page.wait_for_timeout(400)
+            res["boxed_fills_height_again"] = boxed_fill() > 0.9
+            if fill <= 0.9:
+                print(f"       boxed pane covered {fill:.0%} of its box with the panel open")
+
             # The repaint reaches tmux, finds this browser's own client, and
             # finds nothing on the session itself — so it cannot hit anyone else.
             views = [s.mux for s in tmux_mod.list_sessions(SOCKET, prefix=tmux_mod.VIEW_PREFIX)]
-            res["viewer_exists"] = len(views) == 1
+            # One view per open terminal, never one on the session itself.
+            res["viewer_exists"] = len(views) == 2
             if views:
                 clients = tmux_mod._run(
                     ["list-clients", "-t", f"={views[0]}", "-F", "#{client_tty}"], SOCKET
