@@ -8,14 +8,15 @@ Ranked for Justin's actual use (many agents, two machines) against
 
 ---
 
-## Blocked on Justin
+## Releasing to PyPI
 
-**PyPI is stale, not blocked.** `clique-panel` is live and installable, and it
-needs no token: `.github/workflows/publish.yml` uses Trusted Publishing, which
-PyPI is already configured for and which last ran successfully on 2026-08-22.
-What is missing is a GitHub Release. Publishing fires on one, the last tag cut
-was `v0.24.0`, so PyPI is serving 0.50.54 while the panel is on 0.51.8. Cutting
-a release, or running the workflow by hand, ships whatever is on `main`.
+Nothing is blocked and no token is involved. `.github/workflows/publish.yml`
+uses Trusted Publishing, and it fires when a GitHub Release is published, not
+on a push. So `main` running ahead of PyPI is normal and expected; cutting a
+release is what catches it up.
+
+`uvx clique-panel` works. Last cut: `v0.51.9` on 2026-08-28, verified by
+installing from PyPI into a clean venv rather than trusting the workflow.
 
 ## Now — daily drive
 
