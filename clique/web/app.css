@@ -383,7 +383,7 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 #clients { cursor: help; }
 /* Swap keeps its column even at zero, so it appearing does not shove the
    tabs. Hidden-as-invisible, not hidden-as-gone. */
-#swap.is-off { visibility: hidden; }
+#swap.is-off, #temp.is-off { visibility: hidden; }
 /* Each stat carries its own dot, coloured by that stat's own pressure and set
    inline from renderStats. No default background here: an unset dot would show
    a stale colour for the moment before the first poll lands. */
@@ -1966,7 +1966,6 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
   border: 0; border-radius: 7px; background: none; color: var(--dim);
   cursor: pointer; padding: 0; position: relative;
 }
-.railr-btn:hover { background: var(--field); color: var(--fg); }
 .railr-btn.active { color: var(--accent); background: var(--field); }
 /* An accent tick on the active pane's icon, drawn on the panel side. */
 .railr-btn.active::before {
@@ -2024,7 +2023,6 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
   background: var(--field); color: var(--fg); border: 1px solid var(--line);
   font: inherit; font-size: 12px;
 }
-.pane-btn:hover { border-color: var(--accent); }
 .pane-btn .ico { width: 13px; height: 13px; }
 .pane-btn.on { color: var(--accent); border-color: var(--accent); }
 .pane-empty { color: var(--dim); font-size: 12px; padding: 10px 4px; line-height: 1.5; }
@@ -2038,7 +2036,6 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
   display: flex; align-items: flex-start; gap: 5px;
   padding: 2px 2px; border-radius: 6px; min-height: 26px;
 }
-.note-row:hover { background: var(--field); }
 .note-caret {
   flex: none; width: 15px; height: 22px; display: grid; place-items: center;
   background: none; border: 0; padding: 0; cursor: pointer; color: var(--dim);
@@ -2050,7 +2047,6 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
   border: 1.5px solid var(--dim); border-radius: 4px; background: var(--field);
   display: grid; place-items: center; padding: 0;
 }
-.note-check:hover { border-color: var(--accent); }
 .note-check.done { background: var(--accent); border-color: var(--accent); }
 .note-check.done::after {
   content: ""; width: 4px; height: 8px; margin-top: -2px;
@@ -2065,13 +2061,11 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
 .note-text:empty::before { content: attr(data-placeholder); color: var(--dim); }
 .note-item.done > .note-row > .note-text { color: var(--dim); text-decoration: line-through; }
 .note-actions { flex: none; display: flex; align-items: center; gap: 1px; opacity: 0; }
-.note-row:hover .note-actions,
 .note-row:focus-within .note-actions { opacity: 1; }
 .note-act {
   width: 22px; height: 22px; display: grid; place-items: center;
   background: none; border: 0; border-radius: 5px; cursor: pointer; color: var(--dim);
 }
-.note-act:hover { background: var(--panel); color: var(--fg); }
 .note-act .ico { width: 13px; height: 13px; }
 /* Meta line: timestamp and reminder chip, under the text, dim and small. */
 .note-meta {
@@ -2085,6 +2079,19 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
 .note-remind .ico { width: 10px; height: 10px; }
 .note-remind.due { color: var(--warn); border-color: var(--warn); }
 .note-remind.reminded { opacity: .6; }
+
+/* Same gate as the rules further up: a tap leaves :hover stuck on, and a row
+   that keeps its action strip lit after the finger lifts is the phone version
+   of this pane being broken. The actions still appear on focus-within, which
+   is what a tap gives you. */
+@media (hover: hover) and (pointer: fine) {
+  .railr-btn:hover { background: var(--field); color: var(--fg); }
+  .pane-btn:hover { border-color: var(--accent); }
+  .note-row:hover { background: var(--field); }
+  .note-check:hover { border-color: var(--accent); }
+  .note-row:hover .note-actions { opacity: 1; }
+  .note-act:hover { background: var(--panel); color: var(--fg); }
+}
 
 /* The inline reminder time picker. */
 #remindPop {

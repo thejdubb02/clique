@@ -2288,13 +2288,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "notes too long"}, 413)
         path = self._notes_path(session_id)
         try:
-            if items:
-                notes.merge_reminded(notes.load(path)["items"], items)
-                notes.save(path, items)
-            else:
-                for stale in (path, path.with_suffix(".md")):
-                    if stale.exists():
-                        stale.unlink()  # an emptied outline is a deleted note
+            with notes.lock_for(path):
+                if items:
+                    notes.merge_reminded(notes.load(path)["items"], items)
+                    notes.save(path, items)
+                else:
+                    for stale in (path, path.with_suffix(".md")):
+                        if stale.exists():
+                            stale.unlink()  # an emptied outline is a deleted note
         except OSError as exc:
             return self._json({"error": f"could not save: {exc}"}, 500)
         return self._json({"ok": True, "count": len(items)})

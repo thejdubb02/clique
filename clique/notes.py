@@ -24,6 +24,7 @@ import contextlib
 import json
 import os
 import secrets
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -194,6 +195,27 @@ def due(tree_or_items: object, now: float | None = None) -> list[dict]:
         if when and not it.get("done") and not it.get("reminded") and when <= now:
             out.append(it)
     return out
+
+
+_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def lock_for(path: Path) -> threading.Lock:
+    """The write lock for one notes file, shared by every writer in the process.
+
+    Two threads rewrite these files and both do a read-modify-write: the HTTP
+    save, and the reminder loop stamping items it has just fired. Interleave
+    them and the loser's copy goes to disk whole, so a note typed a millisecond
+    earlier disappears. One lock per file, kept forever, which is one entry per
+    session and not worth reaping.
+    """
+    key = str(path)
+    with _LOCKS_GUARD:
+        lock = _LOCKS.get(key)
+        if lock is None:
+            lock = _LOCKS[key] = threading.Lock()
+    return lock
 
 
 def merge_reminded(old_items: list[dict], new_items: list[dict]) -> None:

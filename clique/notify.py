@@ -347,7 +347,15 @@ class Watcher:
                     },
                 )
                 item["reminded"] = True
-            notes.save(path, tree)
+            # Re-read under the write lock before stamping. The browser saves
+            # this same file on a 600ms debounce, and writing our own copy back
+            # whole would drop anything typed while the reminders went out. If
+            # the outline was emptied meanwhile there is nothing left to stamp.
+            with notes.lock_for(path):
+                current = notes.load(path)
+                if current["items"]:
+                    notes.merge_reminded(tree["items"], current["items"])
+                    notes.save(path, current)
 
     @staticmethod
     def _events(was: tuple, now: tuple) -> list[str]:

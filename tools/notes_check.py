@@ -12,6 +12,8 @@ popover) and confirms:
 - the checkbox marks an item done in the file;
 - the reminder popover writes a `remindAt`;
 - the outline reloads from disk after a full page reload;
+- switching sessions mid-edit saves the edit to the session that was edited,
+  and leaves the session switched *to* with its own notes intact;
 - the rail switches panes and the close button hides the panel.
 
     ~/.cache/clique-visual/bin/python tools/notes_check.py
@@ -33,6 +35,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from clique import notes as notes_mod
 from clique.auth import COOKIE_NAME, Auth
 
 PASSWORD = "notes-check"  # noqa: S105 — a throwaway panel on loopback
@@ -194,6 +197,26 @@ def main() -> int:
             res["reminder_set"] = (
                 bool(items) and isinstance(items[0]["remindAt"], int) and items[0]["remindAt"] > 0
             )
+
+            # Switching sessions inside the 600ms debounce window. The edit
+            # belongs to the session it was made in, and the session switched to
+            # keeps the notes it already had on disk. Getting this wrong used to
+            # send an empty outline to the new session, which deletes its file.
+            other = _new_session(page, WORK)
+            other_file = HOME / "notes" / f"{other}.json"
+            notes_mod.save(other_file, notes_mod.sanitize([{"text": "do not clobber me"}]))
+            page.hover("#notesList .note-item")
+            page.click("#notesList .note-check")  # queues a save for this session
+            page.evaluate("(id) => openSession(id)", other)  # well inside the debounce
+            page.wait_for_timeout(1500)
+            survived = (
+                json.loads(other_file.read_text()).get("items") if other_file.is_file() else None
+            )
+            res["switch_kept_other"] = bool(survived) and survived[0]["text"] == "do not clobber me"
+            items = read_items()
+            res["switch_saved_edit"] = bool(items) and items[0]["done"] is False
+            page.evaluate("(id) => openSession(id)", sid)
+            page.wait_for_timeout(700)
 
             # A full reload restores the panel (localStorage) and reloads from disk.
             page.reload(wait_until="domcontentloaded")

@@ -161,7 +161,7 @@ def temperature() -> dict:
     fallback, and keeps only physically plausible readings so a bogus zone does
     not report 0 or 8000 degrees.
     """
-    readings: list[float] = []
+    plausible: list[float] = []
     for pattern in (
         "/sys/class/thermal/thermal_zone*/temp",
         "/sys/class/hwmon/hwmon*/temp*_input",
@@ -169,12 +169,15 @@ def temperature() -> dict:
         for path in glob.glob(pattern):
             try:
                 with open(path) as fh:
-                    readings.append(int(fh.read().strip()) / 1000.0)
+                    celsius = int(fh.read().strip()) / 1000.0
             except (OSError, ValueError):
                 continue
-        if readings:
+            if 0.0 < celsius < 150.0:
+                plausible.append(celsius)
+        # Only a usable reading ends the search. A box whose thermal zones all
+        # report 0 still deserves the hwmon fallback it advertises.
+        if plausible:
             break  # thermal zones are enough; do not double-count with hwmon
-    plausible = [c for c in readings if 0.0 < c < 150.0]
     if not plausible:
         return {}
     return {"c": round(max(plausible), 1)}

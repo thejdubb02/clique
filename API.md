@@ -345,8 +345,10 @@ to finish at three in the morning.
  "url": "https://box.ts.net/clique/?session=..."}
 ```
 
-`event` is `waiting`, `error`, `finished`, `died` or `test`. Each fires on the
-edge — a session waiting for an hour is not news every ten seconds. With
+`event` is `waiting`, `error`, `finished`, `died`, `test` or `reminder`. Each
+fires on the edge — a session waiting for an hour is not news every ten
+seconds, and a note reminder fires once per `remindAt`, guarded by a
+`reminded` flag the server keeps and the browser never sends. With
 `webhook_secret` set, `X-CLIque-Signature: sha256=<hmac>` covers the exact
 bytes sent. One attempt, five second timeout, no retry: a dropped notification
 is superseded by the next change, and a retry queue means durable state.

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.51.3 — 2026-08-28 11:58 PDT
+
+**Notes no longer lose an edit when you switch session.** A note saves shortly
+after you stop typing, and switching tabs inside that window used to send the
+edit to the wrong session: the change was lost, and if the session you switched
+to had not been opened in that browser yet, its notes file was deleted outright.
+The save now carries the session it was made in.
+
+**Reminders no longer overwrite what you are typing.** The background loop that
+fires note reminders rewrote the whole file from a copy it had read seconds
+earlier, dropping anything typed in the meantime. Both writers now take the same
+lock and re-read before writing.
+
+**The temperature column hides where it said it would.** On a machine with no
+sensor the status bar kept showing an empty TEMP reading instead of stepping
+aside. It also falls back to the hwmon sensors now when the kernel's thermal
+zones report something implausible, rather than giving up on the first answer it
+finds.
+
+**Notes stop sticking on touch.** The panel and notes hover styles sit behind
+the same pointer check as the rest of the app, so tapping a note no longer
+leaves its action buttons lit on the row you last touched. They still appear on
+tap, through focus rather than hover.
+
+Also: the `reminder` webhook event is listed in `API.md` with the other four.
+
 ## 0.51.2 — 2026-08-28 11:20 PDT
 
 **A cleaner terminal redraw when the side panel opens.** Opening or closing the

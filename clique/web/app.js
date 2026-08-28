@@ -2572,6 +2572,7 @@ let notesItems = [];           // the working outline for the session in front
 let notesForId = null;
 let notesHideDone = false;
 let _notesSaveTimer = null;
+let _notesPending = null;      // {id, items} captured when the save was queued
 let _notesLoadToken = 0;
 
 /* The menu/palette entry: bring the panel up on Notes for a session, switching
@@ -2598,7 +2599,7 @@ async function loadNotes(id) {
     const r = await api(`api/sessions/${encodeURIComponent(id)}/notes`);
     if (token !== _notesLoadToken) return;                 // a newer load won
     if (panelPane !== "notes" || activeId !== id) return;  // switched away
-    if (_notesSaveTimer && notesForId === id) return;       // local edit is newer
+    if (_notesPending && _notesPending.id === id) return;    // local edit is newer
     notesCache.set(id, r.items || []);
     buildNotes($("#panelBody"), session(id), r.items || []);
   } catch (err) {
@@ -2910,15 +2911,22 @@ async function sendNoteToTerminal(item) {
 
 function queueSaveNotes() {
   paintRail();
+  // Capture the session and the outline as they are *now*, not as they will be
+  // when the timer fires. Switching sessions inside the debounce window used to
+  // send the new session's outline to the new session's endpoint: the edit was
+  // lost, and if that session had never been opened here its outline was the
+  // empty one, which the server reads as "delete the file".
+  _notesPending = { id: notesForId, items: notesItems };
   clearTimeout(_notesSaveTimer);
   _notesSaveTimer = setTimeout(flushSaveNotes, 600);
 }
 async function flushSaveNotes() {
   clearTimeout(_notesSaveTimer);
   _notesSaveTimer = null;
-  const id = notesForId;
-  if (!id) return;
-  const items = notesItems;
+  const pending = _notesPending;
+  _notesPending = null;
+  if (!pending || !pending.id) return;
+  const { id, items } = pending;
   notesCache.set(id, items);
   try {
     await api(`api/sessions/${encodeURIComponent(id)}/notes`, {
