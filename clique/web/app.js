@@ -1229,6 +1229,17 @@ function saveWorkspaceSetting(patch) {
     .catch(() => {});
 }
 
+function fmtUptime(seconds) {
+  const s = Math.max(0, seconds | 0);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m`;
+  return `${s}s`;
+}
+
 function paintStat(id, percent, value, title) {
   const el = $("#" + id);
   if (!el) return;
@@ -1272,6 +1283,20 @@ function renderStats() {
               gb(swap.used_mb) + "G",
               `swap ${swap.percent ?? 0}% used — memory pressure has already happened`);
   }
+
+  // Temperature, only when the machine actually has a sensor. Like swap, the
+  // column hides itself when there is nothing honest to say (most VMs).
+  const temp = st.temp || {};
+  const tempEl = $("#temp");
+  if (tempEl) {
+    const c = typeof temp.c === "number" ? temp.c : null;
+    tempEl.classList.toggle("is-off", c === null);
+    if (c !== null) paintStat("temp", c, Math.round(c) + "°C", `${c}°C, hottest sensor`);
+  }
+
+  // How long the box has been up. Always available on Linux, so it always shows.
+  const up = (st.uptime && st.uptime.seconds) || 0;
+  paintStat("uptime", 0, fmtUptime(up), `up ${fmtUptime(up)} since boot`);
 
   const n = st.clients ?? 0;
   const tabs = openTabs.length;

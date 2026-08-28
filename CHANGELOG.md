@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.51.1 — 2026-08-28 11:04 PDT
+
+**Uptime and temperature in the status bar.** The bottom bar now shows how long
+the box has been up, and its temperature when the machine has a sensor to read.
+Like swap, the temperature column hides itself where there is nothing honest to
+say, which is most VMs and containers.
+
 ## 0.51.0 — 2026-08-28 10:29 PDT
 
 **A docked side panel, and notes that are a real checklist.** The right edge now

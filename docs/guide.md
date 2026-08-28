@@ -39,7 +39,8 @@ Five areas, left to right and top to bottom:
 - **Terminal pane** (center): the live session. Below it, the prompt box.
 - **Side panel** (right): a docked panel for per-session features, opened from
   the icon rail on the far right. Toggle it with `Ctrl+J`.
-- **Status bar** (bottom): CPU, memory, disk, load, and how many live views are
+- **Status bar** (bottom): CPU, memory, disk, load, how long the box has been up,
+  its temperature when the machine has a sensor, and how many live views are
   attached.
 
 ---
