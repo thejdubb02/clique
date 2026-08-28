@@ -1014,9 +1014,14 @@ async function sendKey(id, key, label) {
   }
 }
 
+/* When the last poll landed. The pane size label needs it to tell a stale
+ * reading from somebody else's decision, and nothing else has the timestamp. */
+let lastPollAt = 0;
+
 async function refresh() {
   try {
     state = await api("api/state");
+    lastPollAt = Date.now();
     pollFailures = 0;
     $("#offline").hidden = true;
   } catch (err) {
@@ -2518,6 +2523,7 @@ function settlePane() {
   refitAll();
   reclaimSize(document.hasFocus());
   repaintPane();
+  renderSessionLine();   // the pane's size just changed, and the strip says so
 }
 
 /* Ask tmux to repaint this browser's own client now.
@@ -3405,6 +3411,61 @@ function renderTabs() {
   renderSessionLine();
 }
 
+/* Say what size the pane is drawn at, but only when that is not the obvious
+ * answer.
+ *
+ * Two things make a pane a size nobody asked for, and both are deliberate.
+ * A tmux window has exactly one size shared by every client attached to it,
+ * so the browser in front sets it and everyone else draws at that. And a CLI
+ * that paints its own prompt box has its columns kept and its picture shrunk,
+ * because narrowing the grid is what stacks the box. From the outside both
+ * look like a bug: text smaller than you left it, or a band of dead space
+ * down one side.
+ *
+ * A label is the cheapest thing that turns "why does my pane look wrong" into
+ * a fact, and it stays quiet when the pane is simply drawn at its own fit —
+ * which is almost always. */
+function paneSizeNote(id) {
+  const entry = terms.get(id);
+  const s = session(id);
+  if (!entry || !entry.term) return null;
+  const cols = entry.term.cols, rows = entry.term.rows;
+  if (!claimable(cols, rows)) return null;
+  const size = `${cols}x${rows}`;
+
+  /* What tmux is actually painting, straight off the poll. A pane drawing a
+   * different grid from the window tmux thinks it has is the case a person
+   * cannot fix from where they are standing, so it goes first. Asking the fit
+   * addon instead does not work: each browser fits its own box quite happily
+   * and has no idea the window underneath belongs to somebody else. */
+  /* ...but only from a poll that has actually seen our own last claim. The
+   * size arrives on a 3s cycle, so for a moment after this browser asserts a
+   * size the poll still holds the previous one, and reading that as somebody
+   * else's doing made the label accuse a window that was not there. A fixed
+   * delay does not work either: two browsers taking the size off each other
+   * both keep claiming, and neither would ever be told. Comparing the two
+   * clocks is exact, and it tells whichever browser is *not* winning. */
+  const settled = !entry.claimedAt || lastPollAt > entry.claimedAt;
+  if (settled && s && s.cols && s.rows && (s.cols !== cols || s.rows !== rows)) {
+    return {
+      text: `another window set ${s.cols}x${s.rows}`,
+      title: `This pane is drawing ${size}, but tmux has the window at ${s.cols}x${s.rows}. `
+           + "A tmux window has one size shared by everything attached to it, so "
+           + "whichever browser is in front sets it. Click this pane to take it back.",
+    };
+  }
+  const el = entry.term.element;
+  if (el && (el.style.transform || "").includes("scale")) {
+    return {
+      text: `${size} · scaled to fit`,
+      title: "This CLI draws its own prompt box, so the columns are kept and the "
+           + "picture is shrunk rather than the grid narrowed. Close the side panel "
+           + "or widen the window to get the full size back.",
+    };
+  }
+  return null;
+}
+
 /* The status line under the tabs: what the session in front is doing, at a
  * glance. Its process, where, which branch, how long it has been up and how
  * long it has been quiet. Every fact already rides on the session in the 3s
@@ -3428,6 +3489,11 @@ function renderSessionLine() {
   if (s.branch) {
     const dirty = s.dirty ? ` · <span class="git-dirty">${s.dirty} changed</span>` : "";
     parts.push(`<span class="sl-branch">${escapeHtml(s.branch)}${dirty}</span>`);
+  }
+  const size = paneSizeNote(activeId);
+  if (size) {
+    parts.push(
+      `<span class="sl-size" title="${escapeHtml(size.title)}">${escapeHtml(size.text)}</span>`);
   }
   const tail = [];
   const up = ago(s.created);
@@ -5842,6 +5908,7 @@ async function attachNow(id) {
     if (document.hidden || !document.hasFocus()) return;
     if (!claimable(cols, rows)) return;
     if (entry.ws && entry.ws.readyState === 1) {
+      entry.claimedAt = Date.now();
       entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
     }
   });
@@ -8781,6 +8848,7 @@ function reclaimSize(force) {
   // because the numbers already matched is how a screen of dots lasted
   // until you clicked.
   if (!force && s.cols && s.rows && cols === s.cols && rows === s.rows) return;
+  entry.claimedAt = Date.now();
   entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
 }
 

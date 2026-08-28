@@ -58,20 +58,24 @@ the part worth fixing whichever way it goes.
 The backend stays; the reasoning is in [ROADMAP.md](../ROADMAP.md). These three
 came out of asking, and none of them is a rewrite:
 
-- **`aggressive-resize on`.** Sizes a window from the clients that have it
-  currently active, rather than every client in the session. We do not set it.
-  Both models raised it unprompted, and since each browser already gets its own
-  current window it may let us delete some of the manual focus tracking. Does
-  nothing when two browsers are on the same window, so it is a partial fix.
-  Twenty minutes to test.
-- **Attach background viewers with `-f ignore-size`.** A client with that flag
-  does not vote on the window size at all. That is the "a reconnecting tab
-  filled the other window with dots" class of bug, fixed in tmux rather than in
-  our JavaScript, and it holds even when the focus logic hiccups.
-- **Say the shared size out loud.** Something like "120x30, sized by another
-  window" in the pane header. Both models made the same point independently:
-  most of the confusing reports are people not knowing why their pane looks
-  wrong, and a label is an hour.
+All three are done, in 0.52.0, but not the way they were proposed. Tested
+rather than taken on trust, and the results are worth keeping:
+
+- **`aggressive-resize` and `-f ignore-size` are both no-ops here.** Each only
+  applies to a window whose `window-size` is `smallest` or `latest`, and ours
+  are locked to `manual`, where nothing but `resize-window` moves the window at
+  all. Neither model knew we already lock. Setting them would have looked like
+  a fix and changed nothing.
+- **What the testing did find** is that only the *current* window was being
+  locked. A window created afterwards inherited the loose global rule and
+  collapsed to the size of the next client to attach: measured 200x50 going to
+  80x23 the moment a browser arrived. Every window is locked now.
+- **Global `window-size manual` is still impossible.** It kills the tmux 3.4
+  server the next time a detached session is created, and `default-size` does
+  not rescue it, so per-window locking is not a workaround to tidy away later.
+- **The size label shipped** and is the part that will actually save time. It
+  says "another window set 120x30" or "scaled to fit", with real numbers, only
+  when the pane is not at its own size.
 
 Also raised, and it lines up with the shell-scrollback finding above: stripping
 alternate-screen sequences to fake scrollback is rewriting a byte stream, and

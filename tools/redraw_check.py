@@ -239,6 +239,16 @@ def main() -> int:
                 )
 
             res["boxed_fills_height_at_rest"] = boxed_fill() > 0.9
+
+            # The label that explains an odd-looking pane. Quiet when the pane
+            # is at its own fit, which is almost always.
+            def size_note() -> str:
+                return page.evaluate(
+                    "() => { const e = document.querySelector('#sessionline .sl-size');"
+                    " return e ? e.textContent : ''; }"
+                )
+
+            res["no_size_note_at_rest"] = size_note() == ""
             page.evaluate("() => openPanel('notes')")
             page.wait_for_timeout(400)
             zoomed = page.evaluate(
@@ -249,6 +259,10 @@ def main() -> int:
                 bid,
             )
             res["boxed_zooms_for_panel"] = zoomed
+            note = size_note()
+            res["size_note_explains_the_zoom"] = "scaled to fit" in note and "x" in note
+            if not res["size_note_explains_the_zoom"]:
+                print(f"       size note read {note!r}")
             fill = boxed_fill()
             res["boxed_fills_height_with_panel"] = fill > 0.9
             spill = page.evaluate(
@@ -301,6 +315,7 @@ def main() -> int:
             page.evaluate("() => closePanel()")
             page.wait_for_timeout(400)
             res["boxed_fills_height_again"] = boxed_fill() > 0.9
+            res["size_note_goes_quiet_again"] = size_note() == ""
             if fill <= 0.9:
                 print(f"       boxed pane covered {fill:.0%} of its box with the panel open")
 
@@ -333,6 +348,26 @@ def main() -> int:
 
             wide_fill, small_fill = underfill(page), underfill(second)
             res["both_panes_fill_their_width"] = wide_fill > 0.9 and small_fill > 0.9
+            # And the smaller one says why it looks the way it does, rather
+            # than leaving the person in front of it to guess.
+            READ = (
+                "() => { const e = document.querySelector('#sessionline .sl-size');"
+                " return [e ? e.textContent : '',"
+                "  (state.clients ?? 0) + '/' + openTabs.length,"
+                "  (() => { const t = terms.get(activeId);"
+                "     if (!t) return 'none';"
+                "     const w = t.fit.proposeDimensions() || {};"
+                "     return t.term.cols + 'x' + t.term.rows + ' want ' + w.cols + 'x' + w.rows; })()]; }"
+            )
+            # The strip refreshes on the 3s poll, so give it one.
+            page.wait_for_timeout(3500)
+            first_note = page.evaluate(READ)[0]
+            second_note = second.evaluate(READ)[0]
+            told = [n for n in (first_note, second_note) if n.strip()]
+            res["a_browser_is_told_another_owns_the_size"] = any(
+                "another window" in n for n in told
+            )
+            print(f"       strips read: {first_note!r} / {second_note!r}")
             if not res["both_panes_fill_their_width"]:
                 print(f"       widths covered: first {wide_fill:.0%}, second {small_fill:.0%}")
             second.screenshot(path="/tmp/clique-redraw/second-browser.png")

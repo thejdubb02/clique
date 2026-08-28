@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.52.0 — 2026-08-28 16:37 PDT
+
+**The pane says why it looks the way it does.** A tmux window has one size,
+shared by everything attached to it, so whichever browser is in front sets it
+and the rest draw at their own. And a CLI that paints its own prompt box has
+its columns kept and its picture shrunk, because narrowing the grid is what
+stacks the box. Both are deliberate and both look like a fault from the
+outside: text smaller than you left it, or a band of dead space down one side.
+The status strip now says which is happening, with the real numbers, and stays
+quiet the rest of the time, which is almost always.
+
+Working out *which* took some care. Asking the terminal what it would fit does
+not detect it, because each browser fits its own box quite happily and has no
+idea the window underneath belongs to somebody else. Comparing against the size
+tmux reports does detect it, but that arrives on a three second cycle, so a
+browser that had just resized itself accused a window that was not there. It
+compares the poll's clock against its own last claim instead, which is exact,
+and which correctly tells whichever browser is not winning.
+
+**Every window in a session is held at its size, not just the one in front.**
+Windows are locked individually because setting the rule server-wide kills the
+tmux 3.4 server the next time a detached session is created, and `default-size`
+does not rescue it. Only the current window was being locked, so a window made
+afterwards inherited the loose rule and collapsed to the size of the next
+client to attach: 200x50 became 80x23 the moment a browser arrived. Invisible
+on the one-window sessions CLIque makes itself, and waiting on anything split
+inside tmux or adopted from another tool.
+
 ## 0.51.10 — 2026-08-28 16:11 PDT
 
 **The scrollbar no longer floats in the middle of the pane.** Opening the side

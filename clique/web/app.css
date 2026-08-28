@@ -1943,6 +1943,11 @@ body.win-flash::after {
 #sessionline .sl-cwd { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #sessionline .sl-branch { flex: none; }
 #sessionline .git-dirty { color: var(--warn); }
+/* Only ever drawn when the pane is not at its own fit, so it is a signal
+   rather than a readout. Dimmer than the branch beside it: it explains
+   something, it does not ask to be read. */
+#sessionline .sl-size { flex: none; opacity: .8; cursor: help;
+                        font-variant-numeric: tabular-nums; }
 #sessionline .sl-tail { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
 
 /* Zen mode: the terminal and the prompt, nothing else. Everything else folds
