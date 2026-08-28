@@ -2490,25 +2490,56 @@ function closePanel() {
   refitSoon();
 }
 
+/* Run something once, after the browser has finished laying this change out.
+ *
+ * Two frames, not a timeout. A ResizeObserver delivers its callbacks inside
+ * the same rendering update as the frame that dirtied the layout, and *after*
+ * that frame's requestAnimationFrame callbacks — so the next frame is the
+ * first moment everything that measures the pane has already run. That is a
+ * property of the event loop; the 80ms this replaces was a guess, needlessly
+ * slow on a fast machine and not reliably long enough on a slow one. Keyed, so
+ * a second toggle replaces the first instead of queueing behind it. */
+var _layoutJobs = new Map();
+function afterLayout(key, fn) {
+  cancelAnimationFrame(_layoutJobs.get(key) || 0);
+  _layoutJobs.set(key, requestAnimationFrame(() => {
+    _layoutJobs.set(key, requestAnimationFrame(() => {
+      _layoutJobs.delete(key);
+      try { fn(); } catch (err) { /* nothing laid out yet */ }
+    }));
+  }));
+}
+
+/* The pane changed shape. Measure it, tell tmux, and ask for a frame back. */
+function settlePane() {
+  packTabs();
+  refitAll();
+  reclaimSize(document.hasFocus());
+  repaintPane();
+}
+
+/* Ask tmux to repaint this browser's own client now.
+ *
+ * tmux draws a client when something it tracks changes. A pane handed back the
+ * same grid it already had changes nothing tmux can see, so whatever the
+ * terminal last drew stays on screen until a keystroke provokes a frame — the
+ * "it does not redraw until you type" half of this. One client, the one this
+ * socket owns; nobody else's window moves. */
+function repaintPane() {
+  if (document.hidden) return;
+  const entry = terms.get(activeId);
+  if (!entry || !entry.ws || entry.ws.readyState !== 1) return;
+  try {
+    entry.ws.send(JSON.stringify({ type: "refresh" }));
+  } catch (err) { /* the socket went while we were measuring */ }
+}
+
 /* Reflow tmux once the layout has settled, not on every pixel of a drag. */
-let _refitTimer = null;
 function refitSoon() {
-  // The same two-step settle the sidebar toggle uses, for the same reason:
-  // opening or closing the panel changes the pane's width, and fitting too
-  // early computes a boxed CLI's zoom against the old width, so it comes back
-  // scaled wrong with dead space or spilling under the panel. Fit on the next
-  // frame and again once layout has settled, and push the new size to tmux both
-  // times so the CLI actually redraws at the new width.
-  const settle = () => {
-    try {
-      packTabs();
-      refitAll();
-      reclaimSize(document.hasFocus());
-    } catch (err) { /* nothing laid out yet */ }
-  };
-  requestAnimationFrame(settle);
-  clearTimeout(_refitTimer);
-  _refitTimer = setTimeout(settle, 80);
+  // Opening or closing the panel changes the pane's width, and fitting before
+  // layout has caught up computes a boxed CLI's zoom against the old width, so
+  // it comes back scaled wrong with dead space or spilling under the panel.
+  afterLayout("pane", settlePane);
 }
 
 function paintRail() {
@@ -3146,7 +3177,10 @@ function wirePanelResizer() {
  * layout has settled. The corner button (or the palette) brings it all back. */
 function toggleZen(on) {
   const now = document.body.classList.toggle("zen", on);
-  requestAnimationFrame(() => { try { refitAll(); } catch (err) { /* nothing laid out yet */ } });
+  // The same settle as the sidebar and the panel: this hides three bars, which
+  // is a bigger change to the pane than either, and it used to refit without
+  // ever telling tmux the new height.
+  afterLayout("pane", settlePane);
   if (now) { const e = terms.get(activeId); if (e && e.term) e.term.focus(); }
   return now;
 }
@@ -8795,9 +8829,7 @@ function setSidebar(show) {
   // size to tmux — after the layout has actually settled, not at 0ms. Fitting
   // too early computes a boxed CLI's zoom against the old width, and the pane
   // comes back scaled wrong with a stray scrollbar and dead space beside it.
-  const settle = () => { packTabs(); refitAll(); reclaimSize(document.hasFocus()); };
-  requestAnimationFrame(settle);
-  setTimeout(settle, 80);
+  afterLayout("pane", settlePane);
 }
 
 /* Carry the browser's own state across the rename, once.

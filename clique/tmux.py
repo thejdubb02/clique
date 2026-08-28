@@ -344,6 +344,27 @@ def resize_window(mux: str, cols: int, rows: int, socket: str | None = SOCKET) -
         )
 
 
+def refresh_client(view: str, socket: str | None = SOCKET) -> None:
+    """Force the browser attached to ``view`` to repaint, now.
+
+    tmux draws a client when something it tracks changes. A pane handed back
+    the same grid it already had after a layout change has changed nothing
+    tmux can see, so whatever the terminal last drew stays on screen until a
+    keystroke provokes a frame.
+
+    `refresh-client` addresses a *client*, not a session, so the view's own
+    client is looked up first. A view holds exactly one browser and the real
+    session lists no clients of its own, so this can never repaint a window
+    somebody else is looking at.
+    """
+    with contextlib.suppress(TmuxError, OSError):
+        listing = _run(["list-clients", "-t", _session_target(view), "-F", "#{client_tty}"], socket)
+        for line in listing.splitlines():
+            tty = line.strip()
+            if tty:
+                _run(["refresh-client", "-t", tty], socket)
+
+
 def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> list[Pane]:
     """Every session on a socket. One subprocess for all of them, deliberately.
 

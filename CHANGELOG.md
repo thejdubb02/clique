@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.51.5 — 2026-08-28 13:23 PDT
+
+**The pane settles on a frame instead of a stopwatch.** Opening the side panel,
+the sidebar or zen mode changes the terminal's width, and the refit that
+follows used to run twice: once on the next frame, which measured the box the
+pane had just left, and again 80ms later to correct it. The 80 was a guess. A
+resize observer hands out its callbacks after that first frame and before
+anything is painted, so waiting one more frame is the point at which everything
+measuring the pane has already run, and it is a fact about the browser rather
+than a number that happened to work. One toggle is now one refit, it lands
+sooner than the old one did, and toggling twice quickly collapses to a single
+refit instead of fitting against a box that is already gone.
+
+**Zen mode tells tmux the new size.** Folding away three bars is a bigger change
+to the pane than either of the other two, and it was the one that only ever
+refitted locally.
+
+**A pane that comes back the same size is repainted anyway.** tmux draws a
+client when something it tracks changes, so a layout change that left the grid
+the same size gave it nothing to redraw for, and the terminal kept the frame it
+already had until a keystroke provoked a new one. The browser now asks for that
+frame directly, over the socket it already has. It reaches one client, the one
+that asked, so nobody else's window moves.
+
+**`tools/redraw_check.py`.** Drives a real browser and asserts what the timeout
+was guessing at: one settle per toggle, the terminal's columns matching the tmux
+window's both ways round, and the repaint reaching this browser's view and no
+other.
+
 ## 0.51.4 — 2026-08-28 12:26 PDT
 
 **Search reaches past history, not just live sessions.** With the running-only

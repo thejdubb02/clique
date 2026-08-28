@@ -678,9 +678,16 @@ front of you (sidebar width, sidebar shown or hidden).
 ## Terminals
 
 `GET /ws?id=<id>&cols=<n>&rows=<n>` upgrades to a WebSocket carrying the
-pane. Text frames are keystrokes; JSON control frames handle `resize` and
-running a command. The handshake enforces `Origin`, because a WebSocket is not
-subject to CORS and `SameSite=Lax` does not cover it.
+pane. Text frames are keystrokes; JSON control frames handle `resize`,
+`refresh` and running a command. The handshake enforces `Origin`, because a
+WebSocket is not subject to CORS and `SameSite=Lax` does not cover it.
+
+`{"type": "refresh"}` asks tmux to repaint this socket's own view at once,
+and takes no arguments. It is what a client sends after a layout change that
+left the grid the same size, because tmux has nothing to redraw for and the
+pane would otherwise keep the frame it already had until a keystroke. It
+touches one client, so a read-only token may send it: asking for your own
+screen back is not writing to the session.
 
 `passive=1` attaches a viewer without resizing the shared tmux window, and
 sizes its PTY to the window that is already there. Each window is locked

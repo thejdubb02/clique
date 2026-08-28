@@ -2559,7 +2559,7 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     opcode, payload = message
                     if opcode == OP_TEXT:
-                        self._control(session, bridge, payload, may_write)
+                        self._control(session, bridge, payload, may_write, viewer)
                     elif may_write:
                         bridge.write(payload)
             finally:
@@ -2575,7 +2575,14 @@ class Handler(BaseHTTPRequestHandler):
             with self.panel._lock:
                 self.panel.clients = max(self.panel.clients - 1, 0)
 
-    def _control(self, session, bridge: PtyBridge, payload: bytes, may_write: bool = True) -> None:
+    def _control(
+        self,
+        session,
+        bridge: PtyBridge,
+        payload: bytes,
+        may_write: bool = True,
+        viewer: str | None = None,
+    ) -> None:
         """Text frames are control; binary frames are keystrokes.
 
         Everything here is attacker-shaped: it is JSON from a socket, so a
@@ -2603,6 +2610,14 @@ class Handler(BaseHTTPRequestHandler):
             # a background reconnect left a screen of dots.
             if may_write:
                 tmux.resize_window(session.mux, cols, rows, session.socket)
+        elif kind == "refresh":
+            # Repaint this browser's own view and nobody else's. The pane can
+            # come back from a layout change the same size it went in at, and
+            # then tmux has no reason to send a frame and the terminal keeps
+            # showing what it drew before. Read-only viewers get this too:
+            # asking for your own screen back is not writing to the session.
+            if viewer:
+                tmux.refresh_client(viewer, session.socket)
         elif not may_write:
             return  # watching is allowed; typing is not
         elif kind == "key":
