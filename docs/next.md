@@ -10,8 +10,12 @@ Ranked for Justin's actual use (many agents, two machines) against
 
 ## Blocked on Justin
 
-**PyPI / `uvx clique-panel`.** The package is built. Needs his publish token.
-Until that lands, nobody else can install this.
+**PyPI is stale, not blocked.** `clique-panel` is live and installable, and it
+needs no token: `.github/workflows/publish.yml` uses Trusted Publishing, which
+PyPI is already configured for and which last ran successfully on 2026-08-22.
+What is missing is a GitHub Release. Publishing fires on one, the last tag cut
+was `v0.24.0`, so PyPI is serving 0.50.54 while the panel is on 0.51.8. Cutting
+a release, or running the workflow by hand, ships whatever is on `main`.
 
 ## Now — daily drive
 
