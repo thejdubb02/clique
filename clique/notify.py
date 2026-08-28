@@ -34,6 +34,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import notes
+
 #: A notification is worth one attempt. A retry queue means durable state,
 #: which means a database, which ends the argument this product is making —
 #: and a dropped "your session is waiting" is superseded by the next poll
@@ -59,8 +61,8 @@ YOUNG = 30
 #: case, and refusing it would break the feature to protect an admin from
 #: their own machine. What is blocked is the range with no honest use.
 _FORBIDDEN = (
-    ipaddress.ip_network("169.254.0.0/16"),   # cloud metadata, incl. 169.254.169.254
-    ipaddress.ip_network("fe80::/10"),        # the v6 equivalent
+    ipaddress.ip_network("169.254.0.0/16"),  # cloud metadata, incl. 169.254.169.254
+    ipaddress.ip_network("fe80::/10"),  # the v6 equivalent
 )
 
 
@@ -81,7 +83,7 @@ def allowed(url: str) -> bool:
     try:
         infos = socket.getaddrinfo(parsed.hostname, None)
     except (socket.gaierror, UnicodeError, ValueError):
-        return False        # cannot resolve it, so cannot vouch for it
+        return False  # cannot resolve it, so cannot vouch for it
     for info in infos:
         try:
             address = ipaddress.ip_address(info[4][0])
@@ -218,8 +220,7 @@ class Watcher:
             self._generation += 1
             mine = self._generation
             self._stop.clear()
-            self._thread = threading.Thread(target=self._loop, args=(mine,),
-                                            daemon=True)
+            self._thread = threading.Thread(target=self._loop, args=(mine,), daemon=True)
             self._thread.start()
         elif not wanted and running:
             self._generation += 1
@@ -241,6 +242,10 @@ class Watcher:
                 # why — so this catches what a poll can plausibly raise and
                 # lets anything else surface.
                 continue
+            try:
+                self.reminders()
+            except (OSError, ValueError, KeyError, RuntimeError):
+                continue
 
     # ---------------------------------------------------------------- edges
 
@@ -258,7 +263,7 @@ class Watcher:
             now[row["id"]] = state
             was = self._before.get(row["id"])
             if was is None:
-                continue          # first look is a baseline, not news
+                continue  # first look is a baseline, not news
             for event in self._events(was, state):
                 # A session that has just started produces its opening screen,
                 # then settles — which is a busy->quiet edge, and "it finished"
@@ -267,21 +272,82 @@ class Watcher:
                 # simply having drawn itself.
                 if event == "finished" and time.time() - (row.get("created") or 0) < YOUNG:
                     continue
-                post(url, secret, {
-                    "event": event,
-                    "at": int(time.time()),
-                    "session": {
-                        "id": row["id"], "name": row.get("name", ""),
-                        "cli": row.get("cli", ""), "cli_label": row.get("cli_label", ""),
-                        "folder": row.get("folder"), "cwd": row.get("cwd", ""),
+                post(
+                    url,
+                    secret,
+                    {
+                        "event": event,
+                        "at": int(time.time()),
+                        "session": {
+                            "id": row["id"],
+                            "name": row.get("name", ""),
+                            "cli": row.get("cli", ""),
+                            "cli_label": row.get("cli_label", ""),
+                            "folder": row.get("folder"),
+                            "cwd": row.get("cwd", ""),
+                        },
+                        "text": self._text(event, row),
+                        "url": f"{panel_url}/?session={row['id']}" if panel_url else "",
                     },
-                    "text": self._text(event, row),
-                    "url": f"{panel_url}/?session={row['id']}" if panel_url else "",
-                })
+                )
 
         # A session that disappeared entirely: deleted, not died. No event, and
         # its history goes with it so a re-created id starts clean.
         self._before = now
+
+    # ------------------------------------------------------------- reminders
+
+    def reminders(self) -> None:
+        """Fire the note reminders that have come due, once each.
+
+        Runs on the same slow loop as the edge watcher and, like it, only when a
+        webhook is configured — a reminder that can only pop in a panel you are
+        not looking at is the case this is for. Each fired item is stamped
+        ``reminded`` and the file rewritten, so a nudge is delivered once even
+        across restarts. A reminder outlives its session on purpose: the note is
+        yours, and the thing it was about does not stop mattering because the CLI
+        exited.
+        """
+        settings = self.panel.store.settings
+        url = str(settings.get("webhook_url") or "")
+        if not url:
+            return
+        secret = str(settings.get("webhook_secret") or "")
+        panel_url = str(settings.get("panel_url") or "").rstrip("/")
+        home = self.panel.store.path.parent
+        ndir = notes.dir_for(home)
+        if not ndir.is_dir():
+            return
+        stamp = time.time()
+        for path in sorted(ndir.glob("*.json")):
+            tree = notes.load(path)
+            fired = notes.due(tree, stamp)
+            if not fired:
+                continue
+            session_id = path.stem
+            session = self.panel.store.session(session_id)
+            name = session.name if session else "A note"
+            for item in fired:
+                post(
+                    url,
+                    secret,
+                    {
+                        "event": "reminder",
+                        "at": int(stamp),
+                        "session": {
+                            "id": session_id,
+                            "name": name,
+                            "cli": getattr(session, "cli", "") if session else "",
+                            "cli_label": "",
+                            "folder": None,
+                            "cwd": getattr(session, "cwd", "") if session else "",
+                        },
+                        "text": _reminder_text(item.get("text", "")),
+                        "url": f"{panel_url}/?session={session_id}" if panel_url else "",
+                    },
+                )
+                item["reminded"] = True
+            notes.save(path, tree)
 
     @staticmethod
     def _events(was: tuple, now: tuple) -> list[str]:
@@ -289,7 +355,7 @@ class Watcher:
         new_signal, new_busy, new_alive = now
         out = []
         if old_alive and not new_alive:
-            return ["died"]       # nothing else about a dead session is news
+            return ["died"]  # nothing else about a dead session is news
         if new_signal and new_signal != old_signal:
             out.append(new_signal)
         elif old_busy and not new_busy and not new_signal:
@@ -308,3 +374,10 @@ class Watcher:
             "finished": f"{name} finished",
             "died": f"{name} is gone",
         }.get(event, f"{name}: {event}")
+
+
+def _reminder_text(text: str) -> str:
+    """The webhook body for a due reminder: its first line, kept short."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    first = lines[0][:120] if lines else ""
+    return f"Reminder: {first}" if first else "You have a reminder due"

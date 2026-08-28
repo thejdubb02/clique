@@ -301,13 +301,20 @@ under `<cwd>/.clique-exports/`, returning `{path, relative, bytes, lines}`. `400
 when there is nothing to capture (a session that is not running has no pane to
 read).
 
-### `GET /api/sessions/<id>/note` and `POST /api/sessions/<id>/note`
+### `GET /api/sessions/<id>/notes` and `POST /api/sessions/<id>/notes`
 
-A per-session scratchpad note. `GET` returns `{note}` (empty string when there is
-none). `POST` with `{note}` saves it, or deletes it when the text is empty.
-Stored as a sidecar `.md` file under the panel's home (`<CLIQUE_HOME>/notes/`),
-keyed by session id, so a note never lands as an untracked file in the project it
-is about. Capped at 100 KB (`413` over it).
+A per-session notes outline: a nested checklist shown in the side panel. `GET`
+returns `{version, items, updated}`, where each item is
+`{id, text, done, collapsed, created, updated, remindAt, reminded, children[]}`
+(`items` empty when there are none). `POST` with `{items}` replaces the whole
+outline (the browser owns the tree and sends it back on every change), or deletes
+it when `items` is empty. `remindAt` is a Unix time; when a webhook is configured
+a due reminder is delivered to it once (event `reminder`), which is what
+`reminded` records. Stored as a sidecar `.json` file under the panel's home
+(`<CLIQUE_HOME>/notes/`), keyed by session id, so a note never lands as an
+untracked file in the project it is about; a pre-outline `.md` note is migrated on
+first read. Capped at 200 KB, 2000 items and 6 levels deep (`413` over the byte
+cap).
 
 ### `GET /api/storage`
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.51.0 — 2026-08-28 10:29 PDT
+
+**A docked side panel, and notes that are a real checklist.** The right edge now
+has an always-on icon rail that opens a panel to a feature for the session in
+front: Notes, Git, Session info, and Export. It is collapsed by default, and
+nothing in it runs while it is shut, so an idle panel costs the browser nothing.
+Drag its edge to resize, and Ctrl+J (or the rail) opens and closes it.
+
+Notes moved out of a text box and into a nested checklist. Each line has a
+checkbox, you can indent lines with Tab to make topics with sub-notes, push a line
+straight into the terminal to act on it, and set a reminder that reaches you
+through your webhook (the same one that pings you when a session is waiting) even
+when the panel is closed. Everything is per session and saved on the server. An
+older plain-text note is carried over the first time you open it.
+
+The Git pane shows the branch, what has changed, and a one-click checkpoint. The
+Session pane shows the directory, CLI, memory and uptime. The Export pane writes
+the scrollback to a file. Each one is scoped to the tab you are on.
+
 ## 0.50.97 — 2026-08-25 18:55 PDT
 
 **Zen mode.** "Zen mode" in the command palette folds away the sidebar, the tabs

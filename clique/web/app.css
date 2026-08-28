@@ -1752,28 +1752,18 @@ body.win-flash::after {
  * flow at the foot of the page (the board fell entirely below the fold). This
  * is that rule: a scrim fixed to the viewport, centring the .sheet card. Toast
  * (z-index 70) still sits above them. */
-#inbox, #diff, #board, #broadcast, #confirmSheet, #noteSheet {
+#inbox, #diff, #board, #broadcast, #confirmSheet {
   position: fixed; inset: 0; z-index: 65;
   background: var(--scrim);
   display: grid; place-items: center; padding: 24px;
 }
 #confirmSheet { z-index: 80; }   /* it can open over another sheet */
 #inbox .sheet, #broadcast .sheet { width: min(560px, 94vw); }
-#inbox .sheet, #board .sheet, #broadcast .sheet, #confirmSheet .sheet, #noteSheet .sheet {
+#inbox .sheet, #board .sheet, #broadcast .sheet, #confirmSheet .sheet {
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 16px; max-height: 84vh; overflow: auto;
   display: flex; flex-direction: column; box-shadow: 0 18px 48px var(--shadow);
 }
-#noteSheet .note-sheet { width: min(640px, 94vw); }
-#noteText {
-  width: 100%; min-height: 46vh; resize: vertical; box-sizing: border-box;
-  margin: 4px 0 12px; padding: 10px 12px; border-radius: 6px;
-  background: var(--field); color: var(--fg); border: 1px solid var(--line);
-  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
-  line-height: 1.5;
-}
-#noteText:focus { outline: none; border-color: var(--accent); }
-#noteStatus { margin-right: auto; align-self: center; }
 
 /* --------------------------------------------------------------- confirm */
 
@@ -1946,6 +1936,9 @@ body.win-flash::after {
 body.zen #sidebar,
 body.zen #tabbar,
 body.zen #sessionline,
+body.zen #sidepanel,
+body.zen #panelResizer,
+body.zen #railR,
 body.zen #statusbar { display: none !important; }
 body.zen #zenExit {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1956,3 +1949,187 @@ body.zen #zenExit {
   opacity: .5; transition: opacity .15s ease;
 }
 body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
+
+/* ---------------------------------------------------- right rail + panel */
+
+/* The always-on icon rail on the far right. Thin, cheap, and the one thing that
+   stays put whether the panel is open or shut, so the features have a home you
+   can always find. */
+#railR {
+  flex: 0 0 38px; width: 38px; box-sizing: border-box;
+  background: var(--panel); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 0;
+}
+.railr-btn {
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border: 0; border-radius: 7px; background: none; color: var(--dim);
+  cursor: pointer; padding: 0; position: relative;
+}
+.railr-btn:hover { background: var(--field); color: var(--fg); }
+.railr-btn.active { color: var(--accent); background: var(--field); }
+/* An accent tick on the active pane's icon, drawn on the panel side. */
+.railr-btn.active::before {
+  content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+  width: 2px; height: 18px; border-radius: 2px; background: var(--accent);
+}
+.railr-btn .ico { width: 17px; height: 17px; }
+/* A dot on the rail icon when a pane has something to say (a note reminder due). */
+.railr-btn[data-flag="1"]::after {
+  content: ""; position: absolute; top: 5px; right: 5px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
+}
+
+/* The docked panel. A fixed pixel width the resizer owns; nothing inside renders
+   while it is hidden. */
+#sidepanel {
+  flex: 0 0 var(--panel-w, 320px); width: var(--panel-w, 320px);
+  min-width: 0; box-sizing: border-box;
+  background: var(--panel); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0;
+}
+#sidepanel[hidden] { display: none; }
+#panelHead {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 7px;
+  padding: 0 8px 0 12px; height: 35px; border-bottom: 1px solid var(--line);
+}
+#panelHead .ico { width: 15px; height: 15px; color: var(--dim); flex: none; }
+#panelTitle { font-size: 13px; font-weight: 600; margin: 0; color: var(--fg); }
+#panelHead .panel-for {
+  font-size: 11px; color: var(--dim); flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#panelClose { margin-left: auto; }
+#panelBody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 8px 14px; }
+
+/* The panel resizer: the sidebar's, mirrored to the other edge. */
+#panelResizer { flex: 0 0 0; position: relative; z-index: 5; }
+#panelResizer[hidden] { display: none; }
+#panelResizer::after {
+  content: ""; position: absolute; top: 0; bottom: 0; right: -3px; width: 7px;
+  cursor: col-resize;
+}
+#panelResizer.dragging::after,
+#panelResizer:focus-visible::after { background: var(--accent); opacity: .55; }
+#panelResizer:focus { outline: none; }
+
+/* A small toolbar at the top of a pane (add, filter). */
+.pane-tools {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.pane-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 6px; cursor: pointer;
+  background: var(--field); color: var(--fg); border: 1px solid var(--line);
+  font: inherit; font-size: 12px;
+}
+.pane-btn:hover { border-color: var(--accent); }
+.pane-btn .ico { width: 13px; height: 13px; }
+.pane-btn.on { color: var(--accent); border-color: var(--accent); }
+.pane-empty { color: var(--dim); font-size: 12px; padding: 10px 4px; line-height: 1.5; }
+.pane-hint { color: var(--dim); font-size: 11px; margin: 8px 2px 0; line-height: 1.5; }
+
+/* --------------------------------------------------------- notes outline */
+
+.note-item { position: relative; }
+.note-children { margin-left: 16px; border-left: 1px solid var(--line); padding-left: 4px; }
+.note-row {
+  display: flex; align-items: flex-start; gap: 5px;
+  padding: 2px 2px; border-radius: 6px; min-height: 26px;
+}
+.note-row:hover { background: var(--field); }
+.note-caret {
+  flex: none; width: 15px; height: 22px; display: grid; place-items: center;
+  background: none; border: 0; padding: 0; cursor: pointer; color: var(--dim);
+}
+.note-caret .ico { width: 12px; height: 12px; }
+.note-caret.leaf { visibility: hidden; }
+.note-check {
+  flex: none; width: 15px; height: 15px; margin-top: 4px; cursor: pointer;
+  border: 1.5px solid var(--dim); border-radius: 4px; background: var(--field);
+  display: grid; place-items: center; padding: 0;
+}
+.note-check:hover { border-color: var(--accent); }
+.note-check.done { background: var(--accent); border-color: var(--accent); }
+.note-check.done::after {
+  content: ""; width: 4px; height: 8px; margin-top: -2px;
+  border: solid var(--panel); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.note-text {
+  flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.45;
+  padding: 3px 3px; border-radius: 4px; color: var(--fg);
+  white-space: pre-wrap; overflow-wrap: anywhere; outline: none;
+}
+.note-text:focus { background: var(--field); box-shadow: inset 0 0 0 1px var(--accent); }
+.note-text:empty::before { content: attr(data-placeholder); color: var(--dim); }
+.note-item.done > .note-row > .note-text { color: var(--dim); text-decoration: line-through; }
+.note-actions { flex: none; display: flex; align-items: center; gap: 1px; opacity: 0; }
+.note-row:hover .note-actions,
+.note-row:focus-within .note-actions { opacity: 1; }
+.note-act {
+  width: 22px; height: 22px; display: grid; place-items: center;
+  background: none; border: 0; border-radius: 5px; cursor: pointer; color: var(--dim);
+}
+.note-act:hover { background: var(--panel); color: var(--fg); }
+.note-act .ico { width: 13px; height: 13px; }
+/* Meta line: timestamp and reminder chip, under the text, dim and small. */
+.note-meta {
+  margin: 0 0 2px 35px; display: flex; gap: 8px; align-items: center;
+  font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums;
+}
+.note-remind {
+  display: inline-flex; align-items: center; gap: 3px; cursor: pointer;
+  padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line);
+}
+.note-remind .ico { width: 10px; height: 10px; }
+.note-remind.due { color: var(--warn); border-color: var(--warn); }
+.note-remind.reminded { opacity: .6; }
+
+/* The inline reminder time picker. */
+#remindPop {
+  position: fixed; z-index: 82; width: 232px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px; box-shadow: 0 14px 40px var(--shadow);
+  display: flex; flex-direction: column; gap: 8px;
+}
+#remindPop[hidden] { display: none; }
+#remindPop label { font-size: 11px; color: var(--dim); }
+#remindPop input {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px;
+  background: var(--field); color: var(--fg); border: 1px solid var(--line);
+  font: inherit; font-size: 12px;
+}
+.remind-foot { display: flex; gap: 6px; justify-content: flex-end; }
+.remind-foot button {
+  padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg);
+}
+.remind-foot .primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.remind-foot .ghost { color: var(--dim); }
+
+/* -------------------------------------------------- git / info / export panes */
+
+.pane-kv { display: flex; flex-direction: column; gap: 0; margin: 2px 0 10px; }
+.pane-kv .kv {
+  display: grid; grid-template-columns: 82px 1fr; gap: 8px;
+  padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 12px;
+}
+.pane-kv .kv:last-child { border-bottom: 0; }
+.pane-kv .k { color: var(--dim); }
+.pane-kv .v { color: var(--fg); min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pane-kv .v.mono { font-family: var(--mono, ui-monospace, monospace); }
+.pane-kv .v.warn { color: var(--warn); }
+.pane-result {
+  margin-top: 10px; padding: 8px 10px; border-radius: 6px;
+  background: var(--field); border: 1px solid var(--line);
+  font-size: 12px; color: var(--fg); line-height: 1.5; word-break: break-all;
+}
+.pane-result.err { border-color: var(--err); color: var(--err); }
+
+/* On a narrow screen the panel takes the whole width and the rail sits over it;
+   the terminal is behind, reachable by closing the panel. */
+@media (max-width: 620px) {
+  #sidepanel { position: fixed; inset: 35px 38px 0 0; z-index: 60; width: auto; flex-basis: auto; }
+  #panelResizer { display: none !important; }
+}

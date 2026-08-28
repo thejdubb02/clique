@@ -39,6 +39,7 @@ from . import (
     gitinfo,
     llm,
     migrate,
+    notes,
     notify,
     secretbox,
     services,
@@ -63,10 +64,6 @@ WEB = Path(__file__).parent / "web"
 #: The reporter a hook-speaking CLI runs to report its state (clique/hook.py).
 #: Standard-library only, so any python can run it as a plain script.
 HOOK = Path(__file__).parent / "hook.py"
-
-#: A per-session note is a scratchpad, not a document store. Bounded so a paste
-#: gone wrong cannot write an unbounded file under the panel's home.
-NOTE_CAP = 100_000
 
 
 def _hooks_settings(python: str) -> str:
@@ -1539,8 +1536,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.panel.store.settings.get("drop_cleanup_days", 0) or 0
                 )
                 return self._json(usage)
-            if path.startswith("/api/sessions/") and path.endswith("/note"):
-                return self._get_note(path.split("/")[3])
+            if path.startswith("/api/sessions/") and path.endswith("/notes"):
+                return self._get_notes(path.split("/")[3])
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
             if path == "/api/workspace":
@@ -1891,8 +1888,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._checkpoint(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/export"):
                 return self._export_scrollback(path.split("/")[3], body)
-            if path.startswith("/api/sessions/") and path.endswith("/note"):
-                return self._save_note(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/notes"):
+                return self._save_notes(path.split("/")[3], body)
             if path == "/api/storage/purge":
                 freed = files.purge_shares(tuple(self._share_cwds()))
                 return self._json({"ok": True, **freed})
@@ -2266,39 +2263,41 @@ class Handler(BaseHTTPRequestHandler):
             201,
         )
 
-    def _note_path(self, session_id: str) -> Path:
-        """Where a session's note lives: a sidecar `.md` under the panel's home,
-        keyed by session id. Kept out of the project directory on purpose, so a
-        note never shows up as an untracked file in the repo it is about."""
-        return self.panel.store.path.parent / "notes" / f"{session_id}.md"
+    def _notes_path(self, session_id: str) -> Path:
+        """Where a session's notes outline lives: a sidecar `.json` under the
+        panel's home, keyed by session id. Kept out of the project directory on
+        purpose, so a note never shows up as an untracked file in the repo it is
+        about. A pre-outline `.md` note is migrated here on first read."""
+        return notes.path_for(self.panel.store.path.parent, session_id)
 
-    def _get_note(self, session_id: str) -> None:
+    def _get_notes(self, session_id: str) -> None:
         if not self.panel.store.session(session_id):
             return self._json({"error": "no such session"}, 404)
-        path = self._note_path(session_id)
-        try:
-            note = path.read_text(encoding="utf-8") if path.is_file() else ""
-        except OSError:
-            note = ""
-        return self._json({"note": note})
+        return self._json(notes.load(self._notes_path(session_id)))
 
-    def _save_note(self, session_id: str, body: dict) -> None:
-        """Save (or, when emptied, delete) a session's sidecar note."""
+    def _save_notes(self, session_id: str, body: dict) -> None:
+        """Replace (or, when emptied, delete) a session's notes outline.
+
+        The browser owns the tree and sends the whole thing; the server's job is
+        to bound it, keep the reminded flags it already knows about, and persist.
+        An emptied outline is a deleted file, the same rule the blob note had."""
         if not self.panel.store.session(session_id):
             return self._json({"error": "no such session"}, 404)
-        note = str(body.get("note") or "")
-        if len(note.encode("utf-8")) > NOTE_CAP:
-            return self._json({"error": "note too long"}, 413)
-        path = self._note_path(session_id)
+        items = notes.sanitize({"items": body.get("items")})
+        if len(notes.dumps(items).encode("utf-8")) > notes.MAX_BYTES:
+            return self._json({"error": "notes too long"}, 413)
+        path = self._notes_path(session_id)
         try:
-            if note.strip():
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(note, encoding="utf-8")
-            elif path.exists():
-                path.unlink()  # an emptied note is a deleted note
+            if items:
+                notes.merge_reminded(notes.load(path)["items"], items)
+                notes.save(path, items)
+            else:
+                for stale in (path, path.with_suffix(".md")):
+                    if stale.exists():
+                        stale.unlink()  # an emptied outline is a deleted note
         except OSError as exc:
             return self._json({"error": f"could not save: {exc}"}, 500)
-        return self._json({"ok": True, "bytes": len(note.encode("utf-8"))})
+        return self._json({"ok": True, "count": len(items)})
 
     def _share_cwds(self) -> set:
         """Every working directory that might hold shared files, deduped.

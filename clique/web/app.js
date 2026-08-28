@@ -1040,6 +1040,7 @@ async function refresh() {
   renderServices();
   renderGuard();
   renderVersion();
+  renderSidePanel();   // a no-op while the panel is shut
   loadOrphans();
   reclaimSize();
   // First load pulls history in so the sidebar is complete without anyone
@@ -2379,42 +2380,710 @@ async function exportScrollback(s) {
   }
 }
 
-/* A per-session note: a scratchpad that persists as a sidecar .md under the
- * panel's home, so context, a to-do, or where you left off survives a reload
- * and a restart without landing in the project's git status. */
-let _noteFor = null;
+/* =========================================================================
+ * Side panel — a docked, per-session feature rail.
+ *
+ * A thin always-on icon rail on the right edge opens a panel to a feature for
+ * the session in front: Notes, Git, Session info, Export. Collapsed by default,
+ * and while it is shut nothing in here runs — an idle panel costs the browser
+ * nothing. Which pane is open and how wide the panel is are this browser's
+ * business, the same rule that keeps the sidebar width and the tab order local,
+ * so they live in localStorage, not on the server.
+ *
+ * Cost discipline: the panel re-renders on the 3s poll and on a tab switch, but
+ * the Notes pane rebuilds its outline only when the session or pane changes —
+ * a poll just refreshes the "due" chips, so typing is never interrupted and the
+ * DOM is not thrown away every three seconds. The one heavy step, reflowing the
+ * terminal when the panel opens or closes, is debounced.
+ * ===================================================================== */
+
+const PANE_MIN = 240, PANE_MAX = 760, PANE_DEFAULT = 320;
+const PANE_LABEL = { notes: "Notes", git: "Git", info: "Session", export: "Export" };
+const PANE_ICON = { notes: "notebook", git: "git-branch", info: "info", export: "download" };
+
+let panelPane = null;          // open pane id, or null when the panel is shut
+let panelWidth = PANE_DEFAULT;
+let panelKey = "";             // "pane:sessionId" of what is drawn right now
+const notesCache = new Map();  // session id -> items[] (last known, for instant redraw)
+
+const supportsPlaintext = (() => {
+  try {
+    const d = document.createElement("div");
+    d.contentEditable = "plaintext-only";
+    return d.contentEditable === "plaintext-only";
+  } catch (err) { return false; }
+})();
+
+function nowSec() { return Math.floor(Date.now() / 1000); }
+function noteId() { return "n" + Math.random().toString(16).slice(2, 12); }
+
+function panelLoad() {
+  try {
+    const w = parseInt(localStorage.getItem("clique.panel.w"), 10);
+    if (w >= PANE_MIN && w <= PANE_MAX) panelWidth = w;
+    const p = localStorage.getItem("clique.panel.pane");
+    if (p && PANE_LABEL[p]) panelPane = p;
+  } catch (err) { /* private mode: the defaults are fine */ }
+  document.documentElement.style.setProperty("--panel-w", panelWidth + "px");
+}
+function panelSave() {
+  try {
+    localStorage.setItem("clique.panel.w", String(panelWidth));
+    if (panelPane) localStorage.setItem("clique.panel.pane", panelPane);
+    else localStorage.removeItem("clique.panel.pane");
+  } catch (err) { /* nothing to persist to */ }
+}
+
+function togglePanel(pane) {
+  if (panelPane === pane || (!pane && panelPane)) return closePanel();
+  openPanel(pane || panelPane || "notes");
+}
+function openPanel(pane) {
+  if (!PANE_LABEL[pane]) pane = "notes";
+  const was = Boolean(panelPane);
+  panelPane = pane;
+  panelSave();
+  renderSidePanel();
+  if (!was) refitSoon();   // the pane just took width off the terminal
+}
+function closePanel() {
+  if (!panelPane) return;
+  panelPane = null;
+  panelSave();
+  renderSidePanel();
+  refitSoon();
+}
+
+/* Reflow tmux once the layout has settled, not on every pixel of a drag. */
+let _refitTimer = null;
+function refitSoon() {
+  clearTimeout(_refitTimer);
+  _refitTimer = setTimeout(() => {
+    try { refitAll(); } catch (err) { /* nothing laid out yet */ }
+  }, 60);
+}
+
+function paintRail() {
+  for (const btn of document.querySelectorAll(".railr-btn")) {
+    btn.classList.toggle("active", btn.dataset.pane === panelPane);
+  }
+  const notesBtn = document.querySelector('.railr-btn[data-pane="notes"]');
+  if (notesBtn) {
+    const items = notesCache.get(activeId);
+    notesBtn.dataset.flag = items && notesAnyDue(items) ? "1" : "0";
+  }
+}
+
+function renderSidePanel() {
+  paintRail();
+  const wrap = $("#sidepanel");
+  const rez = $("#panelResizer");
+  if (!wrap) return;
+  if (!panelPane) {
+    wrap.hidden = true;
+    if (rez) rez.hidden = true;
+    panelKey = "";
+    return;
+  }
+  wrap.hidden = false;
+  if (rez) rez.hidden = false;
+  const use = $("#panelIcon");
+  if (use) use.setAttribute("href", "#i-" + (PANE_ICON[panelPane] || "notebook"));
+  $("#panelTitle").textContent = PANE_LABEL[panelPane] || "";
+  const s = activeId ? session(activeId) : null;
+  $("#panelFor").textContent = s ? s.name : "no session open";
+  const body = $("#panelBody");
+  const key = panelPane + ":" + (activeId || "");
+  const fresh = key !== panelKey;
+  panelKey = key;
+  if (panelPane === "notes") return renderNotesPane(body, s, fresh);
+  if (panelPane === "git") return renderGitPane(body, s);
+  if (panelPane === "info") return renderInfoPane(body, s);
+  if (panelPane === "export") return renderExportPane(body, s);
+}
+
+/* -------------------------------------------------------- little builders */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function paneEmpty(text) { return mk("p", "pane-empty", text); }
+function paneP(text) { return mk("p", "pane-hint", text); }
+function kvRow(k, v, cls) {
+  const row = mk("div", "kv");
+  row.append(mk("span", "k", k), mk("span", "v" + (cls ? " " + cls : ""), v));
+  return row;
+}
+function paneButton(label, iconName, fn) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "pane-btn";
+  b.innerHTML = icon(iconName) + `<span>${escapeHtml(label)}</span>`;
+  b.onclick = fn;
+  return b;
+}
+
+/* ----------------------------------------------------------- Notes pane */
+
+let notesItems = [];           // the working outline for the session in front
+let notesForId = null;
+let notesHideDone = false;
+let _notesSaveTimer = null;
+let _notesLoadToken = 0;
+
+/* The menu/palette entry: bring the panel up on Notes for a session, switching
+ * to that tab first because the panel always follows the session in front. */
 async function openNote(s) {
+  if (s && s.id !== activeId) await openSession(s.id);
+  openPanel("notes");
+}
+
+function renderNotesPane(body, s, fresh) {
+  if (!s) {
+    notesForId = null;
+    body.replaceChildren(paneEmpty("Open a session to take notes for it."));
+    return;
+  }
+  if (!fresh) { refreshNotesDue(); return; }
+  buildNotes(body, s, notesCache.get(s.id) || []);
+  loadNotes(s.id);
+}
+
+async function loadNotes(id) {
+  const token = ++_notesLoadToken;
+  try {
+    const r = await api(`api/sessions/${encodeURIComponent(id)}/notes`);
+    if (token !== _notesLoadToken) return;                 // a newer load won
+    if (panelPane !== "notes" || activeId !== id) return;  // switched away
+    if (_notesSaveTimer && notesForId === id) return;       // local edit is newer
+    notesCache.set(id, r.items || []);
+    buildNotes($("#panelBody"), session(id), r.items || []);
+  } catch (err) {
+    if (token === _notesLoadToken && panelPane === "notes" && activeId === id) {
+      $("#panelBody").replaceChildren(
+        paneEmpty("Could not load notes: " + (err.message || err)));
+    }
+  }
+}
+
+function buildNotes(body, s, items) {
+  notesItems = items;
+  notesForId = s.id;
+  body.replaceChildren();
+  const tools = mk("div", "pane-tools");
+  tools.append(paneButton("Add note", "plus", () => {
+    const it = noteNew("");
+    notesItems.push(it);
+    queueSaveNotes();
+    rebuildNotes({ focusId: it.id });
+  }));
+  const hide = paneButton(notesHideDone ? "Show done" : "Hide done", "filter",
+    () => { notesHideDone = !notesHideDone; rebuildNotes(); });
+  if (notesHideDone) hide.classList.add("on");
+  tools.append(hide);
+  body.append(tools);
+  const list = mk("div", "notes-list");
+  list.id = "notesList";
+  body.append(list);
+  paintNotesList(list);
+  body.append(paneP(
+    "Enter starts a new line, Tab indents it, the arrow sends a line to the "
+    + "terminal, and the clock sets a reminder."));
+}
+
+function rebuildNotes(opts = {}) {
+  const list = $("#notesList");
+  if (!list) return;
+  paintNotesList(list);
+  if (opts.focusId) focusNoteText(opts.focusId);
+  paintRail();
+}
+
+function paintNotesList(list) {
+  const kids = [];
+  for (const it of notesItems) {
+    const node = noteRowEl(it);
+    if (node) kids.push(node);
+  }
+  if (!kids.length) {
+    kids.push(paneEmpty("No notes yet. Add one to start a checklist for this session."));
+  }
+  list.replaceChildren(...kids);
+}
+
+function noteNew(text) {
+  const t = nowSec();
+  return {
+    id: noteId(), text: text || "", done: false, collapsed: false,
+    created: t, updated: t, remindAt: null, reminded: false, children: [],
+  };
+}
+
+function noteRowEl(item) {
+  if (notesHideDone && item.done) return null;
+  const wrap = mk("div", "note-item" + (item.done ? " done" : ""));
+  wrap.dataset.id = item.id;
+  const row = mk("div", "note-row");
+
+  const hasKids = Boolean(item.children && item.children.length);
+  const caret = document.createElement("button");
+  caret.type = "button";
+  caret.className = "note-caret" + (hasKids ? "" : " leaf");
+  caret.innerHTML = icon(item.collapsed ? "chevron-right" : "chevron-down");
+  caret.title = item.collapsed ? "Expand" : "Collapse";
+  if (hasKids) caret.onclick = () => toggleCollapse(item.id);
+
+  const check = document.createElement("button");
+  check.type = "button";
+  check.className = "note-check" + (item.done ? " done" : "");
+  check.title = item.done ? "Mark not done" : "Mark done";
+  check.onclick = () => toggleDone(item.id);
+
+  const text = mk("div", "note-text");
+  text.contentEditable = supportsPlaintext ? "plaintext-only" : "true";
+  text.spellcheck = false;
+  text.dataset.placeholder = "New note";
+  text.textContent = item.text || "";
+  wireNoteText(text, item);
+
+  const actions = mk("div", "note-actions");
+  actions.append(
+    noteAct("arrow-right", "Send this line to the terminal", () => sendNoteToTerminal(item)),
+    noteAct("clock", "Set a reminder", (ev) => openRemind(ev, item)),
+    noteAct("plus", "Add a sub-note", () => addChild(item.id)),
+    noteAct("trash", "Delete (its sub-notes move up)", () => removeNote(item.id)),
+  );
+
+  row.append(caret, check, text, actions);
+  wrap.append(row);
+
+  const meta = noteMeta(item);
+  if (meta) wrap.append(meta);
+
+  if (hasKids && !item.collapsed) {
+    const kids = mk("div", "note-children");
+    for (const c of item.children) {
+      const el = noteRowEl(c);
+      if (el) kids.append(el);
+    }
+    wrap.append(kids);
+  }
+  return wrap;
+}
+
+function noteAct(iconName, title, fn) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "note-act";
+  b.title = title;
+  b.innerHTML = icon(iconName);
+  b.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); fn(ev); };
+  return b;
+}
+
+function noteMeta(item) {
+  const meta = mk("div", "note-meta");
+  let any = false;
+  if (item.remindAt) {
+    const chip = mk("span", "note-remind");
+    chip.dataset.at = String(item.remindAt);
+    chip.dataset.reminded = item.reminded ? "1" : "0";
+    if (item.reminded) chip.classList.add("reminded");
+    if (!item.done && !item.reminded && item.remindAt <= nowSec()) chip.classList.add("due");
+    chip.innerHTML = icon("clock") + `<span>${escapeHtml(fmtWhen(item.remindAt))}</span>`;
+    chip.title = "Reminder — click to change";
+    chip.onclick = (ev) => openRemind(ev, item);
+    meta.append(chip);
+    any = true;
+  }
+  if (item.updated) {
+    const t = mk("span", "note-time", "edited " + (ago(item.updated) || "now"));
+    if (item.created) t.title = "Created " + fmtWhen(item.created);
+    meta.append(t);
+    any = true;
+  }
+  return any ? meta : null;
+}
+
+function wireNoteText(elm, item) {
+  elm.oninput = () => {
+    item.text = elm.textContent;
+    item.updated = nowSec();
+    queueSaveNotes();
+  };
+  elm.onkeydown = (ev) => {
+    if (ev.key === "Enter" && !ev.shiftKey) {
+      ev.preventDefault();
+      const id = addSiblingAfter(item.id);
+      if (id) rebuildNotes({ focusId: id });
+    } else if (ev.key === "Tab") {
+      ev.preventDefault();
+      const ok = ev.shiftKey ? outdent(item.id) : indent(item.id);
+      if (ok) rebuildNotes({ focusId: item.id });
+    } else if (ev.key === "Backspace" && elm.textContent === "") {
+      ev.preventDefault();
+      const prev = prevFocusId(item.id);
+      removeNote(item.id);
+      if (prev) focusNoteText(prev);
+    }
+  };
+  elm.onblur = () => flushSaveNotes();
+}
+
+/* ---- outline operations, all on the in-memory tree, then a debounced save ---- */
+
+function noteFind(id, list = notesItems, parent = null) {
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].id === id) return { item: list[i], list, index: i, parent };
+    const deep = noteFind(id, list[i].children || [], list[i]);
+    if (deep) return deep;
+  }
+  return null;
+}
+function addSiblingAfter(id) {
+  const f = noteFind(id);
+  if (!f) return null;
+  const it = noteNew("");
+  f.list.splice(f.index + 1, 0, it);
+  queueSaveNotes();
+  return it.id;
+}
+function addChild(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  const it = noteNew("");
+  f.item.children.push(it);
+  f.item.collapsed = false;
+  queueSaveNotes();
+  rebuildNotes({ focusId: it.id });
+}
+function indent(id) {
+  const f = noteFind(id);
+  if (!f || f.index === 0) return false;     // nothing to become a child of
+  const prev = f.list[f.index - 1];
+  f.list.splice(f.index, 1);
+  (prev.children = prev.children || []).push(f.item);
+  prev.collapsed = false;
+  queueSaveNotes();
+  return true;
+}
+function outdent(id) {
+  const f = noteFind(id);
+  if (!f || !f.parent) return false;          // already at the top level
+  const pf = noteFind(f.parent.id);
+  f.list.splice(f.index, 1);
+  pf.list.splice(pf.index + 1, 0, f.item);
+  queueSaveNotes();
+  return true;
+}
+function removeNote(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  // A delete never silently drops a branch: children move up into its place.
+  f.list.splice(f.index, 1, ...(f.item.children || []));
+  queueSaveNotes();
+  rebuildNotes();
+}
+function toggleDone(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  f.item.done = !f.item.done;
+  f.item.updated = nowSec();
+  queueSaveNotes();
+  rebuildNotes();
+}
+function toggleCollapse(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  f.item.collapsed = !f.item.collapsed;
+  queueSaveNotes();
+  rebuildNotes();
+}
+function setReminder(id, epoch) {
+  const f = noteFind(id);
+  if (!f) return;
+  f.item.remindAt = epoch;
+  f.item.reminded = false;         // a new (or changed) time is a fresh reminder
+  f.item.updated = nowSec();
+  queueSaveNotes();
+  rebuildNotes();
+}
+function prevFocusId(id) {
+  const f = noteFind(id);
+  if (!f) return null;
+  if (f.index > 0) return f.list[f.index - 1].id;
+  return f.parent ? f.parent.id : null;
+}
+
+function focusNoteText(id) {
+  const sel = `.note-item[data-id="${cssEscape(id)}"] > .note-row > .note-text`;
+  const el = document.querySelector(sel);
+  if (!el) return;
+  el.focus();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const s = window.getSelection();
+  s.removeAllRanges();
+  s.addRange(range);
+}
+function cssEscape(v) {
+  return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, "\\$&");
+}
+
+function refreshNotesDue() {
+  if (notesForId !== activeId) return;    // stale; a fresh render will fix it
+  const now = nowSec();
+  for (const chip of document.querySelectorAll("#panelBody .note-remind")) {
+    const at = parseInt(chip.dataset.at, 10) || 0;
+    const done = chip.closest(".note-item").classList.contains("done");
+    const reminded = chip.dataset.reminded === "1";
+    chip.classList.toggle("due", at > 0 && !done && !reminded && at <= now);
+  }
+  paintRail();
+}
+
+function notesAnyDue(items) {
+  const now = nowSec();
+  const walk = (list) => (list || []).some((it) =>
+    (it.remindAt && !it.done && !it.reminded && it.remindAt <= now) || walk(it.children));
+  return walk(items);
+}
+
+async function sendNoteToTerminal(item) {
+  const s = session(activeId);
   if (!s) return;
-  _noteFor = s.id;
-  $("#noteTitle").textContent = `Notes: ${s.name}`;
-  const ta = $("#noteText");
-  ta.value = "";
-  $("#noteStatus").textContent = "Loading...";
-  $("#noteSheet").hidden = false;
-  ta.focus();
+  const text = (item.text || "").trim();
+  if (!text) { toast("That note is empty", true); return; }
   try {
-    const r = await api(`api/sessions/${encodeURIComponent(s.id)}/note`);
-    if (_noteFor === s.id) { ta.value = r.note || ""; $("#noteStatus").textContent = ""; }
-  } catch (err) {
-    if (_noteFor === s.id) $("#noteStatus").textContent = "Could not load";
-  }
-}
-async function saveNote(andClose) {
-  const id = _noteFor;
-  if (!id) return;
-  const note = $("#noteText").value;
-  try {
-    await api(`api/sessions/${encodeURIComponent(id)}/note`, {
-      method: "POST", body: JSON.stringify({ note }),
+    await api(`api/sessions/${encodeURIComponent(s.id)}/send`, {
+      method: "POST", body: JSON.stringify({ text, enter: false }),
     });
-    $("#noteStatus").textContent = "Saved";
-    if (andClose) closeNote();
+    toast(`Sent to ${s.name} — press Enter to run`);
   } catch (err) {
-    // Keep the sheet open on failure so the text is never lost.
-    $("#noteStatus").textContent = `Could not save: ${err.message || err}`;
+    toast(String(err.message || err), true);
   }
 }
-function closeNote() { $("#noteSheet").hidden = true; _noteFor = null; }
+
+function queueSaveNotes() {
+  paintRail();
+  clearTimeout(_notesSaveTimer);
+  _notesSaveTimer = setTimeout(flushSaveNotes, 600);
+}
+async function flushSaveNotes() {
+  clearTimeout(_notesSaveTimer);
+  _notesSaveTimer = null;
+  const id = notesForId;
+  if (!id) return;
+  const items = notesItems;
+  notesCache.set(id, items);
+  try {
+    await api(`api/sessions/${encodeURIComponent(id)}/notes`, {
+      method: "POST", body: JSON.stringify({ items }),
+    });
+  } catch (err) {
+    toast("Notes did not save: " + (err.message || err), true);
+  }
+}
+
+/* ---- the inline reminder time picker ---- */
+
+let _remindItem = null;
+function openRemind(ev, item) {
+  _remindItem = item;
+  const pop = $("#remindPop");
+  const input = $("#remindAt");
+  input.value = epochToLocalInput(item.remindAt);
+  $("#remindClear").hidden = !item.remindAt;
+  pop.hidden = false;
+  const w = 232, h = pop.offsetHeight || 130;
+  const x = ev && ev.clientX ? ev.clientX : innerWidth - w - 48;
+  const y = ev && ev.clientY ? ev.clientY : 120;
+  pop.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + "px";
+  pop.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + "px";
+  input.focus();
+}
+function closeRemind() { $("#remindPop").hidden = true; _remindItem = null; }
+
+function epochToLocalInput(epoch) {
+  if (!epoch) return "";
+  const d = new Date(epoch * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    + `T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function localInputToEpoch(v) {
+  if (!v) return null;
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? Math.floor(t / 1000) : null;
+}
+function fmtWhen(epoch) {
+  if (!epoch) return "";
+  return new Date(epoch * 1000).toLocaleString([],
+    { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/* ----------------------------------------------------------- Git pane */
+
+function renderGitPane(body, s) {
+  if (!s) {
+    body.replaceChildren(paneEmpty("Open a session to see its git status."));
+    return;
+  }
+  const kids = [];
+  const kv = mk("div", "pane-kv");
+  kv.append(kvRow("Branch", s.branch || "not a git branch"));
+  kv.append(kvRow("Changes",
+    s.dirty ? `${s.dirty} file${s.dirty === 1 ? "" : "s"} changed` : "clean",
+    s.dirty ? "warn" : ""));
+  kv.append(kvRow("Directory", shortPath(s.cwd || ""), "mono"));
+  kids.push(kv);
+  const tools = mk("div", "pane-tools");
+  if (s.branch || s.dirty) tools.append(paneButton("Review changes", "git-branch", () => openDiff(s)));
+  if (s.branch) tools.append(paneButton("Checkpoint now", "arrow-down-to-line", () => checkpointSession(s)));
+  kids.push(tools);
+  if (s.branch) {
+    kids.push(paneP("A checkpoint saves HEAD and the current diff to a file under "
+      + ".clique-checkpoints/, so you can see or undo what an agent changed."));
+  }
+  body.replaceChildren(...kids);
+}
+
+/* --------------------------------------------------------- Session info pane */
+
+function renderInfoPane(body, s) {
+  if (!s) {
+    body.replaceChildren(paneEmpty("Open a session to see its details."));
+    return;
+  }
+  const kv = mk("div", "pane-kv");
+  kv.append(kvRow("State", s.alive
+    ? (s.command || s.cli_label || s.cli || "running") : "stopped"));
+  kv.append(kvRow("Directory", s.cwd || "—", "mono"));
+  if (s.project) kv.append(kvRow("Project", s.project));
+  if (s.branch) {
+    kv.append(kvRow("Branch", s.branch + (s.dirty ? ` · ${s.dirty} changed` : ""),
+      s.dirty ? "warn" : ""));
+  }
+  kv.append(kvRow("CLI", s.cli_label || s.cli || "—"));
+  if (s.pid) kv.append(kvRow("PID", String(s.pid), "mono"));
+  if (typeof s.rss === "number" && s.rss > 0) kv.append(kvRow("Memory", humanBytes(s.rss)));
+  if (s.created) kv.append(kvRow("Up", ago(s.created) || "just now"));
+  if (s.activity) kv.append(kvRow("Quiet for", ago(s.activity) || "just now"));
+  body.replaceChildren(kv);
+}
+
+/* ----------------------------------------------------------- Export pane */
+
+function renderExportPane(body, s) {
+  if (!s) {
+    body.replaceChildren(paneEmpty("Open a session to export its scrollback."));
+    return;
+  }
+  const tools = mk("div", "pane-tools");
+  tools.append(paneButton("Export scrollback", "download", () => exportScrollback(s)));
+  body.replaceChildren(
+    paneP("Write this session's whole scrollback to a timestamped text file "
+      + "under .clique-exports/ in its directory — a clean log to keep, search "
+      + "or share."),
+    tools);
+}
+
+/* ----------------------------------------------------- panel wiring + resize */
+
+function wireSidePanel() {
+  for (const btn of document.querySelectorAll(".railr-btn")) {
+    btn.onclick = () => togglePanel(btn.dataset.pane);
+  }
+  $("#panelClose").onclick = () => closePanel();
+  wirePanelResizer();
+
+  $("#remindSet").onclick = () => {
+    if (!_remindItem) return;
+    const epoch = localInputToEpoch($("#remindAt").value);
+    if (!epoch) { toast("Pick a date and time", true); return; }
+    setReminder(_remindItem.id, epoch);
+    closeRemind();
+  };
+  $("#remindClear").onclick = () => {
+    if (_remindItem) setReminder(_remindItem.id, null);
+    closeRemind();
+  };
+  // Click anywhere off the popover closes it, but not the chip that opened it.
+  document.addEventListener("pointerdown", (ev) => {
+    const pop = $("#remindPop");
+    if (!pop.hidden && !pop.contains(ev.target)
+        && !ev.target.closest(".note-remind, .note-act")) {
+      closeRemind();
+    }
+  }, true);
+  addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !$("#remindPop").hidden) { closeRemind(); return; }
+    // Ctrl/Cmd+J toggles the panel, a mirror of Ctrl+B for the sidebar.
+    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey
+        && (ev.key === "j" || ev.key === "J")) {
+      ev.preventDefault();
+      togglePanel(panelPane || "notes");
+    }
+  });
+}
+
+function setPanelWidth(px, persist) {
+  const w = Math.min(Math.max(Math.round(px), PANE_MIN), PANE_MAX);
+  panelWidth = w;
+  document.documentElement.style.setProperty("--panel-w", w + "px");
+  if (persist) panelSave();
+  return w;
+}
+
+function wirePanelResizer() {
+  const handle = $("#panelResizer");
+  if (!handle) return;
+  let frame = 0;
+  handle.onpointerdown = (ev) => {
+    ev.preventDefault();
+    handle.setPointerCapture(ev.pointerId);
+    handle.classList.add("dragging");
+    document.body.classList.add("resizing");
+    // The panel sits between the terminal and the far-right rail, so its width
+    // is the distance from the pointer to the rail's inner edge.
+    const railW = $("#railR") ? $("#railR").offsetWidth : 38;
+    const move = (e) => {
+      setPanelWidth((innerWidth - railW) - e.clientX, false);
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          const entry = terms.get(activeId);
+          if (entry) { try { entry.fit.fit(); } catch (err) { /* hidden */ } }
+        });
+      }
+    };
+    const up = () => {
+      handle.releasePointerCapture(ev.pointerId);
+      handle.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+      handle.onpointermove = null;
+      handle.onpointerup = null;
+      panelSave();
+      packTabs();
+      refitAll();
+    };
+    handle.onpointermove = move;
+    handle.onpointerup = up;
+  };
+  handle.ondblclick = () => { setPanelWidth(PANE_DEFAULT, true); refitAll(); };
+  handle.onkeydown = (ev) => {
+    const step = ev.shiftKey ? 32 : 8;
+    if (ev.key === "ArrowLeft") setPanelWidth(panelWidth + step, true);   // wider
+    else if (ev.key === "ArrowRight") setPanelWidth(panelWidth - step, true);
+    else return;
+    ev.preventDefault();
+    refitAll();
+  };
+}
 
 /* Zen mode: fold away the sidebar, tabs and status bars, leaving the terminal
  * and the prompt. Hiding the chrome resizes the pane, so refit tmux once the
@@ -4594,6 +5263,7 @@ function selectTab(id) {
   showActivePane();
   renderTabs();
   renderTree();
+  renderSidePanel();   // re-scope the open pane to the session in front
   saveWorkspace();
   landFocus();
   // On a phone, opening a session slides the drawer shut so the pane is in front.
@@ -6508,15 +7178,7 @@ function wire() {
     if (ev.target === $("#art")) closeArtifacts();          // the backdrop
   };
   $("#zenExit").onclick = () => toggleZen(false);
-  $("#noteSave").onclick = () => saveNote(false);
-  $("#noteClose").onclick = () => saveNote(true);
-  $("#noteSheet").onclick = (ev) => { if (ev.target.id === "noteSheet") saveNote(true); };
-  $("#noteText").addEventListener("keydown", (ev) => {
-    // Esc and Cmd/Ctrl+Enter both save and close; a note is never lost to a stray key.
-    if (ev.key === "Escape" || (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey))) {
-      ev.preventDefault(); ev.stopPropagation(); saveNote(true);
-    }
-  });
+  wireSidePanel();
   $("#fileClose").onclick = closeFileSheet;
   $("#file").onclick = (ev) => {
     if (ev.target === $("#file")) closeFileSheet();
@@ -7183,6 +7845,8 @@ function paletteCommands() {
   add("What's new", "This release, in Settings",
       () => showChangelog(baseVersion(state.version)));
   add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
+  add(panelPane ? "Close the side panel" : "Open the side panel",
+      "Notes, git, session info and export. Ctrl+J", () => togglePanel(panelPane || "notes"));
   add("Full screen", "The pane, not the browser. Ctrl+Shift+F", toggleFullscreen);
   if (installPrompt) {
     add("Install as an app", "Its own window — no tabs, no URL bar", installApp);
@@ -7210,8 +7874,12 @@ function paletteCommands() {
       add("Interrupt (Ctrl-C)", "Send Ctrl-C to pause what the session is doing",
           () => sendKey(current.id, "C-c", "Paused"));
     }
-    add("Notes for this session", "A sidecar .md to jot context, a to-do, or where you left off",
+    add("Notes for this session", "A nested checklist in the side panel — to-dos, context, reminders",
         () => openNote(current));
+    add("Git and checkpoints", "Branch, what's changed, and a checkpoint, in the side panel",
+        () => openPanel("git"));
+    add("Session info", "Directory, CLI, memory and uptime, in the side panel",
+        () => openPanel("info"));
     add("Focus the terminal", current.name, focusTerminal);
     add(document.body.classList.contains("zen") ? "Exit zen mode" : "Zen mode",
         "Hide everything but the terminal and the prompt", () => toggleZen());
@@ -8163,6 +8831,7 @@ wireResizer();
 wireTouchMenus();
 wirePeekTooltips();
 wireKeyRow();
+panelLoad();   // restore panel width + which pane, before the first render
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 // A phone starts with the drawer closed and the pane in front, whatever a
