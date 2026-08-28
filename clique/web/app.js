@@ -5300,9 +5300,14 @@ function layoutPane(entry) {
   if (!entry || !entry.term || !entry.fit) return;
   const boxed = sessionOwnsInput(entry.id);
   const cell = paneCellPx(entry.term);
-  const scale = paneWidthScale(entry.el.clientWidth, entry.term.cols, cell.w);
+  /* Measure from where the terminal actually starts, not from the left of its
+   * box: the two differ by the pane's padding, and scaling to the wrong one of
+   * them is how the picture ended up a few pixels wider than the room it had. */
+  const box = entry.el.getBoundingClientRect();
+  const start = entry.term.element ? entry.term.element.getBoundingClientRect().left : box.left;
+  const availW = Math.max(0, box.right - start);
+  const scale = paneWidthScale(availW, entry.term.cols, cell.w);
   if (paneShouldZoom(boxed, scale)) {
-    applyPaneZoom(entry.term, scale);
     // Shrinking the picture shrinks every cell with it, so more rows fit in
     // the height than did before, and the pane has to take them. Without
     // this the panel opened, the grid scaled down to clear it, and the
@@ -5310,8 +5315,18 @@ function layoutPane(entry) {
     // where they are: keeping them is the entire reason this zooms.
     const fitRows = Math.floor(entry.el.clientHeight / (cell.h * scale));
     if (fitRows >= 4 && fitRows !== entry.term.rows) {
-      try { entry.term.resize(entry.term.cols, fitRows); } catch (err) { /* not laid out yet */ }
+      // Resize unscaled, so the terminal measures itself in honest pixels,
+      // and put the transform back afterwards.
+      applyPaneZoom(entry.term, 1);
+      entry.relaying = true;
+      try {
+        entry.term.resize(entry.term.cols, fitRows);
+      } catch (err) { /* not laid out yet */ } finally {
+        entry.relaying = false;
+      }
     }
+    applyPaneZoom(entry.term, scale,
+                  entry.term.cols * cell.w, entry.term.rows * cell.h);
     return;
   }
   applyPaneZoom(entry.term, 1);
@@ -8261,14 +8276,27 @@ function paneShouldZoom(boxed, scale) {
   return Boolean(boxed) && scale < 1 && scale >= PANE_ZOOM_MIN;
 }
 
-function applyPaneZoom(term, scale) {
+/* Scale the picture, and tell the terminal how wide it really is.
+ *
+ * The width matters as much as the transform. xterm sizes its viewport (and
+ * therefore its scrollbar) from its own root element, while the screen it
+ * draws follows the column count — so a pane that deliberately keeps a wide
+ * grid inside a narrower box leaves the two disagreeing, and the scrollbar
+ * ends up stranded partway across with terminal text on both sides of it.
+ * Giving the root the grid's true width makes them agree, and the transform
+ * then shrinks both together. */
+function applyPaneZoom(term, scale, naturalW, naturalH) {
   const el = term && term.element;
   if (!el) return;
   if (!scale || scale >= 0.995) {
     el.style.transform = "";
     el.style.transformOrigin = "";
+    el.style.width = "";
+    el.style.height = "";
     return;
   }
+  if (naturalW) el.style.width = Math.ceil(naturalW) + "px";
+  if (naturalH) el.style.height = Math.ceil(naturalH) + "px";
   el.style.transformOrigin = "top left";
   el.style.transform = "scale(" + scale + ")";
 }

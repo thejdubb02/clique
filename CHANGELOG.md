@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.51.10 — 2026-08-28 16:11 PDT
+
+**The scrollbar no longer floats in the middle of the pane.** Opening the side
+panel next to a CLI that draws its own prompt box left the terminal's scrollbar
+stranded about four fifths of the way across, with terminal text on both sides
+of it. The terminal sizes its scrollbar from its own root element while the
+picture it draws follows the column count, so a pane that deliberately keeps a
+wide grid inside a narrower box left the two disagreeing by a couple of hundred
+pixels. The root is told the grid's real width now, and the two scale down
+together.
+
+**And the picture fits the room it actually has.** The fit was measured from
+the left of the pane rather than from where the terminal starts, which differ
+by the pane's padding, so the scaled picture came out a few pixels wider than
+its box every time.
+
+`tools/redraw_check.py` measures the gap between the scrollbar and the edge of
+the drawing: 220 pixels before this, none after.
+
 ## 0.51.9 — 2026-08-28 14:42 PDT
 
 **A second browser no longer leaves the first one drawn at half size.** A tmux

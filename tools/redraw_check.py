@@ -261,6 +261,25 @@ def main() -> int:
                 bid,
             )
             res["zoomed_pane_stays_in_its_box"] = spill["right"] <= 1 and spill["bottom"] <= 1
+            # xterm lays its viewport out from getBoundingClientRect, which
+            # reports scaled pixels. Resizing under a transform sized the
+            # viewport to the shrunken measurement while the screen kept its
+            # real width, and the scrollbar ended up stranded in the middle of
+            # the pane with terminal text on both sides of it.
+            edges = page.evaluate(
+                """(id) => {
+                  const el = terms.get(id).term.element;
+                  const vp = el.querySelector('.xterm-viewport');
+                  const sc = el.querySelector('.xterm-screen');
+                  if (!vp || !sc) return null;
+                  return Math.round(sc.getBoundingClientRect().right
+                                    - vp.getBoundingClientRect().right);
+                }""",
+                bid,
+            )
+            res["scrollbar_sits_at_the_pane_edge"] = edges is not None and abs(edges) <= 2
+            if not res["scrollbar_sits_at_the_pane_edge"]:
+                print(f"       screen overhangs the scrollbar by {edges}px")
             # The question the overlap answered wrongly: just inside the
             # panel's left edge, is the panel what the pointer would hit?
             res["panel_is_not_covered_by_the_pane"] = page.evaluate(
