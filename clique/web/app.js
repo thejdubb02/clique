@@ -1566,8 +1566,11 @@ function renderTree() {
   const query = $("#q").value.trim().toLowerCase();
   tree.innerHTML = "";
 
+  // A typed search overrides the running-only filter: you search to find a
+  // session to open, and the one you want is often a stopped one. With no
+  // query, the filter applies as before.
   const matches = (s) =>
-    (!activeOnly || s.alive)
+    (!activeOnly || s.alive || Boolean(query))
     && (!query || s.name.toLowerCase().includes(query)
       || s.cwd.toLowerCase().includes(query)
       || (s.branch || "").toLowerCase().includes(query));
@@ -2482,10 +2485,22 @@ function closePanel() {
 /* Reflow tmux once the layout has settled, not on every pixel of a drag. */
 let _refitTimer = null;
 function refitSoon() {
+  // The same two-step settle the sidebar toggle uses, for the same reason:
+  // opening or closing the panel changes the pane's width, and fitting too
+  // early computes a boxed CLI's zoom against the old width, so it comes back
+  // scaled wrong with dead space or spilling under the panel. Fit on the next
+  // frame and again once layout has settled, and push the new size to tmux both
+  // times so the CLI actually redraws at the new width.
+  const settle = () => {
+    try {
+      packTabs();
+      refitAll();
+      reclaimSize(document.hasFocus());
+    } catch (err) { /* nothing laid out yet */ }
+  };
+  requestAnimationFrame(settle);
   clearTimeout(_refitTimer);
-  _refitTimer = setTimeout(() => {
-    try { refitAll(); } catch (err) { /* nothing laid out yet */ }
-  }, 60);
+  _refitTimer = setTimeout(settle, 80);
 }
 
 function paintRail() {

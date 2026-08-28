@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.51.2 — 2026-08-28 11:20 PDT
+
+**A cleaner terminal redraw when the side panel opens.** Opening or closing the
+panel now settles the pane the same way toggling the sidebar does: it fits twice,
+once on the next frame and again once layout has settled, and pushes the new size
+to tmux, so a full-screen CLI redraws to the narrower width instead of spilling
+under the panel.
+
+**Search finds sessions even when the list is filtered to running ones.** Typing
+in the sidebar search now looks past the running-only filter, so you can find and
+open a stopped session without turning the filter off first.
+
 ## 0.51.1 — 2026-08-28 11:04 PDT
 
 **Uptime and temperature in the status bar.** The bottom bar now shows how long
