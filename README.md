@@ -53,6 +53,8 @@ is a tap away on a phone:
 
 ## What it does
 
+New here? The [user guide](docs/guide.md) walks through everything below.
+
 | | |
 |---|---|
 | **Command palette** | `Ctrl`/`Cmd`+`K`: fuzzy jump between sessions, most-recently-used first. `>` commands, `@` sessions, `~` past conversations. |
@@ -69,6 +71,7 @@ is a tap away on a phone:
 | **Scroll lock** | Scroll up and the view detaches from the stream. A badge says how far behind you are; the bottom, the lock, or `Ctrl`/`Cmd`+`Shift`+`L` catches you up. |
 | **Paste a screenshot** | `Ctrl`/`Cmd`+`V` saves the image into the session's own directory and drops the path where you were typing. Nothing is sent until you press enter. |
 | **See what it made** | An agent writes a screenshot into the session's directory and a count appears in the tab bar. Grid, full size, and the path back into your prompt in one click. |
+| **Side panel** | A docked panel per session, from an icon rail on the right (`Ctrl`/`Cmd`+`J`). **Notes** are a nested checklist: checkboxes, Tab to nest, a one-click send into the terminal, and reminders that reach your phone. Plus **Git** (branch, diff, checkpoint), **Session info**, and **Export** the scrollback to a file. |
 | **Prompt drafts** | A half-typed instruction survives a tab switch, a reload, and a closed laptop. Per session, on the server, so it follows you to another device. |
 | **Workspace** | Open tabs, their order, the one in front, and which groups are collapsed live on the server. A reload attaches the tab you are looking at, then warms the rest in the background without resizing the pane. Sign in somewhere else and the strip is where you left it. |
 | **Status** | A ring around the CLI's own logo: an arc turning means working, a steady pulse means finished and waiting for you, idle draws nothing. The logo is never recoloured. |
@@ -79,7 +82,7 @@ is a tap away on a phone:
 | **Themes** | Nine presets, light / dark / system, custom CSS in three slots, independent font sizes, a monospace picker that falls back on every OS. |
 | **API** | Every action in the panel is an HTTP call, with bearer tokens and read-only ones. Full reference in [API.md](API.md), kept honest by a drift check in the test suite. |
 | **Changelog** | Settings → Changelog: the last few releases, with a link to the rest on GitHub. After an upgrade, **What's new** sits on the bottom bar and goes straight there. |
-| **Told, not checked** | One webhook URL, POSTed when a session wants you, errors, finishes or dies. ntfy, Gotify, Discord, Mattermost and Uptime Kuma push all speak it. Real phone notifications, no app of ours. |
+| **Told, not checked** | One webhook URL, POSTed when a session wants you, errors, finishes or dies, or a note reminder comes due. ntfy, Gotify, Discord, Mattermost and Uptime Kuma push all speak it. Real phone notifications, no app of ours. |
 | **Monitoring** | `GET /healthz` answers without a login. Point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |
 | **Touch** | Long press a session for the menu right-click gives, with tap targets sized for a finger. |
