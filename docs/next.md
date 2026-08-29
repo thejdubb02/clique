@@ -18,23 +18,45 @@ release is what catches it up.
 `uvx clique-panel` works. Last cut: `v0.51.9` on 2026-08-28, verified by
 installing from PyPI into a clean venv rather than trusting the workflow.
 
+Reordered 2026-08-29 after reading Codeman's feature list against ours
+([ideas-inbox.md](ideas-inbox.md)). The phone moved up because it is the one
+part of this that has never actually been used on a phone.
+
 ## Now — daily drive
 
-Hours each. These are the ones that pay off every hour in the panel.
-
-1. **Session templates:** CLI + directory + starter prompt + name pattern.
-2. **An agent-facing skill.** The API exists; nothing tells an agent so.
-3. **Typography.** Line height, letter spacing, and a ligature-capable stack.
-   Held back from 0.52.1 on purpose: these change how many rows fit in a pane,
-   which touches the whole sizing path, so it wants its own change and its own
-   run of `redraw_check.py`.
+1. **Use it on a phone, then fix what is wrong.** Everything mobile has been
+   built against a 390px browser window and a screenshot. Nobody has driven it
+   with a thumb on real hardware, and until somebody has, the rest of the phone
+   list is guesswork. Half an hour with the real thing is worth more than any
+   amount of reasoning about it.
+2. **QR login.** Typing a long password on a phone is the single worst moment
+   in using this, and it happens before anything else can be judged. The token
+   store already exists, so this is a short-lived single-use code shown on the
+   desktop and nothing more.
+3. **Local echo.** Every keystroke over Tailscale waits a round trip, and it is
+   the difference between the pane feeling like a terminal and feeling like a
+   web page. Draw the character at once, send it in the background, drop the
+   drawing when the real echo lands. Ours, in plain JS. The hard part is not
+   the drawing, it is knowing when to stop.
 
 ## Then — bigger slices
 
-4. **Finish the phone layout.** The drawer landed in 0.50.33 and the key row in
-   0.50.86, so what is left is the tab bar and the input bar's spacing, not the
-   whole job the older wording implied.
-5. **Per-session CPU/memory,** to catch one agent starving the box.
+4. **The rest of the phone pass:** the tab bar, the input bar's spacing, and
+   swiping between sessions. Ranked under the three above because what needs
+   doing here should come out of item 1 rather than out of a guess.
+5. **CLI-declared quick commands.** A row of one-tap `/init`, `/clear`,
+   `/compact`. It belongs in `clis.toml` next to `modes`, so it is config
+   rather than code, and each CLI names its own.
+6. **Session templates:** CLI + directory + starter prompt + name pattern.
+7. **An agent-facing skill.** The API exists; nothing tells an agent so.
+8. **Typography.** Line height, letter spacing, and a ligature-capable stack.
+   Held back from 0.52.1 on purpose: these change how many rows fit in a pane,
+   which touches the whole sizing path, so it wants its own change and its own
+   run of `redraw_check.py`.
+9. **Per-session CPU/memory,** to catch one agent starving the box.
+10. **Auto-resume when a limit resets.** Nearly free now that the panel knows
+    when the window turns over, and it is the one piece of autonomy that needs
+    no model knowledge: a timestamp passed, so send a key.
 
 ## Checked off this list, 2026-08-29
 
@@ -48,6 +70,11 @@ trusting the order above.
   in 0.52.0.
 - **Land on the last prompt.** Measured on 2026-08-28 and it does not
   reproduce; see the entry below.
+- **Plan usage in the status bar.** Shipped 0.54.0 and reshaped in 0.54.1. The
+  shape that made it work is worth copying: the panel runs a probe a CLI
+  declares in `clis.toml` and never learns whose API it is, so a second vendor
+  is a block of TOML. Claude is the only one with a probe today because it is
+  the only one of the four installed here whose vendor publishes an endpoint.
 
 ## Waiting on a repro
 
