@@ -15,8 +15,13 @@ uses Trusted Publishing, and it fires when a GitHub Release is published, not
 on a push. So `main` running ahead of PyPI is normal and expected; cutting a
 release is what catches it up.
 
-`uvx clique-panel` works. Last cut: `v0.51.9` on 2026-08-28, verified by
+`uvx clique-panel` works. Last cut: `v0.55.0` on 2026-08-29, verified by
 installing from PyPI into a clean venv rather than trusting the workflow.
+
+`python3 tools/shipped_check.py` is the thing that actually catches drift here:
+panel version, README badge, working tree, unpushed commits, the tag, what
+useclique.dev tells a stranger to install, and what PyPI serves. Ten seconds,
+and it is in `CLAUDE.md` as the last thing before calling a session done.
 
 Reordered 2026-08-29 after reading Codeman's feature list against ours
 ([ideas-inbox.md](ideas-inbox.md)). The phone moved up because it is the one

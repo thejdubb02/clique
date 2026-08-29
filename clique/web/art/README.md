@@ -21,9 +21,14 @@ fine gradients and small text do not, and adding them costs file size for
 something nobody will see.
 
 **Big enough, not huge.** It displays at up to 340 by 240, so roughly 700px on
-the long edge is plenty. `tools/art_prep.py` resizes and strips metadata, and
-is worth running on anything that arrives straight from an illustrator: a 4MB
-export in a package whose whole argument is that it is small is a bad trade.
+the long edge is plenty. `tools/art_prep.py` keys out the background, crops,
+scales and quantises, and is worth running on anything that arrives straight
+from an illustrator: a 4MB export in a package whose whole argument is that it
+is small is a bad trade.
+
+`tools/art_generate.py` is how the seven here were drawn, and holds the prompts.
+Read its docstring before regenerating one: the originality instruction in it is
+load-bearing, not decoration.
 
 ## What the panel does with it
 
