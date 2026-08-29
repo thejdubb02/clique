@@ -477,6 +477,19 @@
       <p class="note">A preset carries its own light or dark base. This only
          decides which built-in is used when no preset is chosen.</p>
 
+      <!-- Describe a theme and a model builds one. It supplies nine colours
+           that need taste; the other eighteen, brights included, are derived
+           and pushed until they can be read, so a theme can never arrive that
+           hides the sheet you would use to change it back. -->
+      <h3>Make a theme</h3>
+      <div class="theme-make">
+        <input id="themePrompt" type="text" maxlength="300"
+               placeholder="a quiet winter morning, muted blues" autocomplete="off">
+        <button type="button" id="themeGen" class="primary">Generate</button>
+      </div>
+      <p class="note" id="themeGenNote"></p>
+      <div id="themeMine"></div>
+
       <h3>Font</h3>
       <label class="field">Terminal typeface
         <select id="setFontFamily"></select>

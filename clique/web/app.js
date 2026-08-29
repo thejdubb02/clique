@@ -6671,6 +6671,9 @@ function applySettings() {
   // terminal's own selection colour agree with the theme. Without it a light
   // theme still gets dark scrollbars.
   root.style.colorScheme = theme.base || "dark";
+  // Both ways of choosing a theme have to agree afterwards: picking from the
+  // dropdown relabels the rows, and pressing Use in a row moves the dropdown.
+  if (!$("#settings").hidden) renderThemeMaker();
   root.style.setProperty("--font-panel", (s.font_panel || 13) + "px");
   paintFontChrome();
 
@@ -6808,19 +6811,133 @@ async function refreshStorage() {
   }
 }
 
-function openSettings() {
-  const s = state.settings;
-  renderSupport();   // About is one click away, so the list has to be there
+/* Themes made here, as opposed to the presets that ship in themes.js.
+ *
+ * They are merged into the same map the presets live in, keyed by id, which is
+ * the whole integration: `currentTheme()`, the picker and the palette all read
+ * that map and none of them need to know where a theme came from. Kept out of
+ * the 3s poll on purpose — a theme is a couple of dozen colours and changes
+ * about twice a year, so it is fetched at boot and again when one changes. */
+let customThemes = new Set();
+let canGenerateThemes = false;
 
-  const themeSelect = $("#setTheme");
-  themeSelect.innerHTML = "";
+async function loadThemes() {
+  let payload;
+  try {
+    payload = await api("api/themes");
+  } catch (err) {
+    return;   // the presets still work; a missing list is not worth a toast
+  }
+  const themes = window.CLIQUE_THEMES || (window.CLIQUE_THEMES = {});
+  // Drop the ones we added last time before merging, so a theme deleted on
+  // another device disappears here rather than lingering until a reload.
+  for (const id of customThemes) delete themes[id];
+  customThemes = new Set();
+  for (const theme of payload.themes || []) {
+    if (!theme || !theme.id) continue;
+    themes[theme.id] = theme;
+    customThemes.add(theme.id);
+  }
+  canGenerateThemes = Boolean(payload.can_generate);
+  applySettings();               // the theme in use may have just arrived
+  if (!$("#settings").hidden) renderThemeMaker();
+}
+
+/* The list of themes made here, each with a way to remove it. Only these get
+ * a delete: a preset is not ours to take away. */
+function fillThemeSelect() {
+  const select = $("#setTheme");
+  if (!select) return;
+  const chosen = state.settings.theme || "";
+  select.replaceChildren();
   for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
     const option = document.createElement("option");
     option.value = id;
     option.textContent = theme.label;
-    option.selected = id === (s.theme || "");
-    themeSelect.appendChild(option);
+    option.selected = id === chosen;
+    select.appendChild(option);
   }
+  select.value = chosen;
+}
+
+function renderThemeMaker() {
+  fillThemeSelect();   // picking from a row has to move the picker too
+  const note = $("#themeGenNote");
+  const gen = $("#themeGen");
+  if (!note || !gen) return;
+  gen.disabled = !canGenerateThemes;
+  note.textContent = canGenerateThemes
+    ? "Describe a mood. A model picks the colours that need taste; the rest are worked out and checked for contrast."
+    : "Add a model provider under Models first, and point the theme feature at it.";
+
+  const mine = $("#themeMine");
+  if (!mine) return;
+  mine.replaceChildren();
+  const themes = window.CLIQUE_THEMES || {};
+  for (const id of customThemes) {
+    const theme = themes[id];
+    if (!theme) continue;
+    const row = mk("div", "theme-row");
+    const swatch = mk("span", "theme-swatch");
+    swatch.style.background = (theme.panel || {}).bg || "#000";
+    swatch.style.borderColor = (theme.panel || {}).accent || "#888";
+    const name = mk("span", "theme-name");
+    name.textContent = theme.label || id;
+    const use = mk("button", "theme-use");
+    use.type = "button";
+    use.textContent = (state.settings.theme || "") === id ? "in use" : "Use";
+    use.disabled = (state.settings.theme || "") === id;
+    use.onclick = () => saveSettings({ theme: id }).then(renderThemeMaker);
+    const drop = mk("button", "theme-drop");
+    drop.type = "button";
+    drop.title = "Delete this theme";
+    drop.textContent = "\u00d7";
+    drop.onclick = async () => {
+      try {
+        await api(`api/themes/${encodeURIComponent(id)}/delete`, { method: "POST" });
+      } catch (err) {
+        return toast("Could not delete it: " + (err.message || err), true);
+      }
+      await refresh();      // the setting may have fallen back to the default
+      await loadThemes();
+      renderThemeMaker();
+    };
+    row.append(swatch, name, use, drop);
+    mine.appendChild(row);
+  }
+}
+
+async function generateTheme() {
+  const box = $("#themePrompt");
+  const gen = $("#themeGen");
+  const wanted = (box.value || "").trim();
+  if (!wanted) return box.focus();
+  gen.disabled = true;
+  const was = gen.textContent;
+  gen.textContent = "Making it\u2026";
+  try {
+    const made = await api("api/themes/generate", {
+      method: "POST", body: JSON.stringify({ prompt: wanted }),
+    });
+    box.value = "";
+    await loadThemes();
+    await saveSettings({ theme: made.id });   // made it, so wear it
+    toast(`"${made.label}" is on`);
+  } catch (err) {
+    toast(err.message || String(err), true);
+  } finally {
+    gen.textContent = was;
+    gen.disabled = false;
+    renderThemeMaker();
+  }
+}
+
+function openSettings() {
+  const s = state.settings;
+  renderSupport();   // About is one click away, so the list has to be there
+
+  fillThemeSelect();
+  renderThemeMaker();
   $("#setAppearance").value = s.appearance || "dark";
   $("#setInputMode").value = s.input_mode || "auto";
 
@@ -7083,6 +7200,10 @@ function wire() {
   $("#llmForm").onsubmit = addProvider;
 
   $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });
+  $("#themeGen").onclick = generateTheme;
+  $("#themePrompt").onkeydown = (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); generateTheme(); }
+  };
   $("#setFontFamily").onchange = (ev) => saveSettings({ font_family: ev.target.value });
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
@@ -9113,6 +9234,10 @@ setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 // desktop session in the same browser last left the sidebar at.
 if (isMobile()) setSidebar(false);
 bootWorkspace();
+// Themes made here, once. They are wanted on any device the moment it loads,
+// and they change about twice a year, so this is a boot fetch rather than
+// weight on every poll.
+loadThemes();
 setInterval(refresh, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and
 // nobody is waiting on a screenshot to the second.

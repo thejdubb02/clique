@@ -448,6 +448,7 @@ class Store:
         self.folders: list[Folder] = []
         self.sessions: list[Session] = []
         self.settings: dict = dict(DEFAULT_SETTINGS)
+        self.themes: list[dict] = []
         self._load()
 
     # ------------------------------------------------------------ persistence
@@ -477,6 +478,16 @@ class Store:
         # Bring-your-own-key LLM providers. Kept out of `settings` on purpose:
         # each carries an encrypted key, and settings is echoed to every read
         # client — providers are fetched only on demand, keys never in the poll.
+        # Themes somebody made here. Top level rather than inside `settings`
+        # because each is a couple of dozen colours and `settings` rides every
+        # poll — these are fetched once and again when one changes.
+        themes = raw.get("themes")
+        self.themes = (
+            [t for t in themes if isinstance(t, dict) and t.get("id")]
+            if isinstance(themes, list)
+            else []
+        )
+
         llm = raw.get("llm") if isinstance(raw.get("llm"), dict) else {}
         providers = llm.get("providers")
         routes = llm.get("routes")
@@ -507,6 +518,7 @@ class Store:
             "folders": [asdict(f) for f in self.folders],
             "sessions": [asdict(s) for s in self.sessions],
             "settings": self.settings,
+            "themes": self.themes,
             "llm": self.llm,
         }
         tmp = self.path.with_suffix(".json.tmp")
@@ -805,6 +817,44 @@ class Store:
     def folder(self, folder_id: str) -> Folder | None:
         with self._lock:
             return next((f for f in self.folders if f.id == folder_id), None)
+
+    # ----------------------------------------------------------------- themes
+
+    #: Enough to keep every theme anyone liked, few enough that a runaway
+    #: script cannot turn the state file into a colour database.
+    THEME_LIMIT = 40
+
+    def add_theme(self, theme: dict) -> dict:
+        """Store a finished theme and hand back the stored copy, id and all.
+
+        The caller has already validated and derived it — this only owns the
+        id, the ordering and the ceiling. Oldest goes when the ceiling is hit,
+        because a theme somebody is still using is one they will have selected,
+        and the selected one is never the oldest for long.
+        """
+        with self._lock:
+            stored = {**theme, "id": f"t-{uuid.uuid4().hex[:8]}", "created": int(time.time())}
+            self.themes.append(stored)
+            del self.themes[: max(0, len(self.themes) - self.THEME_LIMIT)]
+            self._write()
+            return stored
+
+    def delete_theme(self, theme_id: str) -> bool:
+        """Forget a theme, and stop wearing it if it was the one on.
+
+        Falling back to the default matters: the settings sheet that would let
+        you pick another is drawn in the theme you just deleted, so leaving the
+        setting pointing at nothing is how the panel comes back unpainted.
+        """
+        with self._lock:
+            before = len(self.themes)
+            self.themes = [t for t in self.themes if t.get("id") != theme_id]
+            if len(self.themes) == before:
+                return False
+            if self.settings.get("theme") == theme_id:
+                self.settings["theme"] = ""
+            self._write()
+            return True
 
     def add_folder(self, name: str, color: str | None = None) -> Folder:
         with self._lock:

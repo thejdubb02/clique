@@ -1088,6 +1088,43 @@ button.primary { background: var(--accent); color: var(--on-accent); }
                        cursor: pointer; font: inherit; padding: 5px 6px; }
 
 
+/* Describe a theme, get a theme. One row: the box takes the space, the button
+   keeps its size, and on a narrow sheet they stack rather than squeeze. */
+.theme-make { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.theme-make input {
+  flex: 1 1 220px; min-width: 0; padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg);
+  font: inherit;
+}
+.theme-make input:focus { outline: none; border-color: var(--accent); }
+.theme-make button { flex: none; }
+.theme-make button[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* One made theme. The swatch is the theme's own background ringed in its own
+   accent, which is the shortest honest preview there is. */
+.theme-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.theme-row:last-child { border-bottom: 0; }
+.theme-swatch {
+  width: 22px; height: 22px; border-radius: 5px; flex: none;
+  border: 2px solid var(--dim);
+}
+.theme-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.theme-use, .theme-drop {
+  flex: none; border: 1px solid var(--line); background: var(--field);
+  color: var(--fg); border-radius: 6px; cursor: pointer; font: inherit;
+}
+.theme-use { padding: 4px 10px; }
+.theme-use[disabled] { opacity: .6; cursor: default; color: var(--dim); }
+.theme-drop { width: 26px; height: 26px; display: grid; place-items: center;
+              font-size: 15px; line-height: 1; color: var(--dim); }
+@media (hover: hover) and (pointer: fine) {
+  .theme-use:not([disabled]):hover { border-color: var(--accent); }
+  .theme-drop:hover { border-color: var(--err); color: var(--err); }
+}
+
 /* Scrollbars inside the sheet, made to match rather than announce themselves. */
 #settings .panes::-webkit-scrollbar { width: 10px; }
 #settings .panes::-webkit-scrollbar-track { background: transparent; }

@@ -802,6 +802,32 @@ def _run(panel) -> int:
         page.screenshot(path=str(SHOTS / "settings.png"))
         check("settings opens", page.locator("#settings").is_visible())
 
+        # The theme maker lives at the bottom of a scrolling pane, which is
+        # exactly where the About tab once disappeared. Being in the DOM is
+        # not the assertion; being on screen is. Run here, with the sheet
+        # already open, so it cannot disturb anything that follows.
+        # Earlier tests left the sheet on another pane, and the panes are
+        # hidden rather than scrolled past, so ask for Appearance by name.
+        page.click('#setTabs button[data-pane="appearance"]')
+        page.wait_for_timeout(300)
+        page.evaluate(
+            "() => { const p = document.querySelector('#settings .panes');"
+            " if (p) p.scrollTop = p.scrollHeight; }"
+        )
+        page.wait_for_timeout(300)
+        for sel, name in (
+            ("#themePrompt", "the description box"),
+            ("#themeGen", "the generate button"),
+            ("#themeGenNote", "the note saying what it needs"),
+        ):
+            node = page.locator(sel)
+            box = node.bounding_box() if node.count() else None
+            check(f"{name} is on screen in Appearance",
+                  bool(box) and box["width"] > 20 and box["height"] > 8, box)
+        check("the button is off until a provider is set up",
+              page.evaluate("() => document.querySelector('#themeGen').disabled") is True)
+        page.screenshot(path=str(SHOTS / "theme-maker.png"))
+
         # Phone build, first pass: a narrow viewport, reloaded so the mobile
         # bootstrap runs (drawer starts closed), then the drawer opened over the
         # pane. Not asserted yet — screenshots to iterate the layout on.

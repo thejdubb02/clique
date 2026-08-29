@@ -45,6 +45,7 @@ from . import (
     services,
     sysinfo,
     termstrip,
+    themegen,
     tmux,
     version_string,
     working,
@@ -149,6 +150,33 @@ def host_allowed(host: str, extra: set[str]) -> bool:
 #: When this process came up, for the uptime in /healthz. Process-local by
 #: design: a restart resetting it is exactly what a monitor wants to see.
 _STARTED = time.time()
+
+
+def _theme_seed(reply: str, asked: str) -> dict:
+    """The JSON out of a model's answer, however it chose to wrap it.
+
+    Told to send one object and nothing else, a model will still occasionally
+    fence it, preface it, or add a closing remark. Cutting from the first brace
+    to the last costs nothing and turns a whole class of "it did not work" into
+    a theme, so it is worth doing rather than being strict on principle.
+
+    The description is kept as a fallback label: a model that names its theme
+    gets to, and one that forgets still produces something recognisable in the
+    picker rather than a row called "Generated".
+    """
+    text = str(reply or "").strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("the model did not return a theme")
+    try:
+        seed = json.loads(text[start : end + 1])
+    except ValueError as exc:
+        raise ValueError(f"the model's theme was not valid JSON: {exc}") from exc
+    if not isinstance(seed, dict):
+        raise ValueError("the model did not return a theme")
+    if not str(seed.get("label") or "").strip():
+        seed["label"] = asked
+    return seed
 
 
 class Panel:
@@ -588,7 +616,7 @@ class Panel:
 
     #: Features that can be pointed at a specific provider. Grows as the
     #: BYOK features land (digest, copilot, …); the inbox is the first.
-    _ROUTE_FEATURES = ("inbox",)
+    _ROUTE_FEATURES = ("inbox", "theme")
 
     def llm_list(self) -> dict:
         return {
@@ -638,23 +666,103 @@ class Panel:
     def llm_delete(self, provider_id: str) -> dict | None:
         return {"ok": True} if self.store.remove_provider(provider_id) else None
 
+    def _profile_for(self, p: dict) -> tuple[dict | None, str]:
+        """A stored provider as something `llm` can call, or a reason it cannot.
+
+        The key is decrypted here and nowhere else, and it lives only as long
+        as the call. Every failure is a sentence a person can act on rather
+        than an exception: a missing crypto extra and a tampered key both look
+        like "it did not work" from the panel, and they need different fixes.
+        """
+        key = ""
+        if p.get("key_enc"):
+            if not secretbox.available():
+                return None, f"encryption unavailable — {secretbox.SecretsUnavailable.HINT}"
+            try:
+                key = secretbox.decrypt(p["key_enc"], self._secret_key_path())
+            except Exception:  # noqa: BLE001 — a corrupt/tampered key is a failure, not a 500
+                return None, "the stored key could not be decrypted"
+        return {"kind": p["kind"], "base_url": p["base_url"], "model": p["model"], "key": key}, ""
+
     def llm_test(self, provider_id: str) -> dict | None:
         p = self.store.provider(provider_id)
         if not p:
             return None
-        key = ""
-        if p.get("key_enc"):
-            if not secretbox.available():
-                return {
-                    "ok": False,
-                    "error": f"encryption unavailable — {secretbox.SecretsUnavailable.HINT}",
-                }
-            try:
-                key = secretbox.decrypt(p["key_enc"], self._secret_key_path())
-            except Exception:  # noqa: BLE001 — a corrupt/tampered key is a failed test, not a 500
-                return {"ok": False, "error": "the stored key could not be decrypted"}
-        profile = {"kind": p["kind"], "base_url": p["base_url"], "model": p["model"], "key": key}
+        profile, why = self._profile_for(p)
+        if not profile:
+            return {"ok": False, "error": why}
         return llm.test(profile)
+
+    # ------------------------------------------------------------- themes
+
+    def themes_list(self) -> dict:
+        """Themes made here. The built-in ones ship in the front end and are
+        not repeated: this is only what a person added, so a fresh install
+        sends an empty list rather than a copy of the presets."""
+        return {
+            "themes": list(self.store.themes),
+            "can_generate": bool(self._provider_for("theme")),
+        }
+
+    def theme_add(self, seed: dict) -> dict:
+        """Turn a seed into a whole theme and keep it.
+
+        Validation and derivation are `themegen`'s, so a theme posted by hand
+        gets exactly what a generated one gets, including the contrast pass.
+        The audit afterwards is belt and braces: it should never fire, and if
+        it ever does the theme is refused rather than stored, because an
+        unreadable theme is a panel you cannot navigate to change it back.
+        """
+        built = themegen.build(seed)
+        unreadable = themegen.audit(built)
+        if unreadable:
+            raise ValueError("that theme could not be made readable: " + ", ".join(unreadable))
+        return self.store.add_theme(built)
+
+    #: What the model is asked for. Nine values that need taste; the other
+    #: eighteen are derived, so there is far less for it to get wrong.
+    _THEME_SYSTEM = (
+        "You design colour themes for a developer's terminal panel. Reply with "
+        "one JSON object and nothing else: no prose, no markdown fence.\n\n"
+        "Keys, all required:\n"
+        '  "label"   a short name for the theme, two or three words\n'
+        '  "base"    "dark" or "light", whichever suits the description\n'
+        '  "bg"      the background\n'
+        '  "fg"      the main text colour, which must be easy to read on bg\n'
+        '  "accent"  one colour for buttons, links and the cursor\n'
+        '  "red" "green" "yellow" "blue" "magenta" "cyan"  the six terminal '
+        "hues, each recognisably its own colour and readable on bg\n\n"
+        "Every colour is a #rrggbb string. Interpret the description as a mood "
+        "and commit to it: a theme that hedges toward grey is a worse answer "
+        "than one that is too bold."
+    )
+
+    def theme_generate(self, prompt: str) -> dict:
+        """Describe a theme, get a theme. Uses the caller's own provider.
+
+        The model supplies a seed and nothing more, so the failure modes are
+        small: bad JSON, or a colour that is not a colour. Both come back as a
+        sentence. What it cannot do is produce something unreadable, because
+        the ladder in `themegen` fixes contrast before this ever sees it.
+        """
+        wanted = " ".join(str(prompt or "").split())[:300]
+        if not wanted:
+            raise ValueError("describe the theme you want")
+        provider = self._provider_for("theme")
+        if not provider:
+            raise ValueError("no model provider is set up for themes — add one in Settings, Models")
+        profile, why = self._profile_for(provider)
+        if not profile:
+            raise ValueError(why)
+        reply = llm.complete(
+            profile,
+            [
+                {"role": "system", "content": self._THEME_SYSTEM},
+                {"role": "user", "content": wanted},
+            ],
+            max_tokens=700,
+        )
+        return self.theme_add(_theme_seed(reply, wanted))
 
     def state(self, *, reveal_urls: bool = False) -> dict:
         panes = self.live()
@@ -1530,6 +1638,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.orphans())
             if path == "/api/llm/providers":
                 return self._json(self.panel.llm_list())
+            if path == "/api/themes":
+                return self._json(self.panel.themes_list())
             if path == "/api/storage":
                 usage = files.shares_usage(tuple(self._share_cwds()))
                 usage["cleanup_days"] = int(
@@ -1819,6 +1929,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.spawn(body), 201)
             if path == "/api/orphans/reap":
                 return self._json(self.panel.reap_orphans(body.get("muxes")))
+            if path == "/api/themes":
+                return self._json(self.panel.theme_add(body), 201)
+            if path == "/api/themes/generate":
+                return self._json(self.panel.theme_generate(body.get("prompt")), 201)
+            # Spelled with `parts` rather than `endswith("/delete")`, which is
+            # how the router matches every other id-in-the-middle route and,
+            # not incidentally, the only spelling `tools/api_drift.py` reads
+            # as anything other than a session verb.
+            parts = path.strip("/").split("/")
+            if len(parts) == 4 and parts[1] == "themes" and parts[3] == "delete":
+                if not self.panel.store.delete_theme(parts[2]):
+                    return self._json({"error": "no such theme"}, 404)
+                return self._json({"ok": True})
             if path == "/api/llm/providers":
                 return self._json(self.panel.llm_create(body), 201)
             if path == "/api/llm/routes":

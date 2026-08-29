@@ -563,12 +563,49 @@ with `key_set` only, and it never rides `/api/state`.
 - `POST /api/llm/routes` — point a feature at a provider. Body `{feature,
   provider_id}`; an absent/empty `provider_id` clears the route. `feature` is one
   of the names in `GET /api/llm/providers`'s `features` list (currently
-  `inbox`). Returns `{"routes": {...}}`. Deleting a provider drops any route to
+  `inbox` and `theme`). Returns `{"routes": {...}}`. Deleting a provider drops any route to
   it. Write scope.
 
 Outbound calls refuse a `base_url` that resolves to a cloud-metadata /
 link-local address or (by default) an internal-network host; loopback stays
 allowed for local models. `CLIQUE_LLM_ALLOW_PRIVATE=1` opts into private ranges.
+
+## Themes
+
+A theme is nine colours somebody chose and eighteen worked out from them. The
+built-in presets ship in the front end; this is only what was made here, so a
+fresh panel returns an empty list.
+
+Both routes that create one run the same derivation and the same contrast
+pass, so a theme posted by hand gets exactly what a generated one gets. That
+matters more than it sounds: the settings sheet you would use to pick a
+different theme is drawn in the theme you are wearing, so one whose text
+vanishes into its background is not a bad theme, it is a panel you cannot
+navigate. Colours that cannot be read are pushed away from the background
+until they can be, rather than refused.
+
+- `GET /api/themes` → `{"themes": [...], "can_generate": <bool>}`. Each theme is
+  `{id, label, base, panel, term, created}`, complete and ready to use.
+  `can_generate` is whether a model provider is routed to the `theme` feature.
+  Read scope.
+- `POST /api/themes` → `201` the stored theme. Body is a **seed**: `label`,
+  `base` (`light`/`dark`), `bg`, `fg`, `accent`, and the six hues `red`,
+  `green`, `yellow`, `blue`, `magenta`, `cyan`, each `#rgb` or `#rrggbb`. The
+  panel tokens, all sixteen ANSI colours with their brights, the cursor and the
+  selection are derived. A colour that is not a colour, a missing hue, or a
+  `base` that is neither light nor dark is a `400` naming the problem. Write
+  scope.
+- `POST /api/themes/generate` → `201` the stored theme. Body `{prompt}`, a
+  description in words. Asks the provider routed to the `theme` feature for a
+  seed and then treats it exactly as `POST /api/themes` would. `400` when no
+  provider is set up, when the description is empty, or when the model's reply
+  was not a theme. Write scope.
+- `POST /api/themes/<id>/delete` → `{"ok": true}`, or `404`. Deleting the theme
+  currently in use clears the setting back to the default, because leaving it
+  pointing at a theme that no longer exists is a panel that comes back
+  unpainted. Write scope.
+
+Forty are kept; the oldest goes when a new one would exceed that.
 
 ## Folders
 

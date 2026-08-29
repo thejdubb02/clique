@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.53.0 — 2026-08-28 17:35 PDT
+
+**Describe a theme and get one.** Settings, Appearance now has a box: type "a
+quiet winter morning, muted blues", press Generate, and the theme is built,
+applied, and kept on the server so it follows you to any device. Each one can
+be worn or deleted from the same list. It runs on your own key through the
+existing model providers, so nothing is called unless you set one up, and the
+button says so plainly until you have.
+
+**The model is asked for nine colours, not twenty-seven.** A theme is nine
+panel tokens and eighteen terminal ones, all sixteen ANSI colours with their
+brights included. Ask for that and you get a missing `brightYellow` and a
+foreground nobody can read. So it supplies the ones that need taste, light or
+dark, a background, a foreground, an accent and six hues, and the rest are
+worked out, which is the same bargain the panel already makes with its own
+derived tokens.
+
+**A generated theme cannot lock you out.** This is the part that mattered. The
+settings sheet you would use to pick a different theme is drawn in the theme
+you are wearing, so one whose text vanishes into its background is not a bad
+theme, it is a panel you cannot navigate. Every colour that carries meaning is
+pushed away from the background until it can be read, before the theme is ever
+stored: body text to 7:1, secondary text to 4.5, every ANSI colour to 3.5.
+Colours are corrected rather than refused, so a strange description still gives
+you something usable.
+
+**A theme can also be posted by hand.** `POST /api/themes` takes the same nine
+colours and runs the same derivation and the same contrast pass, so anything
+driving CLIque from a script can make one without a model anywhere near it.
+Forty are kept; the oldest goes when a new one would exceed that. Deleting the
+one you are wearing falls back to the default rather than leaving the setting
+pointing at nothing.
+
+`tools/theme_check.py` covers the lot over HTTP: derivation, every refusal, the
+contrast rescue, wearing, deleting and the ceiling.
+
 ## 0.52.1 — 2026-08-28 17:12 PDT
 
 **The pane's scrollbar wears the theme.** It was the last raw browser control
