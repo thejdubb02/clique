@@ -22,15 +22,32 @@ installing from PyPI into a clean venv rather than trusting the workflow.
 
 Hours each. These are the ones that pay off every hour in the panel.
 
-1. **Session status line:** elapsed, last activity, process state.
+1. **Session templates:** CLI + directory + starter prompt + name pattern.
+2. **An agent-facing skill.** The API exists; nothing tells an agent so.
+3. **Typography.** Line height, letter spacing, and a ligature-capable stack.
+   Held back from 0.52.1 on purpose: these change how many rows fit in a pane,
+   which touches the whole sizing path, so it wants its own change and its own
+   run of `redraw_check.py`.
 
 ## Then — bigger slices
 
-2. **Phone layout.** Sidebar, tab bar, and an on-screen key row. The largest
-    gap between the README and the panel.
-3. **Session templates:** CLI + directory + starter prompt + name pattern.
-4. **An agent-facing skill.** The API exists; nothing tells an agent so.
+4. **Finish the phone layout.** The drawer landed in 0.50.33 and the key row in
+   0.50.86, so what is left is the tab bar and the input bar's spacing, not the
+   whole job the older wording implied.
 5. **Per-session CPU/memory,** to catch one agent starving the box.
+
+## Checked off this list, 2026-08-29
+
+Both had drifted: the work shipped and the entry stayed. Verified against the
+CHANGELOG rather than by reading the code, and worth doing again before
+trusting the order above.
+
+- **Session status line.** Shipped 0.50.93. The strip under the tabs carries
+  the process, the directory, the branch and its changed-file count, uptime and
+  quiet time, which is every fact the entry asked for, plus the pane size added
+  in 0.52.0.
+- **Land on the last prompt.** Measured on 2026-08-28 and it does not
+  reproduce; see the entry below.
 
 ## Waiting on a repro
 
