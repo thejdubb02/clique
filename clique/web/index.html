@@ -291,7 +291,7 @@
     <label>Working directory
       <span class="cwd-row">
         <input name="cwd" list="cwdList" autocomplete="off" required
-               placeholder="Where should it run?">
+               placeholder="A path, or a project name to search for">
         <select id="cwdPick" title="Directories CLIque already knows"></select>
       </span>
     </label>
@@ -581,6 +581,21 @@
          repeat counter and a saved draft live — so it stays. The mode pill is
          never hidden either way. Snippets work regardless: CLIque owns the
          pseudo-terminal, so an expansion is typed into the pane.</p>
+
+      <h3>Finding a project</h3>
+      <label class="field">Where your work lives
+        <textarea id="setProjectRoots" rows="3" spellcheck="false"
+                  placeholder="Blank searches your home directory"></textarea>
+      </label>
+      <p class="note">One directory per line. Type a project name instead of a
+         path in the new-session dialog and CLIque looks under these for a
+         directory holding a <code>.git</code>, a <code>pyproject.toml</code>, a
+         <code>package.json</code> or another project marker, then offers the
+         path.</p>
+      <p class="note">Blank is usually right: your home directory is searched,
+         hidden directories are never opened, so a cache or a virtualenv costs
+         nothing. Name directories here if your work lives outside home, or if
+         home is big enough that the search comes back saying it stopped early.</p>
     </section>
 
     <section class="pane" data-pane="markers" hidden>

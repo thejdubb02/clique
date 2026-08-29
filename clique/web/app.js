@@ -6342,12 +6342,17 @@ function fillCwdList() {
   pick.disabled = !dirs.length;
 }
 
+/* `paths` may be plain strings or {value, label} pairs. A datalist option
+ * shows its text content beside the value it would insert, which is how a
+ * project can say "wsg-sentinel" while still filling the field with the path
+ * nobody remembers. */
 function fillDatalist(paths) {
   const list = $("#cwdList");
   list.textContent = "";
-  for (const cwd of paths) {
+  for (const item of paths) {
     const option = document.createElement("option");
-    option.value = cwd;
+    option.value = typeof item === "string" ? item : item.value;
+    if (typeof item !== "string" && item.label) option.textContent = item.label;
     list.appendChild(option);
   }
 }
@@ -6368,7 +6373,33 @@ let browseTimer = null;
 function browseFrom(text) {
   clearTimeout(browseTimer);
   if (!text.startsWith("/") && !text.startsWith("~")) {
-    return fillDatalist(knownDirs().map((d) => d.cwd));
+    /* Not a path, so it is a name. The two suggestions the dialog already had
+     * both assume you know something: the dropdown knows where you have been,
+     * and the completion below needs the first few characters of the path.
+     * Neither answers "the one called sentinel", which on a box with forty
+     * repos across three parent directories is the actual question. */
+    const known = knownDirs()
+      .filter((d) => !text || d.cwd.toLowerCase().includes(text.toLowerCase()))
+      .map((d) => d.cwd);
+    if (text.trim().length < 2) return fillDatalist(known);
+    browseTimer = setTimeout(async () => {
+      let found = [];
+      try {
+        found = (await api("api/projects?q=" + encodeURIComponent(text))).projects || [];
+      } catch {
+        return fillDatalist(known);   // never worth interrupting a launch over
+      }
+      if ($("#newForm").cwd.value.trim() !== text) return;   // they typed on
+      // Somewhere you have already worked stays ahead of a fresh find: it is
+      // the better guess, and the search is what covers the case it misses.
+      const seen = new Set(known);
+      fillDatalist([
+        ...known.map((cwd) => ({ value: cwd, label: cwd })),
+        ...found.filter((p) => !seen.has(p.path))
+          .map((p) => ({ value: p.path, label: p.name + " · " + p.path })),
+      ]);
+    }, 200);
+    return;
   }
   browseTimer = setTimeout(async () => {
     let dirs = [];
@@ -7201,6 +7232,9 @@ function openSettings() {
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
   // into, and a poll landing mid-edit would move their cursor.
+  if (document.activeElement !== $("#setProjectRoots")) {
+    $("#setProjectRoots").value = (s.project_roots || []).join("\n");
+  }
   if (document.activeElement !== $("#setArtDirs")) {
     $("#setArtDirs").value = (s.artifact_dirs || []).join("\n");
   }
@@ -7473,6 +7507,11 @@ function wire() {
   $("#setArtDirs").onblur = (ev) => {
     saveSettings({ artifact_dirs: ev.target.value.split("\n") });
     pollArtifacts();
+  };
+  // Same reasoning as above. Nothing has to invalidate the two-minute walk
+  // cache by hand: the roots are part of its key, so changing them is a miss.
+  $("#setProjectRoots").onblur = (ev) => {
+    saveSettings({ project_roots: ev.target.value.split("\n") });
   };
   // The toggle carries the days field: unchecked stores 0 (off); checked stores
   // whatever the field says, defaulting to 14 the first time it is switched on.

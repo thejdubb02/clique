@@ -418,6 +418,34 @@ This is what the new-session dialog uses once you start typing a path. The
 dropdown beside it answers a different question — everywhere you have already
 worked — and neither is a substitute for the other.
 
+### `GET /api/projects?q=sentinel`
+
+Project roots matching a name, for when you cannot remember where one lives.
+`/api/browse` completes a path you already know the start of; this answers the
+other question. Add `refresh=1` to force a fresh walk instead of the cached one.
+
+```json
+{"projects": [{"path": "/root/platform/wsg-sentinel", "name": "wsg-sentinel",
+               "kind": "git"}],
+ "partial": false, "total": 140}
+```
+
+A directory counts as a project when it holds `.git`, `pyproject.toml`,
+`package.json`, `Cargo.toml`, `go.mod`, `pom.xml`, `Gemfile`, `composer.json`
+or `CMakeLists.txt`; `kind` says which. Ranked by how the match happened, not
+by string distance: the directory *called* sentinel comes before one that
+merely has it somewhere in its path.
+
+Empty `q` returns the shallowest roots, which is the nearest thing to "the
+projects you would name first". `partial` is true when the walk hit its depth,
+count or three-second budget and stopped, so a short answer is never silently
+short. `total` is how many were indexed in all.
+
+Where it looks is the `project_roots` setting, and the home directory when that
+is empty. Hidden directories are never descended into, which is what keeps a
+cache or a virtualenv out of the walk, and the result is cached for two
+minutes.
+
 ### `POST /api/workspace` → `201` with the same shape
 
 ```json
@@ -723,6 +751,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `active_tab` | session id | Which one was in front |
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
 | `cli_tint` | bool | Colour the pane edge, active tab and prompt box with the active CLI's colour |
+| `project_roots` | list of paths | Where `GET /api/projects` looks when the new-session dialog is asked for a project by name. Empty means the home directory. Name directories here when your work lives elsewhere, or when home is big enough that the walk is worth narrowing |
 | `theme_art` | bool | Draw the theme's hand-drawn character in the bottom-right of the pane, behind the text. Only the seven character themes (`plumber`, `triforce`, `fellowship`, `drizzt`, `pacman`, `tetris`, `aincrad`) carry one; elsewhere it does nothing. Composited with `lighten`/`darken` so a glyph over it stays exactly as readable, and hidden on a pane under 720px or a window under 460px tall. On by default |
 | `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
 | `changelog_seen` | version | Newest release whose notes have been read. Seeded on first load so a fresh install does not badge itself |

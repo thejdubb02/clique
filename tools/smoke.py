@@ -335,6 +335,77 @@ def main() -> int:
     shutil.rmtree(plain, ignore_errors=True)
     shutil.rmtree(repo, ignore_errors=True)
 
+    print("finding a project by name")
+    import tempfile
+
+    from clique import projects
+
+    sand = Path(tempfile.mkdtemp(prefix="clique-projects-"))
+    (sand / "work" / "wsg-sentinel").mkdir(parents=True)
+    (sand / "work" / "wsg-sentinel" / ".git").mkdir()
+    (sand / "work" / "notes").mkdir()
+    # A repo inside a repo, which is the shape that broke the first version of
+    # the walk: treating a project root as a leaf made every client directory
+    # inside a client repo invisible.
+    (sand / "clients" / ".git").mkdir(parents=True)
+    (sand / "clients" / "acme-carwash").mkdir()
+    (sand / "clients" / "acme-carwash" / "package.json").write_text("{}", encoding="utf-8")
+    # The things a walk must not wander into. `.cache` is the real one: on the
+    # box this was written for it is 11GB.
+    (sand / ".cache" / "junk" / "pyproject.toml").parent.mkdir(parents=True)
+    (sand / ".cache" / "junk" / "pyproject.toml").write_text("", encoding="utf-8")
+    (sand / "work" / "node_modules" / "left-pad").mkdir(parents=True)
+    (sand / "work" / "node_modules" / "left-pad" / "package.json").write_text(
+        "{}", encoding="utf-8"
+    )
+
+    projects.forget()
+    found, partial = projects.index(home=sand)
+    names = sorted(p.name for p in found)
+    check("it finds the repos", "wsg-sentinel" in names and "clients" in names, names)
+    check(
+        "including a project inside a project",
+        "acme-carwash" in names,
+        names,
+    )
+    check("a directory with no marker is not a project", "notes" not in names, names)
+    check("it does not walk into a hidden directory", "junk" not in names, names)
+    check("or into node_modules", "left-pad" not in names, names)
+    check("and it finished", partial is False)
+
+    hit = projects.search("sentinel", home=sand)
+    check(
+        "searching by name finds the path",
+        [x["path"] for x in hit["projects"]] == [str(sand / "work" / "wsg-sentinel")],
+        hit,
+    )
+    check("and says what kind it is", hit["projects"][0]["kind"] == "git", hit)
+    kinds = {x["name"]: x["kind"] for x in projects.search("", home=sand)["projects"]}
+    check("a manifest with no repo still counts", kinds.get("acme-carwash") == "node", kinds)
+    # The ranking is the part somebody notices: the directory *called* the
+    # thing has to beat the one that merely contains it in its path.
+    (sand / "work" / "sentinel-old").mkdir()
+    (sand / "work" / "sentinel-old" / ".git").mkdir()
+    projects.forget()
+    order = [x["name"] for x in projects.search("sentinel-old", home=sand)["projects"]]
+    check("an exact name outranks a path match", order[:1] == ["sentinel-old"], order)
+    check("nothing matches nonsense", projects.search("zzzz", home=sand)["projects"] == [])
+
+    projects.forget()
+    narrow = projects.search("", [str(sand / "clients")], home=sand)
+    check(
+        "naming a root narrows the walk to it",
+        all(x["path"].startswith(str(sand / "clients")) for x in narrow["projects"]),
+        narrow,
+    )
+    projects.forget()
+    check(
+        "a root inside another root is not walked twice",
+        len(projects._roots([str(sand), str(sand / "work")], sand)) == 1,
+    )
+    shutil.rmtree(sand, ignore_errors=True)
+    projects.forget()
+
     print("engine")
     tmux.bootstrap(SOCKET, history_limit=9000)
     check("server bootstraps", tmux.list_sessions(SOCKET) == [])

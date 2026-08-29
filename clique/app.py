@@ -41,6 +41,7 @@ from . import (
     migrate,
     notes,
     notify,
+    projects,
     secretbox,
     services,
     sysinfo,
@@ -1673,6 +1674,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._get_notes(path.split("/")[3])
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
+            if path == "/api/projects":
+                return self._json(
+                    projects.search(
+                        query.get("q") or "",
+                        self.panel.store.settings.get("project_roots") or [],
+                        force=query.get("refresh") == "1",
+                    )
+                )
             if path == "/api/workspace":
                 return self._json(
                     workspace.look(

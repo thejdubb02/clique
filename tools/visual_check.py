@@ -595,6 +595,30 @@ def _run(panel) -> int:
             check("a theme with no figure draws nothing", plain is True, plain)
             page.wait_for_timeout(300)
 
+        print("finding a project by name in the new-session dialog")
+        # The unit tests prove the walk. This proves the box people actually
+        # type into is wired to it: a bare name is not a path, and before this
+        # the field answered nothing at all for one.
+        page.evaluate("openModal()")
+        page.wait_for_timeout(400)
+        page.fill('#newForm [name=cwd]', "clique")
+        page.wait_for_timeout(1200)
+        listed = page.evaluate(
+            """() => [...document.querySelectorAll('#cwdList option')]
+                     .map((o) => ({value: o.value, label: o.textContent}))"""
+        )
+        check("typing a name fills the suggestions", len(listed) > 0, listed)
+        check("and one of them is this repo",
+              any(o["value"].rstrip("/").endswith("/clique") for o in listed), listed)
+        check("the value is a path it can launch in",
+              all(o["value"].startswith("/") for o in listed), listed)
+        check("and a found project shows its name beside the path",
+              any(" · " in (o["label"] or "") for o in listed), listed)
+        page.fill('#newForm [name=cwd]', "")
+        page.wait_for_timeout(200)
+        page.evaluate("document.querySelector('#modal').hidden = true")
+        page.wait_for_timeout(300)
+
         print("copy from the pane")
         # A shell has no mouse tracking, so a drag is a selection. The chip
         # and the clipboard are how we know it actually landed.

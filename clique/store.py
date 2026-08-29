@@ -107,6 +107,12 @@ DEFAULT_SETTINGS = {
     "theme": "",
     #: Ask each running CLI what is left of its plan, for the status bar.
     "usage_bar": True,
+    #: Where to look for projects when the new-session dialog is asked for one
+    #: by name. Empty means the home directory, which is the answer that is
+    #: right on a machine nobody has told us about. Name directories here when
+    #: your work lives somewhere else, or when home is big enough that the walk
+    #: is worth narrowing.
+    "project_roots": [],
     #: The character a theme carries, watermarked into the corner of the pane.
     #: Only seven of the presets have one; on the rest the setting does
     #: nothing. On, because a theme that draws nothing is not a theme anybody

@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.56.0 — 2026-08-29 08:26 PDT
+
+**Type a project name in the new-session dialog instead of a path.** "sentinel"
+now finds `/root/platform/wsg-sentinel` and offers it. The same box still takes
+a path and still completes one; a bare name used to return nothing at all.
+
+That gap was the point. The dialog had two ways to fill in a directory and both
+assume you already know something: the dropdown lists everywhere you have
+worked, which is no help for a repo you have not opened here yet, and the
+completion behaves like a shell, which needs the first few characters of the
+path. Neither answers "the one called sentinel", which on a box with forty
+repos across three parent directories is the actual question.
+
+A directory counts as a project when it holds `.git`, `pyproject.toml`,
+`package.json`, `Cargo.toml`, `go.mod`, `pom.xml`, `Gemfile`, `composer.json`
+or `CMakeLists.txt`. Matches are ranked by how the match happened rather than
+by string distance, because the directory *called* sentinel should beat one
+that merely has the word somewhere in its path, and no fuzzy score says that as
+clearly as asking the question in order. Somewhere you have already worked
+stays ahead of a fresh find either way.
+
+**The walk is cheap because it never opens a hidden directory.** That one rule
+removes the caches, the virtualenvs, the package directories and the language
+toolchains, which is most of the bytes in a developer's home directory: it
+takes an 11GB `~/.cache` out of the walk entirely. 140 projects in about a
+tenth of a second here, cached for two minutes after that.
+
+It also keeps going *past* a project root, which is the opposite of the obvious
+optimisation. Stopping there was measured against not stopping and came out
+inside the noise, while hiding real answers: a repo of client directories that
+is itself a repo is an ordinary thing to have, and every directory inside one
+was invisible. It was a trade that bought nothing, and it only stopped looking
+clever once somebody measured it.
+
+Bounded three ways, by depth, count and a three-second budget, and a walk that
+hits any of them says so in `partial` rather than returning a quietly short
+answer.
+
+**`GET /api/projects?q=`** is the whole thing, so an agent driving CLIque can
+ask where a repo is without being told. **`project_roots`** in Settings ▸
+Appearance narrows where it looks; blank means your home directory, which is
+the answer that is right on a machine nobody has configured.
+
 ## 0.55.1 — 2026-08-29 08:16 PDT
 
 **The theme picker says which themes come with a character.** Seven of the

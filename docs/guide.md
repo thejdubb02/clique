@@ -247,6 +247,14 @@ Open Settings from the gear in the sidebar header, or the palette. It saves on
 the server, so your look follows you between devices; only device-specific things
 like the sidebar width stay local.
 
+- **Finding a project:** the working-directory box in the new-session dialog
+  takes a path, completes one as you type it, and, if you type something that
+  is not a path at all, searches for a project of that name. "sentinel" finds
+  `~/work/wsg-sentinel`. It looks under your home directory by default and
+  never opens a hidden one, so caches and virtualenvs cost nothing; point it
+  somewhere else under **Appearance ▸ Finding a project** if your work lives
+  outside home.
+
 - **Appearance:** a theme (grouped by whether it comes with a character), a
   dark, light or follow-system base, terminal and
   sidebar font sizes, the prompt-box mode, and the GPU toggle. Under **Make a
