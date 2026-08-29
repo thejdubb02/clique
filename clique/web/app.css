@@ -1354,12 +1354,15 @@ button > .ico:only-child { vertical-align: baseline; }
 /* Same family as the paused badge: a real button, because a phone has no
    Ctrl+C and a canvas has no native copy. Shown only while something is
    selected, so a session that is not being copied from never grows one. */
-#copySel { position: absolute; left: 16px; bottom: 14px; z-index: 40;
-           padding: 5px 12px; border-radius: 999px; cursor: pointer;
-           background: var(--panel); color: var(--fg); font-size: 11px;
-           border: 1px solid var(--accent); box-shadow: 0 4px 14px var(--shadow); }
+#selChips { position: absolute; left: 16px; bottom: 14px; z-index: 40;
+            display: flex; gap: 8px; align-items: center; }
+#selChips button {
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--panel); color: var(--fg); font-size: 11px;
+  border: 1px solid var(--accent); box-shadow: 0 4px 14px var(--shadow);
+}
 @media (pointer: coarse) {
-  #copySel { padding: 11px 16px; }
+  #selChips button { padding: 11px 16px; }
 }
 
 /* The shortcut reference. One list, built from the same table the bindings are
@@ -1496,6 +1499,23 @@ a.give-value { color: var(--accent); }
 #fileImg { max-width: 100%; max-height: 60vh; object-fit: contain;
            border-radius: 6px; background: var(--bg); display: block;
            margin: 0 auto 12px; }
+.file-list { margin: 0 0 12px; max-height: 60vh; overflow: auto;
+             border: 1px solid var(--line); border-radius: 6px;
+             background: var(--bg); }
+.file-list button {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  margin: 0; text-align: left; cursor: pointer;
+  padding: 10px 12px; min-height: 44px;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line);
+  color: var(--fg); font: inherit;
+}
+.file-list button:last-child { border-bottom: 0; }
+.file-list .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.file-list .kind { flex: 0 0 auto; font-size: 11px; color: var(--dim); }
+@media (hover: hover) and (pointer: fine) {
+  .file-list button { min-height: 36px; padding: 8px 12px; }
+  .file-list button:hover { background: var(--row); }
+}
 .file-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .file-foot code { flex: 1; min-width: 0; font-size: 11px; color: var(--dim);
                   overflow-wrap: anywhere; }

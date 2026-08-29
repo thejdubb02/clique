@@ -2225,6 +2225,7 @@ function sessionMenu(ev, s) {
   const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
   showMenu(ev, [
     [s.alive ? "Open" : "Start again", () => openSession(s.id)],
+    ["Open a file", () => openFileSheet(s.id, s.cwd || ".")],
     ...(cliHasTranscript(s.cli) ? [["View conversation", () => openTranscript(s)]] : []),
     ...(cliHasTranscript(s.cli) ? [["Usage", () => openUsage(s)]] : []),
     ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
@@ -2386,6 +2387,43 @@ function wireTouchMenus() {
   }, { passive: false });
 
   tree.addEventListener("touchcancel", cancel, { passive: true });
+}
+
+function wireTermTouchMenus() {
+  const host = $("#terminal");
+  if (!host) return;
+  let timer = null;
+  let from = null;
+  let fired = false;
+  const cancel = () => { clearTimeout(timer); timer = null; from = null; };
+  host.addEventListener("touchstart", (ev) => {
+    cancel();
+    if (ev.touches.length !== 1) return;
+    const touch = ev.touches[0];
+    from = { x: touch.clientX, y: touch.clientY };
+    fired = false;
+    timer = setTimeout(() => {
+      timer = null;
+      if (!from) return;
+      fired = true;
+      if (navigator.vibrate) navigator.vibrate(12);
+      host.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true, cancelable: true,
+        clientX: from.x, clientY: from.y,
+      }));
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+  host.addEventListener("touchmove", (ev) => {
+    if (!from || !ev.touches.length) return;
+    const touch = ev.touches[0];
+    if (Math.abs(touch.clientX - from.x) > LONG_PRESS_SLOP
+        || Math.abs(touch.clientY - from.y) > LONG_PRESS_SLOP) cancel();
+  }, { passive: true });
+  host.addEventListener("touchend", (ev) => {
+    if (fired) { ev.preventDefault(); fired = false; }
+    cancel();
+  }, { passive: false });
+  host.addEventListener("touchcancel", cancel, { passive: true });
 }
 
 const PALETTE = [
@@ -3227,7 +3265,10 @@ function renderInfoPane(body, s) {
   if (typeof s.rss === "number" && s.rss > 0) kv.append(kvRow("Memory", humanBytes(s.rss)));
   if (s.created) kv.append(kvRow("Up", ago(s.created) || "just now"));
   if (s.activity) kv.append(kvRow("Quiet for", ago(s.activity) || "just now"));
-  body.replaceChildren(kv);
+  const tools = mk("div", "pane-tools");
+  tools.append(paneButton("Open a file", "chevron-right",
+    () => openFileSheet(s.id, s.cwd || ".")));
+  body.replaceChildren(kv, tools);
 }
 
 /* ----------------------------------------------------------- Export pane */
@@ -4272,6 +4313,17 @@ function trimPath(text) {
   return trimUrl(out);
 }
 
+function pathFromText(text) {
+  let raw = String(text || "").trim();
+  if (!raw || /\s/.test(raw) || raw.length > 1024) return "";
+  raw = raw.replace(/^['"`]+|['"`]+$/g, "");
+  PATH_RE.lastIndex = 0;
+  const match = PATH_RE.exec(/^[~./]/.test(raw) ? raw : (" " + raw));
+  if (!match) return "";
+  const got = trimPath(match[1]);
+  return got === raw ? got : "";
+}
+
 function pathRange(line, full, captured) {
   const start = line.indexOf(captured, Math.max(0, full.index));
   const at = start >= 0 ? start : full.index + (full[0].length - captured.length);
@@ -4518,12 +4570,10 @@ async function sendDiffComment() {
  * conversation, and the numbers line up in its monospace pre. */
 async function openUsage(s) {
   fileSession = s.id;
-  fileAsked = " usage:" + s.id;
+  fileAsked = "\u0000usage:" + s.id;
   $("#fileTitle").textContent = (s.name || "Session") + " — usage";
   $("#filePath").textContent = "token usage";
-  $("#fileText").hidden = true; $("#fileText").textContent = "";
-  $("#fileImg").hidden = true; $("#fileImg").removeAttribute("src");
-  $("#fileTurns").hidden = true; $("#fileTurns").textContent = "";
+  resetFileBody();
   $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading…";
   $("#file").hidden = false;
   let data;
@@ -4566,10 +4616,8 @@ async function openTranscript(s) {
   fileAsked = "\u0000transcript:" + s.id;   // no real path collides with this
   $("#fileTitle").textContent = s.name || "Conversation";
   $("#filePath").textContent = "conversation";
-  $("#fileText").hidden = true; $("#fileText").textContent = "";
-  $("#fileImg").hidden = true; $("#fileImg").removeAttribute("src");
-  $("#fileTurns").hidden = true; $("#fileTurns").textContent = "";
-  $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading\u2026";
+  resetFileBody();
+  $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading...";
   $("#file").hidden = false;
   let data;
   try {
@@ -4621,14 +4669,9 @@ async function openFileSheet(sessionId, path) {
   fileAsked = asked;
   $("#fileTitle").textContent = asked.split("/").pop() || asked;
   $("#filePath").textContent = asked;
-  $("#fileText").hidden = true;
-  $("#fileText").textContent = "";
-  $("#fileImg").hidden = true;
-  $("#fileImg").removeAttribute("src");
-  $("#fileTurns").hidden = true;
-  $("#fileTurns").textContent = "";
+  resetFileBody();
   $("#fileNote").hidden = false;
-  $("#fileNote").textContent = "Looking…";
+  $("#fileNote").textContent = "Looking...";
   $("#file").hidden = false;
   try {
     const info = await api(
@@ -4643,17 +4686,63 @@ async function openFileSheet(sessionId, path) {
   }
 }
 
+function resetFileBody() {
+  $("#fileText").hidden = true;
+  $("#fileText").textContent = "";
+  $("#fileImg").hidden = true;
+  $("#fileImg").removeAttribute("src");
+  $("#fileTurns").hidden = true;
+  $("#fileTurns").textContent = "";
+  const list = $("#fileList");
+  if (list) { list.hidden = true; list.textContent = ""; }
+  const up = $("#fileUp");
+  if (up) up.hidden = true;
+}
+
+function fileParentPath(info) {
+  const p = String((info && info.path) || "").replace(/\\/g, "/");
+  if (!p) return "";
+  const parts = p.split("/").filter((bit, i) => bit !== "" || i === 0);
+  if (parts.length < 2) return "";
+  parts.pop();
+  const parent = parts.join("/") || "/";
+  return parent === p ? "" : parent;
+}
+
+const DIR_LIST_HINT = "200";
+
+function showFileList(entries, truncated) {
+  const list = $("#fileList");
+  if (!list) return;
+  list.textContent = "";
+  for (const row of entries || []) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = row.name === ".." ? "Parent folder" : row.name;
+    const kind = document.createElement("span");
+    kind.className = "kind";
+    kind.textContent = row.kind === "dir" ? "folder" : "file";
+    btn.append(name, kind);
+    btn.onclick = () => openFileSheet(fileSession, row.path);
+    list.append(btn);
+  }
+  list.hidden = !list.childElementCount;
+  if (truncated) {
+    const note = $("#fileNote");
+    note.hidden = false;
+    note.textContent = "First " + DIR_LIST_HINT + " entries shown.";
+  }
+}
+
 function showFile(info) {
   $("#fileTitle").textContent = info.name || info.asked || "File";
   $("#filePath").textContent = info.path || info.asked || fileAsked;
   const note = $("#fileNote");
   const text = $("#fileText");
   const img = $("#fileImg");
-  text.hidden = true;
-  text.textContent = "";
-  img.hidden = true;
-  img.removeAttribute("src");
-  $("#fileTurns").hidden = true;
+  resetFileBody();
   note.hidden = true;
 
   if (info.kind === "text") {
@@ -4669,19 +4758,28 @@ function showFile(info) {
     img.src = "api/sessions/" + encodeURIComponent(fileSession)
       + "/file?path=" + encodeURIComponent(info.asked || fileAsked) + "&raw=1";
   } else if (info.kind === "dir") {
-    note.hidden = false;
-    note.textContent = "That is a directory. Send the path if you want to work from it.";
+    const entries = info.entries || [];
+    if (entries.length) {
+      showFileList(entries, info.truncated);
+    } else {
+      note.hidden = false;
+      note.textContent = "That folder is empty.";
+    }
   } else if (info.kind === "binary") {
     note.hidden = false;
-    note.textContent = "Not text — copy or send the path to open it in something that can.";
+    note.textContent = "Not text. Copy or send the path to open it in something that can.";
   } else {
     note.hidden = false;
-    note.textContent = "Nothing at that path from this session’s directory.";
+    note.textContent = "Nothing at that path from this session's directory.";
   }
+
+  const parent = (info.kind === "dir") ? "" : fileParentPath(info);
+  const up = $("#fileUp");
+  if (up) up.hidden = !parent;
 
   // Editing rides the preview: only an untruncated text file offers Edit (a
   // truncated one would save back a fraction of itself), and never a directory,
-  // image, or credential — the server refuses those regardless.
+  // image, or credential. The server refuses those regardless.
   currentFile = info;
   fileEditing = false;
   $("#fileEdit").hidden = true;
@@ -4704,6 +4802,8 @@ function startFileEdit() {
   ta.hidden = false;
   $("#fileText").hidden = true;
   $("#fileNote").hidden = true;
+  if ($("#fileList")) $("#fileList").hidden = true;
+  if ($("#fileUp")) $("#fileUp").hidden = true;
   for (const sel of ["#fileEditBtn", "#fileSend", "#fileCopy"]) $(sel).hidden = true;
   $("#fileSave").hidden = false;
   $("#fileCancel").hidden = false;
@@ -4741,8 +4841,7 @@ async function saveFileEdit() {
 
 function closeFileSheet() {
   $("#file").hidden = true;
-  $("#fileImg").removeAttribute("src");
-  $("#fileText").textContent = "";
+  resetFileBody();
   $("#fileEdit").hidden = true;
   $("#fileEdit").value = "";
   fileEditing = false;
@@ -7873,10 +7972,43 @@ function wire() {
   };
   $("#follow").onclick = () => setFollow(activeId, true);
   $("#copySel").onclick = () => copyPaneSelection();
+  $("#openSel").onclick = () => {
+    const path = pathFromText(paneSelection());
+    if (path && activeId) openFileSheet(activeId, path);
+  };
+  $("#fileUp").onclick = () => {
+    const parent = currentFile && fileParentPath(currentFile);
+    if (parent && fileSession) openFileSheet(fileSession, parent);
+  };
   $("#terminal").addEventListener("contextmenu", (ev) => {
     // A canvas has no native copy. Right-click with a selection copies;
     // without one, leave the event so a browser menu can still appear.
+    // A path under the pointer, or a selected path, is offered as Open:
+    // click already does that on desktop, but a phone has no hover to
+    // discover the link and no right-click either.
+    const entry = terms.get(activeId);
+    const under = entry ? panePathAt(entry.term, ev.clientX, ev.clientY) : "";
+    const picked = pathFromText(paneSelection());
+    const path = under || picked;
+    if (path && activeId) {
+      ev.preventDefault();
+      const name = path.split("/").filter(Boolean).pop() || path;
+      showMenu(ev, [
+        ["Open " + name, () => openFileSheet(activeId, path)],
+        ["Copy path", () => copyText(path).then(() => toast("Path copied"))],
+        ["Send path", () => toast("Path is in " + deliverPath(path))],
+      ]);
+      return;
+    }
     if (copyPaneSelection()) ev.preventDefault();
+    else if (matchMedia("(pointer: coarse)").matches && activeId) {
+      const s = session(activeId);
+      if (!s) return;
+      ev.preventDefault();
+      showMenu(ev, [
+        ["Open a file in this folder", () => openFileSheet(s.id, s.cwd || ".")],
+      ]);
+    }
   });
   $("#artBtn").onclick = openArtifacts;
   $("#artClose").onclick = closeArtifacts;
@@ -8571,6 +8703,8 @@ function paletteCommands() {
         current.name + " — nothing is killed either way",
         () => setArchived(current, !current.archived));
     add("Copy working directory", current.cwd, () => copyText(current.cwd));
+    add("Open a file", "Look at a path in this session's folder",
+        () => openFileSheet(current.id, current.cwd || "."));
     add("Copy what's on screen", "The visible pane, not the scrollback",
         () => { copyPaneSelection() || copyPaneVisible(); });
     add("Copy the last 50 lines", "The recent output, scrollback and all — no dragging",
@@ -8778,6 +8912,23 @@ function paneGridCell(term, clientX, clientY) {
   const row = 1 + Math.max(0, Math.min(term.rows - 1,
     Math.floor((clientY - r.top) / (r.height / term.rows))));
   return { col, row };
+}
+
+function panePathAt(term, clientX, clientY) {
+  if (!term) return "";
+  const cell = paneCellAt(term, clientX, clientY);
+  const line = term.buffer.active.getLine(cell.y);
+  if (!line) return "";
+  const own = line.translateToString(true);
+  PATH_RE.lastIndex = 0;
+  let match;
+  while ((match = PATH_RE.exec(own)) !== null) {
+    const raw = trimPath(match[1]);
+    if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
+    const at = pathRange(own, match, raw);
+    if (cell.x + 1 >= at.start && cell.x + 1 <= at.end) return raw;
+  }
+  return "";
 }
 
 function sendPaneClick(term, clientX, clientY, sessionId) {
@@ -9060,9 +9211,12 @@ function wirePaneClipboard(term, host, sessionId) {
 }
 
 function renderCopyChip() {
-  const chip = $("#copySel");
-  if (!chip) return;
-  chip.hidden = !paneSelection();
+  const wrap = $("#selChips");
+  const open = $("#openSel");
+  const picked = paneSelection();
+  const has = Boolean(picked && picked.trim());
+  if (wrap) wrap.hidden = !has;
+  if (open) open.hidden = !pathFromText(picked);
 }
 
 function typingInAField(el) {
@@ -9623,6 +9777,7 @@ function wirePeekTooltips() {
 wire();
 wireResizer();
 wireTouchMenus();
+wireTermTouchMenus();
 wirePeekTooltips();
 wireKeyRow();
 panelLoad();   // restore panel width + which pane, before the first render

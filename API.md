@@ -500,6 +500,15 @@ anyone who can reach the panel already has a shell as this user.
 `truncated` is true when there is more. `?raw=1` on an image returns the
 bytes, typed from magic, same as an artifact.
 
+A directory also carries `entries`: `{name, kind, path}` for each child,
+directories first, then files, capped. `kind` here is `dir` or `file`.
+`path` is the child as a path this same endpoint will accept. Listing does
+not follow a symlink out of the folder (the name stays in this directory);
+a click still goes through `resolve`, which follows and fences. `truncated`
+is true when the directory had more children than the cap. Parent `..` is
+included when the directory is inside the session folder, not the folder
+itself.
+
 ### `POST /api/sessions/<id>/file` — `{path, text}`
 
 Save edited text back to a file. Write scope. The path is resolved and fenced

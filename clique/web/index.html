@@ -165,7 +165,10 @@
            spare the corner. -->
       <div id="themeArt" aria-hidden="true" hidden></div>
       <div id="follow" hidden></div>
-      <button type="button" id="copySel" hidden>Copy</button>
+      <div id="selChips" hidden>
+        <button type="button" id="copySel">Copy</button>
+        <button type="button" id="openSel" hidden>Open</button>
+      </div>
       <div id="empty">
         <div class="empty-inner">
           <div class="empty-head">
@@ -327,9 +330,11 @@
     <textarea id="fileEdit" class="file-edit" spellcheck="false" hidden></textarea>
     <div id="fileTurns" hidden></div>
     <img id="fileImg" alt="" hidden>
+    <div id="fileList" class="file-list" hidden></div>
     <div class="file-foot">
       <code id="filePath"></code>
       <span class="art-acts">
+        <button type="button" id="fileUp" hidden>This folder</button>
         <button type="button" id="fileEditBtn" hidden>Edit</button>
         <button type="button" id="fileSave" class="primary" hidden>Save</button>
         <button type="button" id="fileCancel" hidden>Cancel</button>

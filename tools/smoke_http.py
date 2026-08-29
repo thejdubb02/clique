@@ -832,6 +832,7 @@ def _run() -> int:
     (file_dir / "readme.md").write_text("# hi\n", encoding="utf-8")
     (file_dir / "shot.png").write_bytes(png)
     (file_dir / "sub").mkdir()
+    (file_dir / "sub" / "child.md").write_text("nested\n", encoding="utf-8")
     status, file_session = call("/api/sessions", "POST",
                                 {"cli": "shell", "cwd": str(file_dir),
                                  "name": "smoke-file"})
@@ -857,14 +858,18 @@ def _run() -> int:
     check("missing is missing, not an error",
           status == 200 and info.get("kind") == "missing", info)
     status, info = call(f"/api/sessions/{file_id}/file?path=sub")
+    names = [row.get("name") for row in (info.get("entries") or [])]
     check("a directory is a directory",
           status == 200 and info.get("kind") == "dir", info)
+    check("and it names what is inside",
+          "child.md" in names and ".." in names, names)
     status, info = call("/api/sessions/no-such/file?path=x")
     check("unknown session is 404", status == 404, info)
     call(f"/api/sessions/{file_id}", "DELETE")
     with contextlib.suppress(OSError):
         (file_dir / "readme.md").unlink()
         (file_dir / "shot.png").unlink()
+        (file_dir / "sub" / "child.md").unlink()
         (file_dir / "sub").rmdir()
         file_dir.rmdir()
 

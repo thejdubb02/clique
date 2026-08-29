@@ -162,9 +162,12 @@ def main() -> int:
     (tmp / "shot.png").write_bytes(png)
     (tmp / "bin.dat").write_bytes(b"\x00\x01\x02")
     (tmp / "sub").mkdir()
+    (tmp / "sub" / "child.md").write_text("nested\n", encoding="utf-8")
     (tmp / "big.txt").write_bytes(b"x" * (files.TEXT_CAP + 8))
     check("strips a compiler suffix", files.clean("src/app.js:42:7") == "src/app.js")
     check("strips trailing punctuation", files.clean("docs/foo.md.") == "docs/foo.md")
+    check("a lone dot is this folder", files.clean(".") == ".")
+    check("and so is parent", files.clean("..") == "..")
     text = files.inspect(str(tmp), "note.md")
     check("reads a relative text file", text["kind"] == "text" and text["text"] == "hello\n", text)
     check(
@@ -177,7 +180,24 @@ def main() -> int:
     check(
         "a nul in the first block is binary", files.inspect(str(tmp), "bin.dat")["kind"] == "binary"
     )
-    check("a directory is a directory", files.inspect(str(tmp), "sub")["kind"] == "dir")
+    listing = files.inspect(str(tmp), "sub")
+    check("a directory is a directory", listing["kind"] == "dir")
+    names = [row["name"] for row in listing.get("entries") or []]
+    check(
+        "and it lists what is inside",
+        "child.md" in names and ".." in names,
+        names,
+    )
+    check(
+        "listed paths stay inside the folder",
+        all(row["path"].startswith(str(tmp / "sub")) or row["name"] == ".."
+            for row in listing.get("entries") or []),
+        listing.get("entries"),
+    )
+    top = files.inspect(str(tmp), ".")
+    top_names = [row["name"] for row in top.get("entries") or []]
+    check("the session folder listing has no parent climb", ".." not in top_names, top_names)
+    check("and it still names a child", "note.md" in top_names, top_names)
     check(
         "missing stays missing, not an error",
         files.inspect(str(tmp), "nope.md")["kind"] == "missing",
@@ -190,6 +210,12 @@ def main() -> int:
         ".. outside the session dir is refused by the default fence",
         climbed["kind"] == "missing",
         climbed,
+    )
+    outside_abs = files.inspect(str(tmp), "/etc/hostname")
+    check(
+        "an absolute path outside the session dir is refused",
+        outside_abs["kind"] == "missing" and not outside_abs.get("entries"),
+        outside_abs,
     )
     # Credential and key material is refused even inside the session dir, and by
     # its whole family / key extensions — .env.local and a .pem, not just .env.

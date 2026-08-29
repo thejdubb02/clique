@@ -950,18 +950,64 @@ def _run(panel) -> int:
                 _remove_session(sid)
 
         print("a path you can look at")
-        sample = Path("/tmp/clique-visual-file.md")
+        work = SANDBOX / "work"
+        sample = work / "clique-visual-file.md"
         sample.write_text("# Hello from a click\n\nNot an editor.\n", encoding="utf-8")
-        page.evaluate("(id) => openFileSheet(id, '/tmp/clique-visual-file.md')", mine)
-        page.wait_for_timeout(500)
+        (work / "sub").mkdir(exist_ok=True)
+        (work / "sub" / "inside.md").write_text("nested file\n", encoding="utf-8")
+        shutil.copy(
+            Path(__file__).resolve().parents[1] / "clique" / "web" / "brand" / "icon-64.png",
+            work / "shot.png",
+        )
+        page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(sample)])
+        page.wait_for_function(
+            """() => {
+              const el = document.getElementById('fileText');
+              return el && !el.hidden && (el.innerText || '').includes('Hello from a click');
+            }""",
+            timeout=8000,
+        )
         check("the file sheet opens", page.locator("#file").is_visible())
         shown = page.locator("#fileText").inner_text()
         check("and it shows the text", "Hello from a click" in shown, shown[:80])
         page.locator("#file").screenshot(path=str(SHOTS / "file-sheet.png"))
+
+        page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(work / "shot.png")])
+        page.wait_for_function(
+            """() => {
+              const el = document.getElementById('fileImg');
+              return el && !el.hidden && el.complete && el.naturalWidth > 0;
+            }""",
+            timeout=8000,
+        )
+        check("an image opens in the sheet", page.locator("#fileImg").is_visible())
+        page.locator("#file").screenshot(path=str(SHOTS / "file-image.png"))
+
+        page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(work)])
+        page.wait_for_function(
+            "() => document.querySelectorAll('#fileList button').length > 0",
+            timeout=8000,
+        )
+        listed = page.locator("#fileList button").all_inner_texts()
+        check(
+            "a directory lists its files",
+            any("clique-visual-file.md" in t for t in listed),
+            listed[:8],
+        )
+        page.locator("#file").screenshot(path=str(SHOTS / "file-dir.png"))
+        page.locator("#fileList button").filter(has_text="clique-visual-file.md").first.click()
+        page.wait_for_function(
+            """() => {
+              const el = document.getElementById('fileText');
+              return el && !el.hidden && (el.innerText || '').includes('Hello from a click');
+            }""",
+            timeout=8000,
+        )
+        check("clicking a listing opens the file", "Hello from a click" in page.locator("#fileText").inner_text())
+
         page.keyboard.press("Escape")
         page.wait_for_timeout(200)
         check("escape closes it", page.locator("#file").is_hidden())
-        sample.unlink(missing_ok=True)
 
         page.screenshot(path=str(SHOTS / "panel.png"), full_page=False)
 

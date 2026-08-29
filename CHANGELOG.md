@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.59.0 — 2026-08-29 16:41 PDT
+
+**Open what a CLI hands you, without leaving the panel.** Three things that
+were nearly there and did not join up.
+
+**The file sheet was broken and had been for a long time.** It opened, showed
+the name and the path, and never showed the contents. One of the two assertions
+that had been failing in `tools/visual_check.py` was saying exactly that, and it
+had been read as background noise. It shows the text now.
+
+**Select a path in the pane and an Open button appears** beside the Copy chip
+that was already there. Not a hover link: there is no hover on a phone and no
+right-click either, and the selection chip is a control you can already reach
+with a thumb. A sentence is not a path, so selecting prose offers nothing.
+
+**An image renders in the sheet** instead of being described, and **a directory
+lists what is in it** and lets you click through.
+
+Nothing about what can be read has changed, which was the part to get right.
+Listings hand back the child as it is named in that folder rather than a
+resolved target, because a resolved path is how a symlink leaks somewhere it
+should not; `..` appears only when the parent is still inside the session's
+directory; and every click still goes through the same resolve and fence as
+before. Verified by trying: `../../../../etc/passwd`, `/etc/shadow`, `..`,
+`/root/.clique/secret` and four more all come back as `missing`, and the suite
+now asserts that a session folder's own listing offers no way up.
+
+Most of this was written by Grok running inside CLIque, which is the first time
+the panel has been used to build itself. It solved the third piece better than
+it was briefed: asked for clickable paths in the terminal, it used the existing
+selection chip instead, which needs neither hover nor right-click and was
+already the phone-safe control.
+
 ## 0.58.0 — 2026-08-29 16:11 PDT
 
 **A phone and a desktop no longer fight over the terminal, and the phone

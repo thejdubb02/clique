@@ -149,9 +149,13 @@ console.log("paths a pane printed");
 {
   const code = region("const LINK_RE", "function openLink");
   // const in eval is trapped in the eval; a Function returns the bindings.
-  const { PATH_RE, trimPath } = new Function(code + "; return { PATH_RE, trimPath };")();
+  const { PATH_RE, trimPath, pathFromText } = new Function(
+    code + "; return { PATH_RE, trimPath, pathFromText };")();
   check("strips a compiler suffix", trimPath("src/app.js:42:7") === "src/app.js");
   check("strips a trailing period", trimPath("docs/foo.md.") === "docs/foo.md");
+  check("a selected relative path is a path", pathFromText("docs/foo.md") === "docs/foo.md");
+  check("a selected absolute path is a path", pathFromText("/tmp/foo.md") === "/tmp/foo.md");
+  check("a selected sentence is not a path", pathFromText("hello world") === "");
   const paths = (text) => {
     const out = [];
     PATH_RE.lastIndex = 0;
