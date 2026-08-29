@@ -41,7 +41,11 @@ Five areas, left to right and top to bottom:
   the icon rail on the far right. Toggle it with `Ctrl+J`.
 - **Status bar** (bottom): CPU, memory, disk, load, how long the box has been up,
   its temperature when the machine has a sensor, and how many live views are
-  attached.
+  attached. Anything the machine cannot report is not drawn at all, and as the
+  bar narrows whole readings step aside rather than being cut in half.
+  To the right of them, if the CLI you are looking at can report it, a meter
+  each for what is left of your plan: green until three quarters, amber past
+  that, red past ninety, with the reset time on hover.
 
 ---
 
@@ -244,7 +248,13 @@ the server, so your look follows you between devices; only device-specific thing
 like the sidebar width stay local.
 
 - **Appearance:** a theme, a dark, light or follow-system base, terminal and
-  sidebar font sizes, the prompt-box mode, and the GPU toggle.
+  sidebar font sizes, the prompt-box mode, and the GPU toggle. Under **Make a
+  theme**, describe one in words and a model builds it, applies it and keeps
+  it, and your own themes list underneath with a Use and a delete. It needs a
+  provider under Models first, and the button says so until it has one.
+  Whatever it comes up with is checked for contrast before it is stored, so a
+  generated theme can never leave you unable to read the sheet you would use
+  to pick a different one.
 - **CLI markers:** how a session's CLI is shown, as a ring or a dot, in the tabs
   and the sidebar, with a per-CLI colour, and an option to tint the pane edge
   with the active CLI's colour.
