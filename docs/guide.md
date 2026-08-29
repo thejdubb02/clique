@@ -247,7 +247,8 @@ Open Settings from the gear in the sidebar header, or the palette. It saves on
 the server, so your look follows you between devices; only device-specific things
 like the sidebar width stay local.
 
-- **Appearance:** a theme, a dark, light or follow-system base, terminal and
+- **Appearance:** a theme (grouped by whether it comes with a character), a
+  dark, light or follow-system base, terminal and
   sidebar font sizes, the prompt-box mode, and the GPU toggle. Under **Make a
   theme**, describe one in words and a model builds it, applies it and keeps
   it, and your own themes list underneath with a Use and a delete. It needs a

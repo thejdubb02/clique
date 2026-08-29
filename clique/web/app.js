@@ -7027,17 +7027,43 @@ async function loadThemes() {
 
 /* The list of themes made here, each with a way to remove it. Only these get
  * a delete: a preset is not ours to take away. */
+/* Grouped rather than marked with a glyph.
+ *
+ * Which themes come with a character is not guessable from the name, and a
+ * marker character next to the ones that do would need a legend somewhere to
+ * say what it meant. An `optgroup` says it in words, costs nothing, is a
+ * native control so it survives a phone and a screen reader, and hides behind
+ * no hover or right-click.
+ *
+ * The order does not move: themes.js already declares the plain presets, then
+ * the ones with a figure, and loadThemes merges anything made here onto the
+ * end. The groups fall on those boundaries exactly, so muscle memory for where
+ * a theme sits in the list is untouched. */
 function fillThemeSelect() {
   const select = $("#setTheme");
   if (!select) return;
   const chosen = state.settings.theme || "";
   select.replaceChildren();
+  const groups = new Map();
+  const groupFor = (label) => {
+    let group = groups.get(label);
+    if (!group) {
+      group = document.createElement("optgroup");
+      group.label = label;
+      groups.set(label, group);
+      select.appendChild(group);
+    }
+    return group;
+  };
   for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
     const option = document.createElement("option");
     option.value = id;
     option.textContent = theme.label;
     option.selected = id === chosen;
-    select.appendChild(option);
+    // Made here first: one of those could carry art one day, and it would
+    // still belong with the rest of yours rather than filed by a feature.
+    groupFor(customThemes.has(id) ? "Made here"
+             : theme.art ? "With a character" : "Presets").appendChild(option);
   }
   select.value = chosen;
 }
@@ -8467,8 +8493,9 @@ function paletteCommands() {
   }
 
   for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
+    const what = theme.art ? theme.base + " · has a character" : theme.base;
     add("Theme: " + theme.label,
-        (state.settings.theme || "") === id ? "in use" : theme.base,
+        (state.settings.theme || "") === id ? "in use" : what,
         () => saveSettings({ theme: id }));
   }
   for (const mode of ["dark", "light", "system"]) {

@@ -949,6 +949,40 @@ def _run(panel) -> int:
                   bool(box) and box["width"] > 20 and box["height"] > 8, box)
         check("the button is off until a provider is set up",
               page.evaluate("() => document.querySelector('#themeGen').disabled") is True)
+
+        # Which themes come with a character, said in the picker itself. A
+        # marker glyph would have needed a legend; a group says it in words.
+        # Worth asserting because it is easy to break by adding a theme and
+        # not thinking about which group it lands in.
+        picker = page.evaluate(
+            """() => {
+              const sel = document.querySelector('#setTheme');
+              if (!sel) return null;
+              const groups = [...sel.querySelectorAll('optgroup')].map((g) => ({
+                label: g.label,
+                items: [...g.querySelectorAll('option')].map((o) => o.value),
+              }));
+              return {
+                groups,
+                loose: [...sel.children].filter((c) => c.tagName === 'OPTION').length,
+                total: sel.querySelectorAll('option').length,
+              };
+            }"""
+        )
+        check("the theme picker is grouped", bool(picker) and len(picker["groups"]) >= 2, picker)
+        check("and no theme escapes a group",
+              bool(picker) and picker["loose"] == 0, picker)
+        named = {g["label"]: g["items"] for g in (picker or {}).get("groups", [])}
+        drawn = named.get("With a character", [])
+        check("the seven with a figure are grouped as such",
+              sorted(drawn) == sorted(
+                  ["aincrad", "drizzt", "fellowship", "pacman",
+                   "plumber", "tetris", "triforce"]), drawn)
+        check("and the plain presets are not in with them",
+              "dracula" in named.get("Presets", []), named.get("Presets"))
+        check("every theme is still reachable",
+              bool(picker) and picker["total"] == page.evaluate(
+                  "() => Object.keys(window.CLIQUE_THEMES || {}).length"), picker)
         page.screenshot(path=str(SHOTS / "theme-maker.png"))
 
         # Phone build, first pass: a narrow viewport, reloaded so the mobile

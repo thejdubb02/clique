@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.55.1 — 2026-08-29 08:16 PDT
+
+**The theme picker says which themes come with a character.** Seven of the
+sixteen do and it was not guessable from the name, so the list is grouped:
+**Presets**, then **With a character**, then **Made here** once you have
+generated one.
+
+A group rather than a marker beside the name, because a marker needs a legend
+somewhere saying what it means, and this says it in words. It is also a native
+control, so it survives a phone and a screen reader and hides behind no hover
+or right-click, which a small glyph in a corner would have done.
+
+Nothing moves. `themes.js` already declares the plain presets, then the ones
+with a figure, and anything made here is merged onto the end, so the groups
+fall exactly on boundaries that were already there and the order in the list is
+unchanged.
+
+The command palette says it too, since that is the faster way to switch: a
+theme with a figure reads `dark · has a character`.
+
 ## 0.55.0 — 2026-08-28 21:26 PDT
 
 **Seven themes with somebody in them.** Plumber, Triforce, Fellowship, Drizzt,
