@@ -595,6 +595,58 @@ def _run(panel) -> int:
             check("a theme with no figure draws nothing", plain is True, plain)
             page.wait_for_timeout(300)
 
+        print("the session menu, actually clicked")
+        # Being defined is not the assertion; the menu working is. Two of these
+        # items threw a ReferenceError for twelve releases and the suite stayed
+        # green, because a throw inside a click handler goes to a console
+        # nobody has open.
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        row = page.locator(f'.session[data-id="{mine}"]').first
+        if row.count():
+            row.click(button="right")
+            page.wait_for_timeout(350)
+            labels = page.evaluate(
+                "() => [...document.querySelectorAll('#menu button')].map((b) => b.textContent)"
+            )
+            check("right-click opens the session menu", len(labels) > 4, labels)
+            check("and it offers another CLI when one is installed",
+                  any("another CLI" in x for x in labels), labels)
+
+            def click_item(needle):
+                return page.evaluate(
+                    """(needle) => {
+                      const b = [...document.querySelectorAll('#menu button')]
+                        .find((x) => x.textContent.includes(needle));
+                      if (!b) return false;
+                      b.click();
+                      return true;
+                    }""",
+                    needle,
+                )
+
+            # Opening the submenu is the part that used to throw.
+            check("Move to folder opens the folder list", click_item("Move to folder"))
+            page.wait_for_timeout(350)
+            folders = page.evaluate(
+                "() => [...document.querySelectorAll('#menu button')].map((b) => b.textContent)"
+            )
+            check("and the list has folders in it", len(folders) > 0, folders)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+
+            row.click(button="right")
+            page.wait_for_timeout(300)
+            check("Open in another CLI lists the others", click_item("another CLI"))
+            page.wait_for_timeout(350)
+            clis = page.evaluate(
+                "() => [...document.querySelectorAll('#menu button')].map((b) => b.textContent)"
+            )
+            check("and names at least one", len(clis) > 0, clis)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+        check("no menu item threw", not errors, errors)
+
         print("finding a project by name in the new-session dialog")
         # The unit tests prove the walk. This proves the box people actually
         # type into is wired to it: a bare name is not a path, and before this

@@ -768,6 +768,26 @@ def main() -> int:
                 done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "",
             )
 
+        # Every handler a menu item points at has to exist.
+        #
+        # `node --check` parses app.js and is perfectly happy with a call to a
+        # function nobody wrote: the reference is only resolved when somebody
+        # clicks. That is how "Move to folder…" spent twelve releases throwing
+        # a ReferenceError into a console nobody had open, and it is a whole
+        # class of bug that costs one regex to close. Arrow-wrapped calls are
+        # the menu idiom throughout, so that is what this reads.
+        source = (ROOT / "clique" / "web" / "app.js").read_text(encoding="utf-8")
+        declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", source))
+        called = set(re.findall(r"\(\)\s*=>\s*([A-Za-z_$][\w$]*)\s*\(", source))
+        # Things that are legitimately not ours: globals, and methods reached
+        # through an object rather than by bare name.
+        ambient = {
+            "alert", "confirm", "fetch", "close", "open", "print", "reload",
+            "Boolean", "Number", "String",       # builtins used as callbacks
+        }
+        missing = sorted(called - declared - ambient)
+        check("every menu handler app.js calls is defined in it", not missing, missing)
+
         # The decisions inside app.js, tested without a browser. See
         # tools/frontend_check.js for why that is possible without a build.
         done = subprocess.run(

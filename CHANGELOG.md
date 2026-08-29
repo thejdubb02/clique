@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.57.0 — 2026-08-29 10:32 PDT
+
+**Open the same work in another CLI.** Right-click a session and pick *Open in
+another CLI*: same name, same directory, same folder, a different tool. The two
+sit side by side as tabs reading the same thing, told apart by the CLI marker
+rather than by a suffix nobody asked for. Handing Codex the job Claude has been
+chewing on should not mean retyping a path.
+
+It only appears when another CLI is actually installed, because an item that
+can only disappoint is worse than no item. The mode is deliberately not carried
+across: a mode is something a CLI declares in `clis.toml`, so the source's mode
+id means nothing to the target and would either be rejected or, worse, quietly
+match something unrelated. The new session takes the target's own default.
+
+*Duplicate* is now labelled **Duplicate (same CLI, same directory)**. It used to
+read "same directory, fresh CLI", which sounds exactly like the feature above
+and is the opposite of what it does.
+
+**Two menu items had been dead for twelve releases.** *Move to folder…* and
+*Take out of its folder* both threw a `ReferenceError` and did nothing: 0.44.0
+deleted `setFolder` and `moveToFolder` and left the two call sites behind.
+Both are restored.
+
+Nothing caught it, and the reason is worth writing down. `node --check` parses
+`app.js` happily with a call to a function nobody wrote, because the reference
+is only resolved when somebody clicks; and a throw inside a click handler goes
+to a console nobody has open. So the failure mode is a menu item that looks
+completely normal and silently does nothing.
+
+`tools/smoke.py` now reads every arrow-wrapped call in `app.js` and fails on
+one that resolves to no declaration. It found `setFolder` immediately, which is
+the second of the two. `tools/visual_check.py` goes further and actually
+right-clicks a session, opens both submenus and asserts nothing threw, because
+"the function exists" and "the menu works" are different claims and only the
+second one is the feature.
+
 ## 0.56.0 — 2026-08-29 08:26 PDT
 
 **Type a project name in the new-session dialog instead of a path.** "sentinel"

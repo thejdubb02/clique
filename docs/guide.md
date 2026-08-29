@@ -247,6 +247,12 @@ Open Settings from the gear in the sidebar header, or the palette. It saves on
 the server, so your look follows you between devices; only device-specific things
 like the sidebar width stay local.
 
+- **The same work in another CLI:** right-click a session and pick **Open in
+  another CLI**. It starts the tool you choose in the same directory, under the
+  same name, in the same folder, so the two sit side by side as tabs. Told apart
+  by the CLI marker, not by a renamed tab. **Duplicate** beside it is the other
+  question: a second instance of the *same* CLI.
+
 - **Finding a project:** the working-directory box in the new-session dialog
   takes a path, completes one as you type it, and, if you type something that
   is not a path at all, searches for a project of that name. "sentinel" finds

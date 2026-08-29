@@ -2230,7 +2230,9 @@ function sessionMenu(ev, s) {
     ...(s.branch ? [["Checkpoint — save HEAD + current diff", () => checkpointSession(s)]] : []),
     ["Rename", () => renameSession(s)],
     ["Notes", () => openNote(s)],
-    ["Duplicate — same directory, fresh CLI", () => duplicateSession(s)],
+    ["Duplicate (same CLI, same directory)", () => duplicateSession(s)],
+    ...(otherClis(s).length
+      ? [["Open in another CLI…", () => openInOtherCli(s)]] : []),
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
      * There is no drag on a phone, which made half the sidebar's organisation
@@ -2456,6 +2458,82 @@ function folderMenu(ev, folder) {
  * source's cwd is (a worktree included); making a *new* worktree is the other
  * gesture, in New Session. The copied name is a starting point — auto-title
  * renames it from the first prompt if it was still a generic one. */
+/* Filing a session, and taking it out again.
+ *
+ * Both of these went with the same 0.44.0 edit, so "Move to folder…" and
+ * "Take out of its folder" have each been a ReferenceError since. Restored
+ * together because the first calls the second.
+ */
+async function setFolder(s, folder) {
+  await api("api/sessions/" + encodeURIComponent(s.id), {
+    method: "PATCH", body: JSON.stringify({ folder }),
+  });
+  const where = folder
+    ? ((state.folders || []).find((f) => f.id === folder) || {}).name || "a folder"
+    : "Ungrouped";
+  toast(`${s.name} moved to ${where}`);
+  refresh();
+}
+
+/* Filing a session from the menu.
+ *
+ * Nothing caught either of these because the call is inside a click handler,
+ * where a throw is invisible unless a console happens to be open. smoke.py now
+ * reads every arrow-wrapped call in app.js and fails on one that resolves to
+ * nothing, which is the cheap version of the test that would have caught it.
+ */
+function moveToFolder(s) {
+  const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
+  showMenu(lastMenuEvent, folders.map((f) => [
+    f.name + (f.id === s.folder ? "  ·  where it is now" : ""),
+    () => { if (f.id !== s.folder) setFolder(s, f.id); },
+  ]));
+}
+
+/* Every other installed CLI, which is also what decides whether the menu
+ * offers the item at all. One CLI on the box means there is nothing to open
+ * it in, and an item that can only disappoint is worse than no item. */
+function otherClis(s) {
+  return (state.clis || []).filter((c) => c.installed && c.id !== s.cli);
+}
+
+/* The same work, in a different tool.
+ *
+ * Distinct from Duplicate, which starts a second instance of the same CLI.
+ * This starts a different one in the same directory under the same name, so
+ * the two sit side by side as tabs reading the same thing, told apart by the
+ * CLI marker rather than by a suffix nobody asked for. Handing the same job to
+ * Codex that Claude has been chewing on is the point, and it should not mean
+ * retyping a path.
+ *
+ * `mode` is deliberately not carried across. A mode is something a CLI
+ * declares in clis.toml, so the source's mode id means nothing to the target
+ * and would either be rejected or, worse, silently match something unrelated.
+ * The new session takes the target CLI's own default. */
+function openInOtherCli(s) {
+  const others = otherClis(s);
+  if (!others.length) return;
+  showMenu(lastMenuEvent, others.map((c) => [c.label || c.id, () => cloneToCli(s, c)]));
+}
+
+async function cloneToCli(s, cli) {
+  const what = cli.label || cli.id;
+  try {
+    const created = await api("api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        cli: cli.id, cwd: s.cwd, name: s.name,
+        folder: s.folder || undefined,
+      }),
+    });
+    await refresh();
+    openSession(created.id);
+    toast(`“${s.name}” opened in ${what}`);
+  } catch (err) {
+    toast(`Could not open it in ${what}: ${err.message || err}`, true);
+  }
+}
+
 async function duplicateSession(s) {
   try {
     const created = await api("api/sessions", {
