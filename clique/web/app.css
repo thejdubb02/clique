@@ -491,6 +491,11 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
   background-size: contain; image-rendering: pixelated;
   pointer-events: none; user-select: none;
 }
+/* A supplied drawing rather than a grid. It has no declared shape, so it gets
+   a box and is contained inside it; and it must not be rendered pixelated,
+   which is the one setting that would take a smooth illustration and put
+   staircases down every edge of it. */
+#themeArt.is-drawing { width: 46%; max-width: 340px; image-rendering: auto; }
 @container termpane (max-width: 720px) { #themeArt { display: none; } }
 @media (max-height: 460px) { #themeArt { display: none; } }
 

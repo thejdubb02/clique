@@ -3,28 +3,28 @@
 ## 0.55.0 — 2026-08-28 21:26 PDT
 
 **Seven themes with somebody in them.** Plumber, Triforce, Fellowship, Drizzt,
-Pacman, Tetris and Aincrad, each a full palette plus a chibi anime figure
+Pacman, Tetris and Aincrad, each a full palette plus a hand-drawn anime figure
 watermarked into the bottom-right of the pane. Sixteen presets now, up from
 nine.
 
-**Drawn as chibi anime rather than as NES sprites**, which is a decision about
-resolution more than taste. The eyes are what make anime read as anime, and an
-eye needs about four cells by four before a lash line and a highlight fit in
-it. That put the grid at 24 by 31 instead of 14 by 16, and once the head is
-that size chibi proportions follow: a third of the height is head, because that
-is where the recognisable part is. Five of the seven are people and share a
-head on purpose. Hair, eyes, clothes and what they are holding is what changes,
-and the two that are not people, the ghost and the tetrominoes, take the same
-eyes and the same cell size so the set reads as one set.
+**They are original designs, not the famous characters, and that took
+deciding.** Asked plainly for a moustachioed plumber in a red cap and blue
+dungarees, an image model returns Nintendo's Mario line for line: same face,
+same moustache, same proportions. That is not inspiration, it is the character,
+and this package is published on PyPI under a real name. The archetype is fair
+to borrow and the likeness is not, so every prompt carries an explicit
+instruction to invent the face, the costume and the proportions fresh. Anyone
+regenerating these has to keep that, which is why it is written above the
+character block in `themes.js` rather than left in somebody's memory.
 
-**The figure is behind the text, not over it, and that is a real claim rather
-than a low opacity.** The layer is composited with `lighten` on a dark theme and
-`darken` on a light one. Both take a per-channel extreme, so wherever a glyph is
-painted the glyph wins the comparison and comes through untouched: a line drawn
-straight across the character is exactly as readable as it would be on a bare
-pane. The figure only fills the space between. Doing it the other way round,
-painting underneath a transparent terminal, would have cost a renderer path we
-would rather not own.
+**The figure is laid in faintly rather than blended.** An earlier pass composited
+with `lighten` on dark themes and `darken` on light ones, which keeps text
+perfectly untouched, but only works because the colours in a hand-built grid are
+all mid-tones by construction. A real drawing has blacks and whites in it and
+those blends eat precisely those. So artwork goes on at twelve percent, normally
+composited, which costs the text a little contrast where the two overlap. That
+is the honest trade for taking art as it comes instead of dictating a palette to
+whoever drew it.
 
 It takes itself away on a pane under 720px and a window under 460px tall, so a
 phone and a pane squeezed between the sidebar and the side panel both get their
@@ -34,28 +34,27 @@ the width of the sidebar. Same mistake the status bar's readings made once.
 
 One checkbox under the theme picker turns them all off.
 
-**Adding a character is still just a block in `themes.js`.** A palette and a
-grid of one character per cell, which becomes one SVG data URI built once per
-theme and cached as a background image after that. Runs of the same colour
-collapse into a single rect, which takes a figure from a couple of hundred
-shapes to about forty.
+**`tools/art_prep.py`** turns an illustration into a shippable figure: keys out
+the flat background it was drawn on, unmixes that colour from the antialiased
+edges so nothing ships wearing a pink rim, crops to the figure, scales it and
+quantises it. A megabyte of magenta field becomes about a hundred kilobytes of
+exactly the character. Cel-shaded art is the case a palette handles without
+showing, which is what keeps seven drawings under a megabyte in a package whose
+whole argument is that it is small.
 
-`tools/theme_check.py` now reads those grids and fails on a row that is not the
-declared width, a cell with no colour behind it, a colour that is never drawn,
-and a colour too near black or white to survive the blend. The last one is not
-theoretical: it caught four on the first run, including a glove and a pair of
-boots that would have been drawn and then not been there.
+`tools/theme_check.py` now checks the shipped files rather than a grid: that
+each one is there, is a PNG, is in a colour type that can actually hold
+transparency, is within its size and dimension budget, and that `pyproject.toml`
+is told to package the directory. That last one is not hypothetical. `package-data`
+is an allow-list of globs, so a new directory under `web/` is silently left out
+and the panel serves 404s on somebody else's machine while working perfectly
+here.
 
-The tetrominoes were the odd ones out at nine cells across, where a block came
-out four times the size of a character's pixel and the theme looked borrowed
-from somewhere else. They are drawn three cells to a block now, which brings
-them into line and leaves room for the bevel the pieces have always had.
-
-`tools/visual_check.py` opens a pane with a figure in it and measures the blend
-mode, the opacity, that it cannot be clicked, that it stays inside the pane, and
-that it disappears and comes back with the width. None of that is visible to a
-check that reasons about the code, which is the whole reason it is in the
-browser suite.
+`tools/visual_check.py` opens a pane with a figure in it and measures the
+compositing, the opacity, that it cannot be clicked, that it stays inside the
+pane, and that it disappears and comes back with the width. None of that is
+visible to a check that reasons about the code, which is the whole reason it is
+in the browser suite.
 
 ## 0.54.1 — 2026-08-28 18:17 PDT
 

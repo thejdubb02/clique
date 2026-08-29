@@ -536,12 +536,16 @@ def _run(panel) -> int:
                 }"""
             )
             check("a theme with a figure draws one", bool(art) and art["display"] != "none", art)
-            check("it is an image, not an element full of text",
-                  bool(art) and art["image"].startswith('url("data:image/svg+xml'), art)
-            check("it is blended rather than laid over the text",
-                  bool(art) and art["blend"] == "lighten", art)
+            check("it is a picture, not an element full of text",
+                  bool(art) and "url(" in art["image"], art)
+            # A drawing is composited normally: the extreme blends the grid
+            # form uses would eat its blacks and whites. What has to hold is
+            # that it is faint enough to read straight through, which the
+            # next check is.
+            check("it is a drawing, sized to the box rather than to a grid",
+                  bool(art) and art["blend"] == "normal", art)
             check("faint enough to read through",
-                  bool(art) and 0 < art["opacity"] <= 0.2, art)
+                  bool(art) and 0 < art["opacity"] <= 0.14, art)
             check("and it cannot be clicked",
                   bool(art) and art["events"] == "none", art)
             check("it stays inside the pane",

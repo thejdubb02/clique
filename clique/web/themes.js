@@ -157,38 +157,30 @@ window.CLIQUE_THEMES = {
 
   /* ------------------------------------------------------------ characters
    *
-   * The seven below carry an `art` block as well as a palette: a chibi anime
-   * figure watermarked into the bottom-right of the pane, behind the text.
+   * The seven below carry an `art` block as well as a palette: a hand-drawn
+   * anime figure watermarked into the bottom-right of the pane, behind the
+   * text. One line each, naming a file in web/art/.
    *
-   * The format is a palette and a grid. One character per cell, `.` for a
-   * hole, and every row exactly `w` wide — tools/theme_check.py fails the
-   * build otherwise, because a ragged row draws a ragged character and
-   * nothing else would catch it.
+   * Drawn for us rather than borrowed, and the distinction took work. Asked
+   * plainly for "a moustachioed plumber in a red cap and blue dungarees", an
+   * image model returns Nintendo's Mario line for line, because that is what
+   * the phrase points at. The archetype is ours to use and the likeness is
+   * not, so every prompt carries an explicit instruction to invent the face,
+   * the costume and the proportions fresh and to avoid resembling the famous
+   * one. Anything regenerated here has to keep that, or this package ends up
+   * distributing somebody else's characters under our name.
    *
-   * Two rules decide the colours, and both come from how it is composited.
-   * The layer blends with `lighten` on a dark theme and `darken` on a light
-   * one, which is what puts it *behind* the text rather than over it: text is
-   * the brightest thing on a dark pane and the darkest on a light one, so it
-   * wins the blend either way and stays exactly as legible as it was.
+   * tools/art_prep.py is what turns an illustration into one of these: keys
+   * out the flat background it was drawn on, crops to the figure, scales it
+   * and quantises it. A megabyte of magenta field becomes about a hundred
+   * kilobytes of exactly the character.
    *
-   *   1. Every colour is a mid-tone. Near-black detail is invisible on a dark
-   *      theme and near-white detail is invisible on a light one, so a black
-   *      coat gets lifted to slate and reads as black anyway at this opacity.
-   *   2. The eyes are the budget. Anime reads as anime because of them, so
-   *      they get four cells by four with a lash line and a highlight, and
-   *      everything else is flat colour with one shadow tone. That is also
-   *      why the head is a full third of the height: chibi proportions put
-   *      the recognisable part where there are enough cells to draw it.
-   *
-   * Five of these are people and share a head, deliberately. Hair, eyes,
-   * clothes and what they are holding is what changes. A set that reads as
-   * one set is the difference between a theme pack and seven doodles, and it
-   * is also why the two that are not people (the ghost, the tetrominoes) take
-   * the same eyes and the same cell size as the rest.
-   *
-   * Drawn here rather than borrowed. These are our own figures in the spirit
-   * of the thing each theme is named for, which is also the only version of
-   * this that is ours to ship. */
+   * Composited normally at low opacity rather than with the `lighten` and
+   * `darken` blends app.js uses for a palette we control. Those two keep text
+   * perfectly untouched, but only because a grid's colours are all mid-tones
+   * by construction; a real drawing has blacks and whites in it and the
+   * extremes eat precisely those. See the note above themeArt in app.js.
+   */
 
   plumber: {
     label: "Plumber", base: "dark",
@@ -202,45 +194,7 @@ window.CLIQUE_THEMES = {
             brightBlack: "#5b688f", brightRed: "#ff5c4d", brightGreen: "#6ede72",
             brightYellow: "#ffd76a", brightBlue: "#5f9dff", brightMagenta: "#ff86c2",
             brightCyan: "#6fe0ef", brightWhite: "#ffffff" },
-    art: {
-      w: 24, h: 31,
-      pal: { C: "#e0392f", c: "#a82a22", M: "#7a4a22", S: "#f5c9a0", t: "#d9a077",
-             P: "#4a3a2e", E: "#dde4f0", I: "#3d7bd9", B: "#3d7bd9", b: "#2a5aa8",
-             Y: "#f2c14e", W: "#d8dfea", K: "#8a5a2b" },
-      rows: [
-        "........CCCCCCCC........",
-        "......CCCCCCCCCCCC......",
-        ".....CCCCCCCCCCCCCC.....",
-        "....CCCCCCCCCCCCCCCC....",
-        "....CCCCCCCCCCCCCCCC....",
-        "...cccccccccccccccccc...",
-        "....MMMttttttttttMMM....",
-        "...MMMtSSSSSSSSSStMMM...",
-        "...MMSSSSSSSSSSSSSSMM...",
-        "...MSSSSSSSSSSSSSSSSM...",
-        "...MSSPPPPSSSSPPPPSSM...",
-        "...MSSPEIISSSSIIEPSSM...",
-        "...MSSPIIISSSSIIIPSSM...",
-        "...MSSPIIISSSSIIIPSSM...",
-        "....SSSPPSSSSSSPPSSS....",
-        ".....SSSSSSSSSSSSSS.....",
-        ".....SSSMMMMMMMMSSS.....",
-        "......SSStttttttSSS.....",
-        ".........SSSSSS.........",
-        "....CCCCCCCCCCCCCCCC....",
-        "...CCCBBBBBBBBBBBBCCC...",
-        "...CCCBBBYBBBBYBBBCCC...",
-        "...WWWBBBBBBBBBBBBWWW...",
-        "...WWWbBBBBBBBBBBbWWW...",
-        "....BBBBBBBBBBBBBBBB....",
-        "....BBBBBBBBBBBBBBBB....",
-        "....BBBBBBB..BBBBBBB....",
-        ".....bBBBB....BBBBb.....",
-        ".....BBBBB....BBBBB.....",
-        "....KKKKKK....KKKKKK....",
-        "...KKKKKKK....KKKKKKK...",
-      ],
-    },
+    art: { src: "art/plumber.png" },
   },
 
   triforce: {
@@ -255,45 +209,7 @@ window.CLIQUE_THEMES = {
             brightBlack: "#4b6b54", brightRed: "#ff7a72", brightGreen: "#63d477",
             brightYellow: "#ffd76a", brightBlue: "#68b6f5", brightMagenta: "#d59aec",
             brightCyan: "#6fe0cd", brightWhite: "#f2fbf0" },
-    art: {
-      w: 24, h: 31,
-      pal: { G: "#3fa34d", g: "#2b7038", H: "#e8c15a", h: "#b8912f", S: "#f0c49b",
-             t: "#d4a077", P: "#4a3a2e", E: "#dde4f0", I: "#4fbf6a", L: "#2f6fd0",
-             Y: "#f2c14e", B: "#8a5a2b", D: "#d8dfea", d: "#9aa6b8" },
-      rows: [
-        ".................GGGG...",
-        "..............GGGGGGG...",
-        "..........GGGGGGGGGG....",
-        "......GGGGGGGGGGGGG.....",
-        "....GGGGGGGGGGGGGG......",
-        "....GGGGGGGGGGGGGGGG....",
-        "...gggggggggggggggggg...",
-        "....HHHttttttttttHHH....",
-        "...HHHhSSSSSSSSSShHHH...",
-        "..HHHSSSSSSSSSSSSSSHHH..",
-        ".H.HSSSSSSSSSSSSSSSSH.H.",
-        ".H.HSSPPPPSSSSPPPPSSH.H.",
-        ".HHHSSPEIISSSSIIEPSSHHH.",
-        "...HSSPIIISSSSIIIPSSH...",
-        "...HSSPIIISSSSIIIPSSH...",
-        "....SSSPPSSSSSSPPSSS....",
-        ".....SSSSSSSStSSSSS.....",
-        "......SSSttttttSSS......",
-        ".........SSSSSS.........",
-        "..LLL..GGGGGGGGGG..DD...",
-        ".LLLLL.GGGGGGGGGG..DD...",
-        ".LLYLL.GGGGGGGGGG..DD...",
-        ".LLLLL.GGGGGGGGGG.DDD...",
-        "..LLL..GGGGGGGGGG..dd...",
-        "....gggggggggggggg.dd...",
-        "....BBBBBBBBBBBBBB......",
-        "....GGGGGGGGGGGGGG......",
-        ".....GGGGG..GGGGG.......",
-        ".....SSSSS..SSSSS.......",
-        "....BBBBBB..BBBBBB......",
-        "...BBBBBBB..BBBBBBB.....",
-      ],
-    },
+    art: { src: "art/triforce.png" },
   },
 
   /* Named for the company rather than the ring, because the ring is the part
@@ -311,44 +227,7 @@ window.CLIQUE_THEMES = {
             brightBlack: "#5c5545", brightRed: "#e0685c", brightGreen: "#a8ba6a",
             brightYellow: "#eac54f", brightBlue: "#84a7bd", brightMagenta: "#c08fa8",
             brightCyan: "#95bdb2", brightWhite: "#f5ecd8" },
-    art: {
-      w: 24, h: 30,
-      pal: { G: "#8d8677", g: "#5f5a4e", W: "#ddd6c4", w: "#a9a290", S: "#e8c9a8",
-             t: "#c4a684", P: "#4a4034", E: "#dde4f0", I: "#7fa8c4", N: "#8a6a3a",
-             L: "#e0c46a" },
-      rows: [
-        "...........GGG..........",
-        "..........GGGGG.........",
-        ".........GGGGGGG........",
-        "........GGGGGGGGG.......",
-        ".......GGGGGGGGGGG......",
-        "......GGGGGGGGGGGGG.....",
-        ".....GGGGGGGGGGGGGGG....",
-        "....gggggggggggggggggg..",
-        ".....WWWttttttttWWW.....",
-        "....WWWwSSSSSSSSwWWW....",
-        "....WWSSSSSSSSSSSSWW....",
-        "....WSSPPPPSSSSPPPPSW...",
-        "....WSSPEIISSSSIIEPSW...",
-        "....WSSPIIISSSSIIIPSW...",
-        ".....SSPIIISSSSIIIPSS...",
-        ".....SSSPPSSSSSSPPSS....",
-        "......WWWWWWWWWWWW.LL...",
-        ".......WWWWWWWWWW.LLLL..",
-        ".......WWWWWWWWWW..NN...",
-        "....GGGGWWWWWWWW...NN...",
-        "...GGGGGGWWWWWWGG..NN...",
-        "...GGGGGGGWWWWGGG..NN...",
-        "...GGGGGGGGWWGGGGG.NN...",
-        "...GGGGGGGGGGGGGGG.NN...",
-        "...gggggggggggggggg.NN..",
-        "....GGGGGGGGGGGGGG.NN...",
-        "....GGGGGGGGGGGGGG.NN...",
-        "....GGGGGGGGGGGGGG.NN...",
-        ".....GGGGGGGGGGGG..NN...",
-        ".....gggggggggggg..NN...",
-      ],
-    },
+    art: { src: "art/fellowship.png" },
   },
 
   drizzt: {
@@ -363,41 +242,7 @@ window.CLIQUE_THEMES = {
             brightBlack: "#544a7a", brightRed: "#ef7a90", brightGreen: "#79d4ad",
             brightYellow: "#e8ca8c", brightBlue: "#93a3f5", brightMagenta: "#c79bf5",
             brightCyan: "#84d6ef", brightWhite: "#f2eefc" },
-    art: {
-      w: 24, h: 27,
-      pal: { W: "#efecf7", w: "#c2bcd9", S: "#5f5488", t: "#4a4070", P: "#453c69",
-             E: "#efe9fa", V: "#cbb0f0", C: "#4a4270", c: "#3d3660", K: "#5a5180",
-             D: "#cfd6e4", d: "#9aa6b8" },
-      rows: [
-        "DD......WWWWWWWW......DD",
-        "DD....WWWWWWWWWWWW....DD",
-        "DD...WWWWWWWWWWWWWW...DD",
-        "DD..WWWWWWWWWWWWWWWW..DD",
-        "DD..WWWwwwwwwwwwwWWW..DD",
-        "DD..WWWttttttttttWWW..DD",
-        "DD..WWtSSSSSSSSSStWW..DD",
-        "DD..WSSSSSSSSSSSSSSW..DD",
-        "DD..WSPPPPSSSSPPPPSW..DD",
-        "DD..WSPEVVSSSSVVEPSW..DD",
-        "DD..WSPVVVSSSSVVVPSW..DD",
-        "DD..WSPVVVSSSSVVVPSW..DD",
-        "DD..WSSPPSSSSSSPPSSW..DD",
-        "DD...SSSSSSSSSSSSSS...DD",
-        "DD.....SSSSSSSSSS.....DD",
-        "DD......SSSSSSSS......DD",
-        "DDDD......SSSS......DDDD",
-        ".dd..CCCCCCCCCCCCCC..dd.",
-        ".dd.CCCCCCCCCCCCCCCC.dd.",
-        "....CCCCcCCCCCCcCCCC....",
-        "...CCCCCCCCCCCCCCCCCC...",
-        "....CCCCCCCCCCCCCCCC....",
-        "....cCCCCCCCCCCCCCCc....",
-        "......CCCCC..CCCCC......",
-        "......CCCCC..CCCCC......",
-        "......KKKKK..KKKKK......",
-        ".....KKKKKK..KKKKKK.....",
-      ],
-    },
+    art: { src: "art/drizzt.png" },
   },
 
   pacman: {
@@ -412,29 +257,7 @@ window.CLIQUE_THEMES = {
             brightBlack: "#4a4a80", brightRed: "#ff7a7a", brightGreen: "#84f08f",
             brightYellow: "#ffe870", brightBlue: "#5f8bff", brightMagenta: "#ffb8dc",
             brightCyan: "#8aeaff", brightWhite: "#ffffff" },
-    art: {
-      w: 26, h: 16,
-      pal: { Y: "#ffd93b", P: "#4a4020", E: "#dde4f0", I: "#3d5fd9", G: "#ff9ecb",
-             g: "#d9709f", D: "#e8dcae" },
-      rows: [
-        ".....YYYYYY...............",
-        "...YYYYYYYYYY.............",
-        "..YYYYYYYYYYYY............",
-        ".YYYYYYYYYYYYY....GGGGG...",
-        "YYYYPPPYYYYYYY..GGGGGGGGG.",
-        "YYYYPEIYYYYYYY.GGGGGGGGGGG",
-        "YYYYPIIYYYYY...GGPPPGGPPPG",
-        "YYYYYYYYY..DD..GGEIIGGIIEG",
-        "YYYYYYY....DD..GGIIIGGIIIG",
-        "YYYYYYYYY......GGGPPGGPPGG",
-        "YYYYYYYYYYY....GGGGGGGGGGG",
-        "YYYYYYYYYYYYYY.GGGGGGGGGGG",
-        ".YYYYYYYYYYYYY.GGGGGGGGGGG",
-        "..YYYYYYYYYYYY.GGGGGGGGGGG",
-        "...YYYYYYYYYY..GGGGGGGGGGG",
-        ".....YYYYYY....gg.gg.gg.gg",
-      ],
-    },
+    art: { src: "art/pacman.png" },
   },
 
   /* The one theme here whose palette is not a costume: the seven ANSI slots
@@ -455,35 +278,7 @@ window.CLIQUE_THEMES = {
     /* Deliberately coarse: a tetromino is a four-cell shape and drawing it at
      * fourteen cells wide would only make the cells smaller, not the pieces
      * clearer. Seven across means the blocks land about the size they were. */
-    art: {
-      w: 27, h: 21,
-      pal: { A: "#88dfec", I: "#31c7de", a: "#228b9b", B: "#cb9ee4", T: "#a558d0",
-             b: "#733e92", C: "#99dca9", S: "#4fc26b", c: "#37884b", D: "#f7e48d",
-             O: "#f2d03b", d: "#a99229" },
-      rows: [
-        "......AAA..................",
-        "......III..................",
-        "......IIa..................",
-        "......AAA......DDDDDD......",
-        "......III......OOOOOO......",
-        "......IIa......OOdOOd......",
-        "......AAA......DDDDDD......",
-        "......III......OOOOOO......",
-        "......IIa......OOdOOd......",
-        "......AAA..................",
-        "......III..................",
-        "......IIa..................",
-        "...........................",
-        "...........................",
-        "...........................",
-        "...BBBBBBBBB......CCCCCC...",
-        "...TTTTTTTTT......SSSSSS...",
-        "...TTbTTbTTb......SScSSc...",
-        "......BBB......CCCCCC......",
-        "......TTT......SSSSSS......",
-        "......TTb......SScSSc......",
-      ],
-    },
+    art: { src: "art/tetris.png" },
   },
 
   aincrad: {
@@ -498,40 +293,6 @@ window.CLIQUE_THEMES = {
             brightBlack: "#4b5a6e", brightRed: "#ff707d", brightGreen: "#6fdfa8",
             brightYellow: "#ffd479", brightBlue: "#74b1ff", brightMagenta: "#bfa0ff",
             brightCyan: "#8adcff", brightWhite: "#f0f6ff" },
-    art: {
-      w: 24, h: 27,
-      pal: { H: "#3d4356", h: "#4b5266", S: "#f2cdb0", t: "#d4a98c", P: "#3f4553",
-             E: "#dde4f0", I: "#4fc3f7", C: "#3a4054", c: "#4a5165", T: "#4fc3f7",
-             K: "#343b4e", D: "#e8eef6", B: "#4fc3f7", d: "#9aa6b8" },
-      rows: [
-        "DD...HHH.....HHH......BB",
-        "DD..HHHHHHHHHHHHHH....BB",
-        "DD..HHHHHHHHHHHHHHHH..BB",
-        "DD..HHHHHHHHHHHHHHHH..BB",
-        "DD..HHHhhhhhhhhhhHHH..BB",
-        "DD..HHHttttttttttHHH..BB",
-        "DD..HHtSSSSSSSSSStHH..BB",
-        "DD..HSSSSSSSSSSSSSSH..BB",
-        "DD..HSPPPPSSSSPPPPSH..BB",
-        "DD..HSPEIISSSSIIEPSH..BB",
-        "DD..HSPIIISSSSIIIPSH..BB",
-        "DD..HSPIIISSSSIIIPSH..BB",
-        "DD..HSSPPSSSSSSPPSSH..BB",
-        "DD...SSSSSSSSSSSSSS...BB",
-        "DD.....SSSSSSSSSS.....BB",
-        "DD......SSSSSSSS......BB",
-        "DDDD......SSSS......BBBB",
-        ".dd..CCCCCCCCCCCCCC..dd.",
-        ".dd.CCCCCCCTTCCCCCCC.dd.",
-        "....CCCCCCCTTCCCCCCC....",
-        "...CCCCCCCCTTCCCCCCCC...",
-        "....CCCCCCCTTCCCCCCC....",
-        "....cCCCCCCCCCCCCCCc....",
-        "......CCCCC..CCCCC......",
-        "......CCCCC..CCCCC......",
-        "......KKKKK..KKKKK......",
-        ".....KKKKKK..KKKKKK.....",
-      ],
-    },
+    art: { src: "art/aincrad.png" },
   },
 };

@@ -6675,10 +6675,24 @@ function derived(theme) {
 
 /* ------------------------------------------------------------------ theme art
  *
- * A theme may carry a chibi anime figure, watermarked into the bottom-right of
- * pane. The grid in themes.js becomes one SVG data URI, built once per theme
- * and cached: it is a background-image after that, so a repaint costs the
- * browser nothing and there is no second element in the terminal's way.
+ * A theme may carry a figure, watermarked into the bottom-right of the pane.
+ * Two ways to say what it is, and a theme picks one:
+ *
+ *   art: { src: "art/plumber.png" }        a drawing we ship
+ *   art: { w, h, pal, rows }               a grid drawn in this file
+ *
+ * The grid form becomes one SVG data URI, built once per theme and cached; the
+ * file form is just a URL. Either way it ends up as a background-image, so a
+ * repaint costs the browser nothing and there is no second element in the
+ * terminal's way.
+ *
+ * The two are composited differently and that is not a detail. A grid is drawn
+ * to a palette we control, every colour a mid-tone, so it can use the extreme
+ * blends below and keep the text perfectly untouched. A supplied drawing has
+ * blacks and whites in it, and an extreme blend eats exactly those, so it is
+ * laid over at a lower opacity instead. That costs the text a little contrast
+ * where the two overlap, which is the honest trade for taking artwork as it
+ * comes rather than dictating a palette to whoever drew it.
  *
  * Runs of the same colour on a row collapse into one rect, which takes a
  * fourteen-wide figure from a couple of hundred rects to about forty. That
@@ -6700,8 +6714,13 @@ function themeArt(theme) {
   let built = _artUrls.get(theme);
   if (built) return built;
   const art = theme && theme.art;
-  built = { url: "", ratio: 1 };
-  if (art && art.rows && art.rows.length) {
+  built = { url: "", ratio: 0, blend: "" };
+  if (art && art.src) {
+    // No ratio: the box is fixed and the drawing is contained inside it,
+    // anchored bottom-right, so a tall figure and a wide one both sit in the
+    // corner properly without the theme having to measure anything.
+    built = { url: `url("${encodeURI(art.src)}")`, ratio: 0, blend: art.blend || "normal" };
+  } else if (art && art.rows && art.rows.length) {
     const pal = art.pal || {};
     const w = art.w || art.rows[0].length;
     const h = art.h || art.rows.length;
@@ -6721,7 +6740,10 @@ function themeArt(theme) {
     if (rects.length) {
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' +
         `${w} ${h}" shape-rendering="crispEdges">${rects.join("")}</svg>`;
-      built = { url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`, ratio: w / h };
+      built = {
+        url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        ratio: w / h, blend: art.blend || "auto",
+      };
     }
   }
   _artUrls.set(theme, built);
@@ -6738,14 +6760,18 @@ function paintThemeArt(theme) {
   const el = $("#themeArt");
   if (!el) return;
   const light = (theme.base || "dark") === "light";
-  const { url, ratio } = state.settings.theme_art === false
-    ? { url: "", ratio: 1 } : themeArt(theme);
+  const { url, ratio, blend } = state.settings.theme_art === false
+    ? { url: "", ratio: 0, blend: "" } : themeArt(theme);
   el.hidden = !url;
   if (!url) return;
   el.style.backgroundImage = url;
-  el.style.aspectRatio = String(ratio);
-  el.style.mixBlendMode = light ? "darken" : "lighten";
-  el.style.opacity = light ? "0.10" : "0.13";
+  // A grid knows its own shape and gets an aspect ratio. A drawing is
+  // contained in the fixed box instead, and must not be smoothed away by the
+  // pixelated rendering the grids need.
+  el.classList.toggle("is-drawing", !ratio);
+  el.style.aspectRatio = ratio ? String(ratio) : "";
+  el.style.mixBlendMode = blend === "normal" ? "normal" : light ? "darken" : "lighten";
+  el.style.opacity = blend === "normal" ? (light ? "0.10" : "0.12") : light ? "0.10" : "0.13";
 }
 
 /* Monospace stacks that exist on Windows, Mac and Linux.

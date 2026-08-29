@@ -129,15 +129,18 @@ def call(
 # character per cell. A row one cell short shifts every pixel after it and
 # draws a figure that is wrong in a way nothing else here would notice, since
 # the panel renders a ragged grid perfectly happily.
-ART = re.compile(
-    r"art:\s*\{\s*w:\s*(\d+),\s*h:\s*(\d+),\s*"
-    r"pal:\s*\{(.*?)\},\s*rows:\s*\[(.*?)\],",
-    re.S,
-)
-# Split on the theme headers first. Matching name and art in one pattern let a
-# theme with no art of its own claim the next theme's block, so a failure named
-# the wrong theme and sent you looking in the wrong place.
+ART = re.compile(r'art:\s*\{\s*src:\s*"([^"]+)"')
+# Split on the theme headers first, so a failure names the theme it is in.
 BLOCK = re.compile(r"^  \"?(\w*)\"?:\s*\{$", re.M)
+
+# A theme figure is a PNG we ship. Four things can go wrong with one and none
+# of them is visible from inside the panel: the file is not there at all, it
+# has no transparency and hangs a white card in the corner of the terminal, it
+# still has the flat colour it was drawn on around the edges, or it is a
+# four-megabyte export nobody looked at. The last one matters more here than
+# it looks: the entire argument for this tool is that it is small.
+MAX_KB = 400
+MAX_EDGE = 1200
 
 
 def check_art() -> None:
@@ -150,28 +153,43 @@ def check_art() -> None:
         if not match:
             continue
         name = head.group(1) or "(default)"
-        width, height, palette, body = match.groups()
         found += 1
-        wide, tall = int(width), int(height)
-        pal = set(re.findall(r'(\w+):\s*"#', palette))
-        rows = re.findall(r'"([^"]*)"', body)
-        check(f"{name}: {tall} rows, as declared", len(rows) == tall, len(rows))
-        ragged = [i for i, row in enumerate(rows) if len(row) != wide]
-        check(f"{name}: every row is {wide} cells", not ragged, ragged)
-        unknown = sorted({c for row in rows for c in row} - pal - {"."})
-        check(f"{name}: every cell has a colour", not unknown, unknown)
-        check(f"{name}: no colour goes unused", not pal - set("".join(rows)),
-              sorted(pal - set("".join(rows))))
-        # A near-black pixel is invisible under `lighten` on a dark theme and a
-        # near-white one is invisible under `darken` on a light theme. Either
-        # way it is a cell that was drawn and cannot be seen, which is how a
-        # figure quietly loses a hand.
-        flat = [
-            token for token, hexval in re.findall(r'(\w+):\s*"(#[0-9a-fA-F]{6})"', palette)
-            if not 0.04 < _relative(hexval) < 0.86
-        ]
-        check(f"{name}: every colour is a mid-tone", not flat, flat)
+        src = match.group(1)
+        path = ROOT / "clique" / "web" / src
+        check(f"{name}: {src} is there", path.is_file(), path)
+        if not path.is_file():
+            continue
+        size = path.stat().st_size // 1024
+        check(f"{name}: {size}KB, under {MAX_KB}", size <= MAX_KB, size)
+        head_bytes = path.read_bytes()[:26]
+        check(f"{name}: it is a PNG", head_bytes.startswith(b"\x89PNG\r\n\x1a\n"), head_bytes[:8])
+        # Colour type 6 is RGBA and 3 is palette, which carries alpha in a tRNS
+        # chunk. Either can be transparent; 0 and 2 cannot be, ever.
+        colour_type = head_bytes[25] if len(head_bytes) > 25 else -1
+        check(f"{name}: it can hold transparency", colour_type in (3, 4, 6), colour_type)
+        width = int.from_bytes(head_bytes[16:20], "big")
+        height = int.from_bytes(head_bytes[20:24], "big")
+        check(f"{name}: {width}x{height}, within {MAX_EDGE}",
+              0 < width <= MAX_EDGE and 0 < height <= MAX_EDGE, (width, height))
     check("themes.js carries the character art", found >= 7, found)
+    _check_packaged()
+
+
+def _check_packaged() -> None:
+    """The wheel has to actually contain them.
+
+    package-data is an allow-list of globs, so a new directory under web/ is
+    silently left out and the panel serves 404s for it on somebody else's
+    machine while working perfectly here. That has already happened once with
+    web/ itself, which is why the comment above that block exists.
+    """
+    spec = (ROOT / "pyproject.toml").read_text()
+    # The list, not the section header: the header is itself in square
+    # brackets, so splitting on the first "]" finds nothing but the header.
+    after = spec[spec.index("[tool.setuptools.package-data]"):]
+    listing = after[after.index("clique = ["):]
+    listing = listing[: listing.index("\n]")]
+    check("the wheel is told to ship web/art", '"web/art/*"' in listing, listing[-120:])
 
 
 def _relative(hexval: str) -> float:
@@ -183,7 +201,7 @@ def _relative(hexval: str) -> float:
 
 def main() -> int:
     proc = _panel()
-    print("the pixel figures a theme can carry")
+    print("the drawings a theme can carry")
     check_art()
 
     try:
