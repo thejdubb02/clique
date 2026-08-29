@@ -414,3 +414,81 @@ every other theme it is damage.
    keeping lightness alone reads as the Matrix, or whether contrast needs
    pushing too, is not a question anyone can answer from a table.
 
+
+
+---
+
+# Codeman's feature list, read against ours (2026-08-29)
+
+Source: the project README and its public marketing pages. **No source file was
+opened, and none ever will be** (CLAUDE.md rule 3). Everything below is a
+description of behaviour, which is the part that is fair to borrow.
+
+The headline finding is not a gap list. It is that Codeman's feature set and
+ours diverge on purpose, and roughly half of what it advertises is work CLIque
+has already decided not to do.
+
+## Already ours, at parity or better
+
+Parallel tmux sessions, xterm.js with full ANSI and TUI support, several CLIs
+per session declared in config, tab colour by state, notifications on approval
+and idle, image paste and drag-and-drop, a file browser and viewer, a REST API
+with a WebSocket terminal channel, cross-device tab order, session pinning,
+loopback by default with a password, a host allowlist and CSRF guards, and a
+phone drawer with an on-screen key row. Ours is 24 MB against a Node runtime.
+
+## Genuinely wanted, and none of it breaks a rule
+
+Ranked by what it would change on a normal day.
+
+1. **Local echo.** Every keystroke over Tailscale costs a round trip, and their
+   claim of 200 to 300ms matches what this box feels like. Draw the character
+   immediately, send it in the background, and drop the overlay when the real
+   echo arrives. Theirs is a positioned element inside the terminal rather than
+   writing into the buffer, which is a sound instinct: a CLI that repaints its
+   own screen will scribble over anything injected into the grid. We would
+   write our own, in plain JS with no library, and the hard part is not the
+   drawing, it is knowing when to stop drawing.
+2. **QR code login.** Typing a long password on a phone is the single worst
+   thing about using this on a phone. A short-lived single-use token in a QR
+   code on the desktop screen removes it entirely. Small, and the auth system
+   already has tokens.
+3. **Live plan usage in the status bar.** Being built now. Notably this is
+   *filesystem* state, not vendor knowledge, as long as the panel reads a
+   declared file rather than knowing who Anthropic is.
+4. **Swipe between sessions on a phone.** Tabs are unusable with a thumb.
+5. **One-tap slash commands.** We have a key row; what is missing is letting a
+   CLI declare its own quick commands in `clis.toml`, which is config rather
+   than code and therefore the right shape.
+6. **Voice dictation.** The browser's own speech API is free and needs no
+   dependency. Worth a try on the phone before deciding.
+7. **Auto-resume when a limit resets.** Falls out of the usage work almost for
+   free, and is the one piece of autonomy that needs no model knowledge: a
+   timestamp passed, so send a key.
+
+## Wanted, but a real slice
+
+**SSH sessions against a remote host** fits our thesis exactly, since tmux is
+already the persistence layer and it would work the same way on the far end.
+**A container per session** is defensible as isolation rather than as an IDE
+feature, but it is a large surface and every bug in it is a security bug.
+
+## Not for us, and the reasons already exist
+
+Their respawn controller, orchestrator loop, phased plans with verification
+gates, per-agent token counts, floating windows per subagent, auto-compact at a
+token threshold, and reading a vendor's transcript files all require the panel
+to know which vendor is running and to interpret what a model is doing. That is
+rule 1, and [ROADMAP.md](../ROADMAP.md) already names agent orchestration a
+trap for a second reason: it demos well and produces divergent states nobody
+can reconcile.
+
+Multi-user workspaces and an admin audit log are a different product. A
+Cloudflare tunnel is a worse Tailscale for this estate.
+
+## The uncomfortable one
+
+Their autonomy features are the reason someone would pick Codeman, and we are
+refusing them on principle rather than on capability. That refusal is worth
+restating out loud every time this comparison is made, because "we could not"
+and "we chose not to" are different sentences and only one of them is true.
