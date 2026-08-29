@@ -126,6 +126,30 @@ dir     = "~/.claude/projects"
 layout  = "dashed-dir"
 pattern = "*.jsonl"
 
+# How much of the plan is spent, for the status bar. Read by `clique/usage.py`,
+# which does exactly what this says and knows nothing else: take the token out
+# of that file at that path, ask that URL, and pull those fields out of the
+# reply. The token is spent on the request and never reaches the browser, and
+# any failure is silence rather than an error.
+#
+# Delete this block and the bar simply stops showing it. Another CLI that
+# publishes the same kind of endpoint is another block, not a code change.
+[cli.claude.usage]
+url         = "https://api.anthropic.com/api/oauth/usage"
+token_file  = "~/.claude/.credentials.json"
+token_field = "claudeAiOauth.accessToken"
+headers     = { "anthropic-beta" = "oauth-2025-04-20" }
+
+  [[cli.claude.usage.window]]
+  label   = "5H"
+  percent = "five_hour.utilization"
+  resets  = "five_hour.resets_at"
+
+  [[cli.claude.usage.window]]
+  label   = "7D"
+  percent = "seven_day.utilization"
+  resets  = "seven_day.resets_at"
+
 [cli.gemini]
 label      = "Gemini CLI"
 command    = "gemini"

@@ -124,6 +124,10 @@ class CliType:
     #: Read only when `input_mode` is "auto", which is the default. The two
     #: explicit settings still win.
     own_input: bool = False
+    #: How to ask this CLI's vendor what is left of the plan, if it offers a
+    #: way. A whole block of TOML rather than a line of Python on purpose: the
+    #: panel runs the description and never learns whose API it is talking to.
+    usage: dict = field(default_factory=dict)
 
     #: Whether this CLI speaks Claude Code's hook protocol, so CLIque can wire
     #: it to report its own state (working / waiting / done) authoritatively
@@ -341,6 +345,7 @@ def parse(data: dict) -> dict[str, CliType]:
             "status",
             "own_input",
             "hooks",
+            "usage",
         }
         if unknown_keys:
             raise RegistryError(f"cli.{cli_id}: unknown key(s) {', '.join(sorted(unknown_keys))}")
@@ -357,6 +362,7 @@ def parse(data: dict) -> dict[str, CliType]:
             icon=raw.get("icon", ""),
             own_input=bool(raw.get("own_input", False)),
             hooks=bool(raw.get("hooks", False)),
+            usage=dict(raw.get("usage") or {}),
             status=dict(raw.get("status") or {}),
             history=dict(raw.get("history") or {}),
             attention=dict(raw.get("attention") or {}),

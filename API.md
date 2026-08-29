@@ -570,6 +570,28 @@ Outbound calls refuse a `base_url` that resolves to a cloud-metadata /
 link-local address or (by default) an internal-network host; loopback stays
 allowed for local models. `CLIQUE_LLM_ALLOW_PRIVATE=1` opts into private ranges.
 
+## Plan usage
+
+`GET /api/usage` → `{"usage": [{"cli", "windows": [{"label", "percent",
+"resets_at"}], "checked"}]}`. How much of a plan each running CLI has spent.
+Read scope.
+
+Nothing in the panel knows whose API is being asked. A CLI's `usage` block in
+`clis.toml` says where its token file is, which field in it holds the token,
+which URL to ask and which fields in the reply are the numbers; the panel runs
+that description. Teaching it about another vendor is a block of TOML.
+
+Only CLIs that declare a probe **and** have a session open are asked, so a
+panel with nothing running makes no outbound call. Readings are cached for five
+minutes and shared by every connected browser, and a failure is cached for the
+same five minutes so a machine with no credentials does not retry forever.
+
+**The token never leaves the process.** It is read from disk, spent on one
+request, and dropped; what comes back over this route is a percentage and a
+reset time. Anything unexpected (no token, an expired one, no network, a reply
+in a shape the block did not describe) returns no entry for that CLI rather
+than an error. Set `usage_bar` to `false` to turn the whole thing off.
+
 ## Themes
 
 A theme is nine colours somebody chose and eighteen worked out from them. The

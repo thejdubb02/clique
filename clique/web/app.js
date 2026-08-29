@@ -1039,6 +1039,7 @@ async function refresh() {
   renderTree();
   renderTabs();
   renderStats();
+  renderPlan();
   renderInbox();
   renderBoard();   // no-op unless the board is open
   updateTitle();
@@ -1253,6 +1254,63 @@ function paintStat(id, percent, value, title) {
   if (dot && !dot.style.background) dot.dataset.level = pressureLevel(percent);
   if (slot) slot.textContent = value;
   if (title) el.title = title;
+}
+
+/* What is left of the plan, for the CLI in front.
+ *
+ * Fetched on its own slow timer rather than riding the 3s poll: the windows it
+ * reports move over hours, and the panel is a guest on somebody else's API.
+ * The server caches too, so a dozen open tabs are still one request.
+ *
+ * Shown only for a CLI that declares a probe, which today is the ones whose
+ * vendor publishes one. Everything else gets no column at all rather than a
+ * row of dashes, the same way the status bar treats a missing sensor. */
+let planUsage = [];
+
+async function loadUsage() {
+  try {
+    const payload = await api("api/usage");
+    planUsage = payload.usage || [];
+  } catch (err) {
+    planUsage = [];      // offline, or the setting is off; say nothing
+  }
+  renderPlan();
+}
+
+/* "in 2h" / "in 40m" / "now". A reset an hour out is the number that decides
+ * whether to keep going or stop, so it is worth more than the timestamp. */
+function untilReset(iso) {
+  const at = Date.parse(iso || "");
+  if (!at) return "";
+  const mins = Math.round((at - Date.now()) / 60000);
+  if (mins <= 0) return "now";
+  if (mins < 60) return `in ${mins}m`;
+  const hours = mins / 60;
+  return hours < 24 ? `in ${Math.round(hours)}h` : `in ${Math.round(hours / 24)}d`;
+}
+
+function renderPlan() {
+  const el = $("#plan");
+  if (!el) return;
+  const s = activeId ? session(activeId) : null;
+  const found = s && planUsage.find((u) => u.cli === s.cli);
+  const windows = (found && found.windows) || [];
+  el.classList.toggle("is-off", !windows.length);
+  if (!windows.length) return;
+
+  // Worst window decides the colour: one number at 90% matters more than the
+  // average of it and one at 4%.
+  const worst = Math.max(...windows.map((w) => w.percent));
+  const dot = worst >= 90 ? "err" : worst >= 75 ? "wait" : "ok";
+  el.querySelector(".v").textContent =
+    windows.map((w) => `${w.label} ${Math.round(w.percent)}%`).join(" · ");
+  el.dataset.level = dot;
+  el.title = windows
+    .map((w) => {
+      const when = untilReset(w.resets_at);
+      return `${w.label}: ${Math.round(w.percent)}% used${when ? `, resets ${when}` : ""}`;
+    })
+    .join("\n") + `\nAsked of ${s.cli_label || s.cli} directly, at most once every few minutes.`;
 }
 
 function renderStats() {
@@ -9238,6 +9296,10 @@ bootWorkspace();
 // and they change about twice a year, so this is a boot fetch rather than
 // weight on every poll.
 loadThemes();
+loadUsage();
+// Its own cadence: plan windows move over hours and this is somebody else's
+// API. The server caches on top of this, so extra tabs cost nothing.
+setInterval(loadUsage, 5 * 60 * 1000);
 setInterval(refresh, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and
 // nobody is waiting on a screenshot to the second.

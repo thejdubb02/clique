@@ -105,6 +105,8 @@ DEFAULT_SETTINGS = {
     "status_on_icon": True,
     #: Preset palette id from web/themes.js. "" is the built-in dark.
     "theme": "",
+    #: Ask each running CLI what is left of its plan, for the status bar.
+    "usage_bar": True,
     #: "dark" | "light" | "system". Themes carry their own base, so this only
     #: decides which built-in is used when no preset is chosen.
     "appearance": "dark",

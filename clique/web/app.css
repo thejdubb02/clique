@@ -392,6 +392,12 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
    sensor and no swap in use, so the bar carried two blank columns forever.
    Gone, not invisible — the row closes up. */
 #stats .stat.is-off { display: none; }
+/* The plan column carries no dot of its own: the number *is* the warning, and
+   a dot beside "7D 92%" is the same fact twice. It takes the colour instead. */
+#plan[data-level="wait"] .v { color: var(--warn); }
+#plan[data-level="err"] .v { color: var(--err); font-weight: 600; }
+#plan { cursor: help; }
+
 /* Each stat carries its own dot, coloured by that stat's own pressure and set
    inline from renderStats. No default background here: an unset dot would show
    a stale colour for the moment before the first poll lands. */

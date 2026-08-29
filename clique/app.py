@@ -47,6 +47,7 @@ from . import (
     termstrip,
     themegen,
     tmux,
+    usage,
     version_string,
     working,
     workspace,
@@ -692,6 +693,26 @@ class Panel:
         if not profile:
             return {"ok": False, "error": why}
         return llm.test(profile)
+
+    def usage_now(self, *, force: bool = False) -> dict:
+        """What is left of each running CLI's plan.
+
+        Only CLIs that declare a probe *and* have a session open are asked. A
+        panel with nothing running makes no outbound call at all, which is the
+        behaviour anyone would want from a tool they just installed and have
+        not configured.
+        """
+        if not self.store.settings.get("usage_bar", True):
+            return {"usage": []}
+        running = {s.cli for s in self.store.sessions if s.cli}
+        out = []
+        for cli_id, cli in self.registry.types().items():
+            if cli_id not in running or not getattr(cli, "usage", None):
+                continue
+            found = usage.read(cli_id, cli.usage, llm._guard_url, force=force)
+            if found:
+                out.append(found)
+        return {"usage": out}
 
     # ------------------------------------------------------------- themes
 
@@ -1640,6 +1661,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.llm_list())
             if path == "/api/themes":
                 return self._json(self.panel.themes_list())
+            if path == "/api/usage":
+                return self._json(self.panel.usage_now())
             if path == "/api/storage":
                 usage = files.shares_usage(tuple(self._share_cwds()))
                 usage["cleanup_days"] = int(

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.54.0 — 2026-08-28 18:07 PDT
+
+**How much of the plan is left, in the status bar.** For the session in front,
+the bar now reads something like `5H 5% · 7D 52%`, amber past three quarters
+and red past ninety. Hovering says when each window resets, in the form that
+actually decides whether to keep going: "resets in 2h", not a timestamp.
+
+**Nothing in the panel knows whose API that is.** A CLI's `usage` block in
+`clis.toml` says where its token file lives, which field in it holds the token,
+which URL answers, and which fields in the reply are the numbers. The panel
+runs that description and learns nothing else. Teaching it about another vendor
+is a block of TOML rather than a line of Python, which is the same bargain
+`clis.toml` already makes for launching a CLI at all. Delete the block and the
+column goes away.
+
+**It works on a machine that has never heard of us.** This was the whole point:
+the probe ships in the package and reads the credentials the CLI already wrote,
+so someone who installs `clique-panel` and opens it gets the bar. Nothing here
+depends on a cron job, a file another tool writes, or a key in somebody's vault.
+
+**The token is spent, not spread around.** It is read from disk, used on one
+request, and dropped. What reaches the browser is a percentage and a reset
+time, and never the credential. Only CLIs that declare a probe *and* have a
+session open are asked, so a fresh panel with nothing running makes no outbound
+call at all. Readings are cached five minutes and shared by every connected
+browser; failures are cached the same, so a machine with no credentials asks
+once and then stops.
+
+Everything that can go wrong goes quiet rather than loud: no token, an expired
+one, no network, a reply in a shape the block did not describe. `usage_bar` in
+settings turns the whole thing off.
+
+Today Claude is the only CLI shipping with a probe, because it is the only one
+of the four installed here whose vendor publishes a usage endpoint. Codex and
+Grok keep credentials on disk but document no such endpoint, and none of them
+cache the numbers locally. The slot is there for the day that changes.
+
+`tools/usage_check.py` points the probe at a throwaway local server that is
+nobody's real API, which is the strongest evidence the code is generic, and
+covers every quiet failure. It also asserts the shipped catalogue still says
+what it said: a sub-table opened in the wrong place silently swallowed four of
+Claude's keys while this was being written, and that class of mistake now has
+a guard.
+
 ## 0.53.0 — 2026-08-28 17:35 PDT
 
 **Describe a theme and get one.** Settings, Appearance now has a box: type "a
