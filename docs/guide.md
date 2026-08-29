@@ -266,7 +266,7 @@ like the sidebar width stay local.
 - **Custom CSS:** three blocks, applied to everything, the panel only, or the
   terminal only, for when a theme is not quite it.
 
-  Seven of the presets carry a **character**: a pixel figure in the bottom-right
+  Seven of the presets carry a **character**: a chibi anime figure in the bottom-right
   of the pane, behind the text. Plumber, Triforce, Fellowship, Drizzt, Pacman,
   Tetris and Aincrad. It is blended rather than laid over, so text always wins
   and a line drawn across the figure is exactly as readable as it would be on a

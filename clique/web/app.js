@@ -6675,7 +6675,7 @@ function derived(theme) {
 
 /* ------------------------------------------------------------------ theme art
  *
- * A theme may carry a pixel figure, watermarked into the bottom-right of the
+ * A theme may carry a chibi anime figure, watermarked into the bottom-right of
  * pane. The grid in themes.js becomes one SVG data URI, built once per theme
  * and cached: it is a background-image after that, so a repaint costs the
  * browser nothing and there is no second element in the terminal's way.

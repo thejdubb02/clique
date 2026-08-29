@@ -3,8 +3,19 @@
 ## 0.55.0 — 2026-08-28 21:26 PDT
 
 **Seven themes with somebody in them.** Plumber, Triforce, Fellowship, Drizzt,
-Pacman, Tetris and Aincrad, each a full palette plus a pixel figure watermarked
-into the bottom-right of the pane. Sixteen presets now, up from nine.
+Pacman, Tetris and Aincrad, each a full palette plus a chibi anime figure
+watermarked into the bottom-right of the pane. Sixteen presets now, up from
+nine.
+
+**Drawn as chibi anime rather than as NES sprites**, which is a decision about
+resolution more than taste. The eyes are what make anime read as anime, and an
+eye needs about four cells by four before a lash line and a highlight fit in
+it. That put the grid at 24 by 31 instead of 14 by 16, and once the head is
+that size chibi proportions follow: a third of the height is head, because that
+is where the recognisable part is. Five of the seven are people and share a
+head on purpose. Hair, eyes, clothes and what they are holding is what changes,
+and the two that are not people, the ghost and the tetrominoes, take the same
+eyes and the same cell size so the set reads as one set.
 
 **The figure is behind the text, not over it, and that is a real claim rather
 than a low opacity.** The layer is composited with `lighten` on a dark theme and
@@ -34,6 +45,11 @@ declared width, a cell with no colour behind it, a colour that is never drawn,
 and a colour too near black or white to survive the blend. The last one is not
 theoretical: it caught four on the first run, including a glove and a pair of
 boots that would have been drawn and then not been there.
+
+The tetrominoes were the odd ones out at nine cells across, where a block came
+out four times the size of a character's pixel and the theme looked borrowed
+from somewhere else. They are drawn three cells to a block now, which brings
+them into line and leaves room for the bevel the pieces have always had.
 
 `tools/visual_check.py` opens a pane with a figure in it and measures the blend
 mode, the opacity, that it cannot be clicked, that it stays inside the pane, and
