@@ -359,10 +359,16 @@ def main() -> int:
                 "     const w = t.fit.proposeDimensions() || {};"
                 "     return t.term.cols + 'x' + t.term.rows + ' want ' + w.cols + 'x' + w.rows; })()]; }"
             )
-            # The strip refreshes on the 3s poll, so give it one.
-            page.wait_for_timeout(3500)
-            first_note = page.evaluate(READ)[0]
-            second_note = second.evaluate(READ)[0]
+            # The strip refreshes on the 3s poll, and a busy box can be late
+            # with one. Wait for the condition rather than for a number of
+            # milliseconds, or this is a check that fails under load.
+            first_note = second_note = ""
+            for _ in range(16):
+                first_note = page.evaluate(READ)[0]
+                second_note = second.evaluate(READ)[0]
+                if "another window" in first_note or "another window" in second_note:
+                    break
+                page.wait_for_timeout(700)
             told = [n for n in (first_note, second_note) if n.strip()]
             res["a_browser_is_told_another_owns_the_size"] = any(
                 "another window" in n for n in told

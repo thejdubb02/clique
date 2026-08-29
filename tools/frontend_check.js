@@ -309,6 +309,63 @@ console.log("copy from a pane that is eating the mouse");
                               true, true));
 }
 
+console.log("the terminal wears the theme");
+{
+  const code = region("function mix(", "function currentTheme");
+  const { mix, termTokens, luminanceOf } = new Function(
+    "function luminance(hex){const v=hex.replace('#','');"
+    + "const f=v.length===3?[...v].map(c=>c+c).join(''):v;"
+    + "const ch=[0,2,4].map(i=>parseInt(f.slice(i,i+2),16)/255)"
+    + ".map(c=>c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4));"
+    + "return 0.2126*ch[0]+0.7152*ch[1]+0.0722*ch[2];}"
+    + "const _termThemes = new WeakMap();"
+    + code + "; return { mix, termTokens, luminanceOf: luminance };")();
+  check("halfway between black and white is grey",
+        mix("#000000", "#ffffff", 0.5) === "#808080");
+  check("no distance is the colour you started from",
+        mix("#1e1e1e", "#ffffff", 0) === "#1e1e1e");
+  check("short hex is read the same as long",
+        mix("#fff", "#000000", 0) === "#ffffff");
+
+  const dark = { term: { background: "#1e1e1e", selectionBackground: "#264f78" } };
+  const light = { term: { background: "#ffffff", selectionBackground: "#b6d7ff" } };
+  check("the character under a block cursor gets the theme's background",
+        termTokens(dark).cursorAccent === "#1e1e1e");
+  check("a dark selection is written on in light text",
+        termTokens(dark).selectionForeground === "#f5f5f5");
+  check("and a pale one in dark text",
+        termTokens(light).selectionForeground === "#101010");
+  check("an unfocused selection sits halfway back to the background",
+        termTokens(dark).selectionInactiveBackground === mix("#264f78", "#1e1e1e", 0.5));
+  check("a theme that states these keeps them",
+        termTokens({ term: { background: "#000", selectionBackground: "#333",
+                             selectionForeground: "#0f0" } }).selectionForeground === "#0f0");
+  check("and a theme with no selection colour is left alone",
+        termTokens({ term: { background: "#000" } }).selectionForeground === undefined);
+
+  /* Every shipped theme, not just a made-up one. The point of deriving these
+   * is that a new theme cannot arrive with a selection you cannot read on, so
+   * the guarantee is worth asserting against the real list. */
+  const themeSrc = fs.readFileSync(
+    path.join(__dirname, "..", "clique", "web", "themes.js"), "utf8");
+  const themes = new Function("const window = {}; " + themeSrc
+    + "; return window.CLIQUE_THEMES;")();
+  const names = Object.keys(themes);
+  check("there are themes to check", names.length >= 4, names.length);
+  const contrast = (a, b) => {
+    const [hi, lo] = [luminanceOf(a), luminanceOf(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const thin = names.filter((name) => {
+    const t = termTokens(themes[name]);
+    if (!t.selectionBackground) return false;
+    return contrast(t.selectionForeground, t.selectionBackground) < 4.5;
+  });
+  check("every theme's selection can be read on", thin.length === 0, thin);
+  const noCursor = names.filter((name) => !termTokens(themes[name]).cursorAccent);
+  check("and every theme says what sits under its cursor", noCursor.length === 0, noCursor);
+}
+
 console.log("zoom a boxed pane instead of wrapping it");
 {
   const code = region("const PANE_ZOOM_MIN", "function paneForceSelectMods");

@@ -5655,6 +5655,9 @@ async function attachNow(id) {
     theme: termTheme(currentTheme()),
     scrollback: 20000,
     cursorBlink: true,
+    // A hollow cursor in the pane you are not typing into. With several panes
+    // open, two solid blocks both look like the live one.
+    cursorInactiveStyle: "outline",
     allowProposedApi: true,
     rightClickSelectsWord: true,
     // Drag-select has to win on a Mac too. xterm's default only honours
@@ -6490,11 +6493,60 @@ function extendedAnsi(theme) {
 
 const _termThemes = new Map();
 
+/* Blend two hex colours. Used to derive the quieter terminal tokens rather
+ * than making every theme spell them out and get one of them wrong. */
+function mix(from, to, amount) {
+  const read = (hex) => {
+    const value = hex.replace("#", "");
+    const full = value.length === 3 ? [...value].map((c) => c + c).join("") : value;
+    return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+  };
+  const [a, b] = [read(from), read(to)];
+  const channel = (i) => Math.round(a[i] + (b[i] - a[i]) * amount);
+  return "#" + [0, 1, 2].map((i) => channel(i).toString(16).padStart(2, "0")).join("");
+}
+
+/* The terminal tokens a theme should not have to spell out.
+ *
+ * Same bargain as `derived()` makes for the panel: a theme stays one block in
+ * themes.js, and anything that follows mechanically from what it already said
+ * is worked out here. Three of them, each fixing something a theme could not
+ * have got right by hand:
+ *
+ * `cursorAccent` is the character *underneath* a block cursor. Left unset it
+ * falls back to xterm's own default rather than this theme's background, so
+ * the character under the cursor could come out invisible.
+ *
+ * `selectionForeground` is picked from the luminance of the selection colour,
+ * because a theme with a pale selection and one with a dark selection cannot
+ * both use the same text colour on top of it, and dragging over a line you
+ * then cannot read is not a selection.
+ *
+ * `selectionInactiveBackground` is the same selection blended halfway back to
+ * the background, so the pane you are not looking at holds its selection
+ * without competing with the one you are. */
+function termTokens(theme) {
+  const term = theme.term || {};
+  const out = { ...term };
+  if (term.background && !out.cursorAccent) out.cursorAccent = term.background;
+  if (term.selectionBackground) {
+    if (!out.selectionForeground) {
+      out.selectionForeground = luminance(term.selectionBackground) > 0.4
+        ? "#101010" : "#f5f5f5";
+    }
+    if (!out.selectionInactiveBackground && term.background) {
+      out.selectionInactiveBackground =
+        mix(term.selectionBackground, term.background, 0.5);
+    }
+  }
+  return out;
+}
+
 function termTheme(theme) {
-  if (!theme.tint_greys) return theme.term || {};
   let built = _termThemes.get(theme);
   if (!built) {
-    built = { ...theme.term, extendedAnsi: extendedAnsi(theme) };
+    built = termTokens(theme);
+    if (theme.tint_greys) built.extendedAnsi = extendedAnsi(theme);
     _termThemes.set(theme, built);
   }
   return built;

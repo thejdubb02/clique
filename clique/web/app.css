@@ -410,6 +410,26 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
             background: var(--bg); }
 #terminal { position: absolute; inset: 0; padding: 6px 8px; }
 #terminal.hidden { visibility: hidden; }
+
+/* The pane's scrollbar, wearing the theme like everything else does.
+   It was the last raw browser control left in the panel, and it sits against
+   the terminal all day. A transparent border with `background-clip` rather
+   than the panel colour the settings sheet uses: a terminal's background is
+   the theme's *terminal* background, which is not always the panel's, and
+   painting the inset in the wrong one is worse than not insetting it. */
+.xterm-viewport::-webkit-scrollbar { width: 10px; }
+.xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--line); background-clip: content-box;
+  border: 3px solid transparent; border-radius: 5px;
+}
+.xterm-viewport::-webkit-scrollbar-corner { background: transparent; }
+.xterm-viewport { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+@media (hover: hover) and (pointer: fine) {
+  .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: var(--dim); background-clip: content-box;
+  }
+}
 /* Inactive panes stay painted (opacity, not visibility) so Chrome cannot
    throw the canvas away. No transition: tab switching does not animate. */
 #terminal > [data-session] { opacity: 0; z-index: 0; }

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.52.1 — 2026-08-28 17:12 PDT
+
+**The pane's scrollbar wears the theme.** It was the last raw browser control
+left in the panel, sitting against the terminal all day in whatever grey the
+browser felt like. It is a thin themed one now, and it changes when the theme
+does. The inset is a transparent border rather than the panel colour the
+settings sheet uses, because a terminal's background is the theme's *terminal*
+background, which is not always the panel's.
+
+**Three terminal colours a theme should never have had to spell out.** They are
+worked out from what the theme already said, the same bargain the panel's own
+tokens make, so a theme stays one block and cannot forget one of them:
+
+- what sits under a block cursor, which fell back to the terminal library's
+  own default rather than this theme's background, so the character under the
+  cursor could come out invisible;
+- what colour to write selected text in, chosen from how light the selection
+  is, because a theme with a pale selection and one with a dark selection
+  cannot both use the same text on top, and dragging over a line you then
+  cannot read is not a selection;
+- a quieter selection for a pane you are not looking at, blended halfway back
+  to the background so it holds its place without competing.
+
+Every shipped theme is now checked for selection contrast, so a new one cannot
+arrive with text you cannot read on it.
+
+**A hollow cursor in the pane you are not typing into.** With several panes
+open, two solid blocks both looked like the live one.
+
 ## 0.52.0 — 2026-08-28 16:37 PDT
 
 **The pane says why it looks the way it does.** A tmux window has one size,

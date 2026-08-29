@@ -430,6 +430,48 @@ def _run(panel) -> int:
             )
             print(f"       terminal background: {painted or '(none set)'}")
 
+            # The pane's scrollbar was the last raw browser control in the
+            # panel. It has to follow the theme like everything else, and it
+            # has to keep following when the theme changes.
+            bar = page.evaluate(
+                """() => {
+                  const vp = document.querySelector('.xterm-viewport');
+                  if (!vp) return null;
+                  const cs = getComputedStyle(vp);
+                  return {width: cs.scrollbarWidth, color: cs.scrollbarColor};
+                }"""
+            )
+            check("the pane's scrollbar is thin, not the browser default",
+                  bool(bar) and bar["width"] == "thin", bar)
+            check("and it is coloured, not auto",
+                  bool(bar) and bar["color"] not in ("", "auto"), bar)
+            before = bar["color"] if bar else ""
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: 'dracula'})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(600)
+            after = page.evaluate(
+                "() => { const v = document.querySelector('.xterm-viewport');"
+                " return v ? getComputedStyle(v).scrollbarColor : ''; }"
+            )
+            check("and it changes with the theme", after and after != before,
+                  {"before": before, "after": after})
+            page.screenshot(path=str(SHOTS / "terminal-dracula.png"))
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: ''})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(400)
+
         print("copy from the pane")
         # A shell has no mouse tracking, so a drag is a selection. The chip
         # and the clipboard are how we know it actually landed.
