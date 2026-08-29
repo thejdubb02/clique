@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.58.0 — 2026-08-29 16:11 PDT
+
+**A phone and a desktop no longer fight over the terminal, and the phone
+wins.** With a desktop panel open on one machine and CLIque open on a phone,
+both attached to the same session, the pane resized itself every three seconds
+forever. The CLI reflowed to 162 columns, then to 42, then back. On the phone
+that made it close to unusable.
+
+A tmux window has one size and every attached client sees it, so two panels of
+different shapes cannot both be right. The guard was `document.hasFocus()`,
+which cannot decide this: it is per browser window, and a desktop on one machine
+and a phone in your hand **both report true, because both are true**. So each
+one saw the window at the other's size on every poll, concluded it had been
+resized out from under it, and claimed it back.
+
+The server settles it now, because it is the only party that can see both
+clients. **A handheld wins.** That is a decision about how the thing is used
+rather than a heuristic: a phone gets picked up to do the thing that could not
+wait, while a desktop panel is often just open. A desktop's resize still sizes
+its own PTY, so it keeps drawing at its own shape and says so in the pane's size
+label, but it does not move the window underneath the phone.
+
+A phone in a pocket does not hold anything: a dark screen or a backgrounded tab
+sends `release` and the desktop has the window back on its next poll, with no
+timer to wait out. A phone that vanishes without saying so, a killed tab or a
+dead battery, expires after 90 seconds. While it is awake it sends a `hold` on
+each poll, which is deliberately cheap - no tmux call, no resize - and exists
+because a phone that already owns the window has nothing left to resize and
+would otherwise let its own claim lapse.
+
+Measured rather than reasoned about, with two real browser contexts attached to
+one session: 5 resize messages in 12 idle seconds before, 0 after, and the
+window holds at the phone's size through a desktop being actively clicked.
+
+**Found with the new `mobile_view.py`**, which renders iOS in WebKit and Android
+in Chromium at real device sizes. Three things it turned up that are not fixed
+here and are now on the list: 34 inputs under 16px, including the prompt box and
+the search field, which make iOS zoom the whole page whenever they are tapped;
+29 tap targets under 44px; and a login page that scrolls sideways at 320px.
+
 ## 0.57.0 — 2026-08-29 10:32 PDT
 
 **Open the same work in another CLI.** Right-click a session and pick *Open in

@@ -778,6 +778,30 @@ pane would otherwise keep the frame it already had until a keystroke. It
 touches one client, so a read-only token may send it: asking for your own
 screen back is not writing to the session.
 
+`{"type": "resize", "cols": n, "rows": n, "handheld": bool}` sets this
+client's PTY and asks for the shared tmux window. **`handheld` decides who
+wins when two panels disagree, and the server settles it, because neither
+client can.** A tmux window has one size that every attached client sees, so a
+desktop panel and a phone cannot both be right; before this each asserted its
+own size on every poll, three seconds apart, forever, and the CLI reflowed
+between 162 and 42 columns for as long as both were open.
+
+A handheld wins. A phone is picked up to do the thing that could not wait; a
+desktop panel is often merely open. While a phone holds the window, a desktop's
+`resize` still sizes its own PTY, so it keeps drawing at its own shape, but it
+does not move the window underneath the phone. `document.hasFocus()` cannot
+decide this: it is per browser window, and a desktop on one machine and a phone
+in a hand both report true, because both are true.
+
+`{"type": "hold"}` and `{"type": "release"}` are how a phone says it is still
+awake and that it has stopped. `hold` is cheap by design, no tmux call and no
+resize, and exists because a phone that already owns the window has nothing
+left to resize and would otherwise let its claim lapse under itself. `release`
+is sent the moment the screen goes dark or the tab is hidden, so a desktop
+never waits out a timer after you put the phone down. A claim with neither goes
+stale after 90 seconds, which is the backstop for a phone that vanishes rather
+than the ordinary path. Both are ignored from a read-only viewer.
+
 `passive=1` attaches a viewer without resizing the shared tmux window, and
 sizes its PTY to the window that is already there. Each window is locked
 to `manual` size — attaching a client cannot move it, only an explicit

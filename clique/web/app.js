@@ -1049,6 +1049,7 @@ async function refresh() {
   renderSidePanel();   // a no-op while the panel is shut
   loadOrphans();
   reclaimSize();
+  holdWindow(!document.hidden);
   // First load pulls history in so the sidebar is complete without anyone
   // having to open the palette to trigger it.
   if (!resumable) loadResumable().then(renderTree);
@@ -6070,7 +6071,7 @@ async function attachNow(id) {
     if (!claimable(cols, rows)) return;
     if (entry.ws && entry.ws.readyState === 1) {
       entry.claimedAt = Date.now();
-      entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
+      entry.ws.send(JSON.stringify({ type: "resize", cols, rows, handheld: handheld() }));
     }
   });
 }
@@ -9327,6 +9328,48 @@ function wireResizer() {
  * fires before the document is focused (Brave and Chrome), so a hasFocus()
  * gate here used to swallow the reclaim and leave the dots until you
  * clicked the pane. */
+/* Who gets to set the shared tmux window when more than one panel is open.
+ *
+ * `document.hasFocus()` was doing this job and cannot: it is per browser
+ * window, and a desktop panel on one machine and a phone in your hand both
+ * report true at the same time, because both are true. So on every poll each
+ * one saw the window at the other's size, decided it had been resized out from
+ * under it, and claimed it back. Two clients, three seconds apart, forever: the
+ * CLI reflows to 162 columns, then to 42, then back, and the phone is unusable
+ * for as long as a desktop panel is open somewhere.
+ *
+ * The rule now is Justin's, and it is a product decision rather than a
+ * heuristic: **a handheld wins.** A phone is only ever picked up to do
+ * something that could not wait, so when one is awake and in front of you it
+ * should own the window and the desktop should get out of the way.
+ *
+ * A phone in a pocket does not count, and does not need to be special-cased:
+ * a backgrounded tab or a dark screen is `document.hidden`, which is already
+ * the first thing this checks.
+ *
+ * A desktop still claims on any real action — selecting a tab, coming back to
+ * the window, clicking into the pane — because that is the moment you are
+ * using it, and it still claims on the poll while it is being used, so a lone
+ * desktop panel recovers from tmux's dot-fill exactly as it did. What it no
+ * longer does is assert its size purely for being open. */
+let lastTouch = 0;
+const TOUCH_ACTIVE_MS = 45000;
+
+for (const kind of ["keydown", "pointerdown", "touchstart"]) {
+  addEventListener(kind, () => { lastTouch = Date.now(); }, { capture: true, passive: true });
+}
+
+/* Touch as the primary input, which is the honest test for "this is a phone
+ * or a tablet". Not the width: a narrow desktop window is still a desktop, and
+ * a tablet in landscape is still the thing that should win. */
+function handheld() {
+  return matchMedia("(pointer: coarse)").matches;
+}
+
+function recentlyUsed() {
+  return Date.now() - lastTouch < TOUCH_ACTIVE_MS;
+}
+
 function claimable(cols, rows) {
   // A collapsed or hidden tab measures as almost nothing. Sending that
   // as the shared window's size is how coming back left a sea of dots.
@@ -9334,9 +9377,36 @@ function claimable(cols, rows) {
   return cols >= 20 && rows >= 8;
 }
 
+/* A phone tells the server it is still here, and tells it when it is not.
+ *
+ * The server decides who owns the shared tmux window and a handheld wins, but
+ * a phone that already owns it has nothing left to resize, so without this the
+ * claim would lapse under an idle phone and the desktop would take the window
+ * back mid-read. And without the release, putting the phone down would lock
+ * the desktop out until the backstop timer expired.
+ *
+ * Only from a phone, only while it is awake and looking at a session. A
+ * desktop never sends either: it is not claiming anything. */
+function holdWindow(alive) {
+  if (!handheld()) return;
+  const entry = terms.get(activeId);
+  if (!entry || !entry.ws || entry.ws.readyState !== 1) return;
+  entry.ws.send(JSON.stringify({ type: alive ? "hold" : "release" }));
+}
+
+document.addEventListener("visibilitychange", () => holdWindow(!document.hidden));
+// A phone locked or swapped away often gets pagehide rather than a clean
+// visibilitychange, and letting go is the half that must not be missed.
+addEventListener("pagehide", () => holdWindow(false));
+
 function reclaimSize(force) {
   if (document.hidden) return;
   if (!force && !document.hasFocus()) return;
+  /* The poll-driven reclaim is the one that fights, so it is the one that
+   * needs a reason. A handheld always has one. A desktop needs to have been
+   * touched recently; being merely open is not a claim on somebody else's
+   * screen. `force` is always a real action and always wins. */
+  if (!force && !handheld() && !recentlyUsed()) return;
   const entry = terms.get(activeId);
   const s = session(activeId);
   if (!entry || !s || !s.alive) return;
@@ -9350,7 +9420,7 @@ function reclaimSize(force) {
   // until you clicked.
   if (!force && s.cols && s.rows && cols === s.cols && rows === s.rows) return;
   entry.claimedAt = Date.now();
-  entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
+  entry.ws.send(JSON.stringify({ type: "resize", cols, rows, handheld: handheld() }));
 }
 
 function refitAll() {

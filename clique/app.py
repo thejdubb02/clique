@@ -1373,6 +1373,53 @@ _PEEKED: dict[str, tuple[tuple, list[str]]] = {}
 _PEEK_LOCK = threading.Lock()
 
 
+#: How long a phone keeps the shared window after it last said anything.
+#: This is only the backstop for a phone that disappears without releasing -
+#: a killed tab, a dead battery, a tunnel. The ordinary case is an explicit
+#: `release` the moment the screen goes dark, so this never has to be waited
+#: out. A visible phone refreshes it every poll with `hold`.
+HANDHELD_HOLD = 90.0
+#: mux name -> when a handheld last claimed the window.
+_handheld: dict[str, float] = {}
+_handheld_lock = threading.Lock()
+
+
+def _may_size_window(mux: str, handheld: bool) -> bool:
+    """Whether this client gets to resize the *shared* tmux window.
+
+    A tmux window has one size and every client attached sees it, so two
+    panels of different shapes cannot both be right. Until now both simply
+    asserted their own size on every poll, three seconds apart, forever: the
+    CLI reflowed to 162 columns, then to 42, then back, and a phone was
+    unusable for as long as a desktop panel was open somewhere.
+
+    The rule is that a handheld wins, and it is a decision about how the thing
+    is used rather than a heuristic. A phone is picked up to do the thing that
+    could not wait; a desktop panel is often just open. So while a phone is
+    claiming, a desktop's resize still sizes its own PTY - it keeps drawing at
+    its own shape - but it does not move the window under the phone.
+
+    It has to be decided here because neither client can decide it. A browser
+    cannot see the other one, and `document.hasFocus()` is per window: a
+    desktop on one machine and a phone in your hand both report true, because
+    both are true. The server is the only party that sees both.
+
+    A phone in a pocket never gets here at all: a backgrounded tab or a dark
+    screen is `document.hidden`, and the panel does not claim while hidden.
+    """
+    now = time.time()
+    with _handheld_lock:
+        # Anything older than the hold is finished, and pruning here keeps a
+        # long-lived panel from accumulating an entry per session it ever
+        # opened on a phone.
+        for name in [k for k, at in _handheld.items() if now - at > HANDHELD_HOLD]:
+            del _handheld[name]
+        if handheld:
+            _handheld[mux] = now
+            return True
+        return mux not in _handheld
+
+
 def _terminal_size(cols, rows) -> tuple[int, int]:
     """Clamp a client-supplied terminal size, tolerating rubbish."""
 
@@ -2763,8 +2810,23 @@ class Handler(BaseHTTPRequestHandler):
             # Tiny sizes are a collapsed or hidden tab measuring itself,
             # not a phone — those still clear 20x8. Applying them is how
             # a background reconnect left a screen of dots.
-            if may_write:
+            if may_write and _may_size_window(session.mux, bool(message.get("handheld"))):
                 tmux.resize_window(session.mux, cols, rows, session.socket)
+        elif kind == "hold":
+            # A handheld saying it is still here and still awake. Cheap on
+            # purpose: no tmux call, no resize, just the timestamp. Needed
+            # because a phone that already owns the window has nothing to
+            # resize and would otherwise let the hold lapse under itself.
+            if may_write:
+                _may_size_window(session.mux, True)
+        elif kind == "release":
+            # A phone going into a pocket. The timer below is the backstop for
+            # one that vanishes without saying so; this is the ordinary case,
+            # and it is what stops a desktop waiting out a two-minute lockout
+            # after you put the phone down.
+            if may_write:
+                with _handheld_lock:
+                    _handheld.pop(session.mux, None)
         elif kind == "refresh":
             # Repaint this browser's own view and nobody else's. The pane can
             # come back from a layout change the same size it went in at, and

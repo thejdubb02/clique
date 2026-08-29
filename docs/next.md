@@ -29,7 +29,24 @@ part of this that has never actually been used on a phone.
 
 ## Now — daily drive
 
-1. **Use it on a phone, then fix what is wrong.** Everything mobile has been
+1. **The mobile pass, and it is no longer guesswork.**
+   `agent-infra/tools/mobile_view.py` renders iOS in WebKit and Android in
+   Chromium at real device sizes and pixel ratios, so these are measured rather
+   than suspected. In the order they hurt:
+
+   - **34 inputs under 16px**, including `#prompt` and `#q`. iOS zooms the whole
+     page when one is focused, so every tap on the prompt shifts the layout.
+     One rule fixes it and the only cost is that the prompt looks slightly
+     larger on a desktop.
+   - **29 tap targets under 44px.** The key row and the header buttons.
+   - **The login page scrolls sideways at 320px**, and its password field is
+     14px, so iOS zooms it too. First thing anyone meets on a phone.
+
+   The resize fight that made it unusable is fixed in 0.58.0; this is what is
+   left. Still worth half an hour with a real handset afterwards, because the
+   tool cannot see the notch and does not run in standalone mode.
+
+1. **(done, kept for the reasoning) Use it on a phone, then fix what is wrong.** Everything mobile has been
    built against a 390px browser window and a screenshot. Nobody has driven it
    with a thumb on real hardware, and until somebody has, the rest of the phone
    list is guesswork. Half an hour with the real thing is worth more than any

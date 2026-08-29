@@ -20,6 +20,7 @@ from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from clique import app as app_mod
 from clique import attention, files, gitinfo, notify, services, termstrip, tmux, working
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
@@ -334,6 +335,40 @@ def main() -> int:
     check("and the next read has the branch", got["branch"] == "visual" and got["dirty"] == 1, got)
     shutil.rmtree(plain, ignore_errors=True)
     shutil.rmtree(repo, ignore_errors=True)
+
+    print("who owns the shared tmux window")
+    # A tmux window has one size and every attached client sees it, so two
+    # panels of different shapes cannot both be right. This used to be settled
+    # by document.hasFocus(), which is per browser window: a desktop on one
+    # machine and a phone in your hand both report true, so both claimed it
+    # every poll and the CLI reflowed between 162 and 42 columns forever.
+    from clique.app import _handheld, _may_size_window
+
+    _handheld.clear()
+    check("with no phone about, a desktop sizes the window",
+          _may_size_window("sm-test", False) is True)
+    check("a phone always may", _may_size_window("sm-test", True) is True)
+    check("and once it has, the desktop may not",
+          _may_size_window("sm-test", False) is False)
+    check("the phone still may, repeatedly",
+          _may_size_window("sm-test", True) and _may_size_window("sm-test", True))
+    check("another session is unaffected",
+          _may_size_window("sm-other", False) is True)
+
+    # Releasing is the ordinary way out: a phone going into a pocket should
+    # not lock a desktop out until a timer expires.
+    _handheld.pop("sm-test", None)
+    check("after the phone lets go, the desktop may again",
+          _may_size_window("sm-test", False) is True)
+
+    # The backstop, for a phone that vanishes without saying so.
+    _handheld.clear()
+    _may_size_window("sm-test", True)
+    _handheld["sm-test"] = time.time() - (app_mod.HANDHELD_HOLD + 1)
+    check("a claim older than the hold has expired",
+          _may_size_window("sm-test", False) is True)
+    check("and the stale entry is pruned", "sm-test" not in _handheld, dict(_handheld))
+    _handheld.clear()
 
     print("finding a project by name")
     import tempfile
