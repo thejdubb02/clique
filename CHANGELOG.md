@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.55.0 — 2026-08-28 21:26 PDT
+
+**Seven themes with somebody in them.** Plumber, Triforce, Fellowship, Drizzt,
+Pacman, Tetris and Aincrad, each a full palette plus a pixel figure watermarked
+into the bottom-right of the pane. Sixteen presets now, up from nine.
+
+**The figure is behind the text, not over it, and that is a real claim rather
+than a low opacity.** The layer is composited with `lighten` on a dark theme and
+`darken` on a light one. Both take a per-channel extreme, so wherever a glyph is
+painted the glyph wins the comparison and comes through untouched: a line drawn
+straight across the character is exactly as readable as it would be on a bare
+pane. The figure only fills the space between. Doing it the other way round,
+painting underneath a transparent terminal, would have cost a renderer path we
+would rather not own.
+
+It takes itself away on a pane under 720px and a window under 460px tall, so a
+phone and a pane squeezed between the sidebar and the side panel both get their
+corner back. That is asked of the **pane**, not the window: with both panels out
+a 1600px window is a 700px pane, and a window query would be wrong by exactly
+the width of the sidebar. Same mistake the status bar's readings made once.
+
+One checkbox under the theme picker turns them all off.
+
+**Adding a character is still just a block in `themes.js`.** A palette and a
+grid of one character per cell, which becomes one SVG data URI built once per
+theme and cached as a background image after that. Runs of the same colour
+collapse into a single rect, which takes a figure from a couple of hundred
+shapes to about forty.
+
+`tools/theme_check.py` now reads those grids and fails on a row that is not the
+declared width, a cell with no colour behind it, a colour that is never drawn,
+and a colour too near black or white to survive the blend. The last one is not
+theoretical: it caught four on the first run, including a glove and a pair of
+boots that would have been drawn and then not been there.
+
+`tools/visual_check.py` opens a pane with a figure in it and measures the blend
+mode, the opacity, that it cannot be clicked, that it stays inside the pane, and
+that it disappears and comes back with the width. None of that is visible to a
+check that reasons about the code, which is the whole reason it is in the
+browser suite.
+
 ## 0.54.1 — 2026-08-28 18:17 PDT
 
 **Plan usage is a pair of meters now, not another number in the machine

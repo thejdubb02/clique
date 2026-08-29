@@ -504,6 +504,93 @@ def _run(panel) -> int:
             )
             page.wait_for_timeout(400)
 
+            # The character a theme carries. Nothing else in this suite can see
+            # it: it is a background image on an element with no text, sized as
+            # a percentage of a pane, blended into the terminal. Every part of
+            # that is invisible to a test that reasons about the code.
+            print("the theme's character in the corner")
+            wide = page.viewport_size or {"width": 1440, "height": 900}
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: 'plumber', theme_art: true})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(600)
+            art = page.evaluate(
+                """() => {
+                  const el = document.querySelector('#themeArt');
+                  if (!el) return null;
+                  const cs = getComputedStyle(el);
+                  const box = el.getBoundingClientRect();
+                  const pane = document.querySelector('#termwrap').getBoundingClientRect();
+                  return {
+                    display: cs.display, blend: cs.mixBlendMode,
+                    opacity: parseFloat(cs.opacity), image: cs.backgroundImage.slice(0, 40),
+                    events: cs.pointerEvents,
+                    w: box.width, h: box.height,
+                    insidePane: box.right <= pane.right + 1 && box.bottom <= pane.bottom + 1,
+                  };
+                }"""
+            )
+            check("a theme with a figure draws one", bool(art) and art["display"] != "none", art)
+            check("it is an image, not an element full of text",
+                  bool(art) and art["image"].startswith('url("data:image/svg+xml'), art)
+            check("it is blended rather than laid over the text",
+                  bool(art) and art["blend"] == "lighten", art)
+            check("faint enough to read through",
+                  bool(art) and 0 < art["opacity"] <= 0.2, art)
+            check("and it cannot be clicked",
+                  bool(art) and art["events"] == "none", art)
+            check("it stays inside the pane",
+                  bool(art) and art["insidePane"], art)
+            check("and it is big enough to be a character, not a speck",
+                  bool(art) and art["h"] > 80 and art["w"] > 60, art)
+            page.screenshot(path=str(SHOTS / "theme-art.png"))
+
+            # The gate is the pane's width, not the window's. A window query
+            # would be wrong by exactly the width of the sidebar, which is the
+            # mistake the status bar's readings already made once.
+            page.set_viewport_size({"width": 700, "height": wide["height"]})
+            page.wait_for_timeout(500)
+            narrow = page.evaluate(
+                "() => getComputedStyle(document.querySelector('#themeArt')).display"
+            )
+            check("a narrow pane takes it away", narrow == "none", narrow)
+            page.set_viewport_size(wide)
+            page.wait_for_timeout(500)
+            back = page.evaluate(
+                "() => getComputedStyle(document.querySelector('#themeArt')).display"
+            )
+            check("and gives it back with the room", back != "none", back)
+
+            off = page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme_art: false})});
+                  await refresh();
+                  const el = document.querySelector('#themeArt');
+                  return {hidden: el.hidden,
+                          shown: getComputedStyle(el).display !== 'none'};
+                }"""
+            )
+            check("turning it off turns it off", bool(off) and off["hidden"], off)
+
+            plain = page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: '', theme_art: true})});
+                  await refresh();
+                  return document.querySelector('#themeArt').hidden;
+                }"""
+            )
+            check("a theme with no figure draws nothing", plain is True, plain)
+            page.wait_for_timeout(300)
+
         print("copy from the pane")
         # A shell has no mouse tracking, so a drag is a selection. The chip
         # and the clipboard are how we know it actually landed.

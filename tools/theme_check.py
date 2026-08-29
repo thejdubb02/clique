@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -121,8 +122,70 @@ def call(
             return exc.code, {"error": raw.decode("utf-8", "replace")[:200]}
 
 
+
+# The `art` grids in web/themes.js. Parsed with a regex rather than a JS engine
+# because that is the whole dependency saved, and the shape being checked is
+# the shape of the literal: a palette, a width, a height, and rows of one
+# character per cell. A row one cell short shifts every pixel after it and
+# draws a figure that is wrong in a way nothing else here would notice, since
+# the panel renders a ragged grid perfectly happily.
+ART = re.compile(
+    r"art:\s*\{\s*w:\s*(\d+),\s*h:\s*(\d+),\s*"
+    r"pal:\s*\{(.*?)\},\s*rows:\s*\[(.*?)\],",
+    re.S,
+)
+# Split on the theme headers first. Matching name and art in one pattern let a
+# theme with no art of its own claim the next theme's block, so a failure named
+# the wrong theme and sent you looking in the wrong place.
+BLOCK = re.compile(r"^  \"?(\w*)\"?:\s*\{$", re.M)
+
+
+def check_art() -> None:
+    text = (ROOT / "clique" / "web" / "themes.js").read_text()
+    heads = list(BLOCK.finditer(text))
+    found = 0
+    for i, head in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        match = ART.search(text, head.end(), end)
+        if not match:
+            continue
+        name = head.group(1) or "(default)"
+        width, height, palette, body = match.groups()
+        found += 1
+        wide, tall = int(width), int(height)
+        pal = set(re.findall(r'(\w+):\s*"#', palette))
+        rows = re.findall(r'"([^"]*)"', body)
+        check(f"{name}: {tall} rows, as declared", len(rows) == tall, len(rows))
+        ragged = [i for i, row in enumerate(rows) if len(row) != wide]
+        check(f"{name}: every row is {wide} cells", not ragged, ragged)
+        unknown = sorted({c for row in rows for c in row} - pal - {"."})
+        check(f"{name}: every cell has a colour", not unknown, unknown)
+        check(f"{name}: no colour goes unused", not pal - set("".join(rows)),
+              sorted(pal - set("".join(rows))))
+        # A near-black pixel is invisible under `lighten` on a dark theme and a
+        # near-white one is invisible under `darken` on a light theme. Either
+        # way it is a cell that was drawn and cannot be seen, which is how a
+        # figure quietly loses a hand.
+        flat = [
+            token for token, hexval in re.findall(r'(\w+):\s*"(#[0-9a-fA-F]{6})"', palette)
+            if not 0.04 < _relative(hexval) < 0.86
+        ]
+        check(f"{name}: every colour is a mid-tone", not flat, flat)
+    check("themes.js carries the character art", found >= 7, found)
+
+
+def _relative(hexval: str) -> float:
+    """WCAG relative luminance, the same definition app.js uses."""
+    parts = [int(hexval[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in parts]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
 def main() -> int:
     proc = _panel()
+    print("the pixel figures a theme can carry")
+    check_art()
+
     try:
         cookie = Auth(PASSWORD, HOME / "secret").issue()
 

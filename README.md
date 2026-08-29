@@ -13,7 +13,7 @@
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/thejdubb02/clique/actions/workflows/tests.yml"><img src="https://github.com/thejdubb02/clique/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.54.1-A855F7?style=flat-square" alt="0.54.1"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.55.0-A855F7?style=flat-square" alt="0.55.0"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
   <a href="https://buymeacoffee.com/jdubb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
   <a href="#support-the-dev"><img src="https://img.shields.io/badge/Donate-BTC%20%7C%20SHIB%20%7C%20DOGE-5FA8F5?style=flat-square" alt="Donate"></a>
@@ -80,7 +80,8 @@ New here? The [user guide](docs/guide.md) walks through everything below.
 | **Waiting on you** | Three tiers: tmux's clock, regexes you declare per CLI, and a `POST .../attention` a session fires from your own hook. Nothing here knows which vendor is talking. |
 | **Unread** | A dot on anything that produced output while you were elsewhere, and a rule in the pane where you stopped reading. |
 | **Which CLI** | The pane edge, the active tab and the prompt box carry the CLI's colour, so switching tabs tells you where you are typing. Colours editable per CLI. |
-| **Themes** | Nine presets, light / dark / system, custom CSS in three slots, independent font sizes, a monospace picker that falls back on every OS. The terminal wears the theme too, scrollbar and cursor and selection included. |
+| **Themes** | Sixteen presets, light / dark / system, custom CSS in three slots, independent font sizes, a monospace picker that falls back on every OS. The terminal wears the theme too, scrollbar and cursor and selection included. |
+| **Characters** | Seven of the presets (Plumber, Triforce, Fellowship, Drizzt, Pacman, Tetris, Aincrad) carry a pixel figure watermarked into the corner of the pane. It is composited so the text always wins the blend, which means a glyph drawn over it is exactly as readable as it would be on a bare pane, and it takes itself away on a narrow pane and on a phone. One switch turns them all off. |
 | **Make a theme** | Describe one ("a quiet winter morning, muted blues") and a model builds it, applies it, and keeps it on the server so it follows you to another device. It supplies the nine colours that need taste; the other eighteen, all sixteen ANSI colours with their brights, are derived and pushed until they can be read, so a generated theme cannot leave you somewhere you cannot see to change it back. Runs on your own key. |
 | **Your own key** | Bring an OpenAI-compatible or Anthropic endpoint (OpenRouter, Groq, Together, a local Ollama) under Settings → Models. Keys are encrypted at rest and never returned by any endpoint. Each feature can point at a different provider. |
 | **API** | Every action in the panel is an HTTP call, with bearer tokens and read-only ones. Full reference in [API.md](API.md), kept honest by a drift check in the test suite. |

@@ -154,4 +154,278 @@ window.CLIQUE_THEMES = {
             brightBlack: "#002b36", brightRed: "#cb4b16", brightGreen: "#586e75", brightYellow: "#657b83",
             brightBlue: "#839496", brightMagenta: "#6c71c4", brightCyan: "#93a1a1", brightWhite: "#fdf6e3" },
   },
+
+  /* ------------------------------------------------------------ characters
+   *
+   * The seven below carry an `art` block as well as a palette: a chunky pixel
+   * figure watermarked into the bottom-right of the pane, behind the text.
+   *
+   * The format is a palette and a grid. One character per cell, `.` for a
+   * hole, and every row exactly `w` wide — tools/theme_check.py fails the
+   * build otherwise, because a ragged row draws a ragged character and
+   * nothing else would catch it.
+   *
+   * Two rules decide the colours, and both come from how it is composited.
+   * The layer blends with `lighten` on a dark theme and `darken` on a light
+   * one, which is what puts it *behind* the text rather than over it: text is
+   * the brightest thing on a dark pane and the darkest on a light one, so it
+   * wins the blend either way and stays exactly as legible as it was.
+   *
+   *   1. Every colour is a mid-tone. Near-black detail is invisible on a dark
+   *      theme and near-white detail is invisible on a light one, so a black
+   *      coat gets lifted to slate and reads as black anyway at this opacity.
+   *   2. Detail below about two cells is noise. This is a watermark at
+   *      thirteen percent, not a portrait: silhouette and flat blocks survive,
+   *      single-pixel eyes mostly do not.
+   *
+   * Drawn here rather than borrowed. These are our own figures in the spirit
+   * of the thing each theme is named for, which is also the only version of
+   * this that is ours to ship. */
+
+  plumber: {
+    label: "Plumber", base: "dark",
+    panel: { bg: "#141a2e", panel: "#1b2340", row: "#25304f", sel: "#33406b",
+             field: "#1f2846", fg: "#e8ecf7", dim: "#8d99c0", line: "#2a3457",
+             accent: "#e5372c" },
+    term: { background: "#141a2e", foreground: "#e8ecf7", cursor: "#f2c14e",
+            selectionBackground: "#33406b",
+            black: "#1b2340", red: "#e5372c", green: "#4caf50", yellow: "#f2c14e",
+            blue: "#3d7bd9", magenta: "#d95f9e", cyan: "#49c4d6", white: "#dbe2f2",
+            brightBlack: "#5b688f", brightRed: "#ff5c4d", brightGreen: "#6ede72",
+            brightYellow: "#ffd76a", brightBlue: "#5f9dff", brightMagenta: "#ff86c2",
+            brightCyan: "#6fe0ef", brightWhite: "#ffffff" },
+    art: {
+      w: 14, h: 16,
+      pal: { R: "#e5372c", M: "#7a4a22", S: "#f2b98d", E: "#6b4326",
+             B: "#3d7bd9", Y: "#f2c14e", W: "#d8dfea", K: "#8a5a2b" },
+      rows: [
+        "....RRRRRR....",
+        "...RRRRRRRR...",
+        "...MMMSSSSS...",
+        "..MMSSSSSSSS..",
+        "..MSSESSSESS..",
+        "..MSSSSSSSSS..",
+        "...MMMMMMMM...",
+        "....SSSSSS....",
+        "..RRRBBBRRR...",
+        ".WRRRBYBRRRW..",
+        ".WRRBBBBBRRW..",
+        ".WRRBBBBBRRW..",
+        "...BBB.BBB....",
+        "...BBB.BBB....",
+        "..KKKK.KKKK...",
+        ".KKKKK.KKKKK..",
+      ],
+    },
+  },
+
+  triforce: {
+    label: "Triforce", base: "dark",
+    panel: { bg: "#101a14", panel: "#16241b", row: "#1e3125", sel: "#2b4a33",
+             field: "#1a2b20", fg: "#e4f0e2", dim: "#87a58e", line: "#22382a",
+             accent: "#f2c14e" },
+    term: { background: "#101a14", foreground: "#dcecd8", cursor: "#f2c14e",
+            selectionBackground: "#2b4a33",
+            black: "#16241b", red: "#d9534f", green: "#3fa34d", yellow: "#e0b13c",
+            blue: "#3f8fd0", magenta: "#b06fc4", cyan: "#4bb8a8", white: "#cfe0cb",
+            brightBlack: "#4b6b54", brightRed: "#ff7a72", brightGreen: "#63d477",
+            brightYellow: "#ffd76a", brightBlue: "#68b6f5", brightMagenta: "#d59aec",
+            brightCyan: "#6fe0cd", brightWhite: "#f2fbf0" },
+    art: {
+      w: 18, h: 16,
+      pal: { G: "#3fa34d", H: "#e8c15a", S: "#f0c49b", E: "#6b5a3a",
+             L: "#2f6fd0", Y: "#f2c14e", B: "#8a5a2b", D: "#dfe6ec" },
+      rows: [
+        ".......GGG........",
+        "......GGGGG.......",
+        ".....GGGGGGG..D...",
+        ".....HHSSSSH..D...",
+        ".....HSESESH..D...",
+        ".....HSSSSSH..D...",
+        "......SSSSS...D...",
+        "..LLL.GGGGG...D...",
+        ".LLLLLGGGGG...D...",
+        ".LLYLLGGGGG..DDD..",
+        ".LLLLLGGGGG...B...",
+        "..LLL.GGGGG...B...",
+        "......BBBBB.......",
+        "......GGGGG.......",
+        "......SS.SS.......",
+        ".....BBB.BBB......",
+      ],
+    },
+  },
+
+  /* Named for the company rather than the ring, because the ring is the part
+   * that is drawn and a theme called after it would be the one thing on this
+   * list claiming to be the artefact itself. */
+  fellowship: {
+    label: "Fellowship", base: "dark",
+    panel: { bg: "#15130f", panel: "#1c1a15", row: "#26231c", sel: "#3a3427",
+             field: "#201d17", fg: "#e8dcc0", dim: "#9a8f76", line: "#2b271f",
+             accent: "#c9a227" },
+    term: { background: "#15130f", foreground: "#e0d4b8", cursor: "#c9a227",
+            selectionBackground: "#3a3427",
+            black: "#1c1a15", red: "#b5453c", green: "#7d8c4a", yellow: "#c9a227",
+            blue: "#5a7a8c", magenta: "#96637f", cyan: "#6d9188", white: "#cdc1a4",
+            brightBlack: "#5c5545", brightRed: "#e0685c", brightGreen: "#a8ba6a",
+            brightYellow: "#eac54f", brightBlue: "#84a7bd", brightMagenta: "#c08fa8",
+            brightCyan: "#95bdb2", brightWhite: "#f5ecd8" },
+    art: {
+      w: 16, h: 16,
+      pal: { Y: "#c9a227", L: "#f0d27a" },
+      rows: [
+        "....YYYYYYYY....",
+        "..YYYLLLLLLYYY..",
+        ".YYLL......LLYY.",
+        ".YLL........LLY.",
+        "YYL..........LYY",
+        "YL............LY",
+        "YL............LY",
+        "YL............LY",
+        "YL............LY",
+        "YL............LY",
+        "YL............LY",
+        "YYL..........LYY",
+        ".YLL........LLY.",
+        ".YYLL......LLYY.",
+        "..YYYLLLLLLYYY..",
+        "....YYYYYYYY....",
+      ],
+    },
+  },
+
+  drizzt: {
+    label: "Drizzt", base: "dark",
+    panel: { bg: "#0f0c18", panel: "#171226", row: "#211a33", sel: "#332a52",
+             field: "#1a1430", fg: "#e6e1f5", dim: "#8f86b5", line: "#241d3a",
+             accent: "#b39ddb" },
+    term: { background: "#0f0c18", foreground: "#ded8f0", cursor: "#b39ddb",
+            selectionBackground: "#332a52",
+            black: "#171226", red: "#c8546b", green: "#5aa88b", yellow: "#c9a86a",
+            blue: "#6f7fd0", magenta: "#a375d6", cyan: "#5fb0c9", white: "#c9c2e0",
+            brightBlack: "#544a7a", brightRed: "#ef7a90", brightGreen: "#79d4ad",
+            brightYellow: "#e8ca8c", brightBlue: "#93a3f5", brightMagenta: "#c79bf5",
+            brightCyan: "#84d6ef", brightWhite: "#f2eefc" },
+    art: {
+      w: 18, h: 15,
+      pal: { D: "#cfd6e4", W: "#e8e4f0", P: "#6b5e94", V: "#b39ddb",
+             C: "#413a63", K: "#5a5180" },
+      rows: [
+        "..D............D..",
+        "..D....WWWW....D..",
+        "..D...WWWWWW...D..",
+        "..D...WPPPPW...D..",
+        "..D...WPVPVW...D..",
+        "..D...WPPPPW...D..",
+        ".DDD...PPPP...DDD.",
+        "..K.....CC.....K..",
+        "..K..CCCCCCCC..K..",
+        "....CCCCCCCCCC....",
+        "....CCCCCCCCCC....",
+        ".....CCCCCCCC.....",
+        ".....CCC..CCC.....",
+        ".....KKK..KKK.....",
+        "....KKKK..KKKK....",
+      ],
+    },
+  },
+
+  pacman: {
+    label: "Pacman", base: "dark",
+    panel: { bg: "#08080f", panel: "#101024", row: "#181838", sel: "#22225a",
+             field: "#12122c", fg: "#f0f0d8", dim: "#8a8ab0", line: "#1c1c40",
+             accent: "#ffd93b" },
+    term: { background: "#08080f", foreground: "#f0e6c8", cursor: "#ffd93b",
+            selectionBackground: "#22225a",
+            black: "#101024", red: "#ff4d4d", green: "#5ad46a", yellow: "#ffd93b",
+            blue: "#2b5df0", magenta: "#ff9ecb", cyan: "#5adcf0", white: "#e8e8d0",
+            brightBlack: "#4a4a80", brightRed: "#ff7a7a", brightGreen: "#84f08f",
+            brightYellow: "#ffe870", brightBlue: "#5f8bff", brightMagenta: "#ffb8dc",
+            brightCyan: "#8aeaff", brightWhite: "#ffffff" },
+    art: {
+      w: 16, h: 9,
+      pal: { Y: "#ffd93b", G: "#ff9ecb", E: "#dfe2f5", D: "#e8dcae" },
+      rows: [
+        "..YYYY.....GGG..",
+        ".YYYYYY...GGGGG.",
+        "YYYYY.....GEGEG.",
+        "YYY.......GEGEG.",
+        "YY...D.D..GGGGG.",
+        "YYY.......GGGGG.",
+        "YYYYY.....GGGGG.",
+        ".YYYYYY...GGGGG.",
+        "..YYYY....G.G.G.",
+      ],
+    },
+  },
+
+  /* The one theme here whose palette is not a costume: the seven ANSI slots
+   * that matter are the seven tetrominoes, which happen to be seven colours
+   * chosen decades ago to be told apart at a glance under pressure. */
+  tetris: {
+    label: "Tetris", base: "dark",
+    panel: { bg: "#0d1226", panel: "#141b36", row: "#1d2749", sel: "#2a3766",
+             field: "#17203f", fg: "#e6ecff", dim: "#8996c4", line: "#212c53",
+             accent: "#31c7de" },
+    term: { background: "#0d1226", foreground: "#dfe6ff", cursor: "#31c7de",
+            selectionBackground: "#2a3766",
+            black: "#141b36", red: "#e5504a", green: "#4fc26b", yellow: "#f2d03b",
+            blue: "#3f7fe0", magenta: "#a558d0", cyan: "#31c7de", white: "#ccd6f0",
+            brightBlack: "#4b5788", brightRed: "#ff7a72", brightGreen: "#74e08c",
+            brightYellow: "#ffe66a", brightBlue: "#6fa5ff", brightMagenta: "#c684ef",
+            brightCyan: "#6ce4f5", brightWhite: "#f2f6ff" },
+    /* Deliberately coarse: a tetromino is a four-cell shape and drawing it at
+     * fourteen cells wide would only make the cells smaller, not the pieces
+     * clearer. Seven across means the blocks land about the size they were. */
+    art: {
+      w: 9, h: 7,
+      pal: { I: "#31c7de", T: "#a558d0", S: "#4fc26b", O: "#f2d03b" },
+      rows: [
+        "..I......",
+        "..I..OO..",
+        "..I..OO..",
+        "..I......",
+        ".........",
+        ".TTT..SS.",
+        "..T..SS..",
+      ],
+    },
+  },
+
+  aincrad: {
+    label: "Aincrad", base: "dark",
+    panel: { bg: "#0a0d14", panel: "#111620", row: "#1a2130", sel: "#26334a",
+             field: "#141a26", fg: "#e2e9f2", dim: "#8595a8", line: "#1d2534",
+             accent: "#4fc3f7" },
+    term: { background: "#0a0d14", foreground: "#dce5f0", cursor: "#4fc3f7",
+            selectionBackground: "#26334a",
+            black: "#111620", red: "#e0505f", green: "#4fbf8b", yellow: "#e0b451",
+            blue: "#4a8fe0", magenta: "#9d7ae0", cyan: "#4fc3f7", white: "#c4d0de",
+            brightBlack: "#4b5a6e", brightRed: "#ff707d", brightGreen: "#6fdfa8",
+            brightYellow: "#ffd479", brightBlue: "#74b1ff", brightMagenta: "#bfa0ff",
+            brightCyan: "#8adcff", brightWhite: "#f0f6ff" },
+    art: {
+      w: 18, h: 15,
+      pal: { D: "#e8eef6", B: "#4fc3f7", H: "#3d4356", S: "#f2cdb0",
+             E: "#6b7280", C: "#343a4e", T: "#4fc3f7", K: "#343b4e" },
+      rows: [
+        "..D............B..",
+        "..D....HHHH....B..",
+        "..D...HHHHHH...B..",
+        "..D...HSSSSH...B..",
+        "..D...HSEESH...B..",
+        "..D...HSSSSH...B..",
+        ".DDD...SSSS...BBB.",
+        "..K.CCCCCCCCCC.K..",
+        "..K.CCCCTTCCCC.K..",
+        "...CCCCCTTCCCCC...",
+        "...CCCCCTTCCCCC...",
+        "....CCCCCCCCCC....",
+        ".....CCC..CCC.....",
+        ".....CCC..CCC.....",
+        "....KKKK..KKKK....",
+      ],
+    },
+  },
 };

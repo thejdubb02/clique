@@ -265,6 +265,13 @@ like the sidebar width stay local.
 - **Images:** which folders to watch for the artifact gallery.
 - **Custom CSS:** three blocks, applied to everything, the panel only, or the
   terminal only, for when a theme is not quite it.
+
+  Seven of the presets carry a **character**: a pixel figure in the bottom-right
+  of the pane, behind the text. Plumber, Triforce, Fellowship, Drizzt, Pacman,
+  Tetris and Aincrad. It is blended rather than laid over, so text always wins
+  and a line drawn across the figure is exactly as readable as it would be on a
+  bare pane, and it removes itself on a pane too narrow to spare the corner and
+  on a phone. The checkbox under the theme picker turns it off everywhere.
 - **Models:** OpenAI-compatible or Anthropic providers for the optional model
   features. Keys are encrypted at rest.
 - **API:** manage the tokens that drive CLIque over HTTP.

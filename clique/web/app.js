@@ -6673,6 +6673,81 @@ function derived(theme) {
   };
 }
 
+/* ------------------------------------------------------------------ theme art
+ *
+ * A theme may carry a pixel figure, watermarked into the bottom-right of the
+ * pane. The grid in themes.js becomes one SVG data URI, built once per theme
+ * and cached: it is a background-image after that, so a repaint costs the
+ * browser nothing and there is no second element in the terminal's way.
+ *
+ * Runs of the same colour on a row collapse into one rect, which takes a
+ * fourteen-wide figure from a couple of hundred rects to about forty. That
+ * matters only because the whole thing then fits in a URI small enough to sit
+ * in a style property without being worth a file.
+ *
+ * It sits *above* the terminal in the stack and still reads as being behind
+ * the text, which is the trick worth understanding: the layer is composited
+ * with `lighten` on a dark theme and `darken` on a light one. Both are
+ * per-channel extremes, so wherever a glyph is painted the glyph wins the
+ * comparison and comes through untouched, and the figure only fills the space
+ * between. Text stays exactly as legible as it was with no figure at all.
+ * Painting it underneath instead would mean making the terminal's own
+ * background transparent, which costs a renderer path we would rather not own.
+ */
+const _artUrls = new Map();
+
+function themeArt(theme) {
+  let built = _artUrls.get(theme);
+  if (built) return built;
+  const art = theme && theme.art;
+  built = { url: "", ratio: 1 };
+  if (art && art.rows && art.rows.length) {
+    const pal = art.pal || {};
+    const w = art.w || art.rows[0].length;
+    const h = art.h || art.rows.length;
+    const rects = [];
+    art.rows.forEach((row, y) => {
+      let x = 0;
+      while (x < row.length) {
+        const ch = row[x];
+        let run = 1;
+        while (x + run < row.length && row[x + run] === ch) run++;
+        if (pal[ch]) {
+          rects.push(`<rect x="${x}" y="${y}" width="${run}" height="1" fill="${pal[ch]}"/>`);
+        }
+        x += run;
+      }
+    });
+    if (rects.length) {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' +
+        `${w} ${h}" shape-rendering="crispEdges">${rects.join("")}</svg>`;
+      built = { url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`, ratio: w / h };
+    }
+  }
+  _artUrls.set(theme, built);
+  return built;
+}
+
+/* Put the current theme's figure in the corner, or take it away.
+ *
+ * Opacity differs by base on purpose. `lighten` on a dark pane adds light to
+ * a nearly black field and is seen readily; `darken` on a white one has more
+ * headroom before it starts competing with the text, and the same number
+ * looks like a stain rather than a watermark. */
+function paintThemeArt(theme) {
+  const el = $("#themeArt");
+  if (!el) return;
+  const light = (theme.base || "dark") === "light";
+  const { url, ratio } = state.settings.theme_art === false
+    ? { url: "", ratio: 1 } : themeArt(theme);
+  el.hidden = !url;
+  if (!url) return;
+  el.style.backgroundImage = url;
+  el.style.aspectRatio = String(ratio);
+  el.style.mixBlendMode = light ? "darken" : "lighten";
+  el.style.opacity = light ? "0.10" : "0.13";
+}
+
 /* Monospace stacks that exist on Windows, Mac and Linux.
  *
  * Each id is a chain, not a single face: the first font that is actually
@@ -6756,6 +6831,7 @@ function applySettings() {
   if (!$("#settings").hidden) renderThemeMaker();
   root.style.setProperty("--font-panel", (s.font_panel || 13) + "px");
   paintFontChrome();
+  paintThemeArt(theme);
 
   /* Applied when it changes, not on every poll.
    *
@@ -7069,6 +7145,7 @@ function openSettings() {
     secretBox.placeholder = s.webhook_secret_set ? "set — leave blank to keep" : "";
   }
   $("#setCliTint").checked = s.cli_tint !== false;
+  $("#setThemeArt").checked = s.theme_art !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
   // into, and a poll landing mid-edit would move their cursor.
@@ -7334,6 +7411,7 @@ function wire() {
     }
   };
   $("#setCliTint").onchange = (ev) => saveSettings({ cli_tint: ev.target.checked });
+  $("#setThemeArt").onchange = (ev) => saveSettings({ theme_art: ev.target.checked });
   $("#setArtShow").onchange = (ev) => {
     saveSettings({ artifacts_show: ev.target.checked });
     pollArtifacts();

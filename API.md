@@ -723,6 +723,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `active_tab` | session id | Which one was in front |
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
 | `cli_tint` | bool | Colour the pane edge, active tab and prompt box with the active CLI's colour |
+| `theme_art` | bool | Draw the theme's pixel character in the bottom-right of the pane, behind the text. Only the seven character themes (`plumber`, `triforce`, `fellowship`, `drizzt`, `pacman`, `tetris`, `aincrad`) carry one; elsewhere it does nothing. Composited with `lighten`/`darken` so a glyph over it stays exactly as readable, and hidden on a pane under 720px or a window under 460px tall. On by default |
 | `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
 | `changelog_seen` | version | Newest release whose notes have been read. Seeded on first load so a fresh install does not badge itself |
 | `service_status` | bool | Ask the provider behind a running CLI whether it is having a bad day. The only outbound requests CLIque makes without being told to — see **Service status** below. On by default |

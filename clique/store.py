@@ -107,6 +107,11 @@ DEFAULT_SETTINGS = {
     "theme": "",
     #: Ask each running CLI what is left of its plan, for the status bar.
     "usage_bar": True,
+    #: The character a theme carries, watermarked into the corner of the pane.
+    #: Only seven of the presets have one; on the rest the setting does
+    #: nothing. On, because a theme that draws nothing is not a theme anybody
+    #: went looking for, and it takes itself away wherever the room is needed.
+    "theme_art": True,
     #: "dark" | "light" | "system". Themes carry their own base, so this only
     #: decides which built-in is used when no preset is chosen.
     "appearance": "dark",

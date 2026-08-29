@@ -158,6 +158,12 @@
 
     <div id="termwrap">
       <div id="terminal"></div>
+      <!-- The theme's character, if it has one. Above the terminal in the
+           stack and behind the text in appearance: it is composited with
+           lighten/darken, so every glyph wins the blend and comes through
+           untouched. Never interactive, and gone on a pane too small to
+           spare the corner. -->
+      <div id="themeArt" aria-hidden="true" hidden></div>
       <div id="follow" hidden></div>
       <button type="button" id="copySel" hidden>Copy</button>
       <div id="empty">
@@ -482,6 +488,15 @@
       </label>
       <p class="note">A preset carries its own light or dark base. This only
          decides which built-in is used when no preset is chosen.</p>
+
+      <label class="check"><input type="checkbox" id="setThemeArt">
+        Show the theme’s character in the corner of the pane</label>
+      <p class="note">Plumber, Triforce, Fellowship, Drizzt, Pacman, Tetris and
+         Aincrad each carry a pixel figure, watermarked into the bottom-right
+         of the terminal. It is blended so that text always wins: a glyph drawn
+         over it is exactly as readable as it would be on a bare pane. It takes
+         itself away on a narrow pane and on a phone, where the corner is
+         needed for the output.</p>
 
       <!-- Describe a theme and a model builds one. It supplies nine colours
            that need taste; the other eighteen, brights included, are derived
