@@ -404,6 +404,38 @@ def _run(panel) -> int:
             }"""
         )
         check("a stat with no reading takes no width", gaps["off"] < 1, gaps)
+
+        # Nothing in the bar may be cut off mid-word. Readings drop out whole
+        # as the row narrows; the plan meters cost it real estate and the first
+        # attempt at them left VIEWS reading "VIEW". Asked at three widths
+        # because the row is the window minus the sidebar, so collapsing the
+        # sidebar has to change the answer.
+        OVERHANG = """() => {
+          const bar = document.querySelector('#statusbar').getBoundingClientRect();
+          const bad = [];
+          for (const el of document.querySelectorAll('#stats > .stat')) {
+            if (!el.offsetParent) continue;
+            const r = el.getBoundingClientRect();
+            if (r.right > bar.right + 1 || r.left < bar.left - 1) bad.push(el.id || '?');
+          }
+          return bad;
+        }"""
+        for width, label in ((1280, "at a normal window"), (900, "at a narrow one")):
+            page.set_viewport_size({"width": width, "height": 860})
+            page.wait_for_timeout(350)
+            over = page.evaluate(OVERHANG)
+            check(f"no reading hangs off the status bar {label}", over == [], over)
+        page.evaluate("() => setSidebar(false)")
+        page.wait_for_timeout(400)
+        check("nor with the sidebar collapsed", page.evaluate(OVERHANG) == [],
+              page.evaluate(OVERHANG))
+        page.evaluate("() => setSidebar(true)")
+        page.set_viewport_size({"width": 1280, "height": 860})
+        page.wait_for_timeout(350)
+        # No CLI in this check declares a usage probe, so the block stays away
+        # rather than sitting there empty.
+        check("the plan block is absent for a CLI that cannot report it",
+              page.evaluate("() => document.querySelector('#plan').hidden") is True)
         check(
             "and leaves no gap where it was",
             abs(gaps["between"] - gaps["normal"]) < 1,

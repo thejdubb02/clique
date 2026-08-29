@@ -392,11 +392,61 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
    sensor and no swap in use, so the bar carried two blank columns forever.
    Gone, not invisible — the row closes up. */
 #stats .stat.is-off { display: none; }
-/* The plan column carries no dot of its own: the number *is* the warning, and
-   a dot beside "7D 92%" is the same fact twice. It takes the colour instead. */
-#plan[data-level="wait"] .v { color: var(--warn); }
-#plan[data-level="err"] .v { color: var(--err); font-weight: 600; }
-#plan { cursor: help; }
+/* What is left of the plan. Its own block, sitting between the machine's
+   numbers and the buttons with a hairline either side, because it is a
+   different kind of fact: CPU is what the box is doing, this is what you have
+   left to spend. A short bar reads from across the desk in a way "52%" does
+   not, and the figure stays for anyone who wants it. */
+#plan {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  margin: 0 2px; padding: 0 10px;
+  border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+}
+#plan[hidden] { display: none; }
+.plan-w { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+.plan-k { font-size: 10px; letter-spacing: .04em; color: var(--dim); font-weight: 600; }
+.plan-track {
+  width: 46px; height: 5px; border-radius: 3px; overflow: hidden;
+  background: var(--row); flex: none;
+}
+.plan-fill {
+  display: block; width: 100%; height: 100%; border-radius: 3px;
+  background: var(--ok); transform-origin: left center;
+  /* It moves once every few minutes, so it is allowed to move properly. */
+  transition: transform 420ms var(--ease-out), background 420ms linear;
+}
+.plan-v { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 4ch;
+          color: var(--dim); }
+.plan-w[data-level="wait"] .plan-fill { background: var(--warn); }
+.plan-w[data-level="wait"] .plan-v { color: var(--warn); }
+.plan-w[data-level="err"] .plan-fill { background: var(--err); }
+.plan-w[data-level="err"] .plan-v { color: var(--err); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .plan-fill { transition: background 420ms linear; }
+}
+/* The plan block costs the row about two hundred pixels, and the row did not
+   have them: the first attempt cut VIEWS to "VIEW", which is the clipped-word
+   failure this file warns about elsewhere.
+
+   Asked against the *row*, not the window. A viewport query gets this wrong by
+   exactly the width of the sidebar, which is why the first attempt at it fired
+   at the wrong moment: 1280px of window is barely a thousand of status bar
+   with the sidebar open, and collapsing it open and shut has to change the
+   answer. Readings drop in reverse order of how much they decide: views is a
+   curiosity and carries its own tooltip, load and disk are glanceable, and CPU
+   and memory are the two nobody should have to open a menu for. */
+#statusbar { container-type: inline-size; container-name: statusbar; }
+@container statusbar (max-width: 1100px) { #stats #clients { display: none; } }
+@container statusbar (max-width: 900px)  { #stats #load { display: none; } }
+@container statusbar (max-width: 760px)  { #stats #disk { display: none; } }
+
+/* A phone keeps the bars and drops the digits: the colour and the fill are
+   the part you read at a glance, and the row has no width to spare. */
+@media (max-width: 640px) {
+  #plan { gap: 8px; padding: 0 8px; }
+  .plan-v { display: none; }
+  .plan-track { width: 32px; }
+}
 
 /* Each stat carries its own dot, coloured by that stat's own pressure and set
    inline from renderStats. No default background here: an unset dot would show

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.54.1 — 2026-08-28 18:17 PDT
+
+**Plan usage is a pair of meters now, not another number in the machine
+stats.** It had been sitting between disk free and uptime reading `PLAN 5H 5%`,
+which made it look like one more thing the box is doing. It is not: how much of
+the week is gone decides what you start next, and CPU does not. It has its own
+block with a hairline either side, a short bar each, green until three
+quarters, amber past that and red past ninety. The exact figure stays beside
+it, and the reset countdown is still on hover.
+
+**Nothing in the status bar is cut off mid-word any more.** The meters cost the
+row about two hundred pixels it did not have, and the first attempt left VIEWS
+reading "VIEW". Readings now drop out whole as the row narrows, in reverse
+order of how much they decide: views first, then load, then disk. On a phone
+the meters keep their bars and drop the digits, which is the half you read at a
+glance.
+
+That is asked of the row rather than the window. A window query gets it wrong
+by exactly the width of the sidebar, which is why the first attempt fired at
+the wrong moment: 1280 pixels of window is barely a thousand of status bar with
+the sidebar open, and collapsing it has to change the answer.
+
+`tools/visual_check.py` now measures every reading against the ends of the bar
+at two window widths and with the sidebar both ways, so nothing can quietly
+start hanging off the edge again.
+
 ## 0.54.0 — 2026-08-28 18:07 PDT
 
 **How much of the plan is left, in the status bar.** For the session in front,

@@ -1289,30 +1289,52 @@ function untilReset(iso) {
   return hours < 24 ? `in ${Math.round(hours)}h` : `in ${Math.round(hours / 24)}d`;
 }
 
+/* A meter each, not a line of text.
+ *
+ * This is the reading that changes what you do next: a week that is 90% gone
+ * means stop starting things. Buried in the machine stats as "PLAN 5H 5%" it
+ * read as one more number beside disk free, which is not what it is. A short
+ * bar is legible at a glance from across the desk, and the exact figure is
+ * still there for anyone who wants it. */
+function planLevel(percent) {
+  return percent >= 90 ? "err" : percent >= 75 ? "wait" : "ok";
+}
+
 function renderPlan() {
   const el = $("#plan");
   if (!el) return;
   const s = activeId ? session(activeId) : null;
   const found = s && planUsage.find((u) => u.cli === s.cli);
   const windows = (found && found.windows) || [];
-  el.classList.toggle("is-off", !windows.length);
-  if (!windows.length) return;
+  el.hidden = !windows.length;
+  if (!windows.length) { el.replaceChildren(); return; }
 
-  // Worst window decides the colour: one number at 90% matters more than the
-  // average of it and one at 4%.
-  const worst = Math.max(...windows.map((w) => w.percent));
-  const dot = worst >= 90 ? "err" : worst >= 75 ? "wait" : "ok";
-  el.querySelector(".v").textContent =
-    windows.map((w) => `${w.label} ${Math.round(w.percent)}%`).join(" · ");
-  el.dataset.level = dot;
-  el.title = windows
-    .map((w) => {
-      const when = untilReset(w.resets_at);
-      return `${w.label}: ${Math.round(w.percent)}% used${when ? `, resets ${when}` : ""}`;
-    })
-    .join("\n") + `\nAsked of ${s.cli_label || s.cli} directly, at most once every few minutes.`;
+  el.replaceChildren();
+  for (const w of windows) {
+    const pct = Math.round(w.percent);
+    const when = untilReset(w.resets_at);
+    const meter = mk("span", "plan-w");
+    meter.dataset.level = planLevel(w.percent);
+
+    const key = mk("b", "plan-k");
+    key.textContent = w.label;
+    const track = mk("span", "plan-track");
+    const fill = mk("i", "plan-fill");
+    // scaleX rather than width: the bar sits in a bottom bar beside a dozen
+    // PTYs, and a transform is the one thing that cannot make the browser
+    // lay the row out again.
+    fill.style.transform = `scaleX(${Math.max(w.percent, 0.5) / 100})`;
+    track.appendChild(fill);
+    const value = mk("span", "plan-v");
+    value.textContent = pct + "%";
+
+    meter.append(key, track, value);
+    meter.title = `${w.label}: ${pct}% used`
+      + (when ? `, resets ${when}` : "")
+      + `\nAsked of ${s.cli_label || s.cli} directly, at most once every few minutes.`;
+    el.appendChild(meter);
+  }
 }
-
 function renderStats() {
   const st = state.stats || {};
   const gb = (mb) => (Math.round((mb || 0) / 1024 * 10) / 10).toFixed(1);
