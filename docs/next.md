@@ -34,11 +34,11 @@ part of this that has never actually been used on a phone.
    Chromium at real device sizes and pixel ratios, so these are measured rather
    than suspected. In the order they hurt:
 
-   - **34 inputs under 16px**, including `#prompt` and `#q`. iOS zooms the whole
-     page when one is focused, so every tap on the prompt shifts the layout.
-     One rule fixes it and the only cost is that the prompt looks slightly
-     larger on a desktop.
-   - **29 tap targets under 44px.** The key row and the header buttons.
+   - ~~34 inputs under 16px~~ done in 0.64.0. None left on any device.
+   - ~~29 tap targets under 44px~~ done in 0.64.0: 34 down to 9, and the nine
+     are the key row, which is the decision below rather than a defect.
+   - ~~The status bar hanging off the screen~~ done in 0.64.0. 460px of
+     controls in a 393px phone was what the clipped icons actually were.
    - ~~The login page~~ done in 0.60.0, along with installing as an app.
 
    - **13px of phantom horizontal scroll on a phone.** What is left of the
