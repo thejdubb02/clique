@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.60.0 — 2026-08-30 08:05 PDT
+
+**CLIque installs as an app on a phone, from the page you actually arrive on.**
+The panel had a correct manifest, a service worker and every icon size for
+years. The sign-in page had none of it, and the sign-in page is what a phone
+meets first, so "Add to Home Screen" gave you a bookmark with a screenshot for
+an icon and Safari's chrome around the result.
+
+**The cause was an allow-list that had quietly gone dead.** `PUBLIC_ASSETS`
+names what may be served before login, and a past fix for a real traversal hole
+(`/brand/../app.js` resolved back to the app shell) replaced the whole check
+with a single "is it inside `brand/`" test. That closed the hole and, with it,
+silently un-published the manifest and the favicon: the constant was still
+declared, still read like documentation, and referenced by nothing. A browser
+cannot offer to install an app whose manifest it is not allowed to read.
+
+The allow-list is honoured again, and the traversal stays closed, because the
+comparison is between *resolved* paths rather than prefixes. `/brand/../app.js`
+resolves to the shell and matches nothing; `/brand/../manifest.webmanifest`
+resolves to a file that is public anyway. `sw.js` joins the list, because Chrome
+judges installability from the page in front of it and will not offer to install
+one with no worker registered.
+
+**Three things fixed on the way in, all on the sign-in page**, all found by
+`agent-infra/tools/mobile_view.py` rather than by looking:
+
+- The password field was 14px, so **iOS zoomed the entire page the moment you
+  tapped it**. The first thing anyone does on a phone, and it moved the layout
+  under them. 16px is the threshold and is not a taste decision.
+- The field and the button were 42px tall against a 44px thumb.
+- At 320px the page **scrolled sideways**, because a 100% width plus padding
+  and a border comes to 323px without `box-sizing: border-box`.
+
+Every device the tool renders now reports nothing on that page.
+
+The app's own name lost an em dash. It is the text on your home screen.
+
+`tools/smoke_http.py` now asserts both halves of the allow-list from a
+logged-out client: that the manifest, favicon, worker and brand icons are
+served, that the shell, its script, its stylesheet and its themes are not, and
+that four traversal attempts through `brand/..` reach nothing. That is the test
+whose absence let the list go dead.
+
 ## 0.59.0 — 2026-08-29 16:41 PDT
 
 **Open what a CLI hands you, without leaving the panel.** Three things that

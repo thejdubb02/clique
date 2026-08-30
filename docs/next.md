@@ -39,8 +39,7 @@ part of this that has never actually been used on a phone.
      One rule fixes it and the only cost is that the prompt looks slightly
      larger on a desktop.
    - **29 tap targets under 44px.** The key row and the header buttons.
-   - **The login page scrolls sideways at 320px**, and its password field is
-     14px, so iOS zooms it too. First thing anyone meets on a phone.
+   - ~~The login page~~ done in 0.60.0, along with installing as an app.
 
    The resize fight that made it unusable is fixed in 0.58.0; this is what is
    left. Still worth half an hour with a real handset afterwards, because the

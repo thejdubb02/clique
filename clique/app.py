@@ -1319,7 +1319,11 @@ def image_extension(data: bytes) -> str:
 #: Deliberately a prefix allowlist and not "any file", because everything else
 #: under web/ — the app shell, its JavaScript, its stylesheet — describes the
 #: panel to someone who has not signed in.
-PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest")
+#: `/brand/` is a directory and is matched by containment; the rest are exact
+#: files. `sw.js` is here so the login page can register the worker, which is
+#: what makes Chrome offer to install from it: installability is judged on the
+#: page you are standing on, and before you sign in that is the login page.
+PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest", "/sw.js")
 
 
 #: Settings that are credentials, not preferences. They go to the browser as a
@@ -1440,10 +1444,28 @@ def _is_public_asset(path: str) -> bool:
     test and `_static` happily resolved it back to the application shell,
     which is the one thing the check exists to keep behind the password.
 
-    Resolve first, then ask whether the answer is still inside the directory.
+    Resolve first, then ask whether the answer is one of the things allowed.
+    Comparing *resolved* paths is what keeps the traversal closed: a request
+    for `/brand/../app.js` resolves to the shell and matches nothing, while
+    `/brand/../manifest.webmanifest` resolves to the manifest, which is
+    allowed anyway.
+
+    The named files matter more than they look. Closing the traversal hole
+    replaced the whole check with the `brand/` containment test, which quietly
+    made `PUBLIC_ASSETS` dead code: the manifest and the favicon had been
+    listed as public since they were added and had silently stopped being
+    served that way. A browser cannot offer to install an app whose manifest
+    it is not allowed to read, so CLIque was uninstallable from the one page
+    anyone actually arrives on.
     """
     target = (WEB / path.lstrip("/")).resolve()
-    return artifacts.inside(target, (WEB / "brand").resolve())
+    if artifacts.inside(target, (WEB / "brand").resolve()):
+        return True
+    return any(
+        target == (WEB / name.lstrip("/")).resolve()
+        for name in PUBLIC_ASSETS
+        if not name.endswith("/")
+    )
 
 
 class Handler(BaseHTTPRequestHandler):

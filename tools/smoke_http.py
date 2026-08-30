@@ -310,6 +310,47 @@ def _run() -> int:
     else:
         print("  --   login form not covered (set CLIQUE_TEST_PASSWORD)")
 
+    print("what a stranger may fetch")
+    # PUBLIC_ASSETS is an allow-list, and it went dead once already: closing a
+    # traversal hole replaced the whole check with a "is it inside brand/"
+    # test, which silently un-published the manifest and the favicon. Nothing
+    # noticed for months, because the only symptom was that a phone would not
+    # offer to install the app, and nobody tests that from a logged-out page.
+    import urllib.error
+    import urllib.request
+
+    def anon_fetch(path: str) -> tuple[int, str, bytes]:
+        try:
+            with urllib.request.urlopen(BASE + path, timeout=5) as r:
+                return r.status, r.headers.get("Content-Type", ""), r.read(400)
+        except urllib.error.HTTPError as exc:
+            return exc.code, "", b""
+
+    for path, kind in (
+        ("/manifest.webmanifest", "manifest"),
+        ("/favicon.ico", "icon"),
+        ("/sw.js", "javascript"),
+        ("/brand/apple-touch-icon.png", "png"),
+    ):
+        status, ctype, _ = anon_fetch(path)
+        check(f"{path} is served before login", status == 200 and kind in ctype,
+              f"{status} {ctype}")
+
+    # The other half: the shell stays behind the password. A gated asset is
+    # answered with the login page rather than a 403, so "is it HTML" is the
+    # test, not the status code.
+    for path in ("/app.js", "/index.html", "/app.css", "/themes.js"):
+        _, _, body = anon_fetch(path)
+        check(f"{path} is not", b"<!doctype html>" in body.lower(), body[:40])
+
+    # And the traversal that made the allow-list get rewritten in the first
+    # place. Resolved-path comparison is what keeps this closed; a prefix
+    # check would let every one of these through.
+    for path in ("/brand/../app.js", "/brand/../index.html",
+                 "/brand/../../etc/passwd", "/brand/../app.css"):
+        _, _, body = anon_fetch(path)
+        check(f"{path} climbs nowhere", b"<!doctype html>" in body.lower(), body[:40])
+
     print("api")
     status, state = call("/api/state")
     check("state loads", status == 200 and "folders" in state, status)
