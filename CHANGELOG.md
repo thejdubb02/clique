@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.62.1 — 2026-08-30 12:40 PDT
+
+**A reload button, for the installed app that has nowhere else to get one.**
+A PWA has no address bar, so a panel that ever needs a fresh load leaves you
+closing it and reopening it from the home screen. It sits in the status bar,
+which is outside the sidebar and therefore still there when the drawer is shut
+on a phone.
+
+Shown only where it is the only way in: the installed app, full screen, and the
+iOS home screen, which has its own flag because it predates the standard. A
+browser tab does not get one, because it would be a button doing what the
+browser's own reload already does, in a row that is already full. The command
+palette offers it everywhere either way, which is also the answer for a
+keyboard that cannot reach the browser's reload because the pane has the keys.
+
+The service worker is asked to update before the page reloads. It does not
+cache, so a plain reload already fetches fresh code, but the worker is the one
+thing a reload would otherwise keep, and "reload" meaning "all of it except the
+part that serves you" is a promise not worth making.
+
+Sessions keep running, and the tabs and layout come back, because the workspace
+has always lived on the server rather than in the tab.
+
 ## 0.62.0 — 2026-08-30 08:56 PDT
 
 **The active CLI's logo, faint in the top-right of the pane.** Opposite corner

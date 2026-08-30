@@ -508,6 +508,25 @@ def _run(panel) -> int:
             # it: it is a background image on an element with no text, sized as
             # a percentage of a pane, blended into the terminal. Every part of
             # that is invisible to a test that reasons about the code.
+            print("reloading an installed app")
+            # A PWA has no address bar, so there is no reload in it. The button
+            # exists for exactly that case and is deliberately absent from a
+            # browser tab, where it would duplicate a control the browser
+            # already has in a row that is already full.
+            check("a browser tab has no reload button",
+                  page.evaluate("() => document.querySelector('#reloadBtn').hidden") is True)
+            page.evaluate("() => openPalette()")
+            page.wait_for_timeout(300)
+            page.keyboard.type("reload")
+            page.wait_for_timeout(400)
+            offered = page.evaluate(
+                """() => [...document.querySelectorAll('#palette .pal-row')]
+                     .some((r) => r.textContent.includes('Reload the panel'))"""
+            )
+            check("but the palette offers it anywhere", offered is True)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+
             print("the CLI's logo in the corner")
             # The pane edge already carries the CLI colour. This is the same
             # question answered for someone who has not learned the colours,

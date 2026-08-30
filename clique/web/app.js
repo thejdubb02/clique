@@ -7727,6 +7727,40 @@ function wire() {
   $("#setCliTint").onchange = (ev) => saveSettings({ cli_tint: ev.target.checked });
   $("#setThemeArt").onchange = (ev) => saveSettings({ theme_art: ev.target.checked });
   $("#setCliWatermark").onchange = (ev) => saveSettings({ cli_watermark: ev.target.checked });
+
+  /* Reloading an installed app.
+   *
+   * A PWA has no address bar, so there is no reload: if the panel ever gets
+   * into a state a fresh load would fix, an installed app has nothing to press
+   * and the only way out is to close and reopen it from the home screen. This
+   * is that button, and it is shown only where it is the only way, which is why
+   * a browser tab does not get one. `standalone` is the installed case
+   * everywhere except iOS, which has its own flag and predates the standard.
+   *
+   * The service worker is asked to update first. It does not cache, so a plain
+   * reload already fetches fresh code, but the worker itself is the one thing a
+   * reload would otherwise keep, and "reload" meaning "all of it except the
+   * part that serves you" is a promise not worth making. Failure is ignored:
+   * an update that cannot happen should not stop the reload that can. */
+  const installed = matchMedia("(display-mode: standalone)").matches
+    || matchMedia("(display-mode: fullscreen)").matches
+    || matchMedia("(display-mode: minimal-ui)").matches
+    || navigator.standalone === true;
+  const reload = $("#reloadBtn");
+  if (reload) {
+    reload.hidden = !installed;
+    reload.onclick = async () => {
+      reload.disabled = true;
+      try {
+        const reg = navigator.serviceWorker
+          && await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+      } catch (err) {
+        /* offline, or no worker. The reload below is the point. */
+      }
+      location.reload();
+    };
+  }
   $("#setArtShow").onchange = (ev) => {
     saveSettings({ artifacts_show: ev.target.checked });
     pollArtifacts();
@@ -8794,6 +8828,12 @@ function paletteCommands() {
     add("Close every tab", `${openTabs.length} open · every session keeps running`,
         closeAllTabs);
   }
+  /* Always offered here, even where the status bar hides the button. The
+   * button is for the installed app, which has no address bar; the palette is
+   * for anyone who would rather type it, and for a keyboard that cannot reach
+   * the browser's own reload because the pane has the keys. */
+  add("Reload the panel", "Sessions keep running; tabs and layout come back",
+      () => { const b = $("#reloadBtn"); if (b) b.onclick(); else location.reload(); });
 
   for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
     const what = theme.art ? theme.base + " · has a character" : theme.base;
