@@ -20,7 +20,7 @@ and blue dungarees" and the model returns Nintendo's Mario, line for line: same
 face, same moustache, same proportions. That is where the phrase points. This
 package is published publicly, so every character prompt carries ORIGINAL,
 which tells it to take the archetype and invent the face, costume and
-proportions fresh. Do not remove it, and do not add it to `tetris` - it says
+proportions fresh. Do not remove it, and do not add it to `bricks` - it says
 "character", and asking for four tetrominoes with it attached returns a
 teenager in a blue jacket.
 
@@ -104,14 +104,14 @@ SUBJECTS = {
         "hooded cloak with a silver clasp. Wielding two curved silver "
         "scimitars, one in each hand, held out to the sides. Agile, watchful."
     ),
-    "pacman": (
+    "chompy": (
         "An original design: a plump round bright yellow creature, a fat "
         "yellow ball with a wide open wedge mouth, two small round eyes and "
         "tiny stubby feet, floating beside a plump round pink ghost with a "
         "wavy scalloped bottom edge, two little nub arms and big expressive "
         "blue eyes. Two cute arcade-style creatures side by side, cheerful."
     ),
-    "tetris": (
+    "bricks": (
         "Four glossy falling tetromino blocks arranged in a loose diagonal "
         "cascade: a cyan straight four-block bar, a purple T-shaped piece, a "
         "yellow two-by-two square and a green S-shaped piece. Each block "
@@ -134,7 +134,7 @@ def generate(name: str, prompt: str) -> tuple[Path, dict]:
     body = json.dumps({
         "model": MODEL,
         "modalities": ["image", "text"],
-        "messages": [{"role": "user", "content": f"{prompt}{'' if name == 'tetris' else ORIGINAL}\n\n{STYLE}"}],
+        "messages": [{"role": "user", "content": f"{prompt}{'' if name == 'bricks' else ORIGINAL}\n\n{STYLE}"}],
     }).encode()
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/chat/completions", data=body,

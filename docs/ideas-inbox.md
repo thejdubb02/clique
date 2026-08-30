@@ -493,31 +493,21 @@ refusing them on principle rather than on capability. That refusal is worth
 restating out loud every time this comparison is made, because "we could not"
 and "we chose not to" are different sentences and only one of them is true.
 
-## Open: two of the theme names are live trademarks
+## Decided: the two exposed theme names were changed
 
-Raised 2026-08-29 when the character themes shipped, and deliberately not acted
-on, because it is Justin's call rather than a technical one.
+Raised 2026-08-29, settled 2026-08-30. `Tetris` became **Bricks** and `Pacman`
+became **Chompy**. The artwork was never the issue: every figure is an original
+design and the prompts keep it that way. The names were the exposed part, and
+both were actively enforced marks.
 
-The artwork is settled. Every figure is an original design and the prompts
-carry an explicit instruction keeping them that way, because an image model
-asked for the archetype returns the actual character. That line is drawn and
-documented above the character block in `themes.js`.
+The id is what gets stored, so a bare rename would have dropped anyone wearing
+one back to the default and looked like the panel forgot. `THEME_RENAMED` in
+app.js maps the two old ids to the new ones, in `currentTheme` so the theme
+still applies and in the picker so the dropdown agrees rather than reading
+empty over a theme that is plainly on. Two entries, deletable once nobody could
+still be on an old id.
 
-The **names** are the part still exposed. `Tetris` and `Pacman` are actively
-enforced marks; `Triforce` is Nintendo's. In practice a terminal theme named
-after something is common and low risk, and plenty of published palettes do it.
-But this package is on PyPI under a real name, and the cost of being wrong is
-asymmetric: renaming later breaks a setting people have already chosen, because
-`theme` is stored as the id string.
-
-So the cheap moment to decide is before many people have picked one. Two
-honest options:
-
-- **Leave them.** The likelihood of anyone caring about a colour scheme is
-  genuinely low, and the names are what make the themes findable.
-- **Rename the two or three exposed ones** and keep the ids as aliases, so a
-  stored setting still resolves. Roughly an hour: a label change, an alias map
-  in `currentTheme()`, and a line in `API.md`.
-
-Not urgent, and not worth raising a third time unprompted. Worth doing before
-the themes get written about anywhere.
+`Triforce` was left alone. It is a Nintendo term, and the judgement is that a
+green-hooded swordsman called Triforce is a fan reference rather than a mark
+anyone would act on, where a colour scheme called Tetris sits closer to the
+thing the mark actually covers. Reopen it if that ever looks wrong.

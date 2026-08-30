@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.64.0 — 2026-08-30 14:56 PDT
+
+**Tapping the prompt on an iPhone no longer zooms the whole page.** Safari
+zooms when it focuses an input whose text is under 16px, and the prompt box was
+13px, so the single most common thing you do on a phone moved the layout under
+your thumb every time. Every input, textarea and select is at least 16px on a
+touch device now, and untouched on a desktop, where the font size you chose is
+the font size you get.
+
+That rule carries `!important`, which is the case the keyword exists for: it is
+an override of an operating system behaviour rather than styling, and it has to
+beat every component that sets a font size without any of them knowing about
+it. Written politely it did nothing at all, because `.search input` and the
+settings fields simply won.
+
+**The status bar stopped hanging off the screen.** 460px of controls in a 393px
+phone, which is what the clipped icons actually were. The readings already
+dropped out in order of how much they decide; the controls on the right never
+did. They go the same way now, and the two that go first are the two a phone
+cannot use anyway: a keyboard-shortcut sheet and a font stepper that Settings
+also has.
+
+**Tap targets: 34 under 44px, now 9.** Growing a 17px tab close button to 44
+would wreck a 35px strip, so the *hit area* grows instead and nothing moves by
+a pixel. Nothing changes on a mouse, where 17px is a perfectly good target. The
+nine that remain are the key row, at a correct 44px tall and as wide as seven
+keys can be on a phone, which is a decision rather than a defect.
+
+**Tetris is now Bricks and Pacman is now Chompy.** The artwork was never the
+issue: every figure is an original design. The names were, and both were
+actively enforced marks. The id is what gets stored, so a bare rename would
+have dropped anyone wearing one back to the default and looked like the panel
+forgot; the two old ids are aliased to the new ones, in the theme lookup so it
+still applies and in the picker so the dropdown agrees rather than reading
+empty over a theme that is plainly on.
+
+**`agent-infra/tools/mobile_view.py` stopped crying wolf twice**, which matters
+because a check nobody believes is worse than no check. It measures the *hit*
+area now, including one grown by a pseudo-element, so a fixed control stops
+being reported as broken. And it ignores elements clipped by an ancestor: a
+terminal pane for a background session is thousands of pixels wide inside
+`overflow: hidden` and was being reported as "the page scrolls sideways" when
+the page plainly does not.
+
 ## 0.63.0 — 2026-08-30 14:40 PDT
 
 **Working groups: sessions you always open together.** A group holds a Claude,

@@ -245,8 +245,8 @@ window.CLIQUE_THEMES = {
     art: { src: "art/drizzt.png" },
   },
 
-  pacman: {
-    label: "Pacman", base: "dark",
+  chompy: {
+    label: "Chompy", base: "dark",
     panel: { bg: "#08080f", panel: "#101024", row: "#181838", sel: "#22225a",
              field: "#12122c", fg: "#f0f0d8", dim: "#8a8ab0", line: "#1c1c40",
              accent: "#ffd93b" },
@@ -257,14 +257,14 @@ window.CLIQUE_THEMES = {
             brightBlack: "#4a4a80", brightRed: "#ff7a7a", brightGreen: "#84f08f",
             brightYellow: "#ffe870", brightBlue: "#5f8bff", brightMagenta: "#ffb8dc",
             brightCyan: "#8aeaff", brightWhite: "#ffffff" },
-    art: { src: "art/pacman.png" },
+    art: { src: "art/chompy.png" },
   },
 
   /* The one theme here whose palette is not a costume: the seven ANSI slots
    * that matter are the seven tetrominoes, which happen to be seven colours
    * chosen decades ago to be told apart at a glance under pressure. */
-  tetris: {
-    label: "Tetris", base: "dark",
+  bricks: {
+    label: "Bricks", base: "dark",
     panel: { bg: "#0d1226", panel: "#141b36", row: "#1d2749", sel: "#2a3766",
              field: "#17203f", fg: "#e6ecff", dim: "#8996c4", line: "#212c53",
              accent: "#31c7de" },
@@ -278,7 +278,7 @@ window.CLIQUE_THEMES = {
     /* Deliberately coarse: a tetromino is a four-cell shape and drawing it at
      * fourteen cells wide would only make the cells smaller, not the pieces
      * clearer. Seven across means the blocks land about the size they were. */
-    art: { src: "art/tetris.png" },
+    art: { src: "art/bricks.png" },
   },
 
   aincrad: {

@@ -7097,9 +7097,19 @@ function termTheme(theme) {
   return built;
 }
 
+/* Themes that have been renamed, old id to new.
+ *
+ * The id is what gets stored, so renaming one silently drops whoever was
+ * wearing it back to the default and looks like the panel forgot. Two entries
+ * is not a migration system; it is the cheapest way to make a rename free, and
+ * the row can be deleted once nobody could plausibly still be on the old id. */
+const THEME_RENAMED = { tetris: "bricks", pacman: "chompy" };
+
 function currentTheme() {
   const themes = window.CLIQUE_THEMES || {};
   const s = state.settings;
+  const renamed = THEME_RENAMED[s.theme];
+  if (renamed && themes[renamed]) return themes[renamed];
   if (s.theme && themes[s.theme]) return themes[s.theme];
   // No preset chosen: the base appearance picks which built-in to use.
   const wantsLight = s.appearance === "light" ||
@@ -7508,7 +7518,8 @@ async function loadThemes() {
 function fillThemeSelect() {
   const select = $("#setTheme");
   if (!select) return;
-  const chosen = state.settings.theme || "";
+  const stored = state.settings.theme || "";
+  const chosen = THEME_RENAMED[stored] || stored;
   select.replaceChildren();
   const groups = new Map();
   const groupFor = (label) => {

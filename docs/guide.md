@@ -282,8 +282,8 @@ like the sidebar width stay local.
   terminal only, for when a theme is not quite it.
 
   Seven of the presets carry a **character**: a hand-drawn anime figure in the bottom-right
-  of the pane, behind the text. Plumber, Triforce, Fellowship, Drizzt, Pacman,
-  Tetris and Aincrad. They are original designs rather than the famous
+  of the pane, behind the text. Plumber, Triforce, Fellowship, Drizzt, Chompy,
+  Bricks and Aincrad. They are original designs rather than the famous
   characters they are named for: the archetype is fair to borrow, the likeness
   is not. Each is laid in faintly enough to read straight through, and it
   removes itself on a pane too narrow to spare the corner and on a phone. The

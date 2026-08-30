@@ -1253,8 +1253,8 @@ def _run(panel) -> int:
         drawn = named.get("With a character", [])
         check("the seven with a figure are grouped as such",
               sorted(drawn) == sorted(
-                  ["aincrad", "drizzt", "fellowship", "pacman",
-                   "plumber", "tetris", "triforce"]), drawn)
+                  ["aincrad", "bricks", "chompy", "drizzt",
+                   "fellowship", "plumber", "triforce"]), drawn)
         check("and the plain presets are not in with them",
               "dracula" in named.get("Presets", []), named.get("Presets"))
         check("every theme is still reachable",

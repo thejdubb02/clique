@@ -41,10 +41,18 @@ part of this that has never actually been used on a phone.
    - **29 tap targets under 44px.** The key row and the header buttons.
    - ~~The login page~~ done in 0.60.0, along with installing as an app.
 
-   - **Things are cut off in the phone view.** Raised 2026-08-30 while working
-     groups went in: there are icons and areas in the mobile layout that are
-     clipped as it stands. Not diagnosed yet, and worth doing as one pass over
-     the whole phone layout rather than one control at a time.
+   - **13px of phantom horizontal scroll on a phone.** What is left of the
+     clipping, after 0.64.0 fixed the status bar overflowing by 67px. Narrowed
+     but not solved: `#shell` measures 412 wide with a scrollWidth of 425 on a
+     Pixel, the same 13px on every width, and no visible unclipped element
+     accounts for it. `mobile_view.py` now ignores elements clipped by an
+     ancestor, so the terminal panes for background sessions (thousands of
+     pixels wide inside `overflow: hidden`) no longer mask it. Worth an hour
+     with the layout rather than another guess.
+   - **The key row keys are 41px wide on a Pixel and 28px on a 320px screen.**
+     Height is a correct 44. Seven keys will not fit at 44 wide on a phone, so
+     either it scrolls, it wraps, or it carries fewer keys. A decision, not a
+     bug.
 
    The resize fight that made it unusable is fixed in 0.58.0, scrolling in
    0.61.0; this is what is left. Still worth half an hour with a real handset afterwards, because the
