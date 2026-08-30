@@ -508,6 +508,85 @@ def _run(panel) -> int:
             # it: it is a background image on an element with no text, sized as
             # a percentage of a pane, blended into the terminal. Every part of
             # that is invisible to a test that reasons about the code.
+            print("working groups, and the band that shows them")
+            # Put the strip back afterwards. This test opens tabs and makes one
+            # of them active, and everything below drags across whichever pane
+            # is in front: leaving a fresh empty shell there broke three copy
+            # assertions that had nothing to do with groups.
+            was_active = page.evaluate("() => activeId")
+            # The band is the whole visual and it only reads as a band if the
+            # tabs it runs under are adjacent. Scattered through the strip the
+            # same colour is three unrelated pills, which is what the first
+            # version of this drew.
+            # Two sessions of its own: the sandbox has one, and a group of one
+            # cannot show that a band runs across a run of tabs.
+            made = page.evaluate(
+                """async () => {
+                  const post = (u, b) => fetch(u, {method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify(b || {})}).then((r) => r.json());
+                  const g = await post('/api/groups',
+                    {name: 'Visual group', color: '#7aa2f7'});
+                  const ids = [];
+                  for (const n of ['group one', 'group two']) {
+                    const s = await post('/api/sessions',
+                      {cli: 'shell', cwd: '/tmp', name: n});
+                    if (s.id) { ids.push(s.id); await post(`/api/groups/${g.id}/add`,
+                      {session: s.id}); }
+                  }
+                  await refresh();
+                  return {gid: g.id, ids};
+                }"""
+            )
+            page.wait_for_timeout(1500)
+            check("the sidebar lists the group",
+                  page.evaluate(
+                      "() => !!document.querySelector('#groups .group-row')") is True)
+            page.evaluate("() => document.querySelector('#groups .group-open').click()")
+            page.wait_for_timeout(4000)
+            band = page.evaluate(
+                """() => {
+                  const tabs = [...document.querySelectorAll('#tabs .tab')];
+                  const at = tabs.map((t, i) => t.classList.contains('grouped') ? i : -1)
+                    .filter((i) => i >= 0);
+                  const starts = tabs.filter((t) => t.classList.contains('group-start')).length;
+                  const ends = tabs.filter((t) => t.classList.contains('group-end')).length;
+                  const one = tabs.find((t) => t.classList.contains('grouped'));
+                  const after = one ? getComputedStyle(one, '::after') : null;
+                  return {at, starts, ends,
+                          h: after ? after.height : '', bg: after ? after.backgroundColor : '',
+                          barHeight: document.querySelector('#tabbar').getBoundingClientRect().height};
+                }"""
+            )
+            check("both members are in the group", len(band["at"]) == 2, band)
+            check("their tabs sit next to each other",
+                  len(band["at"]) == 2 and band["at"][1] == band["at"][0] + 1, band)
+            check("and read as one band, not two pills",
+                  band["starts"] == 1 and band["ends"] == 1, band)
+            check("the band is drawn in the group's colour",
+                  band["h"] == "3px" and "122, 162, 247" in band["bg"], band)
+            # The point of putting it inside the tab: a phone has no row to give.
+            check("and costs the strip no height", band["barHeight"] <= 36, band)
+            page.locator("#tabbar").screenshot(path=str(SHOTS / "group-band.png"))
+            page.evaluate(
+                """async (gid) => {
+                  await fetch(`/api/groups/${gid}/delete`, {method:'POST'});
+                  await refresh();
+                }""", made["gid"])
+            page.wait_for_timeout(400)
+            check("deleting the group leaves the tabs alone",
+                  page.evaluate(
+                      "() => document.querySelectorAll('#tabs .tab.grouped').length") == 0)
+            page.evaluate(
+                """async (ids) => { for (const id of ids)
+                     await fetch(`/api/sessions/${id}`, {method:'DELETE'}); }""",
+                made["ids"])
+            page.wait_for_timeout(800)
+            page.evaluate("(id) => { if (id) selectTab(id); }", was_active)
+            page.wait_for_timeout(800)
+            check("and the pane you were on is back in front",
+                  page.evaluate("() => activeId") == was_active)
+
             print("reloading an installed app")
             # A PWA has no address bar, so there is no reload in it. The button
             # exists for exactly that case and is deliberately absent from a

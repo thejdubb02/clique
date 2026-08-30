@@ -362,6 +362,32 @@ def main() -> int:
     shutil.rmtree(plain, ignore_errors=True)
     shutil.rmtree(repo, ignore_errors=True)
 
+    print("working groups")
+    from clique.store import Group, _clean_members
+
+    # A member is a snapshot, not just an id. That is what lets a group whose
+    # session was deleted offer it back instead of quietly being one short.
+    kept = _clean_members([
+        {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"},
+        {"session": "a", "cli": "grok", "cwd": "/srv/y", "name": "dupe"},
+        {"session": "", "cli": "grok"},
+        {"session": "b", "extra": "dropped", "cli": "grok", "cwd": "/srv/z", "name": "B"},
+        "not a dict",
+    ])
+    check("a member keeps what it takes to rebuild it",
+          kept[0] == {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"}, kept)
+    check("the same session cannot be added twice", len(kept) == 2, kept)
+    check("a member with no session is dropped",
+          all(m["session"] for m in kept), kept)
+    check("and nothing else a caller sent is stored",
+          all(set(m) == {"session", "cli", "cwd", "name"} for m in kept), kept)
+    check("a member that is not even a dict is ignored", len(kept) == 2, kept)
+    wide = _clean_members([{"session": f"s{i}"} for i in range(40)])
+    check("a group you could not see at a glance is capped", len(wide) == 24, len(wide))
+
+    group = Group(id="g-1", name="Morning")
+    check("a group starts empty and coloured", group.members == [] and group.color)
+
     print("who owns the shared tmux window")
     # A tmux window has one size and every attached client sees it, so two
     # panels of different shapes cannot both be right. This used to be settled

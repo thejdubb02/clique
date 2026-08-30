@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.63.0 — 2026-08-30 14:40 PDT
+
+**Working groups: sessions you always open together.** A group holds a Claude,
+a Gemini and a Grok, or three of the same, from one directory or three
+unrelated ones. One click opens all of them, side by side, under a band that
+says they belong together.
+
+**Not folders**, and the difference is the whole feature. A folder files a
+session in the sidebar and a session has exactly one. A group is about
+launching several things at once and telling at a glance which tabs belong to
+which piece of work, so it can pull from several folders or none, a session can
+sit in more than one, and joining one changes nothing about where a session
+lives.
+
+**The band is inside the tab strip, not above it.** Chrome hangs a labelled
+band over its tab groups and spends a row of height on it. There is no row to
+spare: the strip is 35px and on a phone it is competing with the pane for the
+only screen there is. So it is a rule along the bottom edge of the tabs, which
+costs nothing, needs no phone-specific layout, and is the same on both. The
+group's *name* lives in the sidebar, where there is room for words and where
+you launch it from anyway.
+
+Opening a group gathers its tabs into one run. That is not decoration: the same
+colour scattered through the strip reads as three unrelated pills rather than
+one band, which is exactly what the first version drew. Tabs already open are
+moved rather than duplicated, so opening a group twice tidies the strip instead
+of growing it, and the block lands where the first member already was rather
+than throwing you to the end of a strip you were working in.
+
+**A member is a snapshot, not a pointer.** Each one stores the session's CLI,
+directory and name beside its id, so a member whose session has been deleted is
+reported rather than quietly missing. It is not recreated unless you ask, since
+a group silently starting something you deleted on purpose is the worse
+failure, and recreating rewrites the member so the next open does not strand it
+again.
+
+`POST /api/groups/<id>/open` is the whole thing, so a script can open a working
+group too. It reports what was already running, what it started, what is
+missing and what refused, separately rather than as a count.
+
 ## 0.62.1 — 2026-08-30 12:40 PDT
 
 **A reload button, for the installed app that has nowhere else to get one.**

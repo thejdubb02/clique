@@ -298,6 +298,47 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
   min-width: 10.5rem; z-index: 1;
   box-shadow: inset 0 3px 0 var(--cli, var(--accent)), 0 1px 0 var(--bg);
 }
+/* A working group, drawn inside the tab strip rather than above it.
+ *
+ * Chrome hangs a labelled band over its tab groups and spends a row of height
+ * on it. There is no row to spare: the strip is 35px, and on a phone it is
+ * competing with the pane for the only screen there is. So the band is a rule
+ * along the bottom edge of the tabs themselves, which costs nothing, works
+ * the same on a desktop and a phone, and needs no second layout.
+ *
+ * `inset` rather than a border, so it does not move the tab's contents by a
+ * pixel when a session joins a group. The ends round only where the run ends,
+ * which is what makes three coloured tabs read as one band rather than three
+ * coloured tabs. */
+/* The groups strip. Above the tree because it is a launcher, not a filing
+   system, and the thing you reach for when you sit down. */
+.groups { padding: 4px 6px 6px; border-bottom: 1px solid var(--line); }
+.group-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 6px; border-radius: 5px; cursor: pointer; min-height: 30px;
+}
+.group-dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.group-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+.group-count { font-size: 11px; opacity: .6; flex: 0 0 auto; }
+.group-open {
+  flex: 0 0 auto; border: 1px solid var(--line); background: var(--field);
+  color: var(--fg); border-radius: 4px; padding: 2px 8px; font: inherit;
+  font-size: 11px; cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .group-row:hover { background: var(--row); }
+  .group-open:hover { border-color: var(--accent); }
+}
+
+.tab.grouped::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--group, var(--accent));
+}
+.tab.grouped { position: relative; }
+.tab.group-start::after { left: 3px; border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
+.tab.group-end::after { right: 3px; border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
+
 .tab.active .label { font-weight: 600; }
 .tab.active .num { opacity: 1; font-weight: 600; color: var(--fg); }
 .tab .num { font-size: 10px; opacity: .6; flex: 0 0 auto; }

@@ -13,7 +13,7 @@
   <a href="#why-it-is-stdlib-only"><img src="https://img.shields.io/badge/deps-none-22c55e?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5FA8F5?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/thejdubb02/clique/actions/workflows/tests.yml"><img src="https://github.com/thejdubb02/clique/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.62.1-A855F7?style=flat-square" alt="0.62.1"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.63.0-A855F7?style=flat-square" alt="0.63.0"></a>
   <a href="https://github.com/thejdubb02/clique/stargazers"><img src="https://img.shields.io/github/stars/thejdubb02/clique?style=flat-square" alt="GitHub stars"></a>
   <a href="https://buymeacoffee.com/jdubb"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
   <a href="#support-the-dev"><img src="https://img.shields.io/badge/Donate-BTC%20%7C%20SHIB%20%7C%20DOGE-5FA8F5?style=flat-square" alt="Donate"></a>
@@ -67,6 +67,7 @@ New here? The [user guide](docs/guide.md) walks through everything below.
 | **Folders** | A tree. Drag to reorder folders and sessions, or drop a session on a folder to file it. Double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). Each row names the git branch it is on, and how many files have changed. |
 | **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Names shrink first; what still will not fit lands in **N more**, wearing the same working / waiting ring. Closing a tab is not killing the session. |
 | **Same work, another CLI** | Right-click a session and open it in a different installed CLI: same name, same directory, same folder. The two sit side by side as tabs, told apart by the CLI marker. Hand Codex what Claude has been chewing on without retyping a path. |
+| **Working groups** | Sessions you always open together: a Claude, a Gemini and a Grok, from one directory or three unrelated ones. One click opens them side by side under a coloured band. Not folders, which file a session in one place: a group can pull from several and a session can be in more than one. The band lives inside the tab strip rather than above it, so it costs no height on a phone. |
 | **New session** | Pick a CLI, a directory and a folder. Type a project *name* instead of a path and it finds the root: anything holding a `.git`, a `pyproject.toml`, a `package.json` or another project marker, searched under your home directory or wherever you point it. Hidden directories are never opened, so a cache or a virtualenv costs nothing. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. Drag to copy, even when the CLI wants the mouse. `Ctrl`/`Cmd`+`C` copies a selection and interrupts when there isn't one; `Ctrl`/`Cmd`+`Shift`+`C` copies the screen. |
 | **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. A URL that wrapped onto the next line is still one link. A file path opens a read-only look — copy it, or drop it into the prompt. |

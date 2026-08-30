@@ -666,6 +666,65 @@ until they can be, rather than refused.
 
 Forty are kept; the oldest goes when a new one would exceed that.
 
+## Working groups
+
+Sessions you open and see together. **Not folders**, and the difference is the
+whole feature: a folder files a session in the sidebar and a session has
+exactly one, while a group is about launching several things at once and being
+able to tell at a glance which tabs belong to which piece of work. A group can
+pull from several folders or none, a session can belong to more than one, and
+joining a group changes nothing about where a session lives.
+
+Groups arrive whole in `GET /api/state` as `groups`, because the tab strip has
+to colour a tab by its group on the first paint and a second round trip for
+that is a flicker nobody asked for.
+
+### `POST /api/groups` → `201`
+
+```json
+{"name": "Duchamp morning", "color": "#7aa2f7", "members": []}
+```
+
+Returns the record. Capped at 40 groups; past that it is a `400`, because a
+sidebar of forty groups is a worse sidebar than one of five.
+
+### `PATCH /api/groups/<id>`
+
+Fields: `name`, `color`, `members`, `order`. Returns the record, so a colour
+that failed validation is visible rather than silently kept.
+
+### `POST /api/groups/<id>/add` and `/remove` — `{"session": "<id>"}`
+
+Membership. **`add` stores a snapshot**, not just the id: the session's `cli`,
+`cwd` and `name` go in beside it, so a member whose session is later deleted
+can be offered back instead of the group quietly being one short. A group that
+opens two of the three things it promised is worse than one that says so.
+
+### `POST /api/groups/<id>/open`
+
+Starts every member and reports what happened to each, separately rather than
+as a count:
+
+```json
+{"group": {...}, "sessions": ["a", "b"], "started": ["b"],
+ "missing": [{"session": "c", "cli": "grok", "cwd": "/srv/x", "name": "old"}],
+ "failed": []}
+```
+
+`sessions` is what is now running and ready for a tab, in member order.
+`started` is the subset that was stopped and has been started. `missing` is
+members whose session no longer exists: they are **not** recreated unless you
+pass `{"recreate": true}`, because a group silently spawning something somebody
+deleted on purpose is the worse failure. Recreating rewrites the member to
+point at the new session, so the next open does not strand it again.
+
+Opening tabs is the browser's job. This is the half that has to happen on the
+server, and it is a route so that a script can open a working group too.
+
+### `POST /api/groups/<id>/delete`
+
+Removes the group. The sessions are untouched.
+
 ## Folders
 
 - `POST /api/folders` → `201` with the whole folder — body `name`, `color`

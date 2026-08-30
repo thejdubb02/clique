@@ -41,8 +41,13 @@ part of this that has never actually been used on a phone.
    - **29 tap targets under 44px.** The key row and the header buttons.
    - ~~The login page~~ done in 0.60.0, along with installing as an app.
 
-   The resize fight that made it unusable is fixed in 0.58.0; this is what is
-   left. Still worth half an hour with a real handset afterwards, because the
+   - **Things are cut off in the phone view.** Raised 2026-08-30 while working
+     groups went in: there are icons and areas in the mobile layout that are
+     clipped as it stands. Not diagnosed yet, and worth doing as one pass over
+     the whole phone layout rather than one control at a time.
+
+   The resize fight that made it unusable is fixed in 0.58.0, scrolling in
+   0.61.0; this is what is left. Still worth half an hour with a real handset afterwards, because the
    tool cannot see the notch and does not run in standalone mode.
 
 1. **(done, kept for the reasoning) Use it on a phone, then fix what is wrong.** Everything mobile has been

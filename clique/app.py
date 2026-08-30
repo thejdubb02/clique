@@ -803,6 +803,12 @@ class Panel:
                 }
                 for f in sorted(self.store.folders, key=lambda f: f.order)
             ],
+            # Working groups: sessions opened and seen together. Sent whole
+            # rather than by id, because the tab strip has to colour a tab by
+            # its group on the first paint and a second round trip for that is
+            # a flicker nobody asked for.
+            "groups": [dataclasses.asdict(g) for g in sorted(
+                self.store.groups, key=lambda g: (g.order, g.name.lower()))],
             "sessions": self.sessions_view(panes),
             "clis": [c.as_dict() for c in self.registry.types().values()],
             # Almost always empty, which is the point — this carries the
@@ -2092,6 +2098,33 @@ class Handler(BaseHTTPRequestHandler):
                 # refused, and "the API is the whole surface" means a script
                 # should be able to see what it created without a second GET.
                 return self._json(dataclasses.asdict(folder), 201)
+            if path.startswith("/api/groups/"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4 and parts[3] == "delete":
+                    gone = self.panel.store.delete_group(parts[2])
+                    return self._json({"ok": gone}, 200 if gone else 404)
+                if len(parts) == 4 and parts[3] == "add":
+                    group = self.panel.store.group_add_session(
+                        parts[2], str(body.get("session") or ""))
+                    if not group:
+                        return self._json({"error": "no such group or session"}, 404)
+                    return self._json(dataclasses.asdict(group))
+                if len(parts) == 4 and parts[3] == "remove":
+                    group = self.panel.store.group_remove_session(
+                        parts[2], str(body.get("session") or ""))
+                    if not group:
+                        return self._json({"error": "no such group"}, 404)
+                    return self._json(dataclasses.asdict(group))
+                if len(parts) == 4 and parts[3] == "open":
+                    return self._open_group(parts[2], bool(body.get("recreate")))
+            if path == "/api/groups":
+                group = self.panel.store.add_group(
+                    body.get("name") or "New group", body.get("color"),
+                    body.get("members"),
+                )
+                if group is None:
+                    return self._json({"error": "too many groups"}, 400)
+                return self._json(dataclasses.asdict(group), 201)
             if path == "/api/reorder":
                 sessions = body.get("sessions") or []
                 folders = body.get("folders") or []
@@ -2248,6 +2281,61 @@ class Handler(BaseHTTPRequestHandler):
         if not kind:
             return self._json({"error": "not an image this understands"}, 415)
         return self._send(200, raw, kind, {"Cache-Control": "no-store"})
+
+    def _open_group(self, group_id: str, recreate: bool) -> None:
+        """Start everything in a group and say what happened to each member.
+
+        Opening tabs is the browser's job; this is the half that has to happen
+        on the server, and it is a route rather than something only the panel
+        can do so that a script can open a working group too.
+
+        Three things can be true of a member and they are reported separately
+        rather than folded into a count. It was already running. It was stopped
+        and has been started. Or its session is gone, in which case it is only
+        recreated when the caller asks: a group quietly spawning a session
+        somebody deleted on purpose is worse than one that says a member is
+        missing and leaves the decision alone.
+        """
+        group = self.panel.store.group(group_id)
+        if not group:
+            return self._json({"error": "no such group"}, 404)
+        opened, started, missing, failed = [], [], [], []
+        for member in group.members:
+            sid = member.get("session") or ""
+            found = self.panel.store.session(sid)
+            if found and not found.archived:
+                if found.mux in self.panel.live():
+                    opened.append(sid)
+                    continue
+                result = self.panel.start_session(sid)
+                if result.get("error"):
+                    failed.append({"session": sid, "error": result["error"]})
+                else:
+                    started.append(sid)
+                    opened.append(sid)
+                continue
+            if not recreate:
+                missing.append(member)
+                continue
+            made = self.panel.create_session({
+                "cli": member.get("cli") or "",
+                "cwd": member.get("cwd") or "",
+                "name": member.get("name") or "",
+            })
+            if made.get("error"):
+                failed.append({"session": sid, "error": made["error"]})
+                continue
+            # The group now points at the new session rather than the ghost,
+            # or the next open would strand it again.
+            self.panel.store.group_remove_session(group_id, sid)
+            self.panel.store.group_add_session(group_id, made["id"])
+            opened.append(made["id"])
+            started.append(made["id"])
+        return self._json({
+            "group": dataclasses.asdict(self.panel.store.group(group_id) or group),
+            "sessions": opened, "started": started,
+            "missing": missing, "failed": failed,
+        })
 
     def _artifacts(self, session_id: str) -> None:
         """What this session's working directory has to show.
@@ -2580,6 +2668,13 @@ class Handler(BaseHTTPRequestHandler):
                 fields = {k: v for k, v in body.items() if k in allowed}
                 updated = self.panel.store.update_session(parts[2], **fields)
                 return self._json({"ok": bool(updated)}, 200 if updated else 404)
+            if len(parts) == 3 and parts[1] == "groups":
+                allowed_keys = {"name", "color", "members", "order"}
+                fields = {k: v for k, v in body.items() if k in allowed_keys}
+                updated = self.panel.store.update_group(parts[2], **fields)
+                if not updated:
+                    return self._json({"ok": False}, 404)
+                return self._json(dataclasses.asdict(updated))
             if len(parts) == 3 and parts[1] == "folders":
                 updated = self.panel.store.update_folder(
                     parts[2],

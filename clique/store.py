@@ -312,6 +312,36 @@ class Folder:
     order: int = 0
 
 
+#: How many working groups one panel will hold. Not a technical limit: a
+#: sidebar of forty groups is a worse sidebar than one of five, and the point
+#: of a group is that you can see it at a glance.
+GROUP_LIMIT = 40
+
+
+@dataclass
+class Group:
+    """Sessions you always open together.
+
+    Not a folder, and the difference is the whole feature. A folder files a
+    session in the sidebar and a session has exactly one. A group is about
+    opening and seeing things at once: it can pull from several folders or
+    from none, a session can belong to more than one, and being in a group
+    changes nothing about where a session lives.
+
+    Each member carries `cli`, `cwd` and `name` alongside the session id, so a
+    member whose session has been reaped or deleted can be offered back rather
+    than silently vanishing from the group. A group that quietly opens two of
+    the three things it promised is worse than one that says the third is gone.
+    """
+
+    id: str
+    name: str
+    color: str = "#7aa2f7"
+    #: [{"session": id, "cli": str, "cwd": str, "name": str}]
+    members: list[dict] = field(default_factory=list)
+    order: int = 0
+
+
 @dataclass
 class Session:
     id: str
@@ -365,6 +395,33 @@ class Session:
 
 def new_id() -> str:
     return str(uuid.uuid4())
+
+
+def _clean_members(raw: list[dict] | None) -> list[dict]:
+    """Members as we will store them: a session id and enough to rebuild it.
+
+    Anything else a caller sends is dropped rather than stored. This ends up in
+    a JSON file that is read back and handed to the browser, so it is not the
+    place to keep whatever shape somebody happened to POST.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        sid = str(item.get("session") or "").strip()[:64]
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        out.append({
+            "session": sid,
+            "cli": str(item.get("cli") or "").strip()[:64],
+            "cwd": str(item.get("cwd") or "").strip()[:4096],
+            "name": str(item.get("name") or "").strip()[:120],
+        })
+        if len(out) >= 24:      # a group you cannot see at a glance is a folder
+            break
+    return out
 
 
 def auto_folder(cwd: str, folders: list[Folder]) -> str | None:
@@ -464,6 +521,7 @@ class Store:
             )
         self._lock = threading.RLock()
         self.folders: list[Folder] = []
+        self.groups: list[Group] = []
         self.sessions: list[Session] = []
         self.settings: dict = dict(DEFAULT_SETTINGS)
         self.themes: list[dict] = []
@@ -485,6 +543,10 @@ class Store:
         folders = raw.get("folders") or DEFAULT_FOLDERS
         self.folders = [
             Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__}) for f in folders
+        ]
+        self.groups = [
+            Group(**{k: v for k, v in g.items() if k in Group.__annotations__})
+            for g in (raw.get("groups") or [])
         ]
         self.sessions = [
             Session(**{k: v for k, v in s.items() if k in Session.__annotations__})
@@ -534,6 +596,7 @@ class Store:
         payload = {
             "version": 1,
             "folders": [asdict(f) for f in self.folders],
+            "groups": [asdict(g) for g in self.groups],
             "sessions": [asdict(s) for s in self.sessions],
             "settings": self.settings,
             "themes": self.themes,
@@ -873,6 +936,83 @@ class Store:
                 self.settings["theme"] = ""
             self._write()
             return True
+
+    # ---------------------------------------------------------------- groups
+
+    def group(self, group_id: str) -> Group | None:
+        return next((g for g in self.groups if g.id == group_id), None)
+
+    def add_group(self, name: str, color: str | None = None,
+                  members: list[dict] | None = None) -> Group | None:
+        with self._lock:
+            if len(self.groups) >= GROUP_LIMIT:
+                return None
+            group = Group(
+                id=f"g-{uuid.uuid4().hex[:8]}",
+                name=(name or "").strip()[:60] or "New group",
+                color=colour(color, PALETTE[len(self.groups) % len(PALETTE)]),
+                members=_clean_members(members),
+                order=len(self.groups),
+            )
+            self.groups.append(group)
+            self._write()
+            return group
+
+    def update_group(self, group_id: str, **fields) -> Group | None:
+        with self._lock:
+            found = self.group(group_id)
+            if not found:
+                return None
+            if "name" in fields:
+                found.name = str(fields["name"] or "").strip()[:60] or found.name
+            if "color" in fields:
+                found.color = colour(fields["color"], found.color)
+            if "members" in fields:
+                found.members = _clean_members(fields["members"])
+            if "order" in fields:
+                with contextlib.suppress(TypeError, ValueError):
+                    found.order = int(fields["order"])
+            self._write()
+            return found
+
+    def delete_group(self, group_id: str) -> bool:
+        with self._lock:
+            before = len(self.groups)
+            self.groups = [g for g in self.groups if g.id != group_id]
+            if len(self.groups) == before:
+                return False
+            self._write()
+            return True
+
+    def group_add_session(self, group_id: str, session_id: str) -> Group | None:
+        """Put a session in a group, remembering what it takes to rebuild it.
+
+        The snapshot is the point. A member is stored as the session id *plus*
+        its CLI, directory and name, so a group whose session has since been
+        deleted can offer to start it again instead of quietly being one
+        member short.
+        """
+        with self._lock:
+            group = self.group(group_id)
+            found = self.session(session_id)
+            if not group or not found:
+                return None
+            group.members = [m for m in group.members if m.get("session") != session_id]
+            group.members.append({
+                "session": found.id, "cli": found.cli,
+                "cwd": found.cwd, "name": found.name,
+            })
+            self._write()
+            return group
+
+    def group_remove_session(self, group_id: str, session_id: str) -> Group | None:
+        with self._lock:
+            group = self.group(group_id)
+            if not group:
+                return None
+            group.members = [m for m in group.members if m.get("session") != session_id]
+            self._write()
+            return group
 
     def add_folder(self, name: str, color: str | None = None) -> Folder:
         with self._lock:

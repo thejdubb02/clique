@@ -310,6 +310,54 @@ def _run() -> int:
     else:
         print("  --   login form not covered (set CLIQUE_TEST_PASSWORD)")
 
+    print("working groups")
+    status, made = call("/api/groups", "POST", {"name": "Morning", "color": "#7aa2f7"})
+    check("a group is created", status == 201 and made.get("id", "").startswith("g-"), made)
+    gid = made.get("id", "")
+    status, state_now = call("/api/state")
+    check("and arrives whole in state, not by id",
+          any(g["id"] == gid and "members" in g for g in state_now.get("groups", [])),
+          state_now.get("groups"))
+
+    # Membership needs a real session, so make one.
+    status, sess = call("/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp",
+                                                  "name": "group member"})
+    sid = sess.get("id", "")
+    if sid:
+        status, got = call(f"/api/groups/{gid}/add", "POST", {"session": sid})
+        member = (got.get("members") or [{}])[0]
+        check("adding a session stores a snapshot",
+              member.get("session") == sid and member.get("cli") == "shell"
+              and member.get("cwd") == "/tmp", member)
+
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {})
+        check("opening reports what is now running", sid in (opened.get("sessions") or []),
+              opened)
+        check("and separates missing from failed",
+              isinstance(opened.get("missing"), list)
+              and isinstance(opened.get("failed"), list), opened)
+
+        # A member whose session is gone is reported, never silently dropped,
+        # and never recreated unless asked.
+        call(f"/api/sessions/{sid}", "DELETE")
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {})
+        check("a deleted member is reported as missing",
+              len(opened.get("missing") or []) == 1, opened)
+        check("and is not recreated behind your back",
+              opened.get("sessions") == [], opened)
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {"recreate": True})
+        check("recreate brings it back when asked",
+              len(opened.get("sessions") or []) == 1, opened)
+        check("and the group now points at the new session",
+              (opened.get("missing") or []) == [], opened)
+        for made_id in opened.get("sessions") or []:
+            call(f"/api/sessions/{made_id}", "DELETE")
+
+    status, _ = call(f"/api/groups/{gid}/delete", "POST")
+    check("a group can be deleted", status == 200, status)
+    status, _ = call(f"/api/groups/{gid}/open", "POST", {})
+    check("and is gone afterwards", status == 404, status)
+
     print("what a stranger may fetch")
     # PUBLIC_ASSETS is an allow-list, and it went dead once already: closing a
     # traversal hole replaced the whole check with a "is it inside brand/"

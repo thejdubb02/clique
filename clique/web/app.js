@@ -322,6 +322,185 @@ function paintCliMark(active, colour) {
   }
 }
 
+/* Working groups: sessions you open and see together.
+ *
+ * Deliberately not folders. A folder files a session in the sidebar and a
+ * session has exactly one; a group is about opening several things at once and
+ * being able to tell at a glance which tabs belong to which piece of work. So
+ * a group can pull from several folders or none, and a session can sit in more
+ * than one. Being in a group changes nothing about where a session lives. */
+function groups() {
+  return state.groups || [];
+}
+
+/* The group a tab is drawn as part of. First match wins, which is the whole
+ * of the rule for a session in two groups: a tab has one edge to colour, and
+ * picking the first keeps it stable rather than flickering between two
+ * colours as the poll reorders anything. */
+function groupOf(sessionId) {
+  return groups().find(
+    (g) => (g.members || []).some((m) => m.session === sessionId)) || null;
+}
+
+/* Open every session in a group, and put its tabs next to each other.
+ *
+ * Adjacency is not decoration here, it is the whole visual. The band under the
+ * tabs only reads as one band if the tabs it runs under are a run; scattered
+ * through the strip the same colour reads as three unrelated pills, which is
+ * what the first version of this did.
+ *
+ * So the members are gathered into one block. Any that were already open are
+ * moved rather than duplicated, which also means opening a group twice is
+ * harmless and tidies the strip instead of growing it.
+ *
+ * A member whose session is gone is reported, never silently skipped, and
+ * never recreated without being asked: a group quietly starting something
+ * somebody deleted on purpose is the worse failure. */
+async function openGroup(group) {
+  let result;
+  try {
+    result = await api(`api/groups/${encodeURIComponent(group.id)}/open`,
+                       { method: "POST", body: "{}" });
+  } catch (err) {
+    return toast(`Could not open ${group.name}: ${err.message || err}`, true);
+  }
+  await refresh();
+  const wanted = result.sessions || [];
+  if (wanted.length) {
+    for (const id of wanted) if (!openTabs.includes(id)) openTabs.push(id);
+    const rest = openTabs.filter((id) => !wanted.includes(id));
+    // Where the block lands: where the first member already was, so opening a
+    // group does not throw you to the end of a strip you were working in.
+    const at = openTabs.findIndex((id) => wanted.includes(id));
+    const cut = Math.max(0, Math.min(at, rest.length));
+    openTabs = [...rest.slice(0, cut), ...wanted, ...rest.slice(cut)];
+    saveWorkspace(true);
+    selectTab(wanted[0]);
+  }
+  const missing = (result.missing || []).length;
+  const failed = (result.failed || []).length;
+  if (missing || failed) {
+    const bits = [];
+    if (missing) bits.push(`${missing} no longer exist`);
+    if (failed) bits.push(`${failed} would not start`);
+    toast(`${group.name}: ${wanted.length} open, ${bits.join(", ")}`, true);
+  } else {
+    toast(`${group.name}: ${wanted.length} open`);
+  }
+}
+
+/* The groups strip at the top of the sidebar.
+ *
+ * This is where a group's *name* lives, which is the half the tab band cannot
+ * carry: the band is three pixels inside a 35px strip and there is nowhere in
+ * it for words. Here there is room, and this is where you launch from anyway.
+ */
+function renderGroups() {
+  const host = $("#groups");
+  if (!host) return;
+  const all = groups();
+  host.hidden = !all.length;
+  if (!all.length) { host.textContent = ""; return; }
+  host.textContent = "";
+  for (const group of all) {
+    const row = mk("div", "group-row");
+    const dot = mk("span", "group-dot");
+    dot.style.background = cssColor(group.color) || "var(--accent)";
+    const name = mk("span", "group-name");
+    name.textContent = group.name;
+    const count = mk("span", "group-count");
+    const live = (group.members || []).filter(
+      (m) => (session(m.session) || {}).alive).length;
+    count.textContent = `${live}/${(group.members || []).length}`;
+    count.title = `${live} of ${(group.members || []).length} running`;
+    const open = mk("button", "group-open");
+    open.type = "button";
+    open.textContent = "Open";
+    open.title = "Open every session in this group, as tabs side by side";
+    open.onclick = (ev) => { ev.stopPropagation(); openGroup(group); };
+    row.append(dot, name, count, open);
+    row.onclick = () => openGroup(group);
+    row.oncontextmenu = (ev) => groupMenu(ev, group);
+    host.appendChild(row);
+  }
+}
+
+function groupMenu(ev, group) {
+  showMenu(ev, [
+    ["Open the group", () => openGroup(group)],
+    ["Rename", () => renameGroup(group)],
+    ["Delete the group", () => deleteGroup(group), true],
+  ]);
+}
+
+async function renameGroup(group) {
+  const name = prompt("Group name", group.name);
+  if (name === null || !name.trim()) return;
+  try {
+    await api(`api/groups/${encodeURIComponent(group.id)}`,
+              { method: "PATCH", body: JSON.stringify({ name: name.trim() }) });
+    await refresh();
+  } catch (err) {
+    toast(`Could not rename it: ${err.message || err}`, true);
+  }
+}
+
+async function deleteGroup(group) {
+  try {
+    await api(`api/groups/${encodeURIComponent(group.id)}/delete`, { method: "POST" });
+    await refresh();
+    toast(`Deleted ${group.name}. The sessions are untouched.`);
+  } catch (err) {
+    toast(`Could not delete it: ${err.message || err}`, true);
+  }
+}
+
+/* Putting a session in a group, from the session's own menu, which is where
+ * you are when you decide it belongs in one. */
+function addToGroup(s) {
+  const all = groups();
+  const rows = all.map((g) => [
+    g.name + ((g.members || []).some((m) => m.session === s.id) ? "  ·  already in it" : ""),
+    () => joinGroup(g.id, s),
+  ]);
+  rows.push(["New group from this session…", () => newGroupFrom(s)]);
+  showMenu(lastMenuEvent, rows);
+}
+
+async function joinGroup(groupId, s) {
+  try {
+    await api(`api/groups/${encodeURIComponent(groupId)}/add`,
+              { method: "POST", body: JSON.stringify({ session: s.id }) });
+    await refresh();
+  } catch (err) {
+    toast(`Could not add it: ${err.message || err}`, true);
+  }
+}
+
+async function newGroupFrom(s) {
+  const name = prompt("Name the group", s.name);
+  if (name === null || !name.trim()) return;
+  try {
+    const made = await api("api/groups", {
+      method: "POST", body: JSON.stringify({ name: name.trim() }),
+    });
+    await joinGroup(made.id, s);
+    toast(`${made.name}: add more sessions from their menus`);
+  } catch (err) {
+    toast(`Could not create it: ${err.message || err}`, true);
+  }
+}
+
+async function leaveGroup(groupId, s) {
+  try {
+    await api(`api/groups/${encodeURIComponent(groupId)}/remove`,
+              { method: "POST", body: JSON.stringify({ session: s.id }) });
+    await refresh();
+  } catch (err) {
+    toast(`Could not remove it: ${err.message || err}`, true);
+  }
+}
+
 function cliColor(cliId, shipped) {
   return cssColor((state.settings.cli_colors || {})[cliId] || shipped);
 }
@@ -1079,6 +1258,7 @@ async function refresh() {
   noteBusy(state.sessions);   // before anything renders a work state
   noticeFinished(state.sessions.filter((x) => openTabs.includes(x.id)));
   renderTree();
+  renderGroups();
   renderTabs();
   renderStats();
   renderPlan();
@@ -2277,6 +2457,10 @@ function sessionMenu(ev, s) {
     ["Duplicate (same CLI, same directory)", () => duplicateSession(s)],
     ...(otherClis(s).length
       ? [["Open in another CLI…", () => openInOtherCli(s)]] : []),
+    ["Add to a working group…", () => addToGroup(s)],
+    ...(groupOf(s.id)
+      ? [[`Take out of ${groupOf(s.id).name}`, () => leaveGroup(groupOf(s.id).id, s)]]
+      : []),
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
      * There is no drag on a phone, which made half the sidebar's organisation
@@ -3556,6 +3740,7 @@ function tabsFingerprint() {
       unread(s) ? 1 : 0, attention.has(id) ? 1 : 0,
       reviewLockedOf(id) ? 1 : 0,
       s.cwd || "", s.signal || "", s.cli || "",
+      (groupOf(id) || {}).id || "", (groupOf(id) || {}).color || "",
     ].join("\x1f");
   }).join("\x1e") + "\x1d" + (activeId || "");
 }
@@ -3586,6 +3771,28 @@ function renderTabs() {
       (workState(s) === "error" ? " error" : "") +
       (reviewLockedOf(id) ? " locked" : "") +
       (attention.has(id) ? " attention" : "");
+    /* The group band, drawn inside the tab rather than above the strip.
+     *
+     * Chrome puts a labelled band over its tab groups, which costs a row of
+     * height. There is no row to spare here: the strip is 35px and on a phone
+     * it is competing with the pane for the only screen there is. So the band
+     * is a rule along the bottom edge of the tabs themselves, continuous
+     * across a run of them, and the group's name lives in the sidebar where
+     * there is room for words. Same treatment on both, no phone special case.
+     *
+     * The ends are rounded only where the run actually ends, which is what
+     * turns three coloured tabs into one band instead of three. */
+    const grp = groupOf(id);
+    if (grp) {
+      tab.classList.add("grouped");
+      tab.style.setProperty("--group", cssColor(grp.color) || "var(--accent)");
+      const prev = openTabs[index - 1];
+      const next = openTabs[index + 1];
+      const same = (other) => other && (groupOf(other) || {}).id === grp.id;
+      if (!same(prev)) tab.classList.add("group-start");
+      if (!same(next)) tab.classList.add("group-end");
+      tab.title = `${grp.name} · ${tab.title || ""}`.trim();
+    }
     /* A mark nobody can name is a mark nobody trusts.
      *
      * The tab carries up to three of them — a status ring, an attention glow,
@@ -7225,6 +7432,7 @@ async function saveSettings(changes) {
   // does not become the timer-based reclaim two windows would fight over.
   reclaimSize();
   renderTree();
+  renderGroups();
   renderTabs();
 }
 
@@ -8832,6 +9040,12 @@ function paletteCommands() {
    * button is for the installed app, which has no address bar; the palette is
    * for anyone who would rather type it, and for a keyboard that cannot reach
    * the browser's own reload because the pane has the keys. */
+  for (const g of groups()) {
+    const live = (g.members || []).filter((m) => (session(m.session) || {}).alive).length;
+    add("Open group: " + g.name,
+        `${(g.members || []).length} sessions · ${live} already running`,
+        () => openGroup(g));
+  }
   add("Reload the panel", "Sessions keep running; tabs and layout come back",
       () => { const b = $("#reloadBtn"); if (b) b.onclick(); else location.reload(); });
 
