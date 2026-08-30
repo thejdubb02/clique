@@ -100,6 +100,32 @@ Folders are how you keep more than a handful of sessions findable.
 - **Orphans:** if a tmux session leaks (started outside CLIque, or left behind),
   it shows at the foot of the sidebar with a way to reap it.
 
+### Working groups
+
+Sessions you always open together. A group might hold a Claude for the
+dashboard, a Claude for the platform and a Grok for something else: different
+CLIs or all the same, one directory or three unrelated ones. Click **Open** and
+all of them start, side by side, as tabs under a coloured band.
+
+Build one from a session's own menu: right-click it, **Add to a working group**,
+then **New group from this session**. Add the others the same way.
+
+**A group is not a folder**, and the difference is the point. A folder files a
+session and a session has exactly one. A group is about launching several things
+at once and telling at a glance which tabs belong to which piece of work, so it
+can pull from several folders or none, and a session can sit in more than one.
+Joining a group changes nothing about where a session lives.
+
+The band is drawn inside the tab strip rather than above it, so it costs no
+height and looks the same on a phone as on a desktop. The group's *name* lives
+in the sidebar, where there is room for words. Opening a group also gathers its
+tabs into one run, because the same colour scattered through the strip reads as
+unrelated tabs rather than a group.
+
+If a member's session has been deleted, the group says so rather than quietly
+opening one fewer. It will start a replacement, but only when you ask, since a
+group spawning something you deleted on purpose is the worse mistake.
+
 ---
 
 ## The terminal pane
@@ -345,8 +371,17 @@ CLIque is built to check on from the couch.
 - A row of terminal keys (Esc, Tab, Ctrl-C, arrows) appears for a session in
   front.
 - Long-press stands in for right-click, so every menu is reachable.
-- "Install as an app", in Settings, About, adds it to your home screen with no
-  browser chrome.
+- **Add to Home Screen** installs it as a real app, from the sign-in page as
+  well as from inside, so it works before you have logged in for the first time.
+- **Drag the pane to scroll** back through the output. Tapping the prompt does
+  not zoom the page, which it used to on iOS.
+- **A reload button** appears in the status bar once it is installed, because an
+  app has no address bar and nothing else to reload from. The command palette
+  offers it anywhere.
+- **A phone wins the terminal size.** With a desktop panel open on the same
+  session, the phone owns the window while it is awake, and lets go the moment
+  the screen goes dark. Two panels used to resize each other every three
+  seconds, which made a phone close to unusable.
 - Your open tabs, their order and the active one are saved on the server, so the
   panel comes back the way you left it.
 
