@@ -278,6 +278,48 @@ function applyCliTint() {
   const root = document.documentElement.style;
   root.setProperty("--cli", off ? "transparent" : colour);
   root.setProperty("--active-edge", off || !colour ? "var(--accent)" : colour);
+  paintCliMark(s, colour);
+}
+
+/* The active CLI's logo, watermarked into the top-right of the pane.
+ *
+ * The pane edge already carries the CLI's colour, which answers "which one am
+ * I in" for anyone who has learned the colours. This answers it for everyone
+ * else, and at a glance across a screen of panes rather than by reading a tab.
+ * Opposite corner to the theme character on purpose, so a theme with one and
+ * a session with the other do not sit on top of each other.
+ *
+ * Two shapes of icon, the same split `markerFor` makes for the sidebar. A
+ * single-colour glyph becomes a mask tinted with the CLI's own colour, which
+ * is what lets one file serve every mode. A logo that carries its own colours
+ * cannot be a mask - it flattens to a solid square - so it is drawn as the
+ * image it is. A CLI with no icon at all draws nothing here rather than
+ * inventing a letter: a watermark is decoration, and a letter blown up to
+ * a hundred pixels in the corner reads as a mistake. */
+function paintCliMark(active, colour) {
+  const el = $("#cliMark");
+  if (!el) return;
+  const s = active || session(activeId);
+  const cli = s && (state.clis || []).find((c) => c.id === s.cli);
+  const icon = cli && cli.icon;
+  const show = state.settings.cli_watermark !== false && Boolean(icon);
+  el.hidden = !show;
+  if (!show) return;
+  const url = `url("icons/${encodeURIComponent(icon)}")`;
+  const full = Boolean(cli.icon_full_color);
+  el.classList.toggle("is-image", full);
+  if (full) {
+    el.style.backgroundImage = url;
+    el.style.webkitMaskImage = "";
+    el.style.maskImage = "";
+    el.style.background = "";
+    el.style.backgroundImage = url;
+  } else {
+    el.style.backgroundImage = "";
+    el.style.webkitMaskImage = url;
+    el.style.maskImage = url;
+    el.style.background = colour || "var(--dim)";
+  }
 }
 
 function cliColor(cliId, shipped) {
@@ -7414,6 +7456,7 @@ function openSettings() {
   }
   $("#setCliTint").checked = s.cli_tint !== false;
   $("#setThemeArt").checked = s.theme_art !== false;
+  $("#setCliWatermark").checked = s.cli_watermark !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
   // into, and a poll landing mid-edit would move their cursor.
@@ -7683,6 +7726,7 @@ function wire() {
   };
   $("#setCliTint").onchange = (ev) => saveSettings({ cli_tint: ev.target.checked });
   $("#setThemeArt").onchange = (ev) => saveSettings({ theme_art: ev.target.checked });
+  $("#setCliWatermark").onchange = (ev) => saveSettings({ cli_watermark: ev.target.checked });
   $("#setArtShow").onchange = (ev) => {
     saveSettings({ artifacts_show: ev.target.checked });
     pollArtifacts();

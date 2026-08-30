@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.62.0 — 2026-08-30 08:56 PDT
+
+**The active CLI's logo, faint in the top-right of the pane.** Opposite corner
+to the theme character, so a theme with one and a session with the other never
+sit on top of each other.
+
+The pane edge has carried the CLI's colour for a while, and that answers "which
+one am I in" for anyone who has learned the colours. This answers it for
+everyone else, and answers it across a screen of panes rather than by reading a
+tab. At seven percent it is a thing you notice when you look for it and not
+when you are reading output.
+
+Two shapes of icon, the same split the sidebar markers already make. A
+single-colour glyph becomes a mask tinted with the CLI's own colour, which is
+what lets one file serve the tinted, grey and watermark modes at once. A logo
+that carries its own colours cannot be a mask, because it flattens to a solid
+square, so it is drawn as the image it is. A CLI with no icon draws nothing
+rather than inventing a letter: a letter blown up to a hundred pixels in a
+corner reads as a mistake, not as decoration.
+
+Desktop only. It takes itself away on a pane under 720px and a window under
+460px tall, on the same rule the theme character uses, because on a phone the
+corner is needed for output. One checkbox under **CLI markers** turns it off.
+
 ## 0.61.0 — 2026-08-30 08:26 PDT
 
 **Scrolling the terminal with a finger works.** It never had, and there were

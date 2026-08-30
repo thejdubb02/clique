@@ -163,6 +163,9 @@
            lighten/darken, so every glyph wins the blend and comes through
            untouched. Never interactive, and gone on a pane too small to
            spare the corner. -->
+      <!-- The active CLI's logo, faint in the opposite corner to the theme
+           character, so a pane says which tool it is without reading a tab. -->
+      <div id="cliMark" aria-hidden="true" hidden></div>
       <div id="themeArt" aria-hidden="true" hidden></div>
       <div id="follow" hidden></div>
       <div id="selChips" hidden>
@@ -622,6 +625,13 @@
       <h3>Which CLI am I in</h3>
       <label class="check"><input type="checkbox" id="setCliTint">
         Colour the pane edge with the active CLI’s colour</label>
+      <label class="check"><input type="checkbox" id="setCliWatermark">
+        Show the CLI’s logo faintly in the corner of the pane</label>
+      <p class="note">Top-right, opposite the theme character, and faint enough
+         that a line of output crossing it is still the thing you read. It says
+         which tool a pane is without reading the tab, which is the question
+         you have at a glance rather than up close. Hidden on a narrow pane and
+         on a phone, where the corner is needed for output.</p>
       <p class="note">Nine panes of black text look identical, and the moment
          it matters is the moment after you switch. The top of the pane, the
          active tab and the prompt box you are typing in all take the colour.

@@ -508,6 +508,63 @@ def _run(panel) -> int:
             # it: it is a background image on an element with no text, sized as
             # a percentage of a pane, blended into the terminal. Every part of
             # that is invisible to a test that reasons about the code.
+            print("the CLI's logo in the corner")
+            # The pane edge already carries the CLI colour. This is the same
+            # question answered for someone who has not learned the colours,
+            # and it has to stay faint enough that output crossing it reads.
+            mark = page.evaluate(
+                """() => {
+                  const el = document.querySelector('#cliMark');
+                  if (!el) return null;
+                  const cs = getComputedStyle(el);
+                  const box = el.getBoundingClientRect();
+                  const pane = document.querySelector('#termwrap').getBoundingClientRect();
+                  return {
+                    hidden: el.hidden, opacity: parseFloat(cs.opacity),
+                    w: Math.round(box.width), h: Math.round(box.height),
+                    mask: cs.maskImage || cs.webkitMaskImage || '',
+                    image: cs.backgroundImage || '',
+                    tint: cs.backgroundColor, events: cs.pointerEvents,
+                    topRight: box.right <= pane.right + 1 && box.top >= pane.top - 1,
+                  };
+                }"""
+            )
+            check("the active CLI's logo is drawn", bool(mark) and not mark["hidden"], mark)
+            check("it is the icon, one way or the other",
+                  bool(mark) and ("url(" in mark["mask"] or "url(" in mark["image"]), mark)
+            check("faint enough to read output through",
+                  bool(mark) and 0 < mark["opacity"] <= 0.12, mark)
+            check("big enough to recognise across a screen",
+                  bool(mark) and mark["w"] >= 60 and mark["h"] >= 60, mark)
+            check("in the top-right, opposite the theme character",
+                  bool(mark) and mark["topRight"], mark)
+            check("and it cannot be clicked",
+                  bool(mark) and mark["events"] == "none", mark)
+            # A single-colour glyph is masked and takes the CLI's own colour,
+            # which is the whole reason one file can serve every mode.
+            if "url(" in (mark or {}).get("mask", ""):
+                check("a mono glyph is tinted, not left grey",
+                      mark["tint"] not in ("rgba(0, 0, 0, 0)", "transparent"), mark["tint"])
+            gone = page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({cli_watermark: false})});
+                  await refresh();
+                  return document.querySelector('#cliMark').hidden;
+                }"""
+            )
+            check("turning it off turns it off", gone is True, gone)
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({cli_watermark: true})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(300)
+
             print("the theme's character in the corner")
             wide = page.viewport_size or {"width": 1440, "height": 900}
             page.evaluate(

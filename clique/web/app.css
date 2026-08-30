@@ -496,6 +496,24 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
    which is the one setting that would take a smooth illustration and put
    staircases down every edge of it. */
 #themeArt.is-drawing { width: 46%; max-width: 340px; image-rendering: auto; }
+/* The active CLI's logo. Top-right, opposite the theme character, and faint
+   enough that a line of output crossing it is still the thing you read.
+   `mask` for a single-colour glyph so it takes the CLI's colour; the
+   `is-image` variant is for a logo that carries its own. */
+#cliMark {
+  position: absolute; top: 16px; right: 20px; z-index: 1;
+  width: 104px; height: 104px; opacity: .07;
+  pointer-events: none; user-select: none;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  background-repeat: no-repeat; background-position: center;
+  background-size: contain;
+}
+#cliMark.is-image { background-color: transparent; opacity: .09; }
+
+@container termpane (max-width: 720px) { #cliMark { display: none; } }
+@media (max-height: 460px) { #cliMark { display: none; } }
 @container termpane (max-width: 720px) { #themeArt { display: none; } }
 @media (max-height: 460px) { #themeArt { display: none; } }
 

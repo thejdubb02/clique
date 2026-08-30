@@ -236,6 +236,11 @@ DEFAULT_SETTINGS = {
     #: a Claude prompt to a shell is a mistake that costs a paragraph of
     #: apology. An edge on the pane and the active tab, in the CLI's colour.
     "cli_tint": True,
+    #: The active CLI's logo, faint in the top-right of the pane. The edge
+    #: tint answers "which CLI am I in" for anyone who has learned the
+    #: colours; this answers it for everyone else, and across a screen of
+    #: panes rather than by reading a tab.
+    "cli_watermark": True,
     #: Per-CLI overrides of the colour shipped in clis.toml, because one
     #: person's palette is another person's invisible-on-their-theme.
     #: {"claude": "#d97757"}. An empty entry means "use the shipped one".
