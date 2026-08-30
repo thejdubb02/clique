@@ -191,6 +191,32 @@ def _global_options(history_limit: int) -> list[str]:
         "-g",
         "history-limit",
         str(history_limit),
+        # Scrollback, and the reason there was none.
+        #
+        # Every agent CLI here enters the alternate screen at startup, and an
+        # alternate-screen pane keeps no history by design: measured
+        # `history_size=0` against a 20000 limit on every live Claude session.
+        # So the capture this panel sends a reattaching browser had nothing to
+        # send, and a phone opening a session saw exactly one screenful with
+        # nothing above it. That read as "touch scrolling is broken" when
+        # scrolling was working perfectly and there was simply nothing there.
+        #
+        # With this off tmux ignores the switch, the CLI draws into the normal
+        # buffer, and output that scrolls off the top becomes history: measured
+        # 279 lines against 0 for the identical program. A TUI that repaints in
+        # place still creates none, so an input box being redrawn does not fill
+        # the scrollback with copies of itself.
+        #
+        # The trade is real and worth stating: a full-screen program that exits
+        # no longer has its screen restored, so `vim` in a shell session leaves
+        # its last frame behind. For a panel whose whole purpose is reading
+        # what an agent did, keeping the transcript is the better half of that
+        # bargain.
+        ";",
+        "set-option",
+        "-g",
+        "alternate-screen",
+        "off",
         # A CLI's bell should not steal focus in a browser tab, and we render
         # our own tab bar, so tmux's status line is duplicate chrome.
         ";",

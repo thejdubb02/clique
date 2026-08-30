@@ -5898,8 +5898,15 @@ async function attachNow(id) {
    * away, and a host that guessed "I am not" would stay blank if you
    * had clicked *to* it while it was still attaching. */
   host.dataset.session = id;
+  /* `touch-action: none` is what makes a finger reach the scroll handler
+   * below at all. Without it the browser claims a vertical drag for the
+   * native scroll of `.xterm-viewport`, whose scroll area is exactly one
+   * screen tall because xterm renders the buffer itself, so the gesture is
+   * swallowed to move something that cannot move and the pane never gets a
+   * touchmove. Measured: one touchstart, zero touchmoves. The cost is
+   * pinch-zoom on the pane, which a terminal has its own font control for. */
   host.style.cssText = "position:absolute;inset:0;padding:6px 8px;" +
-    "pointer-events:none";
+    "pointer-events:none;touch-action:none";
   box.appendChild(host);
 
   // Built with the theme already on, not with the built-in dark and a repaint
@@ -9208,6 +9215,83 @@ function wirePaneClipboard(term, host, sessionId) {
     e.preventDefault();
     e.stopPropagation();
   }, { capture: true, passive: false });
+
+  /* The same scroll, with a finger, because a phone has no wheel.
+   *
+   * This was simply missing. Scrolling the pane has always been our own wheel
+   * handler rather than the browser's, since xterm needs telling which of the
+   * two buffers a scroll belongs to, and nothing was listening for touch at
+   * all. So on a phone the pane did not scroll, and it looked like a broken
+   * gesture rather than an absent one.
+   *
+   * The branch is the wheel's, unchanged: a full-screen app owns its own view
+   * and is sent wheel events to move it, anything else scrolls the pane's own
+   * scrollback.
+   *
+   * Pixels are carried between moves rather than rounded away. A slow drag
+   * moves a few pixels per event, every one of which truncates to zero lines,
+   * and the pane would not move at all until you flicked. Keeping the
+   * remainder is the difference between a gesture that tracks your thumb and
+   * one that only responds to violence.
+   *
+   * A short movement is left alone so a tap still reaches the CLI and a
+   * long-press can still start a selection. */
+  const TOUCH_SLOP = 8;
+  let touchY = 0;
+  let touchX = 0;
+  let carried = 0;
+  let dragging = false;
+  let tracking = false;
+
+  host.addEventListener("touchstart", (e) => {
+    tracking = e.touches.length === 1;
+    dragging = false;
+    carried = 0;
+    if (!tracking) return;
+    touchY = e.touches[0].clientY;
+    touchX = e.touches[0].clientX;
+  }, { capture: true, passive: true });
+
+  host.addEventListener("touchmove", (e) => {
+    if (!tracking || e.touches.length !== 1) return;
+    /* Deliberately not gated on `sessionOwnsInput`, which the wheel handler
+     * above does gate on. The wheel can afford it: a CLI that does not own its
+     * input is left to the browser's native scrolling. A finger has no such
+     * fallback, because `touch-action: none` above is exactly what took the
+     * gesture away from the browser, so gating here means a shell session
+     * simply does not scroll. Which is how this was written the first time. */
+    const y = e.touches[0].clientY;
+    const moved = touchY - y;
+    if (!dragging) {
+      if (Math.abs(moved) < TOUCH_SLOP) return;   // still might be a tap
+      dragging = true;
+      touchY = y;
+      return;
+    }
+    const cell = paneCellPx(term);
+    const height = (cell && cell.h) || 17;
+    carried += touchY - y;
+    touchY = y;
+    const lines = Math.trunc(carried / height);
+    if (lines) {
+      carried -= lines * height;
+      const s = session(sessionId);
+      if (s && s.alt) {
+        sendPaneWheel(term, touchX, y, lines < 0, Math.abs(lines), sessionId);
+      } else {
+        term.scrollLines(lines);
+      }
+    }
+    // Held even on a move that did not add up to a line yet: releasing it
+    // would let the page rubber-band underneath a half-finished drag.
+    e.preventDefault();
+    e.stopPropagation();
+  }, { capture: true, passive: false });
+
+  host.addEventListener("touchend", () => { tracking = false; dragging = false; },
+                        { capture: true, passive: true });
+  host.addEventListener("touchcancel", () => { tracking = false; dragging = false; },
+                        { capture: true, passive: true });
 }
 
 function renderCopyChip() {

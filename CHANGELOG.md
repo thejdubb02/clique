@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.61.0 — 2026-08-30 08:26 PDT
+
+**Scrolling the terminal with a finger works.** It never had, and there were
+three separate reasons, each of which had to be found before the next one was
+even visible.
+
+**tmux was keeping no scrollback at all.** Every agent CLI enters the
+alternate screen at startup, and an alternate-screen pane keeps no history by
+design: measured `history_size=0` against a 20000 limit on every live session.
+So the history this panel sends a reattaching browser had nothing in it, and a
+phone opening a session got exactly one screenful with nothing above it. tmux
+is now told to ignore the switch, which puts the output in the normal buffer
+where it scrolls into history: measured 279 lines against 0 for the identical
+program.
+
+**The browser was showing the wrong buffer.** With history finally arriving,
+a browser still had none, because the alternate-screen switch was stripped
+only for CLIs that own their input. Everything else parked xterm in the
+alternate buffer, which holds one screen and no scrollback by definition.
+Measured: 360 lines sitting in `buffer.normal` while the pane displayed the
+45-line alternate one. Every session hides that switch now.
+
+**And nothing was listening for a finger.** Scrolling the pane has always been
+this panel's own wheel handler rather than the browser's, because xterm needs
+telling which of the two buffers a scroll belongs to. There was no touch
+equivalent, so on a phone the pane did not scroll: not a broken gesture, an
+absent one. A drag now scrolls it, using the same branch the wheel uses, and
+`touch-action: none` on the pane is what lets the gesture reach it at all.
+Without that the browser claims a vertical drag for the native scroll of a
+scroll area that is exactly one screen tall, and swallows it to move something
+that cannot move. Measured before: one touchstart, zero touchmoves.
+
+Pixels are carried between moves rather than rounded away, so a slow drag
+tracks your thumb instead of doing nothing until you flick, and a short
+movement is left alone so a tap still reaches the CLI.
+
+The trade, stated plainly: a full-screen program that exits no longer has its
+screen restored, so `vim` in a shell session leaves its last frame behind. For
+a panel whose whole purpose is reading what an agent did, keeping the
+transcript is the better half of that bargain.
+
+`tools/visual_check.py` drives a real touch drag and asserts all three: that
+the pane shows the buffer history is in, that there is history in it, and that
+a drag moves through it and back.
+
 ## 0.60.0 — 2026-08-30 08:05 PDT
 
 **CLIque installs as an app on a phone, from the page you actually arrive on.**

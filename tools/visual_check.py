@@ -1119,6 +1119,63 @@ def _run(panel) -> int:
         )
         page.wait_for_timeout(900)
         page.screenshot(path=str(SHOTS / "mobile-closed.png"))
+
+        print("scrolling the pane with a finger")
+        # Three separate things had to be true for this to work and none of
+        # them was, so it is worth pinning all three. tmux has to keep history
+        # (it kept none while the CLI held the alternate screen), the browser
+        # has to be showing the buffer that history is in (it was showing the
+        # alternate one), and something has to turn a drag into a scroll (the
+        # pane only ever listened for a wheel). A phone has no wheel.
+        page.evaluate(
+            """() => { const e = [...terms.values()][0];
+                 for (let i = 0; i < 400; i++) e.term.write('scrollback ' + i + '\\r\\n'); }"""
+        )
+        page.wait_for_timeout(900)
+        state = page.evaluate(
+            """() => { const t = [...terms.values()][0].term;
+                 const host = document.querySelector('#terminal > div[data-session]');
+                 return {kind: t.buffer.active.type, back: t.buffer.active.baseY,
+                         touch: host ? getComputedStyle(host).touchAction : ''}; }"""
+        )
+        check("the pane shows the buffer that holds history",
+              state["kind"] == "normal", state)
+        check("and there is history in it", state["back"] > 20, state)
+        check("the pane claims the gesture rather than the browser",
+              state["touch"] == "none", state)
+
+        cdp = context.new_cdp_session(page)
+        cdp.send("Emulation.setTouchEmulationEnabled",
+                 {"enabled": True, "maxTouchPoints": 1})
+        box = page.evaluate(
+            """() => { const r = document.querySelector('#terminal').getBoundingClientRect();
+                 return {x: Math.round(r.x + r.width / 2),
+                         y: Math.round(r.y + r.height / 2)}; }"""
+        )
+
+        def finger(dy: int) -> None:
+            cdp.send("Input.dispatchTouchEvent",
+                     {"type": "touchStart", "touchPoints": [box]})
+            for i in range(1, 21):
+                cdp.send("Input.dispatchTouchEvent", {
+                    "type": "touchMove",
+                    "touchPoints": [{"x": box["x"], "y": box["y"] + dy * i // 20}]})
+            cdp.send("Input.dispatchTouchEvent",
+                     {"type": "touchEnd", "touchPoints": []})
+            page.wait_for_timeout(500)
+
+        where = lambda: page.evaluate(          # noqa: E731 - a probe, not a design
+            "() => [...terms.values()][0].term.buffer.active.viewportY")
+        page.evaluate("() => [...terms.values()][0].term.scrollToBottom()")
+        page.wait_for_timeout(300)
+        bottom = where()
+        finger(300)
+        back = where()
+        check("dragging down goes back through the scrollback", back < bottom,
+              {"from": bottom, "to": back})
+        finger(-300)
+        check("and dragging up comes forward again", where() > back,
+              {"from": back, "to": where()})
         page.evaluate("setSidebar(true)")
         page.wait_for_timeout(400)
         page.screenshot(path=str(SHOTS / "mobile-drawer.png"))

@@ -2745,7 +2745,12 @@ class Handler(BaseHTTPRequestHandler):
             # Boxed CLIs turn mouse tracking on. Hidden from the browser so
             # drag-select still works; a click we encode ourselves still
             # reaches the program in tmux.
-            filt = termstrip.boxed_stream() if (cli and cli.own_input) else None
+            # Always a filter now. The difference is only whether mouse
+            # reporting goes with it: the alternate screen is hidden from every
+            # session, because tmux ignores it to keep history and a browser
+            # that honoured it would sit in a buffer that has none.
+            filt = (termstrip.boxed_stream() if (cli and cli.own_input)
+                    else termstrip.plain_stream())
 
             def outbound(data: bytes, _filt=filt) -> None:
                 if _filt is not None:
