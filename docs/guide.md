@@ -72,7 +72,11 @@ open on it, and whether or not your browser is even awake.
   sends Ctrl-C, the gentle way to stop what an agent is doing without killing the
   session.
 - **Stop and restart:** stopping a session frees its memory; it can be started
-  again later, resuming the conversation where it left off.
+  again later, resuming the conversation where it left off. If that conversation
+  is not there any more (a session you opened, never typed in, and left long
+  enough to be stopped for you), the CLI refuses to resume it. CLIque notices
+  within a couple of seconds and starts a clean one in the same place, so a
+  click always gets you a session.
 
 Right-click a session row, or long-press it on a phone, for the full menu:
 rename, review changes, checkpoint, move to a folder, archive, pin, lock for
