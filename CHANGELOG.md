@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.65.0 — 2026-09-01 12:58 PDT
+
+**A session whose saved conversation is gone now starts anyway.** Clicking one
+did nothing at all: no pane, no error, nothing to click again. It had been
+doing that for a week before anyone worked out why.
+
+A resume key can outlive the thing it points at. Open a session, never type in
+it, let the idle reaper stop it six hours later, and the CLI has nothing on
+disk to come back to. CLIque asks for it anyway, the CLI refuses in about a
+second and a half, and the tab goes quiet.
+
+The panel now watches a resume for as long as eight seconds and, the moment
+the pane turns out to be gone, drops the key and starts the session clean.
+Usually over in two seconds, and there is nothing to click, learn or turn on.
+It only does this for a key that is CLIque's own session id, which is the one
+case where we know how it got there and can derive it again; a key that came
+from anywhere else was typed deliberately and is left alone. Stopping a
+session inside that window wins, so nothing is ever resurrected behind you.
+
+Nothing is read but process state: the pane is there or it is not. Working out
+*why* would mean reading the CLI's output, which is the line the core does not
+cross.
+
+`POST /api/sessions/<id>/start` now answers with `resumed`, saying whether the
+resume form was used. New check: `tools/resume_check.py`.
+
 ## 0.64.0 — 2026-08-30 14:56 PDT
 
 **Tapping the prompt on an iPhone no longer zooms the whole page.** Safari

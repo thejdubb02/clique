@@ -229,6 +229,10 @@ class Panel:
         self._last_reap = 0.0
         self._last_idle_reap = 0.0
         self._last_sweep = 0.0
+        #: Sessions whose resume is being watched (see _recover_dead_resume).
+        #: Stopping or deleting one takes it out, so a session someone shut
+        #: down inside the grace window is never resurrected behind them.
+        self._resume_watch: set[str] = set()
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ views
@@ -1121,6 +1125,8 @@ class Panel:
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
+        with self._lock:
+            self._resume_watch.discard(session_id)
         with contextlib.suppress(tmux.TmuxError):
             if tmux.exists(session.mux, session.socket):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
@@ -1178,13 +1184,16 @@ class Panel:
                 killed.append(mux)
         return {"killed": killed}
 
-    def start_session(self, session_id: str) -> dict:
+    def start_session(self, session_id: str, *, allow_resume: bool = True) -> dict:
         """Start a stopped session again. Same id, name, folder, directory.
 
         When the CLI was first launched with our session id (Claude's
         ``--session-id``), that is also the resume key. Other CLIs resume
         only if we already stored ``cli_session_id``. A shell has nothing
         to resume — it starts again in the same place.
+
+        ``allow_resume=False`` is the fresh start _recover_dead_resume falls
+        back to, and the only caller that passes it.
         """
         session = self.store.session(session_id)
         if not session:
@@ -1196,8 +1205,8 @@ class Panel:
         cli = self.registry.get(session.cli)
         if not cli.installed:
             raise ValueError(f"{cli.label}: '{cli.command}' is not installed on this box")
-        prior = session.cli_session_id
-        if not prior and cli.resume:
+        prior = session.cli_session_id if allow_resume else None
+        if allow_resume and not prior and cli.resume:
             # Only treat our id as theirs if the first launch handed it over.
             tokens = " ".join(cli.args)
             if "{id}" in tokens or "{uuid}" in tokens:
@@ -1220,12 +1229,73 @@ class Panel:
         )
         if prior and not session.cli_session_id:
             self.store.update_session(session.id, cli_session_id=prior)
-        return {"id": session.id}
+        if prior == session.id:
+            self._recover_dead_resume(session.id)
+        return {"id": session.id, "resumed": bool(prior)}
+
+    #: How long a resumed CLI has to prove it started, and how often the pane
+    #: is looked at while it does. Claude Code refuses a stale --resume in
+    #: about 1.5 seconds; a real one is still drawing its first frame long
+    #: after that. Watching rather than sleeping the whole window is what
+    #: keeps the recovery quick -- the usual case is over in two seconds and
+    #: the eight is only there for a slow box.
+    RESUME_GRACE = 8.0
+    RESUME_POLL = 0.5
+
+    def _recover_dead_resume(self, session_id: str) -> None:
+        """Watch a resume long enough to see it refuse, then start clean.
+
+        A resume key outlives the conversation it points at. Open a session,
+        never type in it, let the idle reaper stop it, and the CLI has nothing
+        on disk to come back to: the launch exits inside two seconds and the
+        tab goes quiet. No pane, no error, nothing to click — which is exactly
+        what one of Justin's sessions had been doing for a week when this was
+        found on 2026-09-01.
+
+        Only for a key that is *our own session id*, which is the one case we
+        know how it got there: we handed it over at first launch, so throwing
+        it away costs nothing the next start cannot derive again. A key that
+        came from somewhere else was typed deliberately and is left alone.
+
+        Process state and nothing else — the pane is gone or it is not.
+        Deciding *why* would mean reading the CLI's output, which is the line
+        the core does not cross.
+        """
+        with self._lock:
+            self._resume_watch.add(session_id)
+
+        def watch() -> None:
+            deadline = time.time() + self.RESUME_GRACE
+            while True:
+                time.sleep(self.RESUME_POLL)
+                with self._lock:
+                    if session_id not in self._resume_watch:
+                        return  # stopped or deleted while we watched
+                session = self.store.session(session_id)
+                if not session:
+                    return
+                if not tmux.exists(session.mux, session.socket):
+                    break
+                if time.time() >= deadline:
+                    return  # still up, so the resume took
+            with self._lock:
+                if session_id not in self._resume_watch:
+                    return
+                self._resume_watch.discard(session_id)
+            if session.cli_session_id != session.id:
+                return  # somebody changed the key under us
+            self.store.update_session(session_id, cli_session_id="")
+            with contextlib.suppress(Exception):
+                self.start_session(session_id, allow_resume=False)
+
+        threading.Thread(target=watch, daemon=True, name=f"resume-{session_id[:8]}").start()
 
     def delete_session(self, session_id: str) -> dict:
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
+        with self._lock:
+            self._resume_watch.discard(session_id)
         # Adopted sessions do not carry our name prefix, so the engine's guard
         # would refuse them. Deleting one is explicit, which is what force means.
         if tmux.exists(session.mux, session.socket):

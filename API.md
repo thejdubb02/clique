@@ -219,6 +219,18 @@ the CLI was first launched with our session id, that is also the resume key
 (Claude's `--session-id`). A shell has nothing to resume; it starts again
 in the same place. Already running is a `400`.
 
+```json
+{"id": "3afc8da8-...", "resumed": true}
+```
+
+`resumed` says whether the CLI's resume form was used rather than a fresh
+launch. A resume key can outlive the conversation it points at — a session
+opened, never typed in, then stopped — and the CLI then exits within a
+couple of seconds, leaving a tab that does nothing. Where the key is CLIque's
+own session id, the server watches the pane for eight seconds and, if it is
+gone, drops the key and starts the session clean. Nothing to call: it is the
+same endpoint, arriving a few seconds later.
+
 ### `DELETE /api/sessions/<id>`
 
 Forgets the record, and stops the process if it is still running. This is

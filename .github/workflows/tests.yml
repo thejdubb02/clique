@@ -31,3 +31,5 @@ jobs:
         run: python3 tools/site_i18n.py --check
       - name: server
         run: python3 tools/smoke_http.py
+      - name: dead resume keys recover
+        run: python3 tools/resume_check.py
