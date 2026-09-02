@@ -105,6 +105,26 @@ DEFAULT_SETTINGS = {
     "status_on_icon": True,
     #: Preset palette id from web/themes.js. "" is the built-in dark.
     "theme": "",
+    #: Wear a different one every so often, picked at random from the ones you
+    #: ticked. Off by default: a panel that changes its own colours without
+    #: being asked is a fault, not a feature.
+    "theme_rotate": False,
+    #: How often, in hours. 24 is a different theme every morning; 1 is the
+    #: shortest it will go, because below that it is a distraction rather than
+    #: a change of scene.
+    "theme_rotate_hours": 24,
+    #: What time of day the change lands, "HH:MM" on the server's own clock.
+    #: With an interval under a day this is the anchor the rest are counted
+    #: from, so "07:00" every 6 hours means 07:00, 13:00, 19:00, 01:00.
+    "theme_rotate_at": "07:00",
+    #: The themes it may choose from: preset ids from web/themes.js and stored
+    #: theme ids, mixed freely. Empty means nothing happens — there is no
+    #: "all of them" default, because the point is the ones you like.
+    "theme_rotate_pool": [],
+    #: Bookkeeping, not a preference: the slot last acted on, in unix seconds.
+    #: It is what stops a panel that has been shut all week applying six
+    #: changes the moment it opens.
+    "theme_rotate_last": 0,
     #: Ask each running CLI what is left of its plan, for the status bar.
     "usage_bar": True,
     #: Where to look for projects when the new-session dialog is asked for one
@@ -169,6 +189,12 @@ DEFAULT_SETTINGS = {
     #: second box under it, and one that does not — a shell, a readline tool —
     #: keeps the panel's, which is also the only place Run, the repeat counter
     #: and a saved draft live. "panel" always shows it, "terminal" never does.
+    #:
+    #: One exception, and it is not the CLI's to make: on a touch device "auto"
+    #: always shows the box. Typing into the terminal there goes through the
+    #: phone keyboard's input method, and Android's duplicates the line rather
+    #: than typing it. The decision is the browser's, so it lives in the front
+    #: end; this note is here so the setting reads honestly from either side.
     #:
     #: The mode pill is not part of this. It is the control for a CLI's
     #: permission mode, and hiding it along with the prompt box was the bug in
@@ -470,6 +496,48 @@ def _clean_patterns(value) -> list[str]:
         if len(out) >= 100:
             break
     return out
+
+
+#: Enough themes to rotate through that nobody hits it, few enough that a
+#: malformed PATCH cannot make the settings object enormous.
+ROTATE_POOL_LIMIT = 64
+
+
+def clock_time(text: str) -> tuple[int, int] | None:
+    """"HH:MM" as (hour, minute), or None if it is not one.
+
+    Written here rather than with `datetime.strptime` because this is asked
+    on every settings write and has to say no to "7", "25:00" and "" without
+    raising through the caller.
+    """
+    hour, sep, minute = str(text or "").partition(":")
+    if not sep or not hour.isdigit() or not minute.isdigit():
+        return None
+    hour, minute = int(hour), int(minute)
+    if 0 <= hour <= 23 and 0 <= minute <= 59:
+        return hour, minute
+    return None
+
+
+def _clean_theme_pool(value) -> list[str]:
+    """Theme ids, deduplicated and in the order they were sent.
+
+    Never checked against the themes that exist: the presets live in
+    `web/themes.js` and the server has never read that file. A pool naming one
+    that has gone is not an error, it is a theme id the browser will fall back
+    from the same way it does for any other missing one.
+    """
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        # The empty id is the built-in dark theme, not a missing value, so it
+        # is kept like any other. Dropping it as falsy is what stopped the
+        # first theme in the list from ever going in the rotation.
+        name = str("" if item is None else item).strip()[:64]
+        if name not in out:
+            out.append(name)
+    return out[:ROTATE_POOL_LIMIT]
 
 
 def _clean_snippets(value) -> list[dict]:
@@ -784,6 +852,18 @@ class Store:
                     self.settings[key] = str(value or "").strip()[:2048]
                 elif key in ("theme", "appearance", "input_mode"):
                     self.settings[key] = str(value or "")[:64]
+                elif key == "theme_rotate_hours":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(1, min(int(value), 720))
+                elif key == "theme_rotate_at":
+                    # A real time or nothing. A malformed one here would leave
+                    # the rotation silently never firing, which looks exactly
+                    # like the feature being broken.
+                    text = str(value or "").strip()[:5]
+                    if clock_time(text) is not None:
+                        self.settings[key] = text
+                elif key == "theme_rotate_pool":
+                    self.settings[key] = _clean_theme_pool(value)
                 elif key == "notify_idle_seconds":
                     with contextlib.suppress(TypeError, ValueError):
                         self.settings[key] = max(2, min(int(value), 120))
@@ -934,6 +1014,11 @@ class Store:
                 return False
             if self.settings.get("theme") == theme_id:
                 self.settings["theme"] = ""
+            # And out of the rotation, or it would be put back on later by a
+            # feature the person deleting it has probably forgotten about.
+            pool = self.settings.get("theme_rotate_pool")
+            if isinstance(pool, list) and theme_id in pool:
+                self.settings["theme_rotate_pool"] = [t for t in pool if t != theme_id]
             self._write()
             return True
 

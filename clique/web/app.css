@@ -2137,6 +2137,37 @@ body.win-flash::after {
 .days-inline:disabled { opacity: .5; }
 #storageUsage { font-variant-numeric: tabular-nums; }
 
+/* ------------------------------------------------------------ theme rotation */
+/* Same chrome as the inline day count next to it, wider because a time needs
+   the room and Firefox draws its own clear button inside the field. */
+.time-inline {
+  margin: 0 4px; padding: 2px 4px;
+  background: var(--field); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 3px; font: inherit;
+}
+.time-inline:disabled { opacity: .5; }
+
+/* The themes in the rotation. A wrapped list rather than a multi-select: a
+   phone cannot ctrl-click, and this is the one control in the sheet where
+   somebody is picking eight things out of twenty. */
+.rotate-pool { margin: 8px 0 10px; }
+.rotate-pool .rotate-group { margin-bottom: 8px; }
+.rotate-pool .rotate-head {
+  font-size: .85em; color: var(--dim); text-transform: uppercase;
+  letter-spacing: .04em; margin-bottom: 3px;
+}
+.rotate-pool .rotate-items {
+  display: flex; flex-wrap: wrap; gap: 2px 14px;
+}
+/* 44px on every device, not just a phone. Twenty of these wrap onto four
+   rows either way, so the desktop pays nothing for a row a thumb can hit. */
+.rotate-pool label {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 44px; cursor: pointer;
+}
+.rotate-pool.is-off { opacity: .5; }
+#themeRotateNow { margin-bottom: 6px; }
+
 /* Per-session status line, a thin strip under the tabs. */
 #sessionline {
   display: flex;

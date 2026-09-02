@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.66.0 — 2026-09-02 15:29 PDT
+
+**Typing on an Android phone no longer repeats the line you just sent.** With a
+suggestion from the keyboard, or a paste, the same sentence would arrive in the
+pane over and over. It made the phone close to unusable, which was the whole
+point of the last six releases.
+
+The cause is not really ours to fix. A CLI that draws its own prompt box gets
+the terminal to itself, so on a phone you were typing straight into the
+terminal, one keystroke at a time, through the keyboard's input method. Gboard
+predicts, autocorrects and pastes into a hidden field the terminal keeps
+emptying under it, loses track of what it believes is there, and re-commits the
+whole line. It is worst with a suggestion or a paste, which is exactly when the
+keyboard has the most to re-commit.
+
+So a touch device now always gets CLIque's own prompt box. Composing in an
+ordinary textarea and sending the finished line never goes near that path. The
+cost is the CLI's own box sitting above ours, which is one bar of screen
+against a phone you cannot type on. Setting the prompt-box mode to **Terminal**
+still overrides it.
+
+Two more things found on the way there, and they were live on a desktop too. An
+Enter arriving mid-word from an input method is no longer treated as send, and
+`run` no longer accepts a second Enter while the first is still waiting on a
+confirm or a request. Both sent the same text twice.
+
+**A different theme on a schedule.** Tick the themes you like under
+**Appearance ▸ Change it on a schedule** and CLIque puts a different one on
+every so often. Every 24 hours from 07:00 is a fresh theme each morning; every
+6 hours from 07:00 changes at 07:00, 13:00, 19:00 and 01:00. It picks at random
+from the ones you ticked and never the one already on, so a change always looks
+like one. **Change now** does it on the spot.
+
+It rides the panel's own poll rather than a timer, so nothing happens while
+nobody has CLIque open, and opening it after a few days catches up to the last
+change that was due rather than running through every one it missed. The server
+still has no idea what a theme is: the presets live in `web/themes.js` and it
+only moves an id you chose.
+
+`POST /api/themes/rotate`, five settings, and a check in
+`tools/rotate_check.py`.
+
+**Also:** the visual suite's boxed-pane click test had been failing since
+0.62.0, aimed at the wrong pane and at a session record the panel had not
+loaded yet. Fixed, so the check that a click reaches the CLI is doing its job
+again.
+
 ## 0.65.0 — 2026-09-01 12:58 PDT
 
 **A session whose saved conversation is gone now starts anyway.** Clicking one

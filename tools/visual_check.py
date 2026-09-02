@@ -888,7 +888,14 @@ def _run(panel) -> int:
             "/api/sessions", "POST", {"cli": "boxed", "cwd": "/tmp", "name": "boxed copy"}
         )["id"]
         page.wait_for_timeout(400)
-        page.evaluate("(id) => openSession(id)", boxed)
+        # Pull the session list before opening it. Half of what the panel does
+        # with a pane it reads off the record rather than the terminal --
+        # `own_input` is what decides whether a click is forwarded to the CLI at
+        # all -- and a session made through the API is not in `state.sessions`
+        # until a poll brings it in. The UI refreshes on create; a test that
+        # skips it is testing a panel that does not know what it is looking at,
+        # and this one silently was from 0.62.0 until 2026-09-02.
+        page.evaluate("async (id) => { await refresh(); await openSession(id); }", boxed)
         try:
             page.wait_for_function(
                 """() => {
@@ -902,8 +909,18 @@ def _run(panel) -> int:
             )
         except Exception as err:  # noqa: BLE001 — the checks below name what failed
             print(f"       boxed pane did not draw: {err}")
-        boxed_host = page.locator("#terminal .xterm").first
-        boxed_box = boxed_host.bounding_box() if boxed_host.count() else None
+        # The *active* pane, not the first one in the DOM. Panes for other
+        # sessions stay mounted, so `.first` is whichever was created earliest
+        # and clicking its box aims at a session nobody is looking at.
+        boxed_box = page.evaluate(
+            """() => {
+              const e = terms.get(activeId);
+              const el = e && e.term && e.term.element;
+              if (!el) return null;
+              const b = el.getBoundingClientRect();
+              return { x: b.x, y: b.y, width: b.width, height: b.height };
+            }"""
+        )
         tracking = page.evaluate(
             """() => {
               const e = terms.get(activeId);
@@ -1260,6 +1277,62 @@ def _run(panel) -> int:
         check("every theme is still reachable",
               bool(picker) and picker["total"] == page.evaluate(
                   "() => Object.keys(window.CLIQUE_THEMES || {}).length"), picker)
+
+        # The rotation: the same list again as checkboxes, because a phone
+        # cannot ctrl-click a multi-select. What matters visually is that the
+        # two lists agree, that ticking one actually stores it, and that the
+        # schedule fields grey out with the switch rather than sitting there
+        # live and doing nothing.
+        print("rotating through the themes you like")
+        rot = page.evaluate(
+            """() => {
+              const pool = document.querySelector('#themeRotatePool');
+              if (!pool) return null;
+              const boxes = [...pool.querySelectorAll('input[type=checkbox]')];
+              const rows = [...pool.querySelectorAll('label')];
+              return {
+                count: boxes.length,
+                ids: boxes.map((b) => b.dataset.theme),
+                groups: [...pool.querySelectorAll('.rotate-head')].map((h) => h.textContent),
+                shortest: Math.min(...rows.map((r) => Math.round(
+                  r.getBoundingClientRect().height))),
+                hoursOff: document.querySelector('#setThemeRotateHours').disabled,
+                atOff: document.querySelector('#setThemeRotateAt').disabled,
+              };
+            }"""
+        )
+        every = page.evaluate("() => Object.keys(window.CLIQUE_THEMES || {}).length")
+        check("every theme can be put in the rotation", bool(rot) and rot["count"] == every, rot)
+        check("grouped the same way the picker is",
+              bool(rot) and "With a character" in rot["groups"], rot)
+        check("a thumb can hit a row", bool(rot) and rot["shortest"] >= 44, rot)
+        check("the schedule is greyed out until it is switched on",
+              bool(rot) and rot["hoursOff"] and rot["atOff"], rot)
+        stored = page.evaluate(
+            """async () => {
+              document.querySelector('#setThemeRotate').click();
+              await new Promise((r) => setTimeout(r, 400));
+              await refresh();
+              // Looked up again rather than held across the save: writing a
+              // setting re-renders the pool, and a box captured before that is
+              // a detached node nothing is listening to.
+              const box = document.querySelector('#themeRotatePool input[type=checkbox]');
+              box.click();
+              await new Promise((r) => setTimeout(r, 400));
+              await refresh();
+              return {
+                pool: state.settings.theme_rotate_pool,
+                on: state.settings.theme_rotate,
+                live: !document.querySelector('#setThemeRotateAt').disabled,
+                wanted: box.dataset.theme,
+              };
+            }"""
+        )
+        check("switching it on ungreys the schedule", stored.get("live") is True, stored)
+        check("and ticking a theme puts it in the pool",
+              stored.get("pool") == [stored.get("wanted")] and stored.get("on") is True, stored)
+        page.screenshot(path=str(SHOTS / "theme-rotation.png"))
+
         page.screenshot(path=str(SHOTS / "theme-maker.png"))
 
         # Phone build, first pass: a narrow viewport, reloaded so the mobile

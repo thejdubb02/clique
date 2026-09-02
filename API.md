@@ -674,9 +674,28 @@ until they can be, rather than refused.
 - `POST /api/themes/<id>/delete` → `{"ok": true}`, or `404`. Deleting the theme
   currently in use clears the setting back to the default, because leaving it
   pointing at a theme that no longer exists is a panel that comes back
-  unpainted. Write scope.
+  unpainted. It also comes out of the rotation pool. Write scope.
+- `POST /api/themes/rotate` → `{"theme": "<id>"}`. Put on a different one from
+  the rotation pool now, ignoring both the schedule and whether the rotation is
+  switched on at all. `400` when the pool is empty. Write scope.
 
 Forty are kept; the oldest goes when a new one would exceed that.
+
+### Rotating through the ones you like
+
+Five settings, and the server never learns what a theme *is* — the presets
+live in `web/themes.js` and are the browser's business. It moves an id you
+chose.
+
+`theme_rotate_pool` is the list of theme ids it may pick from, mixing preset
+ids and stored ids freely. There is no "all of them" default: an empty pool
+does nothing, because the point is the ones you like. Every `theme_rotate_hours`
+hours, anchored on `theme_rotate_at`, the next poll picks one at random and
+sets `theme`. Never the one already on, so a change always looks like one.
+
+It rides the panel's own poll, so nothing happens while nobody has CLIque
+open, and the first poll after opening catches up to the most recent slot that
+has gone by — one slot, never a week of them.
 
 ## Working groups
 
@@ -810,6 +829,11 @@ front of you (sidebar width, sidebar shown or hidden).
 | `markers_in_sidebar` | bool | Marks in the sidebar |
 | `status_on_icon` | bool | The CLI logo carries the status colour, instead of a second dot |
 | `theme` | string | Preset id from `web/themes.js`; `""` is the built-in |
+| `theme_rotate` | bool | Wear a different theme every so often, picked at random from `theme_rotate_pool`. Off by default: a panel that changes its own colours unasked is a fault, not a feature |
+| `theme_rotate_hours` | int | How often, in hours. 24 is a different theme every morning. Clamped to 1–720 |
+| `theme_rotate_at` | string | What time of day the change lands, `"HH:MM"` on the server's own clock. With an interval under a day it is the anchor the rest are counted from, so `"07:00"` every 6 hours is 07:00, 13:00, 19:00, 01:00. Anything that is not a real time is refused and the old value kept |
+| `theme_rotate_pool` | list | The theme ids the rotation may choose from, preset and stored ids mixed freely. `""` is the built-in dark theme and belongs here like any other id, not a missing value. Never checked against the themes that exist — the server has never read `web/themes.js`. Capped at 64 |
+| `theme_rotate_last` | int | Bookkeeping, not a preference: the slot last acted on, in unix seconds. It is what stops a panel shut all week applying six changes when it opens |
 | `appearance` | `"dark"` \| `"light"` \| `"system"` | Base used when no preset is chosen |
 | `font_panel` | 9–28 | Sidebar and chrome |
 | `font_terminal` | 9–28 | The pane, read at a different distance. Also the `+`/`−` stepper in the bottom-right |
@@ -819,7 +843,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `history_days` | int | How far back the sidebar goes when the above is on. Default 14. Does not limit the palette |
 | `reap_idle_hours` | int | Stop an idle session's process after this many hours to free its memory, greying its tab; clicking it resumes exactly where it was. Only a resumable session no browser is attached to and that is not busy is reaped. Default 6; `0` turns it off; clamped to 720 |
 | `drop_cleanup_days` | int | Auto-delete dropped/pasted files older than this many days from the scratch folders (`.clique-drops`, `.claude-images`); nothing else on disk is touched. **Off by default (`0`)** — a share is your file. Clamped to 365. The manual purge and the storage readout work whether this is on or off |
-| `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it. The mode pill is never hidden by this |
+| `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it — except on a touch device, which always gets the box, because typing into the terminal goes through the phone keyboard's input method and Android duplicates the line. `terminal` still overrides it. The mode pill is never hidden by this |
 | `css_both`, `css_panel`, `css_terminal` | string | Custom CSS, applied in that order |
 | `snippets` | list | `{"trigger", "label", "text"}`; malformed entries are dropped here rather than becoming a render error later |
 | `notify_flash` | bool | Flash a tab whose session finished |

@@ -17,9 +17,11 @@ import base64
 import binascii
 import contextlib
 import dataclasses
+import datetime
 import json
 import mimetypes
 import os
+import random
 import secrets
 import shlex
 import sys
@@ -57,7 +59,7 @@ from .auth import Auth, landing_page, login_page
 from .history import History as ConversationHistory
 from .registry import Registry, RegistryError
 from .registry import icon_is_full_colour as registry_icon_is_colour
-from .store import Session, Store, auto_folder, new_id
+from .store import DEFAULT_SETTINGS, Session, Store, auto_folder, clock_time, new_id
 from .stream import PtyBridge
 from .tokens import TokenStore
 from .wsproto import OP_TEXT, WebSocket, handshake_response
@@ -267,6 +269,7 @@ class Panel:
         self._reap_viewers(tuple(sockets))
         self._reap_idle(panes)
         self._sweep_shares()
+        self._rotate_theme()
         return panes
 
     def _reap_viewers(self, sockets: tuple[str | None, ...]) -> None:
@@ -313,6 +316,79 @@ class Panel:
                 continue  # do not interrupt work in progress
             with contextlib.suppress(tmux.TmuxError):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
+
+    def _rotate_theme(self, force: bool = False) -> str | None:
+        """Put on a different theme when a scheduled slot has passed.
+
+        Rides the poll like the other housekeeping here, which means it only
+        runs while somebody has the panel open. That is the right shape for
+        this: nothing needs changing while nobody is looking, and the first
+        poll after opening catches up to the slot that has most recently gone
+        by. It catches up to *one* slot, never a week of them.
+
+        Random rather than a cycle, and never the one already on. A rotation
+        that lands on the theme you are wearing looks broken from the outside,
+        and with a pool of two a strict cycle and a random pick are the same
+        thing anyway.
+
+        Returns the theme now on, or None when nothing changed. None rather
+        than "" because "" is the built-in dark theme and a perfectly good
+        thing to rotate onto — reading it as "nothing happened" is what made
+        the button report failure while it was working.
+
+        The server never learns what a theme *is*. The presets live in
+        web/themes.js and are the browser's business; this moves an id the
+        person chose.
+        """
+        settings = self.store.settings
+        if not force and not settings.get("theme_rotate"):
+            return None
+        pool = [t for t in (settings.get("theme_rotate_pool") or []) if isinstance(t, str)]
+        if not pool:
+            return None
+        now = time.time()
+        if force:
+            slot = now
+        else:
+            slot = self._rotate_slot(now)
+            if slot is None or float(settings.get("theme_rotate_last") or 0) >= slot:
+                return None
+        current = settings.get("theme") or ""
+        choices = [t for t in pool if t != current] or pool
+        self.store.update_settings(
+            {"theme": random.choice(choices), "theme_rotate_last": int(slot)}
+        )
+        return self.store.settings.get("theme") or ""
+
+    def _rotate_slot(self, now: float) -> float | None:
+        """The most recent scheduled change at or before ``now``, as a unix time.
+
+        Slots are `theme_rotate_at` plus whole multiples of the interval, in
+        the server's own local time, so "07:00 every 6 hours" is 07:00, 13:00,
+        19:00, 01:00 and stays on those times through a restart. Local rather
+        than UTC because the setting is a time of day and a person means their
+        morning by it; that it drifts by an hour across a daylight-saving
+        change is the correct answer for the same reason.
+        """
+        at = clock_time(str(self.store.settings.get("theme_rotate_at") or "")) or clock_time(
+            DEFAULT_SETTINGS["theme_rotate_at"]
+        )
+        if at is None:  # pragma: no cover - the default is a valid time
+            return None
+        try:
+            hours = max(1, int(self.store.settings.get("theme_rotate_hours") or 24))
+        except (TypeError, ValueError):
+            hours = 24
+        step = hours * 3600
+        anchor = datetime.datetime.fromtimestamp(now).replace(
+            hour=at[0], minute=at[1], second=0, microsecond=0
+        )
+        # `//` on floats floors toward minus infinity, so an anchor still to
+        # come today gives k = -1 and the slot before it, whatever the step.
+        # An `int()` truncation here instead would round toward zero and hand
+        # back a slot in the future, which never fires.
+        base = anchor.timestamp()
+        return base + step * int((now - base) // step)
 
     def _sweep_shares(self) -> None:
         """Prune old dropped/pasted files from every session's scratch folders.
@@ -2110,6 +2186,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.theme_add(body), 201)
             if path == "/api/themes/generate":
                 return self._json(self.panel.theme_generate(body.get("prompt")), 201)
+            if path == "/api/themes/rotate":
+                # Ignores the schedule and the on/off switch on purpose: this
+                # is the button next to them, and its whole job is "not this
+                # one, give me another".
+                picked = self.panel._rotate_theme(force=True)
+                if picked is None:
+                    return self._json({"error": "no themes are in the rotation"}, 400)
+                return self._json({"theme": picked})
             # Spelled with `parts` rather than `endswith("/delete")`, which is
             # how the router matches every other id-in-the-middle route and,
             # not incidentally, the only spelling `tools/api_drift.py` reads

@@ -520,6 +520,21 @@
          for. It takes itself away on a narrow pane and on a phone, where the
          corner is needed for the output.</p>
 
+      <h3>Change it on a schedule</h3>
+      <label class="check"><input type="checkbox" id="setThemeRotate">
+        Put on a different theme every
+        <input type="number" id="setThemeRotateHours" min="1" max="720" step="1"
+               class="days-inline" disabled> hours, from
+        <input type="time" id="setThemeRotateAt" class="time-inline" disabled></label>
+      <p class="note">Picked at random from the ones you tick below, and never
+         the one already on. Every 24 hours from 07:00 is a different theme
+         each morning; every 6 hours from 07:00 changes at 07:00, 13:00, 19:00
+         and 01:00. It happens while CLIque is open, and opening it after a
+         while catches up to the last change that was due rather than running
+         through every one it missed.</p>
+      <div class="rotate-pool" id="themeRotatePool"></div>
+      <button type="button" id="themeRotateNow">Change now</button>
+
       <!-- Describe a theme and a model builds one. It supplies nine colours
            that need taste; the other eighteen, brights included, are derived
            and pushed until they can be read, so a theme can never arrive that

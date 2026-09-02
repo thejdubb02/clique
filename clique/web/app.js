@@ -4111,6 +4111,22 @@ function promptWanted() {
   const mode = state.settings.input_mode || "auto";
   if (mode === "panel") return true;
   if (mode === "terminal") return false;
+  /* A phone gets the box whatever the CLI draws for itself.
+   *
+   * Typing into the terminal means typing through the keyboard's input method
+   * one keystroke at a time, and on Android that path is not reliable: Gboard
+   * predicts, autocorrects and pastes into a hidden field the terminal keeps
+   * emptying under it, loses track of what it thinks is there, and re-commits
+   * the whole line. The pane fills with the same sentence over and over, and
+   * it is worst with a suggestion or a paste, which is when the keyboard has
+   * the most to re-commit. Reported 2026-09-02: "it starts spamming the same
+   * line of text already entered over and over again, its really bad".
+   *
+   * Composing in an ordinary textarea and sending the finished line never
+   * goes near that. The cost is the CLI's own box sitting above ours, which
+   * is one bar of screen against a phone you cannot type on. `terminal` still
+   * overrides this for anyone who wants the raw thing. */
+  if (handheld()) return true;
   const s = session(activeId);
   return !(s && s.own_input);
 }
@@ -6517,25 +6533,52 @@ async function okToSend(text, whoLabel) {
   });
 }
 
+/* Empty the box the way writing to it from anywhere else in this file does.
+ *
+ * A bare `value = ""` leaves the textarea the height of the paragraph that
+ * was in it until the next keystroke, and tells nothing downstream that it
+ * emptied -- the move button stayed lit over an empty box for the same
+ * reason. */
+function clearPrompt() {
+  const box = $("#prompt");
+  box.value = "";
+  growPrompt(box);
+  showDraftMove();
+}
+
+/* One send at a time.
+ *
+ * `run` waits on a confirm and then on a request, and the box is not emptied
+ * until both are done, so a second Enter arriving in between sent the same
+ * sentence again. A key that repeats, a double tap, and an Android keyboard
+ * committing a suggestion with an Enter of its own all do exactly that. */
+let sending = false;
+
 async function run(text) {
-  if (!text.trim() || !activeId) return;
+  if (!text.trim() || !activeId || sending) return;
   if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
-  const who = session(activeId);
-  if (!await okToSend(text, `“${who ? who.name : "this session"}”`)) return;
-  for (let i = 0; i < repeat; i++) {
-    if (!control({ type: "run", text, enter: true })) {
-      await api(`api/sessions/${activeId}/send`, {
-        method: "POST", body: JSON.stringify({ text, enter: true }),
-      });
+  sending = true;
+  try {
+    const who = session(activeId);
+    if (!await okToSend(text, `“${who ? who.name : "this session"}”`)) return;
+    for (let i = 0; i < repeat; i++) {
+      if (!control({ type: "run", text, enter: true })) {
+        await api(`api/sessions/${activeId}/send`, {
+          method: "POST", body: JSON.stringify({ text, enter: true }),
+        });
+      }
     }
+    maybeAutoTitle(activeId, text);
+    clearPrompt();
+    saveDraft(true);   // sent, so there is no longer a draft
+    setRepeat(1);
+  } finally {
+    sending = false;
   }
-  maybeAutoTitle(activeId, text);
-  $("#prompt").value = "";
-  saveDraft(true);   // sent, so there is no longer a draft
-  setRepeat(1);
 }
 
 async function runShell(text) {
+  if (sending) return;
   /* "Shell" sends a raw command rather than a prompt. The active pane belongs
    * to a CLI, so the command goes to a shell session for the same directory —
    * reusing one if it exists, creating it if not. Typing `rm -rf` into Claude's
@@ -6543,26 +6586,31 @@ async function runShell(text) {
   const current = session(activeId);
   if (!current) return;
   if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
-  if (!await okToSend(text, "a shell for this directory")) return;
-  let shell = state.sessions.find(
-    (s) => s.cli === "shell" && s.cwd === current.cwd && s.alive);
-  if (!shell) {
-    const created = await api("api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        cli: "shell", cwd: current.cwd, folder: current.folder,
-        name: "shell: " + (current.cwd.split("/").pop() || current.cwd),
-      }),
+  sending = true;
+  try {
+    if (!await okToSend(text, "a shell for this directory")) return;
+    let shell = state.sessions.find(
+      (s) => s.cli === "shell" && s.cwd === current.cwd && s.alive);
+    if (!shell) {
+      const created = await api("api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          cli: "shell", cwd: current.cwd, folder: current.folder,
+          name: "shell: " + (current.cwd.split("/").pop() || current.cwd),
+        }),
+      });
+      await refresh();
+      shell = session(created.id);
+    }
+    await openSession(shell.id);
+    await api(`api/sessions/${shell.id}/send`, {
+      method: "POST", body: JSON.stringify({ text, enter: true }),
     });
-    await refresh();
-    shell = session(created.id);
+    clearPrompt();
+    saveDraft(true);   // sent, so there is no longer a draft
+  } finally {
+    sending = false;
   }
-  await openSession(shell.id);
-  await api(`api/sessions/${shell.id}/send`, {
-    method: "POST", body: JSON.stringify({ text, enter: true }),
-  });
-  $("#prompt").value = "";
-  saveDraft(true);   // sent, so there is no longer a draft
 }
 
 function setRepeat(value) {
@@ -7545,8 +7593,70 @@ function fillThemeSelect() {
   select.value = chosen;
 }
 
+/* The themes the rotation may pick from.
+ *
+ * A wrapped list of checkboxes rather than a multi-select: a phone cannot
+ * ctrl-click, and this is the one control in the sheet where somebody is
+ * choosing eight things out of twenty. Grouped the same way the picker above
+ * is, and in the same order, so the two read as the same list twice rather
+ * than as two different lists.
+ *
+ * Ticking one writes the whole pool back. The order is the list's, not the
+ * order they were ticked, because nothing downstream cares: the server picks
+ * at random from it. */
+function renderThemeRotation() {
+  const pool = $("#themeRotatePool");
+  if (!pool) return;
+  const on = new Set(state.settings.theme_rotate_pool || []);
+  pool.classList.toggle("is-off", !state.settings.theme_rotate);
+  pool.replaceChildren();
+  const groups = new Map();
+  const groupFor = (label) => {
+    let items = groups.get(label);
+    if (!items) {
+      const block = mk("div", "rotate-group");
+      const head = mk("div", "rotate-head");
+      head.textContent = label;
+      items = mk("div", "rotate-items");
+      block.append(head, items);
+      pool.appendChild(block);
+      groups.set(label, items);
+    }
+    return items;
+  };
+  for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
+    const label = mk("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = on.has(id);
+    box.onchange = () => {
+      const next = [];
+      for (const el of pool.querySelectorAll("input[type=checkbox]")) {
+        if (el.checked) next.push(el.dataset.theme);
+      }
+      saveSettings({ theme_rotate_pool: next });
+    };
+    box.dataset.theme = id;
+    const name = document.createElement("span");
+    name.textContent = theme.label || id;
+    label.append(box, name);
+    groupFor(customThemes.has(id) ? "Made here"
+             : theme.art ? "With a character" : "Presets").appendChild(label);
+  }
+}
+
+/* The two schedule fields and the pool only mean anything while the rotation
+ * is on, and a live control that does nothing is worse than a greyed one. */
+function syncThemeRotate() {
+  const on = $("#setThemeRotate").checked;
+  $("#setThemeRotateHours").disabled = !on;
+  $("#setThemeRotateAt").disabled = !on;
+  $("#themeRotatePool").classList.toggle("is-off", !on);
+}
+
 function renderThemeMaker() {
   fillThemeSelect();   // picking from a row has to move the picker too
+  renderThemeRotation();
   const note = $("#themeGenNote");
   const gen = $("#themeGen");
   if (!note || !gen) return;
@@ -7675,6 +7785,10 @@ function openSettings() {
   }
   $("#setCliTint").checked = s.cli_tint !== false;
   $("#setThemeArt").checked = s.theme_art !== false;
+  $("#setThemeRotate").checked = Boolean(s.theme_rotate);
+  $("#setThemeRotateHours").value = s.theme_rotate_hours || 24;
+  $("#setThemeRotateAt").value = s.theme_rotate_at || "07:00";
+  syncThemeRotate();
   $("#setCliWatermark").checked = s.cli_watermark !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
@@ -7945,6 +8059,36 @@ function wire() {
   };
   $("#setCliTint").onchange = (ev) => saveSettings({ cli_tint: ev.target.checked });
   $("#setThemeArt").onchange = (ev) => saveSettings({ theme_art: ev.target.checked });
+  $("#setThemeRotate").onchange = (ev) => {
+    saveSettings({ theme_rotate: ev.target.checked });
+    syncThemeRotate();
+  };
+  $("#setThemeRotateHours").onchange = (ev) => {
+    const hours = Math.max(1, Math.min(720, parseInt(ev.target.value, 10) || 24));
+    ev.target.value = hours;
+    saveSettings({ theme_rotate_hours: hours });
+  };
+  $("#setThemeRotateAt").onchange = (ev) => {
+    // The browser hands back "" for a half-typed time. Writing that would be
+    // refused by the server and leave the field disagreeing with what is
+    // stored, so the old value is put back instead.
+    if (!/^\d{2}:\d{2}$/.test(ev.target.value)) {
+      ev.target.value = state.settings.theme_rotate_at || "07:00";
+      return;
+    }
+    saveSettings({ theme_rotate_at: ev.target.value });
+  };
+  $("#themeRotateNow").onclick = async () => {
+    try {
+      const got = await api("api/themes/rotate", { method: "POST", body: "{}" });
+      await refresh();
+      renderThemeMaker();
+      const theme = (window.CLIQUE_THEMES || {})[got.theme];
+      toast("Now wearing " + ((theme && theme.label) || got.theme));
+    } catch (err) {
+      toast("Tick some themes for it to choose from first", true);
+    }
+  };
   $("#setCliWatermark").onchange = (ev) => saveSettings({ cli_watermark: ev.target.checked });
 
   /* Reloading an installed app.
@@ -8211,7 +8355,15 @@ function wire() {
     // closing menus that were not open.
     if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); focusTerminal(); return; }
     if (ev.key === "Tab" && expandInBox(ev.target)) { ev.preventDefault(); return; }
-    if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); run(ev.target.value); }
+    if (ev.key === "Enter" && !ev.shiftKey) {
+      // An input method mid-word reports Enter too: Gboard commits a
+      // suggestion with one. Sending there takes half a sentence and leaves
+      // the keyboard's idea of the field out of step with the field, which is
+      // where the duplication starts.
+      if (ev.isComposing || ev.keyCode === 229) return;
+      ev.preventDefault();
+      run(ev.target.value);
+    }
   };
   $("#prompt").oninput = (ev) => {
     growPrompt(ev.target);

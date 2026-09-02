@@ -300,6 +300,16 @@ like the sidebar width stay local.
   Whatever it comes up with is checked for contrast before it is stored, so a
   generated theme can never leave you unable to read the sheet you would use
   to pick a different one.
+
+- **A different theme on a schedule:** under **Appearance ▸ Change it on a
+  schedule**, tick the themes you like and CLIque puts a different one on every
+  so often. Every 24 hours from 07:00 is a fresh theme each morning; every 6
+  hours from 07:00 changes at 07:00, 13:00, 19:00 and 01:00. It picks at random
+  from the ones you ticked and never the one already on, so a change always
+  looks like one. **Change now** does it on the spot. It only happens while you
+  have CLIque open, and opening it after a few days catches up to the last
+  change that was due rather than running through every one it missed.
+
 - **CLI markers:** how a session's CLI is shown, as a ring or a dot, in the tabs
   and the sidebar, with a per-CLI colour, and an option to tint the pane edge
   with the active CLI's colour.
@@ -379,6 +389,13 @@ CLIque is built to check on from the couch.
   well as from inside, so it works before you have logged in for the first time.
 - **Drag the pane to scroll** back through the output. Tapping the prompt does
   not zoom the page, which it used to on iOS.
+- **You always get CLIque's own prompt box**, even for a CLI that draws one of
+  its own and hides ours on a desktop. Typing straight into the terminal goes
+  through the phone keyboard's input method, and Android's loses its place and
+  repeats the line, which made a suggestion or a paste unusable. Composing in
+  an ordinary box and sending the finished line does not go near that. Set the
+  prompt-box mode to **Terminal** under Appearance if you would rather have the
+  raw thing back.
 - **A reload button** appears in the status bar once it is installed, because an
   app has no address bar and nothing else to reload from. The command palette
   offers it anywhere.
