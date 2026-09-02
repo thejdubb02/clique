@@ -41,6 +41,30 @@ part of this that has never actually been used on a phone.
      controls in a 393px phone was what the clipped icons actually were.
    - ~~The login page~~ done in 0.60.0, along with installing as an app.
 
+   Grok CLI read the whole mobile surface on 2026-09-02 and wrote up what it
+   found in [mobile-review-grok.md](mobile-review-grok.md). Two of its five
+   were fixed the same day (typing landing in the terminal anyway, and the
+   safe area being dead code). These three are its findings that are still
+   open, and each one was checked against the code before it went on this
+   list:
+
+   - **The long-press menu does not scroll, so Kill hangs off the screen.**
+     `#menu` has no `max-height` and no `overflow`, and a live session's menu
+     is 15 to 20 rows at the coarse-pointer padding, which is 600 to 800px. On
+     anything shorter than that the placement clamp goes negative and the rows
+     at both ends are unreachable. The menu exists specifically so a phone can
+     archive, lock and kill, and on a phone it cannot.
+   - **A working group has no long-press at all.** `wireTouchMenus` listens on
+     `#tree` only; group rows live in `#groups` with nothing but
+     `oncontextmenu`. You can open a group from a phone and you cannot rename
+     or delete one.
+   - **No way to hand a session a file from a phone.** Paste and drop are the
+     only two paths in, and a phone really has neither. There is no
+     `<input type="file">` anywhere in the panel. Related, and worse: the pane
+     is `touch-action: none` so a finger drag is our scroll, which leaves no
+     gesture that makes an xterm selection, so the Copy chip never appears and
+     you cannot copy an error off the screen.
+
    - **13px of phantom horizontal scroll on a phone.** What is left of the
      clipping, after 0.64.0 fixed the status bar overflowing by 67px. Narrowed
      but not solved: `#shell` measures 412 wide with a scrollWidth of 425 on a

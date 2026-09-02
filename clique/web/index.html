@@ -1,7 +1,12 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- viewport-fit=cover so `env(safe-area-inset-*)` reports real numbers.
+     Without it they are all 0, and the standalone padding rule further down
+     this file's stylesheet is dead code: an installed app on a notched phone
+     draws its tab strip under the island. The sign-in page has always had
+     this; the page you land on after signing in did not. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CLIque</title>
 <script nonce="__NONCE__">
   // Resolve every asset, API call and WebSocket against wherever this page is

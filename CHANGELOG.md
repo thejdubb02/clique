@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.66.1 — 2026-09-02 15:46 PDT
+
+**The other half of the Android fix.** 0.66.0 gave a phone the panel's own
+prompt box and then handed the keyboard to the terminal anyway: opening a
+session focused the pane, and tapping Esc or Ctrl-C on the key row took focus
+back. So the box was there, and Gboard was still typing into the terminal, and
+still duplicating the line. On a touch device showing the box, nothing takes
+focus on its own now, and the first thing you tap decides. Escape out of the
+prompt box still hands the pane the keyboard, because that is somebody asking.
+
+**The installed app no longer draws under the notch.** The standalone rule that
+pads for the safe area has been in the stylesheet for a while and was doing
+nothing, because `env(safe-area-inset-*)` reports 0 without `viewport-fit=cover`
+in the viewport tag, and only the sign-in page had it. The panel has it now, the
+shell measures the body rather than the whole viewport so the padding is not
+undone one level down, and the toast clears the home indicator, which is where
+Undo after a kill lives.
+
+Both found by having Grok CLI read the mobile surface and say what it thought,
+which is the first time a second model has been pointed at this. Its write-up
+is in `docs/mobile-review-grok.md`; the three findings still open are on
+`docs/next.md`. Every one was checked against the code before being believed.
+
 ## 0.66.0 — 2026-09-02 15:29 PDT
 
 **Typing on an Android phone no longer repeats the line you just sent.** With a

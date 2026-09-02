@@ -5939,7 +5939,7 @@ function showActivePane() {
   const entry = terms.get(activeId);
   if (!entry) { renderCopyChip(); return; }
   paintPane(entry);
-  entry.term.focus();
+  if (paneWantsFocus()) entry.term.focus();
   renderCopyChip();
   requestAnimationFrame(() => {
     if (terms.get(activeId) !== entry) return;
@@ -9249,6 +9249,21 @@ function focusTerminal() {
   if (entry) entry.term.focus();
 }
 
+/* Whether the pane should be handed the keyboard when nobody asked it to be.
+ *
+ * On a desktop, yes: the pane is where you type unless you deliberately went
+ * to the prompt box. On a phone showing the panel's box it is the opposite,
+ * and this is not a preference. Focusing xterm's hidden textarea is what puts
+ * the phone keyboard's input method back on the terminal, which is the exact
+ * path 0.66.0 moved typing off because Android duplicates the line down it.
+ * Showing the box and then focusing the pane anyway left the fix half done.
+ *
+ * Focus nothing instead and let the first tap decide. `focusTerminal` itself
+ * is untouched: Escape out of the prompt box is somebody asking. */
+function paneWantsFocus() {
+  return !(handheld() && promptWanted());
+}
+
 /* Smart focus: after a switch, land in the prompt box so a new prompt is one
  * keystroke away, with Escape to hand focus back to the pane (see its keydown).
  *
@@ -10290,7 +10305,10 @@ function wireKeyRow() {
     const btn = ev.target.closest("[data-key]");
     if (!btn || !activeId) return;
     sendPaneKey(activeId, btn.dataset.key);
-    focusTerminal();
+    // The key went over the socket, not through the keyboard, so nothing here
+    // needed focus. Taking it back would put a phone's next word into the
+    // terminal after a single tap on Esc.
+    if (paneWantsFocus()) focusTerminal();
   });
 }
 

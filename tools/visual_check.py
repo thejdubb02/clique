@@ -1404,6 +1404,56 @@ def _run(panel) -> int:
         finger(-300)
         check("and dragging up comes forward again", where() > back,
               {"from": back, "to": where()})
+        # Typing on a phone, which is a different question from typing on a
+        # desktop and was got wrong twice. Touch emulation is on from the
+        # scroll test above, so `(pointer: coarse)` matches and this is the
+        # real code path rather than a stub.
+        print("typing on a phone goes to the box, not the terminal")
+        # Its own, because the earlier boxed sessions are gone by now and the
+        # only thing left is a shell, which draws no box of its own and so
+        # would have had the panel's one anyway. The whole question here is
+        # what happens to a CLI that *does* draw one.
+        phone_boxed = _api(
+            "/api/sessions", "POST", {"cli": "boxed", "cwd": "/tmp", "name": "phone typing"}
+        )["id"]
+        page.wait_for_timeout(600)
+        typing = page.evaluate(
+            """async (id) => {
+              await refresh();
+              const boxed = state.sessions.find((s) => s.id === id && s.own_input);
+              if (!boxed) return { skipped: true };
+              await openSession(boxed.id);
+              await new Promise((r) => setTimeout(r, 700));
+              const active = () => document.activeElement;
+              const inPane = (el) => !!(el && el.classList
+                && el.classList.contains('xterm-helper-textarea'));
+              const before = inPane(active());
+              const key = document.querySelector('#keyrow [data-key]');
+              if (key) key.click();
+              await new Promise((r) => setTimeout(r, 300));
+              return {
+                coarse: matchMedia('(pointer: coarse)').matches,
+                ownInput: true,
+                boxShown: !document.querySelector('#inputbar').hidden,
+                paneTookFocusOnOpen: before,
+                paneTookFocusFromKeyRow: inPane(active()),
+              };
+            }""",
+            phone_boxed,
+        )
+        if typing.get("skipped"):
+            print("       the boxed stand-in did not arrive; nothing to test with")
+        else:
+            check("a phone gets the panel's box even for a CLI with its own",
+                  typing["coarse"] and typing["boxShown"], typing)
+            # The half of 0.66.0 that was missing: the box was drawn and the
+            # pane was handed the keyboard anyway, so Gboard went on typing
+            # into the terminal and went on duplicating the line.
+            check("opening a session does not hand the keyboard to the pane",
+                  typing["paneTookFocusOnOpen"] is False, typing)
+            check("and a key-row tap does not take it back",
+                  typing["paneTookFocusFromKeyRow"] is False, typing)
+
         page.evaluate("setSidebar(true)")
         page.wait_for_timeout(400)
         page.screenshot(path=str(SHOTS / "mobile-drawer.png"))

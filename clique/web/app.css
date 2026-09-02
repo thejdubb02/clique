@@ -53,7 +53,12 @@ body {
   font: 13px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 
-#shell { display: flex; height: 100vh; height: 100dvh; }
+/* 100% of the body, not of the viewport. They are the same number until the
+   installed-app rule below pads the body for a notch, and then a shell still
+   measuring the whole viewport hangs its bottom bar off the end of a parent
+   with `overflow: hidden` -- which is the safe area re-created one level
+   down. */
+#shell { display: flex; height: 100%; }
 
 /* ------------------------------------------------------------------ sidebar */
 
@@ -1296,9 +1301,16 @@ body.is-fs #fullScr .ico-fs-enter { display: none; }
 body.is-fs #fullScr .ico-fs-leave { display: block; }
 @media (display-mode: standalone), (display-mode: window-controls-overlay) {
   /* Installed app: the OS already drew the titlebar. Don't double a browser
-     safe-area the tab used to need. */
+     safe-area the tab used to need.
+
+     These `env()` values are only real numbers because index.html asks for
+     `viewport-fit=cover`. Without that they are all 0 and this whole block is
+     decoration, which is what it was until 2026-09-02. */
   body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
                   env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  /* Fixed to the viewport, so the body's padding does not move it. Undo after
+     a kill lives in here, and the home indicator is about 34px of it. */
+  #toast { bottom: calc(18px + env(safe-area-inset-bottom)); }
 }
 /* The directory field and its picker. The picker is sized to its own content
    rather than sharing the width, because the field is the thing being filled
