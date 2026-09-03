@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.67.0 — 2026-09-02 18:51 PDT
+
+**The three things a phone still could not do.** All from the review a second
+model wrote on 2026-09-02, and all confirmed against the code first.
+
+**The long-press menu scrolls.** A live session's menu is fifteen to twenty
+rows, and at the padding a thumb needs that is 600 to 800px, taller than a
+phone. The placement clamp goes negative when the menu is taller than the
+window, so Open was cut off above the screen while Kill sat below it, and
+there was nothing to scroll. The menu whose whole reason for existing is that a
+phone can archive, lock and kill from it could do none of the three.
+
+**A working group answers a long press.** Rename and delete were right-click
+only, so from a phone you could launch a group and never change or remove one.
+The sessions and the groups now share one implementation rather than two.
+
+**You can hand a session a file, and get text back off the pane.** Drop needs a
+mouse and paste needs the file already on the clipboard, so between them a
+phone had no route in at all: no photo, no PDF, no log from another app. There
+is a paperclip next to Run now, and an entry in both menus. Coming the other
+way, a finger drag is our scroll and nothing else makes a selection, so the
+Copy chip never appeared; long-pressing the output offers the line you pressed,
+what is on screen, and the last twenty lines.
+
+**And one the paperclip uncovered.** Every control in the input bar refuses to
+shrink and the textarea was the only thing giving, so on a 320px phone the
+prompt measured 26 pixels — narrower than one word, on the box you type every
+prompt into. It went unnoticed while a phone typed into the terminal instead,
+and 0.66.0 made that box the way a phone talks to an agent. Under 460px the bar
+wraps and the box takes the row.
+
 ## 0.66.1 — 2026-09-02 15:46 PDT
 
 **The other half of the Android fix.** 0.66.0 gave a phone the panel's own

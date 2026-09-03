@@ -98,6 +98,8 @@
   <symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" /></symbol>
   <!-- reload the panel, for an installed app with no address bar -->
   <symbol id="i-rotate-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></symbol>
+  <!-- attach a file to this session, the only route in from a phone -->
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" /></symbol>
 </svg>
 <!-- icons:end -->
 
@@ -226,6 +228,14 @@
         <span id="repeat">1</span>
         <button id="repPlus" title="More repeats"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
       </div>
+      <!-- The only way in from a phone. Drop needs a mouse and paste needs the
+           file to already be on the clipboard, so between them a phone had no
+           route at all: no photo from the library, no PDF from Files, no log
+           from another app. The input is hidden and this button is what asks
+           the OS for it. -->
+      <button type="button" id="attachFile" class="hdr-btn"
+              title="Attach a file to this session"><svg class="ico" aria-hidden="true"><use href="#i-paperclip"/></svg></button>
+      <input type="file" id="filePick" multiple hidden>
       <button type="button" id="draftMove" class="hdr-btn draft-move" hidden
               title="Move this draft to another session"></button>
       <button type="button" id="reviewLock" class="hdr-btn" aria-pressed="false"

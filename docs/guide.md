@@ -389,6 +389,15 @@ CLIque is built to check on from the couch.
   well as from inside, so it works before you have logged in for the first time.
 - **Drag the pane to scroll** back through the output. Tapping the prompt does
   not zoom the page, which it used to on iOS.
+- **Attach a file** with the paperclip next to Run. Drop needs a mouse and
+  paste needs the file to be on the clipboard already, so this is the way in
+  from a phone: a photo from the library, a PDF from Files, a log from another
+  app. It lands in the session's folder and the path goes where the CLI can
+  see it, the same as a drop.
+- **Long-press the output to copy it.** Dragging is scrolling, so there is no
+  way to select with a finger; the menu offers the line you pressed, the
+  screen, and the last twenty lines.
+- **Long-press a working group** to rename or delete it, the same as a session.
 - **You always get CLIque's own prompt box**, even for a CLI that draws one of
   its own and hides ours on a desktop. Typing straight into the terminal goes
   through the phone keyboard's input method, and Android's loses its place and

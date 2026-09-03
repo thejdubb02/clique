@@ -87,6 +87,7 @@ ICONS: dict[str, str] = {
     "trash": "delete a note line",
     "panel-right": "open or close the side panel",
     "rotate-cw": "reload the panel, for an installed app with no address bar",
+    "paperclip": "attach a file to this session, the only route in from a phone",
 }
 
 _BODY = re.compile(r"<svg[^>]*>(?P<body>.*)</svg>", re.S)

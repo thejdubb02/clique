@@ -1454,8 +1454,139 @@ def _run(panel) -> int:
             check("and a key-row tap does not take it back",
                   typing["paneTookFocusFromKeyRow"] is False, typing)
 
+        # Everything a phone can only do by long-pressing, and the menu it
+        # long-presses into. All three were reported by a second model on
+        # 2026-09-02 and confirmed against the code before being believed.
+        print("what a phone can actually reach")
         page.evaluate("setSidebar(true)")
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(500)
+        menu = page.evaluate(
+            """async () => {
+              const row = document.querySelector('#tree .session');
+              if (!row) return { skipped: true };
+              row.dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true, clientX: 40, clientY: 300 }));
+              await new Promise((r) => setTimeout(r, 250));
+              const el = document.querySelector('#menu');
+              const box = el.getBoundingClientRect();
+              const cs = getComputedStyle(el);
+              return {
+                rows: el.querySelectorAll('button').length,
+                top: Math.round(box.top),
+                bottom: Math.round(box.bottom),
+                windowH: innerHeight,
+                scrolls: cs.overflowY === 'auto' || cs.overflowY === 'scroll',
+                reachable: el.scrollHeight > el.clientHeight
+                  ? el.scrollHeight > 0 : true,
+              };
+            }"""
+        )
+        if not menu.get("skipped"):
+            # It ran off both ends at once: the clamp goes negative when the
+            # menu is taller than the window, hiding Open above the screen
+            # while Kill sat below it, with nothing to scroll.
+            check("the long-press menu starts on screen",
+                  menu["top"] >= 0, menu)
+            check("and ends on screen", menu["bottom"] <= menu["windowH"] + 1, menu)
+            check("scrolling to the rest of it is possible",
+                  menu["scrolls"] and menu["reachable"], menu)
+        page.evaluate("() => { document.querySelector('#menu').hidden = true; }")
+
+        # Its own group rather than the one the desktop pass made: that one may
+        # or may not have survived to here, and a check that quietly skips
+        # itself is a check that stops being run.
+        page.evaluate(
+            """async () => {
+              if (document.querySelector('#groups .group-row')) return;
+              await fetch('/api/groups', {method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: 'Phone group', color: '#7aa2f7'})});
+              await refresh();
+            }"""
+        )
+        page.wait_for_timeout(500)
+        groups_touch = page.evaluate(
+            """async () => {
+              const row = document.querySelector('#groups .group-row');
+              if (!row) return { skipped: true };
+              const at = row.getBoundingClientRect();
+              const point = { clientX: at.x + 20, clientY: at.y + 10 };
+              row.dispatchEvent(new TouchEvent('touchstart', {
+                bubbles: true, cancelable: true,
+                touches: [new Touch({ identifier: 1, target: row, ...point })] }));
+              await new Promise((r) => setTimeout(r, 800));
+              const open = !document.querySelector('#menu').hidden;
+              const items = [...document.querySelectorAll('#menu button')]
+                .map((b) => b.textContent);
+              document.querySelector('#menu').hidden = true;
+              return { open, items };
+            }"""
+        )
+        if groups_touch.get("skipped"):
+            print("       no group in the sidebar to press")
+        else:
+            # Rename and delete were right-click only, so from a phone you
+            # could launch a working group and never change or remove one.
+            check("a working group answers a long press", groups_touch["open"], groups_touch)
+            check("and offers more than the Open button already does",
+                  any("ename" in t for t in groups_touch["items"]), groups_touch)
+
+        reachable = page.evaluate(
+            """async () => {
+              const attach = document.querySelector('#attachFile');
+              const term = document.querySelector('#terminal');
+              const at = term.getBoundingClientRect();
+              term.dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true,
+                clientX: Math.round(at.x + 30), clientY: Math.round(at.y + 30) }));
+              await new Promise((r) => setTimeout(r, 250));
+              const items = [...document.querySelectorAll('#menu button')]
+                .map((b) => b.textContent);
+              document.querySelector('#menu').hidden = true;
+              return {
+                attachShown: !!attach && attach.offsetParent !== null,
+                picker: !!document.querySelector('#filePick'),
+                paneItems: items,
+              };
+            }"""
+        )
+        check("a phone can hand a session a file", reachable["attachShown"]
+              and reachable["picker"], reachable)
+        # A finger drag is our scroll, so nothing left makes an xterm
+        # selection and the Copy chip never appears. Without these you cannot
+        # get an error message off the screen at all.
+        check("and can copy output off the pane",
+              any("Copy" in t for t in reachable["paneItems"]), reachable)
+
+        # The narrowest phone anyone still has. The attach button is one more
+        # control in a bar that was already tight, and a row that overflows
+        # here puts Run off the edge of the screen.
+        page.set_viewport_size({"width": 320, "height": 568})
+        page.wait_for_timeout(500)
+        narrow = page.evaluate(
+            """() => {
+              const bar = document.querySelector('#inputbar');
+              const run = document.querySelector('#run');
+              const clip = run.getBoundingClientRect();
+              return {
+                over: bar.scrollWidth - bar.clientWidth,
+                promptW: Math.round(
+                  document.querySelector('#prompt').getBoundingClientRect().width),
+                runRight: Math.round(clip.right),
+                width: innerWidth,
+              };
+            }"""
+        )
+        check("the input bar fits a 320px phone", narrow["over"] <= 0, narrow)
+        # It measured 26px before the bar was allowed to wrap: every control
+        # around it refuses to shrink and the textarea was the only thing
+        # giving. Narrower than one word, on the box a phone types prompts in.
+        check("and the prompt box is a box", narrow["promptW"] >= 180, narrow)
+        check("and Run is still on the screen",
+              narrow["runRight"] <= narrow["width"] + 1, narrow)
+        page.set_viewport_size({"width": 390, "height": 844})
+
+        page.wait_for_timeout(300)
         page.screenshot(path=str(SHOTS / "mobile-drawer.png"))
 
         browser.close()

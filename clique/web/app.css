@@ -826,9 +826,18 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 
 /* --------------------------------------------------------------- context menu */
 
+/* Scrolls rather than overflows. A live session's menu is fifteen to twenty
+   rows, and at the coarse-pointer padding below that is 600 to 800px -- taller
+   than a phone. It used to run off both ends at once, because the placement
+   clamp goes negative when the menu is taller than the window, so Open was cut
+   off the top and Kill sat below the bottom with no way to reach either. The
+   menu whose whole reason for existing is that a phone can archive and kill
+   from it could do neither. */
 #menu { position: fixed; z-index: 50; background: var(--panel);
         border: 1px solid var(--line); border-radius: 4px; padding: 4px 0;
         min-width: 150px; box-shadow: 0 6px 20px var(--shadow);
+        max-height: calc(100dvh - 16px); overflow-y: auto;
+        overscroll-behavior: contain;
         opacity: 1; transform: scale(1);
         transform-origin: var(--menu-origin, top left);
         transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
@@ -1397,6 +1406,21 @@ button > .ico:only-child { vertical-align: baseline; }
 /* With the prompt box hidden, the bar is carrying one control. It should read
    as a small strip under the pane rather than an empty version of the box that
    used to be there. */
+/* Under this width the box wraps onto its own row.
+ *
+ * Every control in the bar is `flex: 0 0 auto` and only the textarea gives, so
+ * on a 320px phone the prompt measured 26 pixels wide -- the box you type every
+ * prompt into, narrower than one word. It went unnoticed while a phone typed
+ * into the terminal instead; 0.66.0 made that box the way you talk to an agent
+ * from a phone, so it has to be a box.
+ *
+ * `order: -1` puts it above the controls rather than between them, so this is
+ * two rows and not three. */
+@media (max-width: 460px) {
+  #inputbar { flex-wrap: wrap; }
+  #inputbar #prompt { flex: 1 1 100%; order: -1; }
+}
+
 #inputbar.pill-only { padding: 4px 8px; min-height: 0; }
 #inputbar.pill-only .pill { margin: 0; }
 
@@ -1525,8 +1549,11 @@ a.give-value { color: var(--accent); }
 /* Touch. A long press on a session row opens the menu that right-click opens,
    so the platform's own callout and text-selection have to get out of the way
    — otherwise the browser offers "Copy" over the top of ours. */
-.session, .folder-head { -webkit-touch-callout: none; }
+.session, .folder-head, .group-row { -webkit-touch-callout: none; }
 .session .meta, .session .age { -webkit-user-select: none; user-select: none; }
+.group-row .group-name, .group-row .group-count {
+  -webkit-user-select: none; user-select: none;
+}
 
 /* A finger is not a mouse pointer. Menu rows get a real tap target on any
    coarse-pointer device rather than the 6px padding a cursor is fine with. */

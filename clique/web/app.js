@@ -2435,8 +2435,12 @@ function showMenu(ev, items) {
   }
   menu.hidden = false;
   menu.style.setProperty("--menu-origin", "top left");
-  menu.style.left = Math.min(ev.clientX, innerWidth - 170) + "px";
-  menu.style.top = Math.min(ev.clientY, innerHeight - menu.offsetHeight - 8) + "px";
+  // Floored at the top edge as well as clamped to the bottom one. Without the
+  // floor a menu taller than the window is placed at a negative offset, which
+  // hides the first rows above the screen -- and since the stylesheet now
+  // makes it scroll, hiding them is no longer even necessary.
+  menu.style.left = Math.max(8, Math.min(ev.clientX, innerWidth - 170)) + "px";
+  menu.style.top = Math.max(8, Math.min(ev.clientY, innerHeight - menu.offsetHeight - 8)) + "px";
 }
 
 /* The destructive item names what is actually there to destroy. Offering
@@ -2448,6 +2452,7 @@ function sessionMenu(ev, s) {
   showMenu(ev, [
     [s.alive ? "Open" : "Start again", () => openSession(s.id)],
     ["Open a file", () => openFileSheet(s.id, s.cwd || ".")],
+    ["Attach a file…", () => { openSession(s.id).then(pickFiles); }],
     ...(cliHasTranscript(s.cli) ? [["View conversation", () => openTranscript(s)]] : []),
     ...(cliHasTranscript(s.cli) ? [["Usage", () => openUsage(s)]] : []),
     ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
@@ -2558,19 +2563,21 @@ function nextLine(row) {
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_SLOP = 10;   // px of drift still counted as holding still
 
-function wireTouchMenus() {
-  const tree = $("#tree");
+/* Takes the container and how to find a pressable row in it, so the sidebar's
+ * sessions and its working groups share one implementation.
+ *
+ * Groups had none of this until 2026-09-03: the rows carried `oncontextmenu`
+ * and nothing else, so from a phone you could open a group and had no way to
+ * rename or delete one. A menu reachable only by right-click is a menu a
+ * phone does not have, which is the rule this repo already writes down. */
+function wireTouchMenus(root, pressTarget) {
+  if (!root) return;
+  const tree = root;
   let timer = null;
   let from = null;
   let fired = false;
 
   const cancel = () => { clearTimeout(timer); timer = null; from = null; };
-
-  const pressTarget = (node) => {
-    const head = node.closest(".folder-head");
-    if (head && head.querySelector(".folder-edit")) return head;
-    return node.closest(".session");
-  };
 
   tree.addEventListener("touchstart", (ev) => {
     cancel();
@@ -4298,6 +4305,19 @@ async function dropFiles(list) {
       toast(`Could not save ${file.name}: ${err.message}`, true);
     }
   }
+}
+
+/* Ask the OS for a file, then hand it to the same path a drop takes.
+ *
+ * `dropFiles` uploads it into the session's scratch folder and puts the path
+ * where the CLI can see it, so this adds a route in rather than a feature.
+ * The input is reset afterwards or picking the same file twice in a row fires
+ * no change event and looks broken. */
+function pickFiles() {
+  const input = $("#filePick");
+  if (!input) return;
+  if (!activeId) { toast("Open a session first, then attach the file to it.", true); return; }
+  input.click();
 }
 
 /* The pane with nothing in it.
@@ -8337,6 +8357,12 @@ function wire() {
     if (!$("#prompt").value.trim()) return;
     pickSession("Move this draft to…", moveDraft);
   };
+  $("#attachFile").onclick = pickFiles;
+  $("#filePick").onchange = (ev) => {
+    const chosen = ev.target.files;
+    if (chosen && chosen.length) dropFiles(chosen);
+    ev.target.value = "";
+  };
   $("#run").onclick = () => run($("#prompt").value);
   $("#runShell").onclick = () => runShell($("#prompt").value);
   $("#reviewLock").onclick = () => toggleReviewLock(activeId);
@@ -8461,7 +8487,22 @@ function wire() {
       const s = session(activeId);
       if (!s) return;
       ev.preventDefault();
+      // Copy first, because it is the thing you long-pressed the output for.
+      // A finger drag is our scroll and there is no other gesture that makes
+      // an xterm selection, so without these you cannot get an error message
+      // off the screen of a phone at all.
+      const term = entry && entry.term;
+      const row = term ? paneCellAt(term, ev.clientX, ev.clientY).y : -1;
+      const here = term && row >= 0
+        ? (term.buffer.active.getLine(row) || { translateToString: () => "" })
+            .translateToString(true).trimEnd()
+        : "";
       showMenu(ev, [
+        ...(here ? [["Copy this line", () => copyText(here)
+          .then(() => toast("Line copied"))]] : []),
+        ["Copy what is on screen", () => { if (!copyPaneVisible()) toast("Nothing there to copy yet"); }],
+        ["Copy the last 20 lines", () => copyPaneLast(20)],
+        ["Attach a file…", pickFiles],
         ["Open a file in this folder", () => openFileSheet(s.id, s.cwd || ".")],
       ]);
     }
@@ -10339,7 +10380,12 @@ function wirePeekTooltips() {
 
 wire();
 wireResizer();
-wireTouchMenus();
+wireTouchMenus($("#tree"), (node) => {
+  const head = node.closest(".folder-head");
+  if (head && head.querySelector(".folder-edit")) return head;
+  return node.closest(".session");
+});
+wireTouchMenus($("#groups"), (node) => node.closest(".group-row"));
 wireTermTouchMenus();
 wirePeekTooltips();
 wireKeyRow();
