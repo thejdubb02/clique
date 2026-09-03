@@ -17,9 +17,11 @@ import base64
 import binascii
 import contextlib
 import dataclasses
+import datetime
 import json
 import mimetypes
 import os
+import random
 import secrets
 import shlex
 import sys
@@ -39,12 +41,16 @@ from . import (
     gitinfo,
     llm,
     migrate,
+    notes,
     notify,
+    projects,
     secretbox,
     services,
     sysinfo,
     termstrip,
+    themegen,
     tmux,
+    usage,
     version_string,
     working,
     workspace,
@@ -53,7 +59,7 @@ from .auth import Auth, landing_page, login_page
 from .history import History as ConversationHistory
 from .registry import Registry, RegistryError
 from .registry import icon_is_full_colour as registry_icon_is_colour
-from .store import Session, Store, auto_folder, new_id
+from .store import DEFAULT_SETTINGS, Session, Store, auto_folder, clock_time, new_id
 from .stream import PtyBridge
 from .tokens import TokenStore
 from .wsproto import OP_TEXT, WebSocket, handshake_response
@@ -63,10 +69,6 @@ WEB = Path(__file__).parent / "web"
 #: The reporter a hook-speaking CLI runs to report its state (clique/hook.py).
 #: Standard-library only, so any python can run it as a plain script.
 HOOK = Path(__file__).parent / "hook.py"
-
-#: A per-session note is a scratchpad, not a document store. Bounded so a paste
-#: gone wrong cannot write an unbounded file under the panel's home.
-NOTE_CAP = 100_000
 
 
 def _hooks_settings(python: str) -> str:
@@ -154,6 +156,33 @@ def host_allowed(host: str, extra: set[str]) -> bool:
 _STARTED = time.time()
 
 
+def _theme_seed(reply: str, asked: str) -> dict:
+    """The JSON out of a model's answer, however it chose to wrap it.
+
+    Told to send one object and nothing else, a model will still occasionally
+    fence it, preface it, or add a closing remark. Cutting from the first brace
+    to the last costs nothing and turns a whole class of "it did not work" into
+    a theme, so it is worth doing rather than being strict on principle.
+
+    The description is kept as a fallback label: a model that names its theme
+    gets to, and one that forgets still produces something recognisable in the
+    picker rather than a row called "Generated".
+    """
+    text = str(reply or "").strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("the model did not return a theme")
+    try:
+        seed = json.loads(text[start : end + 1])
+    except ValueError as exc:
+        raise ValueError(f"the model's theme was not valid JSON: {exc}") from exc
+    if not isinstance(seed, dict):
+        raise ValueError("the model did not return a theme")
+    if not str(seed.get("label") or "").strip():
+        seed["label"] = asked
+    return seed
+
+
 class Panel:
     """Everything the request handlers share. One instance per process."""
 
@@ -202,6 +231,10 @@ class Panel:
         self._last_reap = 0.0
         self._last_idle_reap = 0.0
         self._last_sweep = 0.0
+        #: Sessions whose resume is being watched (see _recover_dead_resume).
+        #: Stopping or deleting one takes it out, so a session someone shut
+        #: down inside the grace window is never resurrected behind them.
+        self._resume_watch: set[str] = set()
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ views
@@ -236,6 +269,7 @@ class Panel:
         self._reap_viewers(tuple(sockets))
         self._reap_idle(panes)
         self._sweep_shares()
+        self._rotate_theme()
         return panes
 
     def _reap_viewers(self, sockets: tuple[str | None, ...]) -> None:
@@ -282,6 +316,79 @@ class Panel:
                 continue  # do not interrupt work in progress
             with contextlib.suppress(tmux.TmuxError):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
+
+    def _rotate_theme(self, force: bool = False) -> str | None:
+        """Put on a different theme when a scheduled slot has passed.
+
+        Rides the poll like the other housekeeping here, which means it only
+        runs while somebody has the panel open. That is the right shape for
+        this: nothing needs changing while nobody is looking, and the first
+        poll after opening catches up to the slot that has most recently gone
+        by. It catches up to *one* slot, never a week of them.
+
+        Random rather than a cycle, and never the one already on. A rotation
+        that lands on the theme you are wearing looks broken from the outside,
+        and with a pool of two a strict cycle and a random pick are the same
+        thing anyway.
+
+        Returns the theme now on, or None when nothing changed. None rather
+        than "" because "" is the built-in dark theme and a perfectly good
+        thing to rotate onto — reading it as "nothing happened" is what made
+        the button report failure while it was working.
+
+        The server never learns what a theme *is*. The presets live in
+        web/themes.js and are the browser's business; this moves an id the
+        person chose.
+        """
+        settings = self.store.settings
+        if not force and not settings.get("theme_rotate"):
+            return None
+        pool = [t for t in (settings.get("theme_rotate_pool") or []) if isinstance(t, str)]
+        if not pool:
+            return None
+        now = time.time()
+        if force:
+            slot = now
+        else:
+            slot = self._rotate_slot(now)
+            if slot is None or float(settings.get("theme_rotate_last") or 0) >= slot:
+                return None
+        current = settings.get("theme") or ""
+        choices = [t for t in pool if t != current] or pool
+        self.store.update_settings(
+            {"theme": random.choice(choices), "theme_rotate_last": int(slot)}
+        )
+        return self.store.settings.get("theme") or ""
+
+    def _rotate_slot(self, now: float) -> float | None:
+        """The most recent scheduled change at or before ``now``, as a unix time.
+
+        Slots are `theme_rotate_at` plus whole multiples of the interval, in
+        the server's own local time, so "07:00 every 6 hours" is 07:00, 13:00,
+        19:00, 01:00 and stays on those times through a restart. Local rather
+        than UTC because the setting is a time of day and a person means their
+        morning by it; that it drifts by an hour across a daylight-saving
+        change is the correct answer for the same reason.
+        """
+        at = clock_time(str(self.store.settings.get("theme_rotate_at") or "")) or clock_time(
+            DEFAULT_SETTINGS["theme_rotate_at"]
+        )
+        if at is None:  # pragma: no cover - the default is a valid time
+            return None
+        try:
+            hours = max(1, int(self.store.settings.get("theme_rotate_hours") or 24))
+        except (TypeError, ValueError):
+            hours = 24
+        step = hours * 3600
+        anchor = datetime.datetime.fromtimestamp(now).replace(
+            hour=at[0], minute=at[1], second=0, microsecond=0
+        )
+        # `//` on floats floors toward minus infinity, so an anchor still to
+        # come today gives k = -1 and the slot before it, whatever the step.
+        # An `int()` truncation here instead would round toward zero and hand
+        # back a slot in the future, which never fires.
+        base = anchor.timestamp()
+        return base + step * int((now - base) // step)
 
     def _sweep_shares(self) -> None:
         """Prune old dropped/pasted files from every session's scratch folders.
@@ -591,7 +698,7 @@ class Panel:
 
     #: Features that can be pointed at a specific provider. Grows as the
     #: BYOK features land (digest, copilot, …); the inbox is the first.
-    _ROUTE_FEATURES = ("inbox",)
+    _ROUTE_FEATURES = ("inbox", "theme")
 
     def llm_list(self) -> dict:
         return {
@@ -641,23 +748,123 @@ class Panel:
     def llm_delete(self, provider_id: str) -> dict | None:
         return {"ok": True} if self.store.remove_provider(provider_id) else None
 
+    def _profile_for(self, p: dict) -> tuple[dict | None, str]:
+        """A stored provider as something `llm` can call, or a reason it cannot.
+
+        The key is decrypted here and nowhere else, and it lives only as long
+        as the call. Every failure is a sentence a person can act on rather
+        than an exception: a missing crypto extra and a tampered key both look
+        like "it did not work" from the panel, and they need different fixes.
+        """
+        key = ""
+        if p.get("key_enc"):
+            if not secretbox.available():
+                return None, f"encryption unavailable — {secretbox.SecretsUnavailable.HINT}"
+            try:
+                key = secretbox.decrypt(p["key_enc"], self._secret_key_path())
+            except Exception:  # noqa: BLE001 — a corrupt/tampered key is a failure, not a 500
+                return None, "the stored key could not be decrypted"
+        return {"kind": p["kind"], "base_url": p["base_url"], "model": p["model"], "key": key}, ""
+
     def llm_test(self, provider_id: str) -> dict | None:
         p = self.store.provider(provider_id)
         if not p:
             return None
-        key = ""
-        if p.get("key_enc"):
-            if not secretbox.available():
-                return {
-                    "ok": False,
-                    "error": f"encryption unavailable — {secretbox.SecretsUnavailable.HINT}",
-                }
-            try:
-                key = secretbox.decrypt(p["key_enc"], self._secret_key_path())
-            except Exception:  # noqa: BLE001 — a corrupt/tampered key is a failed test, not a 500
-                return {"ok": False, "error": "the stored key could not be decrypted"}
-        profile = {"kind": p["kind"], "base_url": p["base_url"], "model": p["model"], "key": key}
+        profile, why = self._profile_for(p)
+        if not profile:
+            return {"ok": False, "error": why}
         return llm.test(profile)
+
+    def usage_now(self, *, force: bool = False) -> dict:
+        """What is left of each running CLI's plan.
+
+        Only CLIs that declare a probe *and* have a session open are asked. A
+        panel with nothing running makes no outbound call at all, which is the
+        behaviour anyone would want from a tool they just installed and have
+        not configured.
+        """
+        if not self.store.settings.get("usage_bar", True):
+            return {"usage": []}
+        running = {s.cli for s in self.store.sessions if s.cli}
+        out = []
+        for cli_id, cli in self.registry.types().items():
+            if cli_id not in running or not getattr(cli, "usage", None):
+                continue
+            found = usage.read(cli_id, cli.usage, llm._guard_url, force=force)
+            if found:
+                out.append(found)
+        return {"usage": out}
+
+    # ------------------------------------------------------------- themes
+
+    def themes_list(self) -> dict:
+        """Themes made here. The built-in ones ship in the front end and are
+        not repeated: this is only what a person added, so a fresh install
+        sends an empty list rather than a copy of the presets."""
+        return {
+            "themes": list(self.store.themes),
+            "can_generate": bool(self._provider_for("theme")),
+        }
+
+    def theme_add(self, seed: dict) -> dict:
+        """Turn a seed into a whole theme and keep it.
+
+        Validation and derivation are `themegen`'s, so a theme posted by hand
+        gets exactly what a generated one gets, including the contrast pass.
+        The audit afterwards is belt and braces: it should never fire, and if
+        it ever does the theme is refused rather than stored, because an
+        unreadable theme is a panel you cannot navigate to change it back.
+        """
+        built = themegen.build(seed)
+        unreadable = themegen.audit(built)
+        if unreadable:
+            raise ValueError("that theme could not be made readable: " + ", ".join(unreadable))
+        return self.store.add_theme(built)
+
+    #: What the model is asked for. Nine values that need taste; the other
+    #: eighteen are derived, so there is far less for it to get wrong.
+    _THEME_SYSTEM = (
+        "You design colour themes for a developer's terminal panel. Reply with "
+        "one JSON object and nothing else: no prose, no markdown fence.\n\n"
+        "Keys, all required:\n"
+        '  "label"   a short name for the theme, two or three words\n'
+        '  "base"    "dark" or "light", whichever suits the description\n'
+        '  "bg"      the background\n'
+        '  "fg"      the main text colour, which must be easy to read on bg\n'
+        '  "accent"  one colour for buttons, links and the cursor\n'
+        '  "red" "green" "yellow" "blue" "magenta" "cyan"  the six terminal '
+        "hues, each recognisably its own colour and readable on bg\n\n"
+        "Every colour is a #rrggbb string. Interpret the description as a mood "
+        "and commit to it: a theme that hedges toward grey is a worse answer "
+        "than one that is too bold."
+    )
+
+    def theme_generate(self, prompt: str) -> dict:
+        """Describe a theme, get a theme. Uses the caller's own provider.
+
+        The model supplies a seed and nothing more, so the failure modes are
+        small: bad JSON, or a colour that is not a colour. Both come back as a
+        sentence. What it cannot do is produce something unreadable, because
+        the ladder in `themegen` fixes contrast before this ever sees it.
+        """
+        wanted = " ".join(str(prompt or "").split())[:300]
+        if not wanted:
+            raise ValueError("describe the theme you want")
+        provider = self._provider_for("theme")
+        if not provider:
+            raise ValueError("no model provider is set up for themes — add one in Settings, Models")
+        profile, why = self._profile_for(provider)
+        if not profile:
+            raise ValueError(why)
+        reply = llm.complete(
+            profile,
+            [
+                {"role": "system", "content": self._THEME_SYSTEM},
+                {"role": "user", "content": wanted},
+            ],
+            max_tokens=700,
+        )
+        return self.theme_add(_theme_seed(reply, wanted))
 
     def state(self, *, reveal_urls: bool = False) -> dict:
         panes = self.live()
@@ -676,6 +883,12 @@ class Panel:
                 }
                 for f in sorted(self.store.folders, key=lambda f: f.order)
             ],
+            # Working groups: sessions opened and seen together. Sent whole
+            # rather than by id, because the tab strip has to colour a tab by
+            # its group on the first paint and a second round trip for that is
+            # a flicker nobody asked for.
+            "groups": [dataclasses.asdict(g) for g in sorted(
+                self.store.groups, key=lambda g: (g.order, g.name.lower()))],
             "sessions": self.sessions_view(panes),
             "clis": [c.as_dict() for c in self.registry.types().values()],
             # Almost always empty, which is the point — this carries the
@@ -988,6 +1201,8 @@ class Panel:
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
+        with self._lock:
+            self._resume_watch.discard(session_id)
         with contextlib.suppress(tmux.TmuxError):
             if tmux.exists(session.mux, session.socket):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
@@ -1045,13 +1260,16 @@ class Panel:
                 killed.append(mux)
         return {"killed": killed}
 
-    def start_session(self, session_id: str) -> dict:
+    def start_session(self, session_id: str, *, allow_resume: bool = True) -> dict:
         """Start a stopped session again. Same id, name, folder, directory.
 
         When the CLI was first launched with our session id (Claude's
         ``--session-id``), that is also the resume key. Other CLIs resume
         only if we already stored ``cli_session_id``. A shell has nothing
         to resume — it starts again in the same place.
+
+        ``allow_resume=False`` is the fresh start _recover_dead_resume falls
+        back to, and the only caller that passes it.
         """
         session = self.store.session(session_id)
         if not session:
@@ -1063,8 +1281,8 @@ class Panel:
         cli = self.registry.get(session.cli)
         if not cli.installed:
             raise ValueError(f"{cli.label}: '{cli.command}' is not installed on this box")
-        prior = session.cli_session_id
-        if not prior and cli.resume:
+        prior = session.cli_session_id if allow_resume else None
+        if allow_resume and not prior and cli.resume:
             # Only treat our id as theirs if the first launch handed it over.
             tokens = " ".join(cli.args)
             if "{id}" in tokens or "{uuid}" in tokens:
@@ -1087,12 +1305,73 @@ class Panel:
         )
         if prior and not session.cli_session_id:
             self.store.update_session(session.id, cli_session_id=prior)
-        return {"id": session.id}
+        if prior == session.id:
+            self._recover_dead_resume(session.id)
+        return {"id": session.id, "resumed": bool(prior)}
+
+    #: How long a resumed CLI has to prove it started, and how often the pane
+    #: is looked at while it does. Claude Code refuses a stale --resume in
+    #: about 1.5 seconds; a real one is still drawing its first frame long
+    #: after that. Watching rather than sleeping the whole window is what
+    #: keeps the recovery quick -- the usual case is over in two seconds and
+    #: the eight is only there for a slow box.
+    RESUME_GRACE = 8.0
+    RESUME_POLL = 0.5
+
+    def _recover_dead_resume(self, session_id: str) -> None:
+        """Watch a resume long enough to see it refuse, then start clean.
+
+        A resume key outlives the conversation it points at. Open a session,
+        never type in it, let the idle reaper stop it, and the CLI has nothing
+        on disk to come back to: the launch exits inside two seconds and the
+        tab goes quiet. No pane, no error, nothing to click — which is exactly
+        what one of Justin's sessions had been doing for a week when this was
+        found on 2026-09-01.
+
+        Only for a key that is *our own session id*, which is the one case we
+        know how it got there: we handed it over at first launch, so throwing
+        it away costs nothing the next start cannot derive again. A key that
+        came from somewhere else was typed deliberately and is left alone.
+
+        Process state and nothing else — the pane is gone or it is not.
+        Deciding *why* would mean reading the CLI's output, which is the line
+        the core does not cross.
+        """
+        with self._lock:
+            self._resume_watch.add(session_id)
+
+        def watch() -> None:
+            deadline = time.time() + self.RESUME_GRACE
+            while True:
+                time.sleep(self.RESUME_POLL)
+                with self._lock:
+                    if session_id not in self._resume_watch:
+                        return  # stopped or deleted while we watched
+                session = self.store.session(session_id)
+                if not session:
+                    return
+                if not tmux.exists(session.mux, session.socket):
+                    break
+                if time.time() >= deadline:
+                    return  # still up, so the resume took
+            with self._lock:
+                if session_id not in self._resume_watch:
+                    return
+                self._resume_watch.discard(session_id)
+            if session.cli_session_id != session.id:
+                return  # somebody changed the key under us
+            self.store.update_session(session_id, cli_session_id="")
+            with contextlib.suppress(Exception):
+                self.start_session(session_id, allow_resume=False)
+
+        threading.Thread(target=watch, daemon=True, name=f"resume-{session_id[:8]}").start()
 
     def delete_session(self, session_id: str) -> dict:
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
+        with self._lock:
+            self._resume_watch.discard(session_id)
         # Adopted sessions do not carry our name prefix, so the engine's guard
         # would refuse them. Deleting one is explicit, which is what force means.
         if tmux.exists(session.mux, session.socket):
@@ -1192,7 +1471,11 @@ def image_extension(data: bytes) -> str:
 #: Deliberately a prefix allowlist and not "any file", because everything else
 #: under web/ — the app shell, its JavaScript, its stylesheet — describes the
 #: panel to someone who has not signed in.
-PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest")
+#: `/brand/` is a directory and is matched by containment; the rest are exact
+#: files. `sw.js` is here so the login page can register the worker, which is
+#: what makes Chrome offer to install from it: installability is judged on the
+#: page you are standing on, and before you sign in that is the login page.
+PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest", "/sw.js")
 
 
 #: Settings that are credentials, not preferences. They go to the browser as a
@@ -1246,6 +1529,53 @@ _PEEKED: dict[str, tuple[tuple, list[str]]] = {}
 _PEEK_LOCK = threading.Lock()
 
 
+#: How long a phone keeps the shared window after it last said anything.
+#: This is only the backstop for a phone that disappears without releasing -
+#: a killed tab, a dead battery, a tunnel. The ordinary case is an explicit
+#: `release` the moment the screen goes dark, so this never has to be waited
+#: out. A visible phone refreshes it every poll with `hold`.
+HANDHELD_HOLD = 90.0
+#: mux name -> when a handheld last claimed the window.
+_handheld: dict[str, float] = {}
+_handheld_lock = threading.Lock()
+
+
+def _may_size_window(mux: str, handheld: bool) -> bool:
+    """Whether this client gets to resize the *shared* tmux window.
+
+    A tmux window has one size and every client attached sees it, so two
+    panels of different shapes cannot both be right. Until now both simply
+    asserted their own size on every poll, three seconds apart, forever: the
+    CLI reflowed to 162 columns, then to 42, then back, and a phone was
+    unusable for as long as a desktop panel was open somewhere.
+
+    The rule is that a handheld wins, and it is a decision about how the thing
+    is used rather than a heuristic. A phone is picked up to do the thing that
+    could not wait; a desktop panel is often just open. So while a phone is
+    claiming, a desktop's resize still sizes its own PTY - it keeps drawing at
+    its own shape - but it does not move the window under the phone.
+
+    It has to be decided here because neither client can decide it. A browser
+    cannot see the other one, and `document.hasFocus()` is per window: a
+    desktop on one machine and a phone in your hand both report true, because
+    both are true. The server is the only party that sees both.
+
+    A phone in a pocket never gets here at all: a backgrounded tab or a dark
+    screen is `document.hidden`, and the panel does not claim while hidden.
+    """
+    now = time.time()
+    with _handheld_lock:
+        # Anything older than the hold is finished, and pruning here keeps a
+        # long-lived panel from accumulating an entry per session it ever
+        # opened on a phone.
+        for name in [k for k, at in _handheld.items() if now - at > HANDHELD_HOLD]:
+            del _handheld[name]
+        if handheld:
+            _handheld[mux] = now
+            return True
+        return mux not in _handheld
+
+
 def _terminal_size(cols, rows) -> tuple[int, int]:
     """Clamp a client-supplied terminal size, tolerating rubbish."""
 
@@ -1266,10 +1596,28 @@ def _is_public_asset(path: str) -> bool:
     test and `_static` happily resolved it back to the application shell,
     which is the one thing the check exists to keep behind the password.
 
-    Resolve first, then ask whether the answer is still inside the directory.
+    Resolve first, then ask whether the answer is one of the things allowed.
+    Comparing *resolved* paths is what keeps the traversal closed: a request
+    for `/brand/../app.js` resolves to the shell and matches nothing, while
+    `/brand/../manifest.webmanifest` resolves to the manifest, which is
+    allowed anyway.
+
+    The named files matter more than they look. Closing the traversal hole
+    replaced the whole check with the `brand/` containment test, which quietly
+    made `PUBLIC_ASSETS` dead code: the manifest and the favicon had been
+    listed as public since they were added and had silently stopped being
+    served that way. A browser cannot offer to install an app whose manifest
+    it is not allowed to read, so CLIque was uninstallable from the one page
+    anyone actually arrives on.
     """
     target = (WEB / path.lstrip("/")).resolve()
-    return artifacts.inside(target, (WEB / "brand").resolve())
+    if artifacts.inside(target, (WEB / "brand").resolve()):
+        return True
+    return any(
+        target == (WEB / name.lstrip("/")).resolve()
+        for name in PUBLIC_ASSETS
+        if not name.endswith("/")
+    )
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1533,16 +1881,28 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.orphans())
             if path == "/api/llm/providers":
                 return self._json(self.panel.llm_list())
+            if path == "/api/themes":
+                return self._json(self.panel.themes_list())
+            if path == "/api/usage":
+                return self._json(self.panel.usage_now())
             if path == "/api/storage":
                 usage = files.shares_usage(tuple(self._share_cwds()))
                 usage["cleanup_days"] = int(
                     self.panel.store.settings.get("drop_cleanup_days", 0) or 0
                 )
                 return self._json(usage)
-            if path.startswith("/api/sessions/") and path.endswith("/note"):
-                return self._get_note(path.split("/")[3])
+            if path.startswith("/api/sessions/") and path.endswith("/notes"):
+                return self._get_notes(path.split("/")[3])
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
+            if path == "/api/projects":
+                return self._json(
+                    projects.search(
+                        query.get("q") or "",
+                        self.panel.store.settings.get("project_roots") or [],
+                        force=query.get("refresh") == "1",
+                    )
+                )
             if path == "/api/workspace":
                 return self._json(
                     workspace.look(
@@ -1822,6 +2182,27 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.spawn(body), 201)
             if path == "/api/orphans/reap":
                 return self._json(self.panel.reap_orphans(body.get("muxes")))
+            if path == "/api/themes":
+                return self._json(self.panel.theme_add(body), 201)
+            if path == "/api/themes/generate":
+                return self._json(self.panel.theme_generate(body.get("prompt")), 201)
+            if path == "/api/themes/rotate":
+                # Ignores the schedule and the on/off switch on purpose: this
+                # is the button next to them, and its whole job is "not this
+                # one, give me another".
+                picked = self.panel._rotate_theme(force=True)
+                if picked is None:
+                    return self._json({"error": "no themes are in the rotation"}, 400)
+                return self._json({"theme": picked})
+            # Spelled with `parts` rather than `endswith("/delete")`, which is
+            # how the router matches every other id-in-the-middle route and,
+            # not incidentally, the only spelling `tools/api_drift.py` reads
+            # as anything other than a session verb.
+            parts = path.strip("/").split("/")
+            if len(parts) == 4 and parts[1] == "themes" and parts[3] == "delete":
+                if not self.panel.store.delete_theme(parts[2]):
+                    return self._json({"error": "no such theme"}, 404)
+                return self._json({"ok": True})
             if path == "/api/llm/providers":
                 return self._json(self.panel.llm_create(body), 201)
             if path == "/api/llm/routes":
@@ -1871,6 +2252,33 @@ class Handler(BaseHTTPRequestHandler):
                 # refused, and "the API is the whole surface" means a script
                 # should be able to see what it created without a second GET.
                 return self._json(dataclasses.asdict(folder), 201)
+            if path.startswith("/api/groups/"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4 and parts[3] == "delete":
+                    gone = self.panel.store.delete_group(parts[2])
+                    return self._json({"ok": gone}, 200 if gone else 404)
+                if len(parts) == 4 and parts[3] == "add":
+                    group = self.panel.store.group_add_session(
+                        parts[2], str(body.get("session") or ""))
+                    if not group:
+                        return self._json({"error": "no such group or session"}, 404)
+                    return self._json(dataclasses.asdict(group))
+                if len(parts) == 4 and parts[3] == "remove":
+                    group = self.panel.store.group_remove_session(
+                        parts[2], str(body.get("session") or ""))
+                    if not group:
+                        return self._json({"error": "no such group"}, 404)
+                    return self._json(dataclasses.asdict(group))
+                if len(parts) == 4 and parts[3] == "open":
+                    return self._open_group(parts[2], bool(body.get("recreate")))
+            if path == "/api/groups":
+                group = self.panel.store.add_group(
+                    body.get("name") or "New group", body.get("color"),
+                    body.get("members"),
+                )
+                if group is None:
+                    return self._json({"error": "too many groups"}, 400)
+                return self._json(dataclasses.asdict(group), 201)
             if path == "/api/reorder":
                 sessions = body.get("sessions") or []
                 folders = body.get("folders") or []
@@ -1891,8 +2299,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._checkpoint(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/export"):
                 return self._export_scrollback(path.split("/")[3], body)
-            if path.startswith("/api/sessions/") and path.endswith("/note"):
-                return self._save_note(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/notes"):
+                return self._save_notes(path.split("/")[3], body)
             if path == "/api/storage/purge":
                 freed = files.purge_shares(tuple(self._share_cwds()))
                 return self._json({"ok": True, **freed})
@@ -2027,6 +2435,61 @@ class Handler(BaseHTTPRequestHandler):
         if not kind:
             return self._json({"error": "not an image this understands"}, 415)
         return self._send(200, raw, kind, {"Cache-Control": "no-store"})
+
+    def _open_group(self, group_id: str, recreate: bool) -> None:
+        """Start everything in a group and say what happened to each member.
+
+        Opening tabs is the browser's job; this is the half that has to happen
+        on the server, and it is a route rather than something only the panel
+        can do so that a script can open a working group too.
+
+        Three things can be true of a member and they are reported separately
+        rather than folded into a count. It was already running. It was stopped
+        and has been started. Or its session is gone, in which case it is only
+        recreated when the caller asks: a group quietly spawning a session
+        somebody deleted on purpose is worse than one that says a member is
+        missing and leaves the decision alone.
+        """
+        group = self.panel.store.group(group_id)
+        if not group:
+            return self._json({"error": "no such group"}, 404)
+        opened, started, missing, failed = [], [], [], []
+        for member in group.members:
+            sid = member.get("session") or ""
+            found = self.panel.store.session(sid)
+            if found and not found.archived:
+                if found.mux in self.panel.live():
+                    opened.append(sid)
+                    continue
+                result = self.panel.start_session(sid)
+                if result.get("error"):
+                    failed.append({"session": sid, "error": result["error"]})
+                else:
+                    started.append(sid)
+                    opened.append(sid)
+                continue
+            if not recreate:
+                missing.append(member)
+                continue
+            made = self.panel.create_session({
+                "cli": member.get("cli") or "",
+                "cwd": member.get("cwd") or "",
+                "name": member.get("name") or "",
+            })
+            if made.get("error"):
+                failed.append({"session": sid, "error": made["error"]})
+                continue
+            # The group now points at the new session rather than the ghost,
+            # or the next open would strand it again.
+            self.panel.store.group_remove_session(group_id, sid)
+            self.panel.store.group_add_session(group_id, made["id"])
+            opened.append(made["id"])
+            started.append(made["id"])
+        return self._json({
+            "group": dataclasses.asdict(self.panel.store.group(group_id) or group),
+            "sessions": opened, "started": started,
+            "missing": missing, "failed": failed,
+        })
 
     def _artifacts(self, session_id: str) -> None:
         """What this session's working directory has to show.
@@ -2266,39 +2729,42 @@ class Handler(BaseHTTPRequestHandler):
             201,
         )
 
-    def _note_path(self, session_id: str) -> Path:
-        """Where a session's note lives: a sidecar `.md` under the panel's home,
-        keyed by session id. Kept out of the project directory on purpose, so a
-        note never shows up as an untracked file in the repo it is about."""
-        return self.panel.store.path.parent / "notes" / f"{session_id}.md"
+    def _notes_path(self, session_id: str) -> Path:
+        """Where a session's notes outline lives: a sidecar `.json` under the
+        panel's home, keyed by session id. Kept out of the project directory on
+        purpose, so a note never shows up as an untracked file in the repo it is
+        about. A pre-outline `.md` note is migrated here on first read."""
+        return notes.path_for(self.panel.store.path.parent, session_id)
 
-    def _get_note(self, session_id: str) -> None:
+    def _get_notes(self, session_id: str) -> None:
         if not self.panel.store.session(session_id):
             return self._json({"error": "no such session"}, 404)
-        path = self._note_path(session_id)
-        try:
-            note = path.read_text(encoding="utf-8") if path.is_file() else ""
-        except OSError:
-            note = ""
-        return self._json({"note": note})
+        return self._json(notes.load(self._notes_path(session_id)))
 
-    def _save_note(self, session_id: str, body: dict) -> None:
-        """Save (or, when emptied, delete) a session's sidecar note."""
+    def _save_notes(self, session_id: str, body: dict) -> None:
+        """Replace (or, when emptied, delete) a session's notes outline.
+
+        The browser owns the tree and sends the whole thing; the server's job is
+        to bound it, keep the reminded flags it already knows about, and persist.
+        An emptied outline is a deleted file, the same rule the blob note had."""
         if not self.panel.store.session(session_id):
             return self._json({"error": "no such session"}, 404)
-        note = str(body.get("note") or "")
-        if len(note.encode("utf-8")) > NOTE_CAP:
-            return self._json({"error": "note too long"}, 413)
-        path = self._note_path(session_id)
+        items = notes.sanitize({"items": body.get("items")})
+        if len(notes.dumps(items).encode("utf-8")) > notes.MAX_BYTES:
+            return self._json({"error": "notes too long"}, 413)
+        path = self._notes_path(session_id)
         try:
-            if note.strip():
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(note, encoding="utf-8")
-            elif path.exists():
-                path.unlink()  # an emptied note is a deleted note
+            with notes.lock_for(path):
+                if items:
+                    notes.merge_reminded(notes.load(path)["items"], items)
+                    notes.save(path, items)
+                else:
+                    for stale in (path, path.with_suffix(".md")):
+                        if stale.exists():
+                            stale.unlink()  # an emptied outline is a deleted note
         except OSError as exc:
             return self._json({"error": f"could not save: {exc}"}, 500)
-        return self._json({"ok": True, "bytes": len(note.encode("utf-8"))})
+        return self._json({"ok": True, "count": len(items)})
 
     def _share_cwds(self) -> set:
         """Every working directory that might hold shared files, deduped.
@@ -2356,6 +2822,13 @@ class Handler(BaseHTTPRequestHandler):
                 fields = {k: v for k, v in body.items() if k in allowed}
                 updated = self.panel.store.update_session(parts[2], **fields)
                 return self._json({"ok": bool(updated)}, 200 if updated else 404)
+            if len(parts) == 3 and parts[1] == "groups":
+                allowed_keys = {"name", "color", "members", "order"}
+                fields = {k: v for k, v in body.items() if k in allowed_keys}
+                updated = self.panel.store.update_group(parts[2], **fields)
+                if not updated:
+                    return self._json({"ok": False}, 404)
+                return self._json(dataclasses.asdict(updated))
             if len(parts) == 3 and parts[1] == "folders":
                 updated = self.panel.store.update_folder(
                     parts[2],
@@ -2521,7 +2994,12 @@ class Handler(BaseHTTPRequestHandler):
             # Boxed CLIs turn mouse tracking on. Hidden from the browser so
             # drag-select still works; a click we encode ourselves still
             # reaches the program in tmux.
-            filt = termstrip.boxed_stream() if (cli and cli.own_input) else None
+            # Always a filter now. The difference is only whether mouse
+            # reporting goes with it: the alternate screen is hidden from every
+            # session, because tmux ignores it to keep history and a browser
+            # that honoured it would sit in a buffer that has none.
+            filt = (termstrip.boxed_stream() if (cli and cli.own_input)
+                    else termstrip.plain_stream())
 
             def outbound(data: bytes, _filt=filt) -> None:
                 if _filt is not None:
@@ -2559,7 +3037,7 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     opcode, payload = message
                     if opcode == OP_TEXT:
-                        self._control(session, bridge, payload, may_write)
+                        self._control(session, bridge, payload, may_write, viewer)
                     elif may_write:
                         bridge.write(payload)
             finally:
@@ -2575,7 +3053,14 @@ class Handler(BaseHTTPRequestHandler):
             with self.panel._lock:
                 self.panel.clients = max(self.panel.clients - 1, 0)
 
-    def _control(self, session, bridge: PtyBridge, payload: bytes, may_write: bool = True) -> None:
+    def _control(
+        self,
+        session,
+        bridge: PtyBridge,
+        payload: bytes,
+        may_write: bool = True,
+        viewer: str | None = None,
+    ) -> None:
         """Text frames are control; binary frames are keystrokes.
 
         Everything here is attacker-shaped: it is JSON from a socket, so a
@@ -2601,8 +3086,31 @@ class Handler(BaseHTTPRequestHandler):
             # Tiny sizes are a collapsed or hidden tab measuring itself,
             # not a phone — those still clear 20x8. Applying them is how
             # a background reconnect left a screen of dots.
-            if may_write:
+            if may_write and _may_size_window(session.mux, bool(message.get("handheld"))):
                 tmux.resize_window(session.mux, cols, rows, session.socket)
+        elif kind == "hold":
+            # A handheld saying it is still here and still awake. Cheap on
+            # purpose: no tmux call, no resize, just the timestamp. Needed
+            # because a phone that already owns the window has nothing to
+            # resize and would otherwise let the hold lapse under itself.
+            if may_write:
+                _may_size_window(session.mux, True)
+        elif kind == "release":
+            # A phone going into a pocket. The timer below is the backstop for
+            # one that vanishes without saying so; this is the ordinary case,
+            # and it is what stops a desktop waiting out a two-minute lockout
+            # after you put the phone down.
+            if may_write:
+                with _handheld_lock:
+                    _handheld.pop(session.mux, None)
+        elif kind == "refresh":
+            # Repaint this browser's own view and nobody else's. The pane can
+            # come back from a layout change the same size it went in at, and
+            # then tmux has no reason to send a frame and the terminal keeps
+            # showing what it drew before. Read-only viewers get this too:
+            # asking for your own screen back is not writing to the session.
+            if viewer:
+                tmux.refresh_client(viewer, session.socket)
         elif not may_write:
             return  # watching is allowed; typing is not
         elif kind == "key":

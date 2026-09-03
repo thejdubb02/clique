@@ -219,6 +219,18 @@ the CLI was first launched with our session id, that is also the resume key
 (Claude's `--session-id`). A shell has nothing to resume; it starts again
 in the same place. Already running is a `400`.
 
+```json
+{"id": "3afc8da8-...", "resumed": true}
+```
+
+`resumed` says whether the CLI's resume form was used rather than a fresh
+launch. A resume key can outlive the conversation it points at — a session
+opened, never typed in, then stopped — and the CLI then exits within a
+couple of seconds, leaving a tab that does nothing. Where the key is CLIque's
+own session id, the server watches the pane for eight seconds and, if it is
+gone, drops the key and starts the session clean. Nothing to call: it is the
+same endpoint, arriving a few seconds later.
+
 ### `DELETE /api/sessions/<id>`
 
 Forgets the record, and stops the process if it is still running. This is
@@ -301,13 +313,20 @@ under `<cwd>/.clique-exports/`, returning `{path, relative, bytes, lines}`. `400
 when there is nothing to capture (a session that is not running has no pane to
 read).
 
-### `GET /api/sessions/<id>/note` and `POST /api/sessions/<id>/note`
+### `GET /api/sessions/<id>/notes` and `POST /api/sessions/<id>/notes`
 
-A per-session scratchpad note. `GET` returns `{note}` (empty string when there is
-none). `POST` with `{note}` saves it, or deletes it when the text is empty.
-Stored as a sidecar `.md` file under the panel's home (`<CLIQUE_HOME>/notes/`),
-keyed by session id, so a note never lands as an untracked file in the project it
-is about. Capped at 100 KB (`413` over it).
+A per-session notes outline: a nested checklist shown in the side panel. `GET`
+returns `{version, items, updated}`, where each item is
+`{id, text, done, collapsed, created, updated, remindAt, reminded, children[]}`
+(`items` empty when there are none). `POST` with `{items}` replaces the whole
+outline (the browser owns the tree and sends it back on every change), or deletes
+it when `items` is empty. `remindAt` is a Unix time; when a webhook is configured
+a due reminder is delivered to it once (event `reminder`), which is what
+`reminded` records. Stored as a sidecar `.json` file under the panel's home
+(`<CLIQUE_HOME>/notes/`), keyed by session id, so a note never lands as an
+untracked file in the project it is about; a pre-outline `.md` note is migrated on
+first read. Capped at 200 KB, 2000 items and 6 levels deep (`413` over the byte
+cap).
 
 ### `GET /api/storage`
 
@@ -338,8 +357,10 @@ to finish at three in the morning.
  "url": "https://box.ts.net/clique/?session=..."}
 ```
 
-`event` is `waiting`, `error`, `finished`, `died` or `test`. Each fires on the
-edge — a session waiting for an hour is not news every ten seconds. With
+`event` is `waiting`, `error`, `finished`, `died`, `test` or `reminder`. Each
+fires on the edge — a session waiting for an hour is not news every ten
+seconds, and a note reminder fires once per `remindAt`, guarded by a
+`reminded` flag the server keeps and the browser never sends. With
 `webhook_secret` set, `X-CLIque-Signature: sha256=<hmac>` covers the exact
 bytes sent. One attempt, five second timeout, no retry: a dropped notification
 is superseded by the next change, and a retry queue means durable state.
@@ -409,6 +430,34 @@ This is what the new-session dialog uses once you start typing a path. The
 dropdown beside it answers a different question — everywhere you have already
 worked — and neither is a substitute for the other.
 
+### `GET /api/projects?q=sentinel`
+
+Project roots matching a name, for when you cannot remember where one lives.
+`/api/browse` completes a path you already know the start of; this answers the
+other question. Add `refresh=1` to force a fresh walk instead of the cached one.
+
+```json
+{"projects": [{"path": "/root/platform/wsg-sentinel", "name": "wsg-sentinel",
+               "kind": "git"}],
+ "partial": false, "total": 140}
+```
+
+A directory counts as a project when it holds `.git`, `pyproject.toml`,
+`package.json`, `Cargo.toml`, `go.mod`, `pom.xml`, `Gemfile`, `composer.json`
+or `CMakeLists.txt`; `kind` says which. Ranked by how the match happened, not
+by string distance: the directory *called* sentinel comes before one that
+merely has it somewhere in its path.
+
+Empty `q` returns the shallowest roots, which is the nearest thing to "the
+projects you would name first". `partial` is true when the walk hit its depth,
+count or three-second budget and stopped, so a short answer is never silently
+short. `total` is how many were indexed in all.
+
+Where it looks is the `project_roots` setting, and the home directory when that
+is empty. Hidden directories are never descended into, which is what keeps a
+cache or a virtualenv out of the walk, and the result is cached for two
+minutes.
+
 ### `POST /api/workspace` → `201` with the same shape
 
 ```json
@@ -462,6 +511,15 @@ anyone who can reach the panel already has a shell as this user.
 `kind` is `text`, `image`, `binary`, `dir` or `missing`. Text is capped;
 `truncated` is true when there is more. `?raw=1` on an image returns the
 bytes, typed from magic, same as an artifact.
+
+A directory also carries `entries`: `{name, kind, path}` for each child,
+directories first, then files, capped. `kind` here is `dir` or `file`.
+`path` is the child as a path this same endpoint will accept. Listing does
+not follow a symlink out of the folder (the name stays in this directory);
+a click still goes through `resolve`, which follows and fences. `truncated`
+is true when the directory had more children than the cap. Parent `..` is
+included when the directory is inside the session folder, not the folder
+itself.
 
 ### `POST /api/sessions/<id>/file` — `{path, text}`
 
@@ -554,12 +612,149 @@ with `key_set` only, and it never rides `/api/state`.
 - `POST /api/llm/routes` — point a feature at a provider. Body `{feature,
   provider_id}`; an absent/empty `provider_id` clears the route. `feature` is one
   of the names in `GET /api/llm/providers`'s `features` list (currently
-  `inbox`). Returns `{"routes": {...}}`. Deleting a provider drops any route to
+  `inbox` and `theme`). Returns `{"routes": {...}}`. Deleting a provider drops any route to
   it. Write scope.
 
 Outbound calls refuse a `base_url` that resolves to a cloud-metadata /
 link-local address or (by default) an internal-network host; loopback stays
 allowed for local models. `CLIQUE_LLM_ALLOW_PRIVATE=1` opts into private ranges.
+
+## Plan usage
+
+`GET /api/usage` → `{"usage": [{"cli", "windows": [{"label", "percent",
+"resets_at"}], "checked"}]}`. How much of a plan each running CLI has spent.
+Read scope.
+
+Nothing in the panel knows whose API is being asked. A CLI's `usage` block in
+`clis.toml` says where its token file is, which field in it holds the token,
+which URL to ask and which fields in the reply are the numbers; the panel runs
+that description. Teaching it about another vendor is a block of TOML.
+
+Only CLIs that declare a probe **and** have a session open are asked, so a
+panel with nothing running makes no outbound call. Readings are cached for five
+minutes and shared by every connected browser, and a failure is cached for the
+same five minutes so a machine with no credentials does not retry forever.
+
+**The token never leaves the process.** It is read from disk, spent on one
+request, and dropped; what comes back over this route is a percentage and a
+reset time. Anything unexpected (no token, an expired one, no network, a reply
+in a shape the block did not describe) returns no entry for that CLI rather
+than an error. Set `usage_bar` to `false` to turn the whole thing off.
+
+## Themes
+
+A theme is nine colours somebody chose and eighteen worked out from them. The
+built-in presets ship in the front end; this is only what was made here, so a
+fresh panel returns an empty list.
+
+Both routes that create one run the same derivation and the same contrast
+pass, so a theme posted by hand gets exactly what a generated one gets. That
+matters more than it sounds: the settings sheet you would use to pick a
+different theme is drawn in the theme you are wearing, so one whose text
+vanishes into its background is not a bad theme, it is a panel you cannot
+navigate. Colours that cannot be read are pushed away from the background
+until they can be, rather than refused.
+
+- `GET /api/themes` → `{"themes": [...], "can_generate": <bool>}`. Each theme is
+  `{id, label, base, panel, term, created}`, complete and ready to use.
+  `can_generate` is whether a model provider is routed to the `theme` feature.
+  Read scope.
+- `POST /api/themes` → `201` the stored theme. Body is a **seed**: `label`,
+  `base` (`light`/`dark`), `bg`, `fg`, `accent`, and the six hues `red`,
+  `green`, `yellow`, `blue`, `magenta`, `cyan`, each `#rgb` or `#rrggbb`. The
+  panel tokens, all sixteen ANSI colours with their brights, the cursor and the
+  selection are derived. A colour that is not a colour, a missing hue, or a
+  `base` that is neither light nor dark is a `400` naming the problem. Write
+  scope.
+- `POST /api/themes/generate` → `201` the stored theme. Body `{prompt}`, a
+  description in words. Asks the provider routed to the `theme` feature for a
+  seed and then treats it exactly as `POST /api/themes` would. `400` when no
+  provider is set up, when the description is empty, or when the model's reply
+  was not a theme. Write scope.
+- `POST /api/themes/<id>/delete` → `{"ok": true}`, or `404`. Deleting the theme
+  currently in use clears the setting back to the default, because leaving it
+  pointing at a theme that no longer exists is a panel that comes back
+  unpainted. It also comes out of the rotation pool. Write scope.
+- `POST /api/themes/rotate` → `{"theme": "<id>"}`. Put on a different one from
+  the rotation pool now, ignoring both the schedule and whether the rotation is
+  switched on at all. `400` when the pool is empty. Write scope.
+
+Forty are kept; the oldest goes when a new one would exceed that.
+
+### Rotating through the ones you like
+
+Five settings, and the server never learns what a theme *is* — the presets
+live in `web/themes.js` and are the browser's business. It moves an id you
+chose.
+
+`theme_rotate_pool` is the list of theme ids it may pick from, mixing preset
+ids and stored ids freely. There is no "all of them" default: an empty pool
+does nothing, because the point is the ones you like. Every `theme_rotate_hours`
+hours, anchored on `theme_rotate_at`, the next poll picks one at random and
+sets `theme`. Never the one already on, so a change always looks like one.
+
+It rides the panel's own poll, so nothing happens while nobody has CLIque
+open, and the first poll after opening catches up to the most recent slot that
+has gone by — one slot, never a week of them.
+
+## Working groups
+
+Sessions you open and see together. **Not folders**, and the difference is the
+whole feature: a folder files a session in the sidebar and a session has
+exactly one, while a group is about launching several things at once and being
+able to tell at a glance which tabs belong to which piece of work. A group can
+pull from several folders or none, a session can belong to more than one, and
+joining a group changes nothing about where a session lives.
+
+Groups arrive whole in `GET /api/state` as `groups`, because the tab strip has
+to colour a tab by its group on the first paint and a second round trip for
+that is a flicker nobody asked for.
+
+### `POST /api/groups` → `201`
+
+```json
+{"name": "Duchamp morning", "color": "#7aa2f7", "members": []}
+```
+
+Returns the record. Capped at 40 groups; past that it is a `400`, because a
+sidebar of forty groups is a worse sidebar than one of five.
+
+### `PATCH /api/groups/<id>`
+
+Fields: `name`, `color`, `members`, `order`. Returns the record, so a colour
+that failed validation is visible rather than silently kept.
+
+### `POST /api/groups/<id>/add` and `/remove` — `{"session": "<id>"}`
+
+Membership. **`add` stores a snapshot**, not just the id: the session's `cli`,
+`cwd` and `name` go in beside it, so a member whose session is later deleted
+can be offered back instead of the group quietly being one short. A group that
+opens two of the three things it promised is worse than one that says so.
+
+### `POST /api/groups/<id>/open`
+
+Starts every member and reports what happened to each, separately rather than
+as a count:
+
+```json
+{"group": {...}, "sessions": ["a", "b"], "started": ["b"],
+ "missing": [{"session": "c", "cli": "grok", "cwd": "/srv/x", "name": "old"}],
+ "failed": []}
+```
+
+`sessions` is what is now running and ready for a tab, in member order.
+`started` is the subset that was stopped and has been started. `missing` is
+members whose session no longer exists: they are **not** recreated unless you
+pass `{"recreate": true}`, because a group silently spawning something somebody
+deleted on purpose is the worse failure. Recreating rewrites the member to
+point at the new session, so the next open does not strand it again.
+
+Opening tabs is the browser's job. This is the half that has to happen on the
+server, and it is a route so that a script can open a working group too.
+
+### `POST /api/groups/<id>/delete`
+
+Removes the group. The sessions are untouched.
 
 ## Folders
 
@@ -634,6 +829,11 @@ front of you (sidebar width, sidebar shown or hidden).
 | `markers_in_sidebar` | bool | Marks in the sidebar |
 | `status_on_icon` | bool | The CLI logo carries the status colour, instead of a second dot |
 | `theme` | string | Preset id from `web/themes.js`; `""` is the built-in |
+| `theme_rotate` | bool | Wear a different theme every so often, picked at random from `theme_rotate_pool`. Off by default: a panel that changes its own colours unasked is a fault, not a feature |
+| `theme_rotate_hours` | int | How often, in hours. 24 is a different theme every morning. Clamped to 1–720 |
+| `theme_rotate_at` | string | What time of day the change lands, `"HH:MM"` on the server's own clock. With an interval under a day it is the anchor the rest are counted from, so `"07:00"` every 6 hours is 07:00, 13:00, 19:00, 01:00. Anything that is not a real time is refused and the old value kept |
+| `theme_rotate_pool` | list | The theme ids the rotation may choose from, preset and stored ids mixed freely. `""` is the built-in dark theme and belongs here like any other id, not a missing value. Never checked against the themes that exist — the server has never read `web/themes.js`. Capped at 64 |
+| `theme_rotate_last` | int | Bookkeeping, not a preference: the slot last acted on, in unix seconds. It is what stops a panel shut all week applying six changes when it opens |
 | `appearance` | `"dark"` \| `"light"` \| `"system"` | Base used when no preset is chosen |
 | `font_panel` | 9–28 | Sidebar and chrome |
 | `font_terminal` | 9–28 | The pane, read at a different distance. Also the `+`/`−` stepper in the bottom-right |
@@ -643,7 +843,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `history_days` | int | How far back the sidebar goes when the above is on. Default 14. Does not limit the palette |
 | `reap_idle_hours` | int | Stop an idle session's process after this many hours to free its memory, greying its tab; clicking it resumes exactly where it was. Only a resumable session no browser is attached to and that is not busy is reaped. Default 6; `0` turns it off; clamped to 720 |
 | `drop_cleanup_days` | int | Auto-delete dropped/pasted files older than this many days from the scratch folders (`.clique-drops`, `.claude-images`); nothing else on disk is touched. **Off by default (`0`)** — a share is your file. Clamped to 365. The manual purge and the storage readout work whether this is on or off |
-| `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it. The mode pill is never hidden by this |
+| `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it — except on a touch device, which always gets the box, because typing into the terminal goes through the phone keyboard's input method and Android duplicates the line. `terminal` still overrides it. The mode pill is never hidden by this |
 | `css_both`, `css_panel`, `css_terminal` | string | Custom CSS, applied in that order |
 | `snippets` | list | `{"trigger", "label", "text"}`; malformed entries are dropped here rather than becoming a render error later |
 | `notify_flash` | bool | Flash a tab whose session finished |
@@ -655,6 +855,9 @@ front of you (sidebar width, sidebar shown or hidden).
 | `active_tab` | session id | Which one was in front |
 | `views_collapsed` | list | Shut view-groups: `__running`, `__unfiled`, `__archived` |
 | `cli_tint` | bool | Colour the pane edge, active tab and prompt box with the active CLI's colour |
+| `project_roots` | list of paths | Where `GET /api/projects` looks when the new-session dialog is asked for a project by name. Empty means the home directory. Name directories here when your work lives elsewhere, or when home is big enough that the walk is worth narrowing |
+| `cli_watermark` | bool | Draw the active CLI's logo faintly in the top-right of the pane, opposite the theme character. A single-colour glyph is masked and tinted with the CLI's own colour; a logo carrying its own colours is drawn as the image. A CLI with no icon draws nothing. Hidden on a pane under 720px or a window under 460px tall. On by default |
+| `theme_art` | bool | Draw the theme's hand-drawn character in the bottom-right of the pane, behind the text. Only the seven character themes (`plumber`, `triforce`, `fellowship`, `drizzt`, `chompy`, `bricks`, `aincrad`) carry one; elsewhere it does nothing. Composited with `lighten`/`darken` so a glyph over it stays exactly as readable, and hidden on a pane under 720px or a window under 460px tall. On by default |
 | `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
 | `changelog_seen` | version | Newest release whose notes have been read. Seeded on first load so a fresh install does not badge itself |
 | `service_status` | bool | Ask the provider behind a running CLI whether it is having a bad day. The only outbound requests CLIque makes without being told to — see **Service status** below. On by default |
@@ -669,9 +872,40 @@ front of you (sidebar width, sidebar shown or hidden).
 ## Terminals
 
 `GET /ws?id=<id>&cols=<n>&rows=<n>` upgrades to a WebSocket carrying the
-pane. Text frames are keystrokes; JSON control frames handle `resize` and
-running a command. The handshake enforces `Origin`, because a WebSocket is not
-subject to CORS and `SameSite=Lax` does not cover it.
+pane. Text frames are keystrokes; JSON control frames handle `resize`,
+`refresh` and running a command. The handshake enforces `Origin`, because a
+WebSocket is not subject to CORS and `SameSite=Lax` does not cover it.
+
+`{"type": "refresh"}` asks tmux to repaint this socket's own view at once,
+and takes no arguments. It is what a client sends after a layout change that
+left the grid the same size, because tmux has nothing to redraw for and the
+pane would otherwise keep the frame it already had until a keystroke. It
+touches one client, so a read-only token may send it: asking for your own
+screen back is not writing to the session.
+
+`{"type": "resize", "cols": n, "rows": n, "handheld": bool}` sets this
+client's PTY and asks for the shared tmux window. **`handheld` decides who
+wins when two panels disagree, and the server settles it, because neither
+client can.** A tmux window has one size that every attached client sees, so a
+desktop panel and a phone cannot both be right; before this each asserted its
+own size on every poll, three seconds apart, forever, and the CLI reflowed
+between 162 and 42 columns for as long as both were open.
+
+A handheld wins. A phone is picked up to do the thing that could not wait; a
+desktop panel is often merely open. While a phone holds the window, a desktop's
+`resize` still sizes its own PTY, so it keeps drawing at its own shape, but it
+does not move the window underneath the phone. `document.hasFocus()` cannot
+decide this: it is per browser window, and a desktop on one machine and a phone
+in a hand both report true, because both are true.
+
+`{"type": "hold"}` and `{"type": "release"}` are how a phone says it is still
+awake and that it has stopped. `hold` is cheap by design, no tmux call and no
+resize, and exists because a phone that already owns the window has nothing
+left to resize and would otherwise let its claim lapse under itself. `release`
+is sent the moment the screen goes dark or the tab is hidden, so a desktop
+never waits out a timer after you put the phone down. A claim with neither goes
+stale after 90 seconds, which is the backstop for a phone that vanishes rather
+than the ordinary path. Both are ignored from a read-only viewer.
 
 `passive=1` attaches a viewer without resizing the shared tmux window, and
 sizes its PTY to the window that is already there. Each window is locked

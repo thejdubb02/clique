@@ -1,7 +1,12 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- viewport-fit=cover so `env(safe-area-inset-*)` reports real numbers.
+     Without it they are all 0, and the standalone padding rule further down
+     this file's stylesheet is dead code: an installed app on a notched phone
+     draws its tab strip under the island. The sign-in page has always had
+     this; the page you land on after signing in did not. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CLIque</title>
 <script nonce="__NONCE__">
   // Resolve every asset, API call and WebSocket against wherever this page is
@@ -77,6 +82,24 @@
   <symbol id="i-more-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
   <!-- a session held read-only for review — input is blocked -->
   <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+  <!-- the side panel's Notes pane -->
+  <symbol id="i-notebook" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h4" /><path d="M2 10h4" /><path d="M2 14h4" /><path d="M2 18h4" /><rect width="16" height="20" x="4" y="2" rx="2" /><path d="M16 2v20" /></symbol>
+  <!-- the side panel's Git / Checkpoint pane -->
+  <symbol id="i-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a9 9 0 0 0-9 9V3" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /></symbol>
+  <!-- the side panel's Session info pane -->
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></symbol>
+  <!-- push a note into the terminal -->
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></symbol>
+  <!-- a reminder is set on a note -->
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></symbol>
+  <!-- delete a note line -->
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+  <!-- open or close the side panel -->
+  <symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" /></symbol>
+  <!-- reload the panel, for an installed app with no address bar -->
+  <symbol id="i-rotate-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></symbol>
+  <!-- attach a file to this session, the only route in from a phone -->
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" /></symbol>
 </svg>
 <!-- icons:end -->
 
@@ -94,6 +117,10 @@
       <button id="collapse" class="hdr-btn" title="Hide sidebar (Ctrl+B)"><svg class="ico" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
     </header>
     <div class="search"><input id="q" placeholder="Search sessions…" autocomplete="off"><button type="button" id="qClear" class="q-clear" title="Clear search" aria-label="Clear search" hidden>×</button></div>
+    <!-- Working groups: sessions opened and seen together. Above the tree
+         because it is a launcher rather than a filing system, and the thing
+         you reach for first when you sit down. -->
+    <div id="groups" class="groups" hidden></div>
     <div id="tree" class="tree"></div>
     <div id="orphans" class="orphans" hidden></div>
     <footer id="version"></footer>
@@ -144,8 +171,20 @@
 
     <div id="termwrap">
       <div id="terminal"></div>
+      <!-- The theme's character, if it has one. Above the terminal in the
+           stack and behind the text in appearance: it is composited with
+           lighten/darken, so every glyph wins the blend and comes through
+           untouched. Never interactive, and gone on a pane too small to
+           spare the corner. -->
+      <!-- The active CLI's logo, faint in the opposite corner to the theme
+           character, so a pane says which tool it is without reading a tab. -->
+      <div id="cliMark" aria-hidden="true" hidden></div>
+      <div id="themeArt" aria-hidden="true" hidden></div>
       <div id="follow" hidden></div>
-      <button type="button" id="copySel" hidden>Copy</button>
+      <div id="selChips" hidden>
+        <button type="button" id="copySel">Copy</button>
+        <button type="button" id="openSel" hidden>Open</button>
+      </div>
       <div id="empty">
         <div class="empty-inner">
           <div class="empty-head">
@@ -189,6 +228,14 @@
         <span id="repeat">1</span>
         <button id="repPlus" title="More repeats"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
       </div>
+      <!-- The only way in from a phone. Drop needs a mouse and paste needs the
+           file to already be on the clipboard, so between them a phone had no
+           route at all: no photo from the library, no PDF from Files, no log
+           from another app. The input is hidden and this button is what asks
+           the OS for it. -->
+      <button type="button" id="attachFile" class="hdr-btn"
+              title="Attach a file to this session"><svg class="ico" aria-hidden="true"><use href="#i-paperclip"/></svg></button>
+      <input type="file" id="filePick" multiple hidden>
       <button type="button" id="draftMove" class="hdr-btn draft-move" hidden
               title="Move this draft to another session"></button>
       <button type="button" id="reviewLock" class="hdr-btn" aria-pressed="false"
@@ -206,14 +253,30 @@
         <span id="swap" class="stat is-off"><i class="dot stat" aria-hidden="true"></i><b class="k">SWAP</b><span class="v">—.–G</span></span>
         <span id="disk" class="stat"><i class="dot stat" aria-hidden="true"></i><b class="k">DISK</b><span class="v">—.–G free</span></span>
         <span id="load" class="stat"><i class="dot stat" aria-hidden="true"></i><b class="k">LOAD</b><span class="v">-.--</span></span>
+        <span id="temp" class="stat is-off"><i class="dot stat" aria-hidden="true"></i><b class="k">TEMP</b><span class="v">--&deg;C</span></span>
+        <span id="uptime" class="stat"><i class="dot" style="background:var(--ok)"></i><b class="k">UP</b><span class="v">--</span></span>
         <span id="clients" class="stat" title="Live views — one per open tab, plus any other window or phone"><i class="dot" style="background:var(--ok)"></i><b class="k">VIEWS</b><span class="v">0</span></span>
       </div>
+      <!-- What is left of the plan for the session in front, when its CLI
+           declares a way to ask. Its own block rather than another reading in
+           the machine stats: how much of the week is gone decides what you do
+           next, and CPU does not. Hidden entirely for a CLI with no probe. -->
+      <div id="plan" hidden></div>
+
       <button type="button" id="whatsNew" class="whats-new" hidden
               title="What changed in this release">
         <i class="version-new" aria-hidden="true"></i> What's new
       </button>
       <button id="keysBtn" class="hdr-btn" title="Keyboard shortcuts (Ctrl+Shift+/)">
         <svg class="ico" aria-hidden="true"><use href="#i-keyboard"/></svg>
+      </button>
+      <!-- Only shown when there is no address bar to reload from, which is
+           the installed app and the iOS home screen. In a browser tab this
+           would be a button that does what the browser's own reload already
+           does, in a row that is already full. -->
+      <button type="button" id="reloadBtn" class="hdr-btn" hidden
+              title="Reload the panel">
+        <svg class="ico" aria-hidden="true"><use href="#i-rotate-cw"/></svg>
       </button>
       <button type="button" id="fullScr" class="hdr-btn" title="Full screen (Ctrl+Shift+F)">
         <svg class="ico ico-fs-enter" aria-hidden="true"><use href="#i-maximize-2"/></svg>
@@ -230,6 +293,28 @@
       </div>
     </div>
   </main>
+
+  <!-- The docked right panel: per-session features, switched from the icon rail
+       to its right. Collapsed by default, and nothing inside it renders while it
+       is closed — an idle panel costs the browser nothing. -->
+  <div id="panelResizer" role="separator" aria-orientation="vertical" tabindex="0"
+       title="Drag to resize the panel · double-click to reset"
+       aria-label="Resize side panel" hidden></div>
+  <aside id="sidepanel" hidden aria-label="Session panel">
+    <header id="panelHead">
+      <svg class="ico" aria-hidden="true"><use id="panelIcon" href="#i-notebook"/></svg>
+      <h2 id="panelTitle">Notes</h2>
+      <span id="panelFor" class="panel-for"></span>
+      <button type="button" id="panelClose" class="hdr-btn" title="Close panel (Ctrl+J)"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </header>
+    <div id="panelBody"></div>
+  </aside>
+  <nav id="railR" aria-label="Panel features">
+    <button type="button" class="railr-btn" data-pane="notes" title="Notes for this session"><svg class="ico" aria-hidden="true"><use href="#i-notebook"/></svg></button>
+    <button type="button" class="railr-btn" data-pane="git" title="Git and checkpoints"><svg class="ico" aria-hidden="true"><use href="#i-git-branch"/></svg></button>
+    <button type="button" class="railr-btn" data-pane="info" title="Session info"><svg class="ico" aria-hidden="true"><use href="#i-info"/></svg></button>
+    <button type="button" class="railr-btn" data-pane="export" title="Export scrollback to a file"><svg class="ico" aria-hidden="true"><use href="#i-download"/></svg></button>
+  </nav>
 </div>
 
 <div id="modal" hidden>
@@ -241,7 +326,7 @@
     <label>Working directory
       <span class="cwd-row">
         <input name="cwd" list="cwdList" autocomplete="off" required
-               placeholder="Where should it run?">
+               placeholder="A path, or a project name to search for">
         <select id="cwdPick" title="Directories CLIque already knows"></select>
       </span>
     </label>
@@ -277,9 +362,11 @@
     <textarea id="fileEdit" class="file-edit" spellcheck="false" hidden></textarea>
     <div id="fileTurns" hidden></div>
     <img id="fileImg" alt="" hidden>
+    <div id="fileList" class="file-list" hidden></div>
     <div class="file-foot">
       <code id="filePath"></code>
       <span class="art-acts">
+        <button type="button" id="fileUp" hidden>This folder</button>
         <button type="button" id="fileEditBtn" hidden>Edit</button>
         <button type="button" id="fileSave" class="primary" hidden>Save</button>
         <button type="button" id="fileCancel" hidden>Cancel</button>
@@ -341,18 +428,17 @@
   </div>
 </div>
 
-<div id="noteSheet" hidden>
-  <div class="sheet note-sheet">
-    <header class="sheet-head">
-      <h2 id="noteTitle">Notes</h2>
-      <button type="button" id="noteClose" class="hdr-btn" title="Save and close"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button>
-    </header>
-    <textarea id="noteText" spellcheck="false"
-      placeholder="Notes for this session. Plain text or Markdown, saved to a sidecar .md file."></textarea>
-    <div class="confirm-foot">
-      <span id="noteStatus" class="note"></span>
-      <button type="button" id="noteSave">Save</button>
-    </div>
+<!-- Notes moved out of a modal and into the docked side panel (#sidepanel),
+     where they are a nested checklist per session rather than a text blob. -->
+
+<!-- A reminder time, picked inline for one note line. Positioned by JS next to
+     the bell that opened it. -->
+<div id="remindPop" hidden>
+  <label for="remindAt">Remind me</label>
+  <input type="datetime-local" id="remindAt">
+  <div class="remind-foot">
+    <button type="button" id="remindClear" class="ghost">Clear</button>
+    <button type="button" id="remindSet" class="primary">Set</button>
   </div>
 </div>
 
@@ -440,6 +526,43 @@
       <p class="note">A preset carries its own light or dark base. This only
          decides which built-in is used when no preset is chosen.</p>
 
+      <label class="check"><input type="checkbox" id="setThemeArt">
+        Show the theme’s character in the corner of the pane</label>
+      <p class="note">Plumber, Triforce, Fellowship, Drizzt, Chompy, Bricks and
+         Aincrad each carry a hand-drawn anime figure, watermarked into the bottom-right
+         of the terminal, laid in faintly enough to read straight through. They
+         are original designs rather than the famous characters they are named
+         for. It takes itself away on a narrow pane and on a phone, where the
+         corner is needed for the output.</p>
+
+      <h3>Change it on a schedule</h3>
+      <label class="check"><input type="checkbox" id="setThemeRotate">
+        Put on a different theme every
+        <input type="number" id="setThemeRotateHours" min="1" max="720" step="1"
+               class="days-inline" disabled> hours, from
+        <input type="time" id="setThemeRotateAt" class="time-inline" disabled></label>
+      <p class="note">Picked at random from the ones you tick below, and never
+         the one already on. Every 24 hours from 07:00 is a different theme
+         each morning; every 6 hours from 07:00 changes at 07:00, 13:00, 19:00
+         and 01:00. It happens while CLIque is open, and opening it after a
+         while catches up to the last change that was due rather than running
+         through every one it missed.</p>
+      <div class="rotate-pool" id="themeRotatePool"></div>
+      <button type="button" id="themeRotateNow">Change now</button>
+
+      <!-- Describe a theme and a model builds one. It supplies nine colours
+           that need taste; the other eighteen, brights included, are derived
+           and pushed until they can be read, so a theme can never arrive that
+           hides the sheet you would use to change it back. -->
+      <h3>Make a theme</h3>
+      <div class="theme-make">
+        <input id="themePrompt" type="text" maxlength="300"
+               placeholder="a quiet winter morning, muted blues" autocomplete="off">
+        <button type="button" id="themeGen" class="primary">Generate</button>
+      </div>
+      <p class="note" id="themeGenNote"></p>
+      <div id="themeMine"></div>
+
       <h3>Font</h3>
       <label class="field">Terminal typeface
         <select id="setFontFamily"></select>
@@ -510,6 +633,21 @@
          repeat counter and a saved draft live — so it stays. The mode pill is
          never hidden either way. Snippets work regardless: CLIque owns the
          pseudo-terminal, so an expansion is typed into the pane.</p>
+
+      <h3>Finding a project</h3>
+      <label class="field">Where your work lives
+        <textarea id="setProjectRoots" rows="3" spellcheck="false"
+                  placeholder="Blank searches your home directory"></textarea>
+      </label>
+      <p class="note">One directory per line. Type a project name instead of a
+         path in the new-session dialog and CLIque looks under these for a
+         directory holding a <code>.git</code>, a <code>pyproject.toml</code>, a
+         <code>package.json</code> or another project marker, then offers the
+         path.</p>
+      <p class="note">Blank is usually right: your home directory is searched,
+         hidden directories are never opened, so a cache or a virtualenv costs
+         nothing. Name directories here if your work lives outside home, or if
+         home is big enough that the search comes back saying it stopped early.</p>
     </section>
 
     <section class="pane" data-pane="markers" hidden>
@@ -531,6 +669,13 @@
       <h3>Which CLI am I in</h3>
       <label class="check"><input type="checkbox" id="setCliTint">
         Colour the pane edge with the active CLI’s colour</label>
+      <label class="check"><input type="checkbox" id="setCliWatermark">
+        Show the CLI’s logo faintly in the corner of the pane</label>
+      <p class="note">Top-right, opposite the theme character, and faint enough
+         that a line of output crossing it is still the thing you read. It says
+         which tool a pane is without reading the tab, which is the question
+         you have at a glance rather than up close. Hidden on a narrow pane and
+         on a phone, where the corner is needed for output.</p>
       <p class="note">Nine panes of black text look identical, and the moment
          it matters is the moment after you switch. The top of the pane, the
          active tab and the prompt box you are typing in all take the colour.

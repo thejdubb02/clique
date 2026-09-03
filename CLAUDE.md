@@ -75,6 +75,35 @@ Skipping it leaves an entry the app renders without a time, and on a day with
 ten releases the date alone distinguishes nothing. It is idempotent; run it
 whenever.
 
+## Before calling a session done
+
+```bash
+python3 tools/shipped_check.py
+```
+
+Four surfaces have to agree: the panel's version, the README badge, what
+useclique.dev tells people to install, and what PyPI actually serves. They
+drift apart quietly and each one embarrasses differently, and none of it is
+visible from inside the panel. Ten seconds, so it is a command rather than a
+habit.
+
+Being ahead of PyPI is normal while work is in flight and stops being normal
+the moment the site tells a stranger to `pip install`, which it does. Cutting
+the release is: bump, changelog, tag `vX.Y.Z`, `gh release create`. Publishing
+fires on the release, uses Trusted Publishing, and needs no token.
+
+## It has to work on a stranger's machine
+
+Every feature is designed for someone who installs the package, opens the
+panel, and is off. Not for this box. If a feature only works because of
+something in `/root/platform`, a cron job we run, a file another tool of ours
+writes, or a key in our vault, it is not finished, and it is a trap: it will
+look complete here and be dead on arrival everywhere else.
+
+Where a feature genuinely needs a fact from somewhere else, ship the thing that
+fetches it and declare the vendor-shaped parts in `clis.toml`, which is where
+they already belong.
+
 ## The three rules
 
 1. **Filesystem, tmux, and process state only** — optional git detection. If a

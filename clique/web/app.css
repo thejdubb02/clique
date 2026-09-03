@@ -53,7 +53,12 @@ body {
   font: 13px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 
-#shell { display: flex; height: 100vh; height: 100dvh; }
+/* 100% of the body, not of the viewport. They are the same number until the
+   installed-app rule below pads the body for a notch, and then a shell still
+   measuring the whole viewport hangs its bottom bar off the end of a parent
+   with `overflow: hidden` -- which is the safe area re-created one level
+   down. */
+#shell { display: flex; height: 100%; }
 
 /* ------------------------------------------------------------------ sidebar */
 
@@ -116,17 +121,22 @@ body {
 
 .search { padding: 8px; background: var(--panel); position: relative; }
 .search input {
-  width: 100%; padding: 5px 26px 5px 8px; font: inherit;   /* room for the clear × */
+  width: 100%; padding: 5px 34px 5px 8px; font: inherit;   /* room for the clear × */
   background: var(--field); color: var(--fg);
   border: 1px solid transparent; border-radius: 3px;
 }
 .search input:focus { outline: none; border-color: var(--accent); }
 /* A clear × on the right, shown only when there is something to clear. */
+/* 26px square, not a 17px glyph: this is a target a thumb or a moving mouse
+   has to land on, and the old one was small enough to miss. */
 .q-clear {
-  position: absolute; top: 50%; right: 14px; transform: translateY(-50%);
+  position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+  width: 26px; height: 26px; display: grid; place-items: center;
   border: 0; background: none; color: var(--dim); cursor: pointer;
-  font-size: 16px; line-height: 1; padding: 0 4px; border-radius: 3px;
+  font-size: 16px; line-height: 1; padding: 0; border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
 }
+.q-clear:active { background: var(--row); color: var(--fg); }
 .q-clear:hover { color: var(--fg); }
 
 .tree { flex: 1; overflow-y: auto; padding-bottom: 12px; }
@@ -293,6 +303,47 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
   min-width: 10.5rem; z-index: 1;
   box-shadow: inset 0 3px 0 var(--cli, var(--accent)), 0 1px 0 var(--bg);
 }
+/* A working group, drawn inside the tab strip rather than above it.
+ *
+ * Chrome hangs a labelled band over its tab groups and spends a row of height
+ * on it. There is no row to spare: the strip is 35px, and on a phone it is
+ * competing with the pane for the only screen there is. So the band is a rule
+ * along the bottom edge of the tabs themselves, which costs nothing, works
+ * the same on a desktop and a phone, and needs no second layout.
+ *
+ * `inset` rather than a border, so it does not move the tab's contents by a
+ * pixel when a session joins a group. The ends round only where the run ends,
+ * which is what makes three coloured tabs read as one band rather than three
+ * coloured tabs. */
+/* The groups strip. Above the tree because it is a launcher, not a filing
+   system, and the thing you reach for when you sit down. */
+.groups { padding: 4px 6px 6px; border-bottom: 1px solid var(--line); }
+.group-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 6px; border-radius: 5px; cursor: pointer; min-height: 30px;
+}
+.group-dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.group-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+.group-count { font-size: 11px; opacity: .6; flex: 0 0 auto; }
+.group-open {
+  flex: 0 0 auto; border: 1px solid var(--line); background: var(--field);
+  color: var(--fg); border-radius: 4px; padding: 2px 8px; font: inherit;
+  font-size: 11px; cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .group-row:hover { background: var(--row); }
+  .group-open:hover { border-color: var(--accent); }
+}
+
+.tab.grouped::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--group, var(--accent));
+}
+.tab.grouped { position: relative; }
+.tab.group-start::after { left: 3px; border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
+.tab.group-end::after { right: 3px; border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
+
 .tab.active .label { font-weight: 600; }
 .tab.active .num { opacity: 1; font-weight: 600; color: var(--fg); }
 .tab .num { font-size: 10px; opacity: .6; flex: 0 0 auto; }
@@ -381,9 +432,67 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 #load .v { min-width: 5ch; text-align: right; }
 #clients .v { min-width: 2ch; text-align: right; }
 #clients { cursor: help; }
-/* Swap keeps its column even at zero, so it appearing does not shove the
-   tabs. Hidden-as-invisible, not hidden-as-gone. */
-#swap.is-off { visibility: hidden; }
+/* A stat with nothing honest to say is not drawn at all. It used to be held
+   invisible so that swap appearing would not shove the row sideways, but that
+   traded a rare nudge for a permanent hole: most VMs have no temperature
+   sensor and no swap in use, so the bar carried two blank columns forever.
+   Gone, not invisible — the row closes up. */
+#stats .stat.is-off { display: none; }
+/* What is left of the plan. Its own block, sitting between the machine's
+   numbers and the buttons with a hairline either side, because it is a
+   different kind of fact: CPU is what the box is doing, this is what you have
+   left to spend. A short bar reads from across the desk in a way "52%" does
+   not, and the figure stays for anyone who wants it. */
+#plan {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  margin: 0 2px; padding: 0 10px;
+  border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+}
+#plan[hidden] { display: none; }
+.plan-w { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+.plan-k { font-size: 10px; letter-spacing: .04em; color: var(--dim); font-weight: 600; }
+.plan-track {
+  width: 46px; height: 5px; border-radius: 3px; overflow: hidden;
+  background: var(--row); flex: none;
+}
+.plan-fill {
+  display: block; width: 100%; height: 100%; border-radius: 3px;
+  background: var(--ok); transform-origin: left center;
+  /* It moves once every few minutes, so it is allowed to move properly. */
+  transition: transform 420ms var(--ease-out), background 420ms linear;
+}
+.plan-v { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 4ch;
+          color: var(--dim); }
+.plan-w[data-level="wait"] .plan-fill { background: var(--warn); }
+.plan-w[data-level="wait"] .plan-v { color: var(--warn); }
+.plan-w[data-level="err"] .plan-fill { background: var(--err); }
+.plan-w[data-level="err"] .plan-v { color: var(--err); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .plan-fill { transition: background 420ms linear; }
+}
+/* The plan block costs the row about two hundred pixels, and the row did not
+   have them: the first attempt cut VIEWS to "VIEW", which is the clipped-word
+   failure this file warns about elsewhere.
+
+   Asked against the *row*, not the window. A viewport query gets this wrong by
+   exactly the width of the sidebar, which is why the first attempt at it fired
+   at the wrong moment: 1280px of window is barely a thousand of status bar
+   with the sidebar open, and collapsing it open and shut has to change the
+   answer. Readings drop in reverse order of how much they decide: views is a
+   curiosity and carries its own tooltip, load and disk are glanceable, and CPU
+   and memory are the two nobody should have to open a menu for. */
+#statusbar { container-type: inline-size; container-name: statusbar; }
+@container statusbar (max-width: 1100px) { #stats #clients { display: none; } }
+@container statusbar (max-width: 900px)  { #stats #load { display: none; } }
+@container statusbar (max-width: 760px)  { #stats #disk { display: none; } }
+/* A phone keeps the bars and drops the digits: the colour and the fill are
+   the part you read at a glance, and the row has no width to spare. */
+@media (max-width: 640px) {
+  #plan { gap: 8px; padding: 0 8px; }
+  .plan-v { display: none; }
+  .plan-track { width: 32px; }
+}
+
 /* Each stat carries its own dot, coloured by that stat's own pressure and set
    inline from renderStats. No default background here: an unset dot would show
    a stale colour for the moment before the first poll lands. */
@@ -392,9 +501,86 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 
 /* ----------------------------------------------------------------- terminal */
 
-#termwrap { flex: 1; position: relative; min-height: 0; background: var(--bg); }
+/* Clipped, because the pane is the one thing here that is not laid out by
+   CSS. A boxed CLI keeps its own grid and is scaled to fit, and the scale is
+   computed from a measured character cell — so a fraction of a pixel of error,
+   multiplied by a couple of hundred columns, put the right edge of the
+   terminal on top of the side panel. Nothing legitimately draws outside this
+   box, and a terminal is a fixed viewport, so clipping loses nothing. */
+#termwrap { flex: 1; position: relative; min-height: 0; overflow: hidden;
+            background: var(--bg);
+            container-type: inline-size; container-name: termpane;
+            isolation: isolate; }
 #terminal { position: absolute; inset: 0; padding: 6px 8px; }
 #terminal.hidden { visibility: hidden; }
+
+/* The theme's character, watermarked into the corner.
+ *
+ * `container-type` is on #termwrap and not on the window, because the pane is
+ * what has to have room, not the screen: with the side panel and the sidebar
+ * both out, a 1600px window is a 700px pane, and a figure sized for the window
+ * would be sitting on the output. Same reasoning as the status bar's readings,
+ * and the same mistake made once already.
+ *
+ * `isolation` keeps the blend inside the pane. Without it the figure would
+ * lighten whatever the pane happens to be sitting on, which on a light theme
+ * is the panel, and the corner would glow through the terminal's own edge.
+ *
+ * The blend mode and the opacity are set from JS rather than here: they follow
+ * from the theme's base, which is data, and a CSS rule per base would be a
+ * second place for a theme to be light or dark. */
+#themeArt {
+  position: absolute; right: 20px; bottom: 16px; z-index: 1;
+  height: 44%; min-height: 88px; max-height: 240px;
+  background-repeat: no-repeat; background-position: bottom right;
+  background-size: contain; image-rendering: pixelated;
+  pointer-events: none; user-select: none;
+}
+/* A supplied drawing rather than a grid. It has no declared shape, so it gets
+   a box and is contained inside it; and it must not be rendered pixelated,
+   which is the one setting that would take a smooth illustration and put
+   staircases down every edge of it. */
+#themeArt.is-drawing { width: 46%; max-width: 340px; image-rendering: auto; }
+/* The active CLI's logo. Top-right, opposite the theme character, and faint
+   enough that a line of output crossing it is still the thing you read.
+   `mask` for a single-colour glyph so it takes the CLI's colour; the
+   `is-image` variant is for a logo that carries its own. */
+#cliMark {
+  position: absolute; top: 16px; right: 20px; z-index: 1;
+  width: 104px; height: 104px; opacity: .07;
+  pointer-events: none; user-select: none;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  background-repeat: no-repeat; background-position: center;
+  background-size: contain;
+}
+#cliMark.is-image { background-color: transparent; opacity: .09; }
+
+@container termpane (max-width: 720px) { #cliMark { display: none; } }
+@media (max-height: 460px) { #cliMark { display: none; } }
+@container termpane (max-width: 720px) { #themeArt { display: none; } }
+@media (max-height: 460px) { #themeArt { display: none; } }
+
+/* The pane's scrollbar, wearing the theme like everything else does.
+   It was the last raw browser control left in the panel, and it sits against
+   the terminal all day. A transparent border with `background-clip` rather
+   than the panel colour the settings sheet uses: a terminal's background is
+   the theme's *terminal* background, which is not always the panel's, and
+   painting the inset in the wrong one is worse than not insetting it. */
+.xterm-viewport::-webkit-scrollbar { width: 10px; }
+.xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--line); background-clip: content-box;
+  border: 3px solid transparent; border-radius: 5px;
+}
+.xterm-viewport::-webkit-scrollbar-corner { background: transparent; }
+.xterm-viewport { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+@media (hover: hover) and (pointer: fine) {
+  .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: var(--dim); background-clip: content-box;
+  }
+}
 /* Inactive panes stay painted (opacity, not visibility) so Chrome cannot
    throw the canvas away. No transition: tab switching does not animate. */
 #terminal > [data-session] { opacity: 0; z-index: 0; }
@@ -640,9 +826,18 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 
 /* --------------------------------------------------------------- context menu */
 
+/* Scrolls rather than overflows. A live session's menu is fifteen to twenty
+   rows, and at the coarse-pointer padding below that is 600 to 800px -- taller
+   than a phone. It used to run off both ends at once, because the placement
+   clamp goes negative when the menu is taller than the window, so Open was cut
+   off the top and Kill sat below the bottom with no way to reach either. The
+   menu whose whole reason for existing is that a phone can archive and kill
+   from it could do neither. */
 #menu { position: fixed; z-index: 50; background: var(--panel);
         border: 1px solid var(--line); border-radius: 4px; padding: 4px 0;
         min-width: 150px; box-shadow: 0 6px 20px var(--shadow);
+        max-height: calc(100dvh - 16px); overflow-y: auto;
+        overscroll-behavior: contain;
         opacity: 1; transform: scale(1);
         transform-origin: var(--menu-origin, top left);
         transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
@@ -1053,6 +1248,43 @@ button.primary { background: var(--accent); color: var(--on-accent); }
                        cursor: pointer; font: inherit; padding: 5px 6px; }
 
 
+/* Describe a theme, get a theme. One row: the box takes the space, the button
+   keeps its size, and on a narrow sheet they stack rather than squeeze. */
+.theme-make { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.theme-make input {
+  flex: 1 1 220px; min-width: 0; padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg);
+  font: inherit;
+}
+.theme-make input:focus { outline: none; border-color: var(--accent); }
+.theme-make button { flex: none; }
+.theme-make button[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* One made theme. The swatch is the theme's own background ringed in its own
+   accent, which is the shortest honest preview there is. */
+.theme-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.theme-row:last-child { border-bottom: 0; }
+.theme-swatch {
+  width: 22px; height: 22px; border-radius: 5px; flex: none;
+  border: 2px solid var(--dim);
+}
+.theme-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.theme-use, .theme-drop {
+  flex: none; border: 1px solid var(--line); background: var(--field);
+  color: var(--fg); border-radius: 6px; cursor: pointer; font: inherit;
+}
+.theme-use { padding: 4px 10px; }
+.theme-use[disabled] { opacity: .6; cursor: default; color: var(--dim); }
+.theme-drop { width: 26px; height: 26px; display: grid; place-items: center;
+              font-size: 15px; line-height: 1; color: var(--dim); }
+@media (hover: hover) and (pointer: fine) {
+  .theme-use:not([disabled]):hover { border-color: var(--accent); }
+  .theme-drop:hover { border-color: var(--err); color: var(--err); }
+}
+
 /* Scrollbars inside the sheet, made to match rather than announce themselves. */
 #settings .panes::-webkit-scrollbar { width: 10px; }
 #settings .panes::-webkit-scrollbar-track { background: transparent; }
@@ -1078,9 +1310,16 @@ body.is-fs #fullScr .ico-fs-enter { display: none; }
 body.is-fs #fullScr .ico-fs-leave { display: block; }
 @media (display-mode: standalone), (display-mode: window-controls-overlay) {
   /* Installed app: the OS already drew the titlebar. Don't double a browser
-     safe-area the tab used to need. */
+     safe-area the tab used to need.
+
+     These `env()` values are only real numbers because index.html asks for
+     `viewport-fit=cover`. Without that they are all 0 and this whole block is
+     decoration, which is what it was until 2026-09-02. */
   body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
                   env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  /* Fixed to the viewport, so the body's padding does not move it. Undo after
+     a kill lives in here, and the home indicator is about 34px of it. */
+  #toast { bottom: calc(18px + env(safe-area-inset-bottom)); }
 }
 /* The directory field and its picker. The picker is sized to its own content
    rather than sharing the width, because the field is the thing being filled
@@ -1167,6 +1406,21 @@ button > .ico:only-child { vertical-align: baseline; }
 /* With the prompt box hidden, the bar is carrying one control. It should read
    as a small strip under the pane rather than an empty version of the box that
    used to be there. */
+/* Under this width the box wraps onto its own row.
+ *
+ * Every control in the bar is `flex: 0 0 auto` and only the textarea gives, so
+ * on a 320px phone the prompt measured 26 pixels wide -- the box you type every
+ * prompt into, narrower than one word. It went unnoticed while a phone typed
+ * into the terminal instead; 0.66.0 made that box the way you talk to an agent
+ * from a phone, so it has to be a box.
+ *
+ * `order: -1` puts it above the controls rather than between them, so this is
+ * two rows and not three. */
+@media (max-width: 460px) {
+  #inputbar { flex-wrap: wrap; }
+  #inputbar #prompt { flex: 1 1 100%; order: -1; }
+}
+
 #inputbar.pill-only { padding: 4px 8px; min-height: 0; }
 #inputbar.pill-only .pill { margin: 0; }
 
@@ -1194,12 +1448,15 @@ button > .ico:only-child { vertical-align: baseline; }
 /* Same family as the paused badge: a real button, because a phone has no
    Ctrl+C and a canvas has no native copy. Shown only while something is
    selected, so a session that is not being copied from never grows one. */
-#copySel { position: absolute; left: 16px; bottom: 14px; z-index: 40;
-           padding: 5px 12px; border-radius: 999px; cursor: pointer;
-           background: var(--panel); color: var(--fg); font-size: 11px;
-           border: 1px solid var(--accent); box-shadow: 0 4px 14px var(--shadow); }
+#selChips { position: absolute; left: 16px; bottom: 14px; z-index: 40;
+            display: flex; gap: 8px; align-items: center; }
+#selChips button {
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--panel); color: var(--fg); font-size: 11px;
+  border: 1px solid var(--accent); box-shadow: 0 4px 14px var(--shadow);
+}
 @media (pointer: coarse) {
-  #copySel { padding: 11px 16px; }
+  #selChips button { padding: 11px 16px; }
 }
 
 /* The shortcut reference. One list, built from the same table the bindings are
@@ -1292,8 +1549,11 @@ a.give-value { color: var(--accent); }
 /* Touch. A long press on a session row opens the menu that right-click opens,
    so the platform's own callout and text-selection have to get out of the way
    — otherwise the browser offers "Copy" over the top of ours. */
-.session, .folder-head { -webkit-touch-callout: none; }
+.session, .folder-head, .group-row { -webkit-touch-callout: none; }
 .session .meta, .session .age { -webkit-user-select: none; user-select: none; }
+.group-row .group-name, .group-row .group-count {
+  -webkit-user-select: none; user-select: none;
+}
 
 /* A finger is not a mouse pointer. Menu rows get a real tap target on any
    coarse-pointer device rather than the 6px padding a cursor is fine with. */
@@ -1336,6 +1596,23 @@ a.give-value { color: var(--accent); }
 #fileImg { max-width: 100%; max-height: 60vh; object-fit: contain;
            border-radius: 6px; background: var(--bg); display: block;
            margin: 0 auto 12px; }
+.file-list { margin: 0 0 12px; max-height: 60vh; overflow: auto;
+             border: 1px solid var(--line); border-radius: 6px;
+             background: var(--bg); }
+.file-list button {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  margin: 0; text-align: left; cursor: pointer;
+  padding: 10px 12px; min-height: 44px;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line);
+  color: var(--fg); font: inherit;
+}
+.file-list button:last-child { border-bottom: 0; }
+.file-list .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.file-list .kind { flex: 0 0 auto; font-size: 11px; color: var(--dim); }
+@media (hover: hover) and (pointer: fine) {
+  .file-list button { min-height: 36px; padding: 8px 12px; }
+  .file-list button:hover { background: var(--row); }
+}
 .file-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .file-foot code { flex: 1; min-width: 0; font-size: 11px; color: var(--dim);
                   overflow-wrap: anywhere; }
@@ -1752,28 +2029,18 @@ body.win-flash::after {
  * flow at the foot of the page (the board fell entirely below the fold). This
  * is that rule: a scrim fixed to the viewport, centring the .sheet card. Toast
  * (z-index 70) still sits above them. */
-#inbox, #diff, #board, #broadcast, #confirmSheet, #noteSheet {
+#inbox, #diff, #board, #broadcast, #confirmSheet {
   position: fixed; inset: 0; z-index: 65;
   background: var(--scrim);
   display: grid; place-items: center; padding: 24px;
 }
 #confirmSheet { z-index: 80; }   /* it can open over another sheet */
 #inbox .sheet, #broadcast .sheet { width: min(560px, 94vw); }
-#inbox .sheet, #board .sheet, #broadcast .sheet, #confirmSheet .sheet, #noteSheet .sheet {
+#inbox .sheet, #board .sheet, #broadcast .sheet, #confirmSheet .sheet {
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 16px; max-height: 84vh; overflow: auto;
   display: flex; flex-direction: column; box-shadow: 0 18px 48px var(--shadow);
 }
-#noteSheet .note-sheet { width: min(640px, 94vw); }
-#noteText {
-  width: 100%; min-height: 46vh; resize: vertical; box-sizing: border-box;
-  margin: 4px 0 12px; padding: 10px 12px; border-radius: 6px;
-  background: var(--field); color: var(--fg); border: 1px solid var(--line);
-  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
-  line-height: 1.5;
-}
-#noteText:focus { outline: none; border-color: var(--accent); }
-#noteStatus { margin-right: auto; align-self: center; }
 
 /* --------------------------------------------------------------- confirm */
 
@@ -1909,6 +2176,37 @@ body.win-flash::after {
 .days-inline:disabled { opacity: .5; }
 #storageUsage { font-variant-numeric: tabular-nums; }
 
+/* ------------------------------------------------------------ theme rotation */
+/* Same chrome as the inline day count next to it, wider because a time needs
+   the room and Firefox draws its own clear button inside the field. */
+.time-inline {
+  margin: 0 4px; padding: 2px 4px;
+  background: var(--field); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 3px; font: inherit;
+}
+.time-inline:disabled { opacity: .5; }
+
+/* The themes in the rotation. A wrapped list rather than a multi-select: a
+   phone cannot ctrl-click, and this is the one control in the sheet where
+   somebody is picking eight things out of twenty. */
+.rotate-pool { margin: 8px 0 10px; }
+.rotate-pool .rotate-group { margin-bottom: 8px; }
+.rotate-pool .rotate-head {
+  font-size: .85em; color: var(--dim); text-transform: uppercase;
+  letter-spacing: .04em; margin-bottom: 3px;
+}
+.rotate-pool .rotate-items {
+  display: flex; flex-wrap: wrap; gap: 2px 14px;
+}
+/* 44px on every device, not just a phone. Twenty of these wrap onto four
+   rows either way, so the desktop pays nothing for a row a thumb can hit. */
+.rotate-pool label {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 44px; cursor: pointer;
+}
+.rotate-pool.is-off { opacity: .5; }
+#themeRotateNow { margin-bottom: 6px; }
+
 /* Per-session status line, a thin strip under the tabs. */
 #sessionline {
   display: flex;
@@ -1938,6 +2236,11 @@ body.win-flash::after {
 #sessionline .sl-cwd { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #sessionline .sl-branch { flex: none; }
 #sessionline .git-dirty { color: var(--warn); }
+/* Only ever drawn when the pane is not at its own fit, so it is a signal
+   rather than a readout. Dimmer than the branch beside it: it explains
+   something, it does not ask to be read. */
+#sessionline .sl-size { flex: none; opacity: .8; cursor: help;
+                        font-variant-numeric: tabular-nums; }
 #sessionline .sl-tail { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
 
 /* Zen mode: the terminal and the prompt, nothing else. Everything else folds
@@ -1946,6 +2249,9 @@ body.win-flash::after {
 body.zen #sidebar,
 body.zen #tabbar,
 body.zen #sessionline,
+body.zen #sidepanel,
+body.zen #panelResizer,
+body.zen #railR,
 body.zen #statusbar { display: none !important; }
 body.zen #zenExit {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1956,3 +2262,268 @@ body.zen #zenExit {
   opacity: .5; transition: opacity .15s ease;
 }
 body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
+
+/* ---------------------------------------------------- right rail + panel */
+
+/* The always-on icon rail on the far right. Thin, cheap, and the one thing that
+   stays put whether the panel is open or shut, so the features have a home you
+   can always find. */
+#railR {
+  flex: 0 0 38px; width: 38px; box-sizing: border-box;
+  background: var(--panel); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 0;
+}
+.railr-btn {
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border: 0; border-radius: 7px; background: none; color: var(--dim);
+  cursor: pointer; padding: 0; position: relative;
+}
+.railr-btn.active { color: var(--accent); background: var(--field); }
+/* An accent tick on the active pane's icon, drawn on the panel side. */
+.railr-btn.active::before {
+  content: ""; position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+  width: 2px; height: 18px; border-radius: 2px; background: var(--accent);
+}
+.railr-btn .ico { width: 17px; height: 17px; }
+/* A dot on the rail icon when a pane has something to say (a note reminder due). */
+.railr-btn[data-flag="1"]::after {
+  content: ""; position: absolute; top: 5px; right: 5px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
+}
+
+/* The docked panel. A fixed pixel width the resizer owns; nothing inside renders
+   while it is hidden. */
+#sidepanel {
+  flex: 0 0 var(--panel-w, 320px); width: var(--panel-w, 320px);
+  min-width: 0; box-sizing: border-box;
+  background: var(--panel); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0;
+}
+#sidepanel[hidden] { display: none; }
+#panelHead {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 7px;
+  padding: 0 8px 0 12px; height: 35px; border-bottom: 1px solid var(--line);
+}
+#panelHead .ico { width: 15px; height: 15px; color: var(--dim); flex: none; }
+#panelTitle { font-size: 13px; font-weight: 600; margin: 0; color: var(--fg); }
+#panelHead .panel-for {
+  font-size: 11px; color: var(--dim); flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#panelClose { margin-left: auto; }
+#panelBody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 8px 14px; }
+
+/* The panel resizer: the sidebar's, mirrored to the other edge. */
+#panelResizer { flex: 0 0 0; position: relative; z-index: 5; }
+#panelResizer[hidden] { display: none; }
+#panelResizer::after {
+  content: ""; position: absolute; top: 0; bottom: 0; right: -3px; width: 7px;
+  cursor: col-resize;
+}
+#panelResizer.dragging::after,
+#panelResizer:focus-visible::after { background: var(--accent); opacity: .55; }
+#panelResizer:focus { outline: none; }
+
+/* A small toolbar at the top of a pane (add, filter). */
+.pane-tools {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.pane-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 6px; cursor: pointer;
+  background: var(--field); color: var(--fg); border: 1px solid var(--line);
+  font: inherit; font-size: 12px;
+}
+.pane-btn .ico { width: 13px; height: 13px; }
+.pane-btn.on { color: var(--accent); border-color: var(--accent); }
+.pane-empty { color: var(--dim); font-size: 12px; padding: 10px 4px; line-height: 1.5; }
+.pane-hint { color: var(--dim); font-size: 11px; margin: 8px 2px 0; line-height: 1.5; }
+
+/* --------------------------------------------------------- notes outline */
+
+.note-item { position: relative; }
+.note-children { margin-left: 16px; border-left: 1px solid var(--line); padding-left: 4px; }
+.note-row {
+  display: flex; align-items: flex-start; gap: 5px;
+  padding: 2px 2px; border-radius: 6px; min-height: 26px;
+}
+.note-caret {
+  flex: none; width: 15px; height: 22px; display: grid; place-items: center;
+  background: none; border: 0; padding: 0; cursor: pointer; color: var(--dim);
+}
+.note-caret .ico { width: 12px; height: 12px; }
+.note-caret.leaf { visibility: hidden; }
+.note-check {
+  flex: none; width: 15px; height: 15px; margin-top: 4px; cursor: pointer;
+  border: 1.5px solid var(--dim); border-radius: 4px; background: var(--field);
+  display: grid; place-items: center; padding: 0;
+}
+.note-check.done { background: var(--accent); border-color: var(--accent); }
+.note-check.done::after {
+  content: ""; width: 4px; height: 8px; margin-top: -2px;
+  border: solid var(--panel); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.note-text {
+  flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.45;
+  padding: 3px 3px; border-radius: 4px; color: var(--fg);
+  white-space: pre-wrap; overflow-wrap: anywhere; outline: none;
+}
+.note-text:focus { background: var(--field); box-shadow: inset 0 0 0 1px var(--accent); }
+.note-text:empty::before { content: attr(data-placeholder); color: var(--dim); }
+.note-item.done > .note-row > .note-text { color: var(--dim); text-decoration: line-through; }
+.note-actions { flex: none; display: flex; align-items: center; gap: 1px; opacity: 0; }
+.note-row:focus-within .note-actions { opacity: 1; }
+.note-act {
+  width: 22px; height: 22px; display: grid; place-items: center;
+  background: none; border: 0; border-radius: 5px; cursor: pointer; color: var(--dim);
+}
+.note-act .ico { width: 13px; height: 13px; }
+/* Meta line: timestamp and reminder chip, under the text, dim and small. */
+.note-meta {
+  margin: 0 0 2px 35px; display: flex; gap: 8px; align-items: center;
+  font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums;
+}
+.note-remind {
+  display: inline-flex; align-items: center; gap: 3px; cursor: pointer;
+  padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line);
+}
+.note-remind .ico { width: 10px; height: 10px; }
+.note-remind.due { color: var(--warn); border-color: var(--warn); }
+.note-remind.reminded { opacity: .6; }
+
+/* Same gate as the rules further up: a tap leaves :hover stuck on, and a row
+   that keeps its action strip lit after the finger lifts is the phone version
+   of this pane being broken. The actions still appear on focus-within, which
+   is what a tap gives you. */
+@media (hover: hover) and (pointer: fine) {
+  .railr-btn:hover { background: var(--field); color: var(--fg); }
+  .pane-btn:hover { border-color: var(--accent); }
+  .note-row:hover { background: var(--field); }
+  .note-check:hover { border-color: var(--accent); }
+  .note-row:hover .note-actions { opacity: 1; }
+  .note-act:hover { background: var(--panel); color: var(--fg); }
+}
+
+/* The inline reminder time picker. */
+#remindPop {
+  position: fixed; z-index: 82; width: 232px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px; box-shadow: 0 14px 40px var(--shadow);
+  display: flex; flex-direction: column; gap: 8px;
+}
+#remindPop[hidden] { display: none; }
+#remindPop label { font-size: 11px; color: var(--dim); }
+#remindPop input {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px;
+  background: var(--field); color: var(--fg); border: 1px solid var(--line);
+  font: inherit; font-size: 12px;
+}
+.remind-foot { display: flex; gap: 6px; justify-content: flex-end; }
+.remind-foot button {
+  padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg);
+}
+.remind-foot .primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.remind-foot .ghost { color: var(--dim); }
+
+/* -------------------------------------------------- git / info / export panes */
+
+.pane-kv { display: flex; flex-direction: column; gap: 0; margin: 2px 0 10px; }
+.pane-kv .kv {
+  display: grid; grid-template-columns: 82px 1fr; gap: 8px;
+  padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 12px;
+}
+.pane-kv .kv:last-child { border-bottom: 0; }
+.pane-kv .k { color: var(--dim); }
+.pane-kv .v { color: var(--fg); min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pane-kv .v.mono { font-family: var(--mono, ui-monospace, monospace); }
+.pane-kv .v.warn { color: var(--warn); }
+.pane-result {
+  margin-top: 10px; padding: 8px 10px; border-radius: 6px;
+  background: var(--field); border: 1px solid var(--line);
+  font-size: 12px; color: var(--fg); line-height: 1.5; word-break: break-all;
+}
+.pane-result.err { border-color: var(--err); color: var(--err); }
+
+/* On a narrow screen the panel takes the whole width and the rail sits over it;
+   the terminal is behind, reachable by closing the panel. */
+@media (max-width: 620px) {
+  #sidepanel { position: fixed; inset: 35px 38px 0 0; z-index: 60; width: auto; flex-basis: auto; }
+  #panelResizer { display: none !important; }
+}
+
+/* ------------------------------------------------------- the phone, measured
+ *
+ * Three faults, all found by agent-infra/tools/mobile_view.py rendering iOS in
+ * WebKit at a real device size rather than by resizing a desktop window. Each
+ * is invisible from a desktop, which is why they lasted.
+ *
+ * 1. **iOS zooms the whole page** when it focuses an input whose text is under
+ *    16px. `#prompt` was 13px, so every tap on the thing you type into shifted
+ *    the layout under your thumb. It is the single most common unexplained
+ *    layout jump on an iPhone and it is entirely preventable.
+ *
+ *    Scoped to a coarse pointer so a desktop keeps the font size you chose.
+ *    `max()` rather than a flat 16px, so anyone who has turned the panel font
+ *    up still gets what they asked for.
+ *
+ *    This whole block sits last in the file on purpose. The first attempt put
+ *    it beside the status bar queries and did nothing at all, because #prompt
+ *    sets its own font-size a hundred and ninety lines further down and an id
+ *    beats a bare element selector anyway.
+ */
+@media (pointer: coarse) {
+  /* `!important` on purpose, and it is the case the keyword exists for. This
+     is not styling, it is an override of an operating system behaviour, and it
+     has to beat every component rule that sets a font size without any of them
+     having to know about it. Written without it, `.search input` and the
+     settings fields simply won and the page still zoomed. */
+  input, textarea, select { font-size: max(16px, 1em) !important; }
+  #prompt { font-size: max(16px, var(--font-panel, 13px)) !important; }
+}
+
+/* 2. **The status bar overflowed the screen**: 460px of controls in a 393px
+ *    phone, which is the clipping that looked like icons being cut off. The
+ *    readings already drop out in order of how much they decide; the controls
+ *    on the right never did. They go the same way, and the two that go first
+ *    are the two a phone cannot use anyway: a keyboard-shortcut sheet, and a
+ *    font stepper that Settings also has.
+ */
+@container statusbar (max-width: 620px) { #keysBtn { display: none; } }
+@container statusbar (max-width: 560px) { #fontSize { display: none; } }
+@container statusbar (max-width: 460px) { #stats #uptime { display: none; } }
+/* Whatever is left must not push the row wider than the screen. */
+#statusbar { flex-wrap: nowrap; }
+#stats { min-width: 0; overflow: hidden; }
+
+/* 3. **Tap targets under 44px.** Apple asks 44, Material 48, and the tab close
+ *    and gear were 17x13. Growing them would wreck a 35px strip, so the *hit
+ *    area* grows instead and the drawing does not move by a pixel. Nothing
+ *    changes on a mouse, where 17px is a perfectly good target.
+ */
+@media (pointer: coarse) {
+  .tab .x, .tab .gear, .hdr-btn, #fontSize button,
+  #keyrow button, .railr-btn, .rail-dot, .group-open,
+  #lock, #newTab, .tab-add, .tab-more, #reviewLock { position: relative; }
+  /* -16 rather than -12: a 17x13 control needs 16 a side to clear 44, and the
+     first pass at -12 left the tab gear at 41x37, which is the kind of nearly
+     that a thumb still misses. */
+  .tab .x::after, .tab .gear::after, .hdr-btn::after, #fontSize button::after,
+  .railr-btn::after, .rail-dot::after, .group-open::after,
+  #lock::after, #newTab::after, .tab-add::after, .tab-more::after,
+  #reviewLock::after {
+    content: ""; position: absolute; inset: -16px; z-index: 0;
+  }
+  /* The key row is the one place a phone types from, so those get real size
+     rather than an invisible margin. */
+  /* Height, not width. Seven keys at a 44px minimum width come to more than a
+     393px phone has, which is what pushed the row off the screen the moment
+     the targets were made big enough. Sharing the row instead gives about
+     50px each on a phone and 45 on the narrowest one still in use, so the
+     target is honoured and nothing hangs off the edge. */
+  #keyrow button { min-height: 44px; flex: 1 1 0; min-width: 0; }
+  /* A tab you cannot hit is worse than a tab you cannot read all of. */
+  .tab { min-height: 35px; }
+}

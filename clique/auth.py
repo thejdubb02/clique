@@ -147,8 +147,23 @@ class Auth:
 LOGIN_PAGE = """<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CLIque</title>
+<!-- Everything below is what makes "Add to Home Screen" produce an app rather
+     than a bookmark. It belongs here and not only on the panel, because a
+     browser decides installability from the page in front of it and the page
+     in front of you before you sign in is this one. Without it, installing
+     from a phone gave you a screenshot for an icon and Safari's chrome around
+     the result. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="brand/mark.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+<meta name="theme-color" content="#0E1116">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CLIque">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script nonce="__NONCE__">
   // CLIque is mounted under /clique by `tailscale serve`, which strips the
   // prefix before the request arrives — so the server genuinely believes it is
@@ -163,6 +178,16 @@ LOGIN_PAGE = """<!doctype html>
     if (!path.endsWith("/")) path += "/";
     document.write('<base href="' + path.replace(/"/g, "") + '">');
   })();
+  // Chrome will not offer to install a page with no service worker, and it
+  // judges the page you are on. Registering here rather than only in the panel
+  // is what turns "Add to Home Screen" on the sign-in page into a real install
+  // instead of a bookmark. Failure is not worth reporting: without it the
+  // browser's own menu still works, which is how iOS installs anyway.
+  if (navigator.serviceWorker) {
+    addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
 </script>
 <style>
   /* The panel's theme is a server setting, but this page is served before
@@ -189,8 +214,17 @@ LOGIN_PAGE = """<!doctype html>
   .mark { width:34px; height:34px; display:block; margin:0 0 14px; }
   h1 { font-size:16px; font-weight:700; margin:0 0 2px; letter-spacing:-.01em; }
   p  { margin:0 0 18px; color:var(--dim); font-size:13px; }
-  input,button { width:100%; font:inherit; border-radius:4px; }
-  input { padding:9px 10px; background:var(--field); color:var(--fg);
+  /* Without this a 100% width plus padding and a border comes to 323px inside
+     a 320px screen, and the narrowest phone still in use scrolls sideways on
+     the sign-in page. */
+  *, *::before, *::after { box-sizing:border-box; }
+  input,button { width:100%; font:inherit; border-radius:4px; min-height:44px; }
+  /* 16px is not a taste decision. Safari zooms the whole page when it focuses
+     an input whose text is smaller, so a 14px password box made the layout
+     jump on the first tap of the first thing anyone does on a phone. 44px is
+     the matching rule for the thumb: Apple asks 44, Material asks 48, and
+     these were 42. */
+  input { padding:9px 10px; font-size:16px; background:var(--field); color:var(--fg);
           border:1px solid var(--line); margin-bottom:10px; }
   input:focus { outline:none; border-color:var(--accent); }
   button { padding:10px; border:0; cursor:pointer; font-weight:600; color:#fff;

@@ -79,6 +79,15 @@ ICONS: dict[str, str] = {
     "layout-grid": "the board — sessions by what they are doing",
     "more-horizontal": "the sidebar overflow menu — folders, adopt, broadcast, board",
     "lock": "a session held read-only for review — input is blocked",
+    "notebook": "the side panel's Notes pane",
+    "git-branch": "the side panel's Git / Checkpoint pane",
+    "info": "the side panel's Session info pane",
+    "arrow-right": "push a note into the terminal",
+    "clock": "a reminder is set on a note",
+    "trash": "delete a note line",
+    "panel-right": "open or close the side panel",
+    "rotate-cw": "reload the panel, for an installed app with no address bar",
+    "paperclip": "attach a file to this session, the only route in from a phone",
 }
 
 _BODY = re.compile(r"<svg[^>]*>(?P<body>.*)</svg>", re.S)

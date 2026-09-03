@@ -1,5 +1,924 @@
 # Changelog
 
+## 0.67.0 — 2026-09-02 18:51 PDT
+
+**The three things a phone still could not do.** All from the review a second
+model wrote on 2026-09-02, and all confirmed against the code first.
+
+**The long-press menu scrolls.** A live session's menu is fifteen to twenty
+rows, and at the padding a thumb needs that is 600 to 800px, taller than a
+phone. The placement clamp goes negative when the menu is taller than the
+window, so Open was cut off above the screen while Kill sat below it, and
+there was nothing to scroll. The menu whose whole reason for existing is that a
+phone can archive, lock and kill from it could do none of the three.
+
+**A working group answers a long press.** Rename and delete were right-click
+only, so from a phone you could launch a group and never change or remove one.
+The sessions and the groups now share one implementation rather than two.
+
+**You can hand a session a file, and get text back off the pane.** Drop needs a
+mouse and paste needs the file already on the clipboard, so between them a
+phone had no route in at all: no photo, no PDF, no log from another app. There
+is a paperclip next to Run now, and an entry in both menus. Coming the other
+way, a finger drag is our scroll and nothing else makes a selection, so the
+Copy chip never appeared; long-pressing the output offers the line you pressed,
+what is on screen, and the last twenty lines.
+
+**And one the paperclip uncovered.** Every control in the input bar refuses to
+shrink and the textarea was the only thing giving, so on a 320px phone the
+prompt measured 26 pixels — narrower than one word, on the box you type every
+prompt into. It went unnoticed while a phone typed into the terminal instead,
+and 0.66.0 made that box the way a phone talks to an agent. Under 460px the bar
+wraps and the box takes the row.
+
+## 0.66.1 — 2026-09-02 15:46 PDT
+
+**The other half of the Android fix.** 0.66.0 gave a phone the panel's own
+prompt box and then handed the keyboard to the terminal anyway: opening a
+session focused the pane, and tapping Esc or Ctrl-C on the key row took focus
+back. So the box was there, and Gboard was still typing into the terminal, and
+still duplicating the line. On a touch device showing the box, nothing takes
+focus on its own now, and the first thing you tap decides. Escape out of the
+prompt box still hands the pane the keyboard, because that is somebody asking.
+
+**The installed app no longer draws under the notch.** The standalone rule that
+pads for the safe area has been in the stylesheet for a while and was doing
+nothing, because `env(safe-area-inset-*)` reports 0 without `viewport-fit=cover`
+in the viewport tag, and only the sign-in page had it. The panel has it now, the
+shell measures the body rather than the whole viewport so the padding is not
+undone one level down, and the toast clears the home indicator, which is where
+Undo after a kill lives.
+
+Both found by having Grok CLI read the mobile surface and say what it thought,
+which is the first time a second model has been pointed at this. Its write-up
+is in `docs/mobile-review-grok.md`; the three findings still open are on
+`docs/next.md`. Every one was checked against the code before being believed.
+
+## 0.66.0 — 2026-09-02 15:29 PDT
+
+**Typing on an Android phone no longer repeats the line you just sent.** With a
+suggestion from the keyboard, or a paste, the same sentence would arrive in the
+pane over and over. It made the phone close to unusable, which was the whole
+point of the last six releases.
+
+The cause is not really ours to fix. A CLI that draws its own prompt box gets
+the terminal to itself, so on a phone you were typing straight into the
+terminal, one keystroke at a time, through the keyboard's input method. Gboard
+predicts, autocorrects and pastes into a hidden field the terminal keeps
+emptying under it, loses track of what it believes is there, and re-commits the
+whole line. It is worst with a suggestion or a paste, which is exactly when the
+keyboard has the most to re-commit.
+
+So a touch device now always gets CLIque's own prompt box. Composing in an
+ordinary textarea and sending the finished line never goes near that path. The
+cost is the CLI's own box sitting above ours, which is one bar of screen
+against a phone you cannot type on. Setting the prompt-box mode to **Terminal**
+still overrides it.
+
+Two more things found on the way there, and they were live on a desktop too. An
+Enter arriving mid-word from an input method is no longer treated as send, and
+`run` no longer accepts a second Enter while the first is still waiting on a
+confirm or a request. Both sent the same text twice.
+
+**A different theme on a schedule.** Tick the themes you like under
+**Appearance ▸ Change it on a schedule** and CLIque puts a different one on
+every so often. Every 24 hours from 07:00 is a fresh theme each morning; every
+6 hours from 07:00 changes at 07:00, 13:00, 19:00 and 01:00. It picks at random
+from the ones you ticked and never the one already on, so a change always looks
+like one. **Change now** does it on the spot.
+
+It rides the panel's own poll rather than a timer, so nothing happens while
+nobody has CLIque open, and opening it after a few days catches up to the last
+change that was due rather than running through every one it missed. The server
+still has no idea what a theme is: the presets live in `web/themes.js` and it
+only moves an id you chose.
+
+`POST /api/themes/rotate`, five settings, and a check in
+`tools/rotate_check.py`.
+
+**Also:** the visual suite's boxed-pane click test had been failing since
+0.62.0, aimed at the wrong pane and at a session record the panel had not
+loaded yet. Fixed, so the check that a click reaches the CLI is doing its job
+again.
+
+## 0.65.0 — 2026-09-01 12:58 PDT
+
+**A session whose saved conversation is gone now starts anyway.** Clicking one
+did nothing at all: no pane, no error, nothing to click again. It had been
+doing that for a week before anyone worked out why.
+
+A resume key can outlive the thing it points at. Open a session, never type in
+it, let the idle reaper stop it six hours later, and the CLI has nothing on
+disk to come back to. CLIque asks for it anyway, the CLI refuses in about a
+second and a half, and the tab goes quiet.
+
+The panel now watches a resume for as long as eight seconds and, the moment
+the pane turns out to be gone, drops the key and starts the session clean.
+Usually over in two seconds, and there is nothing to click, learn or turn on.
+It only does this for a key that is CLIque's own session id, which is the one
+case where we know how it got there and can derive it again; a key that came
+from anywhere else was typed deliberately and is left alone. Stopping a
+session inside that window wins, so nothing is ever resurrected behind you.
+
+Nothing is read but process state: the pane is there or it is not. Working out
+*why* would mean reading the CLI's output, which is the line the core does not
+cross.
+
+`POST /api/sessions/<id>/start` now answers with `resumed`, saying whether the
+resume form was used. New check: `tools/resume_check.py`.
+
+## 0.64.0 — 2026-08-30 14:56 PDT
+
+**Tapping the prompt on an iPhone no longer zooms the whole page.** Safari
+zooms when it focuses an input whose text is under 16px, and the prompt box was
+13px, so the single most common thing you do on a phone moved the layout under
+your thumb every time. Every input, textarea and select is at least 16px on a
+touch device now, and untouched on a desktop, where the font size you chose is
+the font size you get.
+
+That rule carries `!important`, which is the case the keyword exists for: it is
+an override of an operating system behaviour rather than styling, and it has to
+beat every component that sets a font size without any of them knowing about
+it. Written politely it did nothing at all, because `.search input` and the
+settings fields simply won.
+
+**The status bar stopped hanging off the screen.** 460px of controls in a 393px
+phone, which is what the clipped icons actually were. The readings already
+dropped out in order of how much they decide; the controls on the right never
+did. They go the same way now, and the two that go first are the two a phone
+cannot use anyway: a keyboard-shortcut sheet and a font stepper that Settings
+also has.
+
+**Tap targets: 34 under 44px, now 9.** Growing a 17px tab close button to 44
+would wreck a 35px strip, so the *hit area* grows instead and nothing moves by
+a pixel. Nothing changes on a mouse, where 17px is a perfectly good target. The
+nine that remain are the key row, at a correct 44px tall and as wide as seven
+keys can be on a phone, which is a decision rather than a defect.
+
+**Tetris is now Bricks and Pacman is now Chompy.** The artwork was never the
+issue: every figure is an original design. The names were, and both were
+actively enforced marks. The id is what gets stored, so a bare rename would
+have dropped anyone wearing one back to the default and looked like the panel
+forgot; the two old ids are aliased to the new ones, in the theme lookup so it
+still applies and in the picker so the dropdown agrees rather than reading
+empty over a theme that is plainly on.
+
+**`agent-infra/tools/mobile_view.py` stopped crying wolf twice**, which matters
+because a check nobody believes is worse than no check. It measures the *hit*
+area now, including one grown by a pseudo-element, so a fixed control stops
+being reported as broken. And it ignores elements clipped by an ancestor: a
+terminal pane for a background session is thousands of pixels wide inside
+`overflow: hidden` and was being reported as "the page scrolls sideways" when
+the page plainly does not.
+
+## 0.63.0 — 2026-08-30 14:40 PDT
+
+**Working groups: sessions you always open together.** A group holds a Claude,
+a Gemini and a Grok, or three of the same, from one directory or three
+unrelated ones. One click opens all of them, side by side, under a band that
+says they belong together.
+
+**Not folders**, and the difference is the whole feature. A folder files a
+session in the sidebar and a session has exactly one. A group is about
+launching several things at once and telling at a glance which tabs belong to
+which piece of work, so it can pull from several folders or none, a session can
+sit in more than one, and joining one changes nothing about where a session
+lives.
+
+**The band is inside the tab strip, not above it.** Chrome hangs a labelled
+band over its tab groups and spends a row of height on it. There is no row to
+spare: the strip is 35px and on a phone it is competing with the pane for the
+only screen there is. So it is a rule along the bottom edge of the tabs, which
+costs nothing, needs no phone-specific layout, and is the same on both. The
+group's *name* lives in the sidebar, where there is room for words and where
+you launch it from anyway.
+
+Opening a group gathers its tabs into one run. That is not decoration: the same
+colour scattered through the strip reads as three unrelated pills rather than
+one band, which is exactly what the first version drew. Tabs already open are
+moved rather than duplicated, so opening a group twice tidies the strip instead
+of growing it, and the block lands where the first member already was rather
+than throwing you to the end of a strip you were working in.
+
+**A member is a snapshot, not a pointer.** Each one stores the session's CLI,
+directory and name beside its id, so a member whose session has been deleted is
+reported rather than quietly missing. It is not recreated unless you ask, since
+a group silently starting something you deleted on purpose is the worse
+failure, and recreating rewrites the member so the next open does not strand it
+again.
+
+`POST /api/groups/<id>/open` is the whole thing, so a script can open a working
+group too. It reports what was already running, what it started, what is
+missing and what refused, separately rather than as a count.
+
+## 0.62.1 — 2026-08-30 12:40 PDT
+
+**A reload button, for the installed app that has nowhere else to get one.**
+A PWA has no address bar, so a panel that ever needs a fresh load leaves you
+closing it and reopening it from the home screen. It sits in the status bar,
+which is outside the sidebar and therefore still there when the drawer is shut
+on a phone.
+
+Shown only where it is the only way in: the installed app, full screen, and the
+iOS home screen, which has its own flag because it predates the standard. A
+browser tab does not get one, because it would be a button doing what the
+browser's own reload already does, in a row that is already full. The command
+palette offers it everywhere either way, which is also the answer for a
+keyboard that cannot reach the browser's reload because the pane has the keys.
+
+The service worker is asked to update before the page reloads. It does not
+cache, so a plain reload already fetches fresh code, but the worker is the one
+thing a reload would otherwise keep, and "reload" meaning "all of it except the
+part that serves you" is a promise not worth making.
+
+Sessions keep running, and the tabs and layout come back, because the workspace
+has always lived on the server rather than in the tab.
+
+## 0.62.0 — 2026-08-30 08:56 PDT
+
+**The active CLI's logo, faint in the top-right of the pane.** Opposite corner
+to the theme character, so a theme with one and a session with the other never
+sit on top of each other.
+
+The pane edge has carried the CLI's colour for a while, and that answers "which
+one am I in" for anyone who has learned the colours. This answers it for
+everyone else, and answers it across a screen of panes rather than by reading a
+tab. At seven percent it is a thing you notice when you look for it and not
+when you are reading output.
+
+Two shapes of icon, the same split the sidebar markers already make. A
+single-colour glyph becomes a mask tinted with the CLI's own colour, which is
+what lets one file serve the tinted, grey and watermark modes at once. A logo
+that carries its own colours cannot be a mask, because it flattens to a solid
+square, so it is drawn as the image it is. A CLI with no icon draws nothing
+rather than inventing a letter: a letter blown up to a hundred pixels in a
+corner reads as a mistake, not as decoration.
+
+Desktop only. It takes itself away on a pane under 720px and a window under
+460px tall, on the same rule the theme character uses, because on a phone the
+corner is needed for output. One checkbox under **CLI markers** turns it off.
+
+## 0.61.0 — 2026-08-30 08:26 PDT
+
+**Scrolling the terminal with a finger works.** It never had, and there were
+three separate reasons, each of which had to be found before the next one was
+even visible.
+
+**tmux was keeping no scrollback at all.** Every agent CLI enters the
+alternate screen at startup, and an alternate-screen pane keeps no history by
+design: measured `history_size=0` against a 20000 limit on every live session.
+So the history this panel sends a reattaching browser had nothing in it, and a
+phone opening a session got exactly one screenful with nothing above it. tmux
+is now told to ignore the switch, which puts the output in the normal buffer
+where it scrolls into history: measured 279 lines against 0 for the identical
+program.
+
+**The browser was showing the wrong buffer.** With history finally arriving,
+a browser still had none, because the alternate-screen switch was stripped
+only for CLIs that own their input. Everything else parked xterm in the
+alternate buffer, which holds one screen and no scrollback by definition.
+Measured: 360 lines sitting in `buffer.normal` while the pane displayed the
+45-line alternate one. Every session hides that switch now.
+
+**And nothing was listening for a finger.** Scrolling the pane has always been
+this panel's own wheel handler rather than the browser's, because xterm needs
+telling which of the two buffers a scroll belongs to. There was no touch
+equivalent, so on a phone the pane did not scroll: not a broken gesture, an
+absent one. A drag now scrolls it, using the same branch the wheel uses, and
+`touch-action: none` on the pane is what lets the gesture reach it at all.
+Without that the browser claims a vertical drag for the native scroll of a
+scroll area that is exactly one screen tall, and swallows it to move something
+that cannot move. Measured before: one touchstart, zero touchmoves.
+
+Pixels are carried between moves rather than rounded away, so a slow drag
+tracks your thumb instead of doing nothing until you flick, and a short
+movement is left alone so a tap still reaches the CLI.
+
+The trade, stated plainly: a full-screen program that exits no longer has its
+screen restored, so `vim` in a shell session leaves its last frame behind. For
+a panel whose whole purpose is reading what an agent did, keeping the
+transcript is the better half of that bargain.
+
+`tools/visual_check.py` drives a real touch drag and asserts all three: that
+the pane shows the buffer history is in, that there is history in it, and that
+a drag moves through it and back.
+
+## 0.60.0 — 2026-08-30 08:05 PDT
+
+**CLIque installs as an app on a phone, from the page you actually arrive on.**
+The panel had a correct manifest, a service worker and every icon size for
+years. The sign-in page had none of it, and the sign-in page is what a phone
+meets first, so "Add to Home Screen" gave you a bookmark with a screenshot for
+an icon and Safari's chrome around the result.
+
+**The cause was an allow-list that had quietly gone dead.** `PUBLIC_ASSETS`
+names what may be served before login, and a past fix for a real traversal hole
+(`/brand/../app.js` resolved back to the app shell) replaced the whole check
+with a single "is it inside `brand/`" test. That closed the hole and, with it,
+silently un-published the manifest and the favicon: the constant was still
+declared, still read like documentation, and referenced by nothing. A browser
+cannot offer to install an app whose manifest it is not allowed to read.
+
+The allow-list is honoured again, and the traversal stays closed, because the
+comparison is between *resolved* paths rather than prefixes. `/brand/../app.js`
+resolves to the shell and matches nothing; `/brand/../manifest.webmanifest`
+resolves to a file that is public anyway. `sw.js` joins the list, because Chrome
+judges installability from the page in front of it and will not offer to install
+one with no worker registered.
+
+**Three things fixed on the way in, all on the sign-in page**, all found by
+`agent-infra/tools/mobile_view.py` rather than by looking:
+
+- The password field was 14px, so **iOS zoomed the entire page the moment you
+  tapped it**. The first thing anyone does on a phone, and it moved the layout
+  under them. 16px is the threshold and is not a taste decision.
+- The field and the button were 42px tall against a 44px thumb.
+- At 320px the page **scrolled sideways**, because a 100% width plus padding
+  and a border comes to 323px without `box-sizing: border-box`.
+
+Every device the tool renders now reports nothing on that page.
+
+The app's own name lost an em dash. It is the text on your home screen.
+
+`tools/smoke_http.py` now asserts both halves of the allow-list from a
+logged-out client: that the manifest, favicon, worker and brand icons are
+served, that the shell, its script, its stylesheet and its themes are not, and
+that four traversal attempts through `brand/..` reach nothing. That is the test
+whose absence let the list go dead.
+
+## 0.59.0 — 2026-08-29 16:41 PDT
+
+**Open what a CLI hands you, without leaving the panel.** Three things that
+were nearly there and did not join up.
+
+**The file sheet was broken and had been for a long time.** It opened, showed
+the name and the path, and never showed the contents. One of the two assertions
+that had been failing in `tools/visual_check.py` was saying exactly that, and it
+had been read as background noise. It shows the text now.
+
+**Select a path in the pane and an Open button appears** beside the Copy chip
+that was already there. Not a hover link: there is no hover on a phone and no
+right-click either, and the selection chip is a control you can already reach
+with a thumb. A sentence is not a path, so selecting prose offers nothing.
+
+**An image renders in the sheet** instead of being described, and **a directory
+lists what is in it** and lets you click through.
+
+Nothing about what can be read has changed, which was the part to get right.
+Listings hand back the child as it is named in that folder rather than a
+resolved target, because a resolved path is how a symlink leaks somewhere it
+should not; `..` appears only when the parent is still inside the session's
+directory; and every click still goes through the same resolve and fence as
+before. Verified by trying: `../../../../etc/passwd`, `/etc/shadow`, `..`,
+`/root/.clique/secret` and four more all come back as `missing`, and the suite
+now asserts that a session folder's own listing offers no way up.
+
+Most of this was written by Grok running inside CLIque, which is the first time
+the panel has been used to build itself. It solved the third piece better than
+it was briefed: asked for clickable paths in the terminal, it used the existing
+selection chip instead, which needs neither hover nor right-click and was
+already the phone-safe control.
+
+## 0.58.0 — 2026-08-29 16:11 PDT
+
+**A phone and a desktop no longer fight over the terminal, and the phone
+wins.** With a desktop panel open on one machine and CLIque open on a phone,
+both attached to the same session, the pane resized itself every three seconds
+forever. The CLI reflowed to 162 columns, then to 42, then back. On the phone
+that made it close to unusable.
+
+A tmux window has one size and every attached client sees it, so two panels of
+different shapes cannot both be right. The guard was `document.hasFocus()`,
+which cannot decide this: it is per browser window, and a desktop on one machine
+and a phone in your hand **both report true, because both are true**. So each
+one saw the window at the other's size on every poll, concluded it had been
+resized out from under it, and claimed it back.
+
+The server settles it now, because it is the only party that can see both
+clients. **A handheld wins.** That is a decision about how the thing is used
+rather than a heuristic: a phone gets picked up to do the thing that could not
+wait, while a desktop panel is often just open. A desktop's resize still sizes
+its own PTY, so it keeps drawing at its own shape and says so in the pane's size
+label, but it does not move the window underneath the phone.
+
+A phone in a pocket does not hold anything: a dark screen or a backgrounded tab
+sends `release` and the desktop has the window back on its next poll, with no
+timer to wait out. A phone that vanishes without saying so, a killed tab or a
+dead battery, expires after 90 seconds. While it is awake it sends a `hold` on
+each poll, which is deliberately cheap - no tmux call, no resize - and exists
+because a phone that already owns the window has nothing left to resize and
+would otherwise let its own claim lapse.
+
+Measured rather than reasoned about, with two real browser contexts attached to
+one session: 5 resize messages in 12 idle seconds before, 0 after, and the
+window holds at the phone's size through a desktop being actively clicked.
+
+**Found with the new `mobile_view.py`**, which renders iOS in WebKit and Android
+in Chromium at real device sizes. Three things it turned up that are not fixed
+here and are now on the list: 34 inputs under 16px, including the prompt box and
+the search field, which make iOS zoom the whole page whenever they are tapped;
+29 tap targets under 44px; and a login page that scrolls sideways at 320px.
+
+## 0.57.0 — 2026-08-29 10:32 PDT
+
+**Open the same work in another CLI.** Right-click a session and pick *Open in
+another CLI*: same name, same directory, same folder, a different tool. The two
+sit side by side as tabs reading the same thing, told apart by the CLI marker
+rather than by a suffix nobody asked for. Handing Codex the job Claude has been
+chewing on should not mean retyping a path.
+
+It only appears when another CLI is actually installed, because an item that
+can only disappoint is worse than no item. The mode is deliberately not carried
+across: a mode is something a CLI declares in `clis.toml`, so the source's mode
+id means nothing to the target and would either be rejected or, worse, quietly
+match something unrelated. The new session takes the target's own default.
+
+*Duplicate* is now labelled **Duplicate (same CLI, same directory)**. It used to
+read "same directory, fresh CLI", which sounds exactly like the feature above
+and is the opposite of what it does.
+
+**Two menu items had been dead for twelve releases.** *Move to folder…* and
+*Take out of its folder* both threw a `ReferenceError` and did nothing: 0.44.0
+deleted `setFolder` and `moveToFolder` and left the two call sites behind.
+Both are restored.
+
+Nothing caught it, and the reason is worth writing down. `node --check` parses
+`app.js` happily with a call to a function nobody wrote, because the reference
+is only resolved when somebody clicks; and a throw inside a click handler goes
+to a console nobody has open. So the failure mode is a menu item that looks
+completely normal and silently does nothing.
+
+`tools/smoke.py` now reads every arrow-wrapped call in `app.js` and fails on
+one that resolves to no declaration. It found `setFolder` immediately, which is
+the second of the two. `tools/visual_check.py` goes further and actually
+right-clicks a session, opens both submenus and asserts nothing threw, because
+"the function exists" and "the menu works" are different claims and only the
+second one is the feature.
+
+## 0.56.0 — 2026-08-29 08:26 PDT
+
+**Type a project name in the new-session dialog instead of a path.** "sentinel"
+now finds `/root/platform/wsg-sentinel` and offers it. The same box still takes
+a path and still completes one; a bare name used to return nothing at all.
+
+That gap was the point. The dialog had two ways to fill in a directory and both
+assume you already know something: the dropdown lists everywhere you have
+worked, which is no help for a repo you have not opened here yet, and the
+completion behaves like a shell, which needs the first few characters of the
+path. Neither answers "the one called sentinel", which on a box with forty
+repos across three parent directories is the actual question.
+
+A directory counts as a project when it holds `.git`, `pyproject.toml`,
+`package.json`, `Cargo.toml`, `go.mod`, `pom.xml`, `Gemfile`, `composer.json`
+or `CMakeLists.txt`. Matches are ranked by how the match happened rather than
+by string distance, because the directory *called* sentinel should beat one
+that merely has the word somewhere in its path, and no fuzzy score says that as
+clearly as asking the question in order. Somewhere you have already worked
+stays ahead of a fresh find either way.
+
+**The walk is cheap because it never opens a hidden directory.** That one rule
+removes the caches, the virtualenvs, the package directories and the language
+toolchains, which is most of the bytes in a developer's home directory: it
+takes an 11GB `~/.cache` out of the walk entirely. 140 projects in about a
+tenth of a second here, cached for two minutes after that.
+
+It also keeps going *past* a project root, which is the opposite of the obvious
+optimisation. Stopping there was measured against not stopping and came out
+inside the noise, while hiding real answers: a repo of client directories that
+is itself a repo is an ordinary thing to have, and every directory inside one
+was invisible. It was a trade that bought nothing, and it only stopped looking
+clever once somebody measured it.
+
+Bounded three ways, by depth, count and a three-second budget, and a walk that
+hits any of them says so in `partial` rather than returning a quietly short
+answer.
+
+**`GET /api/projects?q=`** is the whole thing, so an agent driving CLIque can
+ask where a repo is without being told. **`project_roots`** in Settings ▸
+Appearance narrows where it looks; blank means your home directory, which is
+the answer that is right on a machine nobody has configured.
+
+## 0.55.1 — 2026-08-29 08:16 PDT
+
+**The theme picker says which themes come with a character.** Seven of the
+sixteen do and it was not guessable from the name, so the list is grouped:
+**Presets**, then **With a character**, then **Made here** once you have
+generated one.
+
+A group rather than a marker beside the name, because a marker needs a legend
+somewhere saying what it means, and this says it in words. It is also a native
+control, so it survives a phone and a screen reader and hides behind no hover
+or right-click, which a small glyph in a corner would have done.
+
+Nothing moves. `themes.js` already declares the plain presets, then the ones
+with a figure, and anything made here is merged onto the end, so the groups
+fall exactly on boundaries that were already there and the order in the list is
+unchanged.
+
+The command palette says it too, since that is the faster way to switch: a
+theme with a figure reads `dark · has a character`.
+
+## 0.55.0 — 2026-08-28 21:26 PDT
+
+**Seven themes with somebody in them.** Plumber, Triforce, Fellowship, Drizzt,
+Pacman, Tetris and Aincrad, each a full palette plus a hand-drawn anime figure
+watermarked into the bottom-right of the pane. Sixteen presets now, up from
+nine.
+
+**They are original designs, not the famous characters, and that took
+deciding.** Asked plainly for a moustachioed plumber in a red cap and blue
+dungarees, an image model returns Nintendo's Mario line for line: same face,
+same moustache, same proportions. That is not inspiration, it is the character,
+and this package is published on PyPI under a real name. The archetype is fair
+to borrow and the likeness is not, so every prompt carries an explicit
+instruction to invent the face, the costume and the proportions fresh. Anyone
+regenerating these has to keep that, which is why it is written above the
+character block in `themes.js` rather than left in somebody's memory.
+
+**The figure is laid in faintly rather than blended.** An earlier pass composited
+with `lighten` on dark themes and `darken` on light ones, which keeps text
+perfectly untouched, but only works because the colours in a hand-built grid are
+all mid-tones by construction. A real drawing has blacks and whites in it and
+those blends eat precisely those. So artwork goes on at twelve percent, normally
+composited, which costs the text a little contrast where the two overlap. That
+is the honest trade for taking art as it comes instead of dictating a palette to
+whoever drew it.
+
+It takes itself away on a pane under 720px and a window under 460px tall, so a
+phone and a pane squeezed between the sidebar and the side panel both get their
+corner back. That is asked of the **pane**, not the window: with both panels out
+a 1600px window is a 700px pane, and a window query would be wrong by exactly
+the width of the sidebar. Same mistake the status bar's readings made once.
+
+One checkbox under the theme picker turns them all off.
+
+**`tools/art_prep.py`** turns an illustration into a shippable figure: keys out
+the flat background it was drawn on, unmixes that colour from the antialiased
+edges so nothing ships wearing a pink rim, crops to the figure, scales it and
+quantises it. A megabyte of magenta field becomes about a hundred kilobytes of
+exactly the character. Cel-shaded art is the case a palette handles without
+showing, which is what keeps seven drawings under a megabyte in a package whose
+whole argument is that it is small.
+
+`tools/theme_check.py` now checks the shipped files rather than a grid: that
+each one is there, is a PNG, is in a colour type that can actually hold
+transparency, is within its size and dimension budget, and that `pyproject.toml`
+is told to package the directory. That last one is not hypothetical. `package-data`
+is an allow-list of globs, so a new directory under `web/` is silently left out
+and the panel serves 404s on somebody else's machine while working perfectly
+here.
+
+`tools/visual_check.py` opens a pane with a figure in it and measures the
+compositing, the opacity, that it cannot be clicked, that it stays inside the
+pane, and that it disappears and comes back with the width. None of that is
+visible to a check that reasons about the code, which is the whole reason it is
+in the browser suite.
+
+## 0.54.1 — 2026-08-28 18:17 PDT
+
+**Plan usage is a pair of meters now, not another number in the machine
+stats.** It had been sitting between disk free and uptime reading `PLAN 5H 5%`,
+which made it look like one more thing the box is doing. It is not: how much of
+the week is gone decides what you start next, and CPU does not. It has its own
+block with a hairline either side, a short bar each, green until three
+quarters, amber past that and red past ninety. The exact figure stays beside
+it, and the reset countdown is still on hover.
+
+**Nothing in the status bar is cut off mid-word any more.** The meters cost the
+row about two hundred pixels it did not have, and the first attempt left VIEWS
+reading "VIEW". Readings now drop out whole as the row narrows, in reverse
+order of how much they decide: views first, then load, then disk. On a phone
+the meters keep their bars and drop the digits, which is the half you read at a
+glance.
+
+That is asked of the row rather than the window. A window query gets it wrong
+by exactly the width of the sidebar, which is why the first attempt fired at
+the wrong moment: 1280 pixels of window is barely a thousand of status bar with
+the sidebar open, and collapsing it has to change the answer.
+
+`tools/visual_check.py` now measures every reading against the ends of the bar
+at two window widths and with the sidebar both ways, so nothing can quietly
+start hanging off the edge again.
+
+## 0.54.0 — 2026-08-28 18:07 PDT
+
+**How much of the plan is left, in the status bar.** For the session in front,
+the bar now reads something like `5H 5% · 7D 52%`, amber past three quarters
+and red past ninety. Hovering says when each window resets, in the form that
+actually decides whether to keep going: "resets in 2h", not a timestamp.
+
+**Nothing in the panel knows whose API that is.** A CLI's `usage` block in
+`clis.toml` says where its token file lives, which field in it holds the token,
+which URL answers, and which fields in the reply are the numbers. The panel
+runs that description and learns nothing else. Teaching it about another vendor
+is a block of TOML rather than a line of Python, which is the same bargain
+`clis.toml` already makes for launching a CLI at all. Delete the block and the
+column goes away.
+
+**It works on a machine that has never heard of us.** This was the whole point:
+the probe ships in the package and reads the credentials the CLI already wrote,
+so someone who installs `clique-panel` and opens it gets the bar. Nothing here
+depends on a cron job, a file another tool writes, or a key in somebody's vault.
+
+**The token is spent, not spread around.** It is read from disk, used on one
+request, and dropped. What reaches the browser is a percentage and a reset
+time, and never the credential. Only CLIs that declare a probe *and* have a
+session open are asked, so a fresh panel with nothing running makes no outbound
+call at all. Readings are cached five minutes and shared by every connected
+browser; failures are cached the same, so a machine with no credentials asks
+once and then stops.
+
+Everything that can go wrong goes quiet rather than loud: no token, an expired
+one, no network, a reply in a shape the block did not describe. `usage_bar` in
+settings turns the whole thing off.
+
+Today Claude is the only CLI shipping with a probe, because it is the only one
+of the four installed here whose vendor publishes a usage endpoint. Codex and
+Grok keep credentials on disk but document no such endpoint, and none of them
+cache the numbers locally. The slot is there for the day that changes.
+
+`tools/usage_check.py` points the probe at a throwaway local server that is
+nobody's real API, which is the strongest evidence the code is generic, and
+covers every quiet failure. It also asserts the shipped catalogue still says
+what it said: a sub-table opened in the wrong place silently swallowed four of
+Claude's keys while this was being written, and that class of mistake now has
+a guard.
+
+## 0.53.0 — 2026-08-28 17:35 PDT
+
+**Describe a theme and get one.** Settings, Appearance now has a box: type "a
+quiet winter morning, muted blues", press Generate, and the theme is built,
+applied, and kept on the server so it follows you to any device. Each one can
+be worn or deleted from the same list. It runs on your own key through the
+existing model providers, so nothing is called unless you set one up, and the
+button says so plainly until you have.
+
+**The model is asked for nine colours, not twenty-seven.** A theme is nine
+panel tokens and eighteen terminal ones, all sixteen ANSI colours with their
+brights included. Ask for that and you get a missing `brightYellow` and a
+foreground nobody can read. So it supplies the ones that need taste, light or
+dark, a background, a foreground, an accent and six hues, and the rest are
+worked out, which is the same bargain the panel already makes with its own
+derived tokens.
+
+**A generated theme cannot lock you out.** This is the part that mattered. The
+settings sheet you would use to pick a different theme is drawn in the theme
+you are wearing, so one whose text vanishes into its background is not a bad
+theme, it is a panel you cannot navigate. Every colour that carries meaning is
+pushed away from the background until it can be read, before the theme is ever
+stored: body text to 7:1, secondary text to 4.5, every ANSI colour to 3.5.
+Colours are corrected rather than refused, so a strange description still gives
+you something usable.
+
+**A theme can also be posted by hand.** `POST /api/themes` takes the same nine
+colours and runs the same derivation and the same contrast pass, so anything
+driving CLIque from a script can make one without a model anywhere near it.
+Forty are kept; the oldest goes when a new one would exceed that. Deleting the
+one you are wearing falls back to the default rather than leaving the setting
+pointing at nothing.
+
+`tools/theme_check.py` covers the lot over HTTP: derivation, every refusal, the
+contrast rescue, wearing, deleting and the ceiling.
+
+## 0.52.1 — 2026-08-28 17:12 PDT
+
+**The pane's scrollbar wears the theme.** It was the last raw browser control
+left in the panel, sitting against the terminal all day in whatever grey the
+browser felt like. It is a thin themed one now, and it changes when the theme
+does. The inset is a transparent border rather than the panel colour the
+settings sheet uses, because a terminal's background is the theme's *terminal*
+background, which is not always the panel's.
+
+**Three terminal colours a theme should never have had to spell out.** They are
+worked out from what the theme already said, the same bargain the panel's own
+tokens make, so a theme stays one block and cannot forget one of them:
+
+- what sits under a block cursor, which fell back to the terminal library's
+  own default rather than this theme's background, so the character under the
+  cursor could come out invisible;
+- what colour to write selected text in, chosen from how light the selection
+  is, because a theme with a pale selection and one with a dark selection
+  cannot both use the same text on top, and dragging over a line you then
+  cannot read is not a selection;
+- a quieter selection for a pane you are not looking at, blended halfway back
+  to the background so it holds its place without competing.
+
+Every shipped theme is now checked for selection contrast, so a new one cannot
+arrive with text you cannot read on it.
+
+**A hollow cursor in the pane you are not typing into.** With several panes
+open, two solid blocks both looked like the live one.
+
+## 0.52.0 — 2026-08-28 16:37 PDT
+
+**The pane says why it looks the way it does.** A tmux window has one size,
+shared by everything attached to it, so whichever browser is in front sets it
+and the rest draw at their own. And a CLI that paints its own prompt box has
+its columns kept and its picture shrunk, because narrowing the grid is what
+stacks the box. Both are deliberate and both look like a fault from the
+outside: text smaller than you left it, or a band of dead space down one side.
+The status strip now says which is happening, with the real numbers, and stays
+quiet the rest of the time, which is almost always.
+
+Working out *which* took some care. Asking the terminal what it would fit does
+not detect it, because each browser fits its own box quite happily and has no
+idea the window underneath belongs to somebody else. Comparing against the size
+tmux reports does detect it, but that arrives on a three second cycle, so a
+browser that had just resized itself accused a window that was not there. It
+compares the poll's clock against its own last claim instead, which is exact,
+and which correctly tells whichever browser is not winning.
+
+**Every window in a session is held at its size, not just the one in front.**
+Windows are locked individually because setting the rule server-wide kills the
+tmux 3.4 server the next time a detached session is created, and `default-size`
+does not rescue it. Only the current window was being locked, so a window made
+afterwards inherited the loose rule and collapsed to the size of the next
+client to attach: 200x50 became 80x23 the moment a browser arrived. Invisible
+on the one-window sessions CLIque makes itself, and waiting on anything split
+inside tmux or adopted from another tool.
+
+## 0.51.10 — 2026-08-28 16:11 PDT
+
+**The scrollbar no longer floats in the middle of the pane.** Opening the side
+panel next to a CLI that draws its own prompt box left the terminal's scrollbar
+stranded about four fifths of the way across, with terminal text on both sides
+of it. The terminal sizes its scrollbar from its own root element while the
+picture it draws follows the column count, so a pane that deliberately keeps a
+wide grid inside a narrower box left the two disagreeing by a couple of hundred
+pixels. The root is told the grid's real width now, and the two scale down
+together.
+
+**And the picture fits the room it actually has.** The fit was measured from
+the left of the pane rather than from where the terminal starts, which differ
+by the pane's padding, so the scaled picture came out a few pixels wider than
+its box every time.
+
+`tools/redraw_check.py` measures the gap between the scrollbar and the edge of
+the drawing: 220 pixels before this, none after.
+
+## 0.51.9 — 2026-08-28 14:42 PDT
+
+**A second browser no longer leaves the first one drawn at half size.** A tmux
+window has one size, shared by everyone attached to it, so when another browser
+resizes it this pane's grid changes underneath. The box does not move, so the
+observer that normally triggers a re-layout never fired, and a boxed CLI's zoom
+is worked out from its column count: the scale stayed the one that suited a
+grid we no longer had. The pane ended up a half-width picture in a full-width
+box, with the terminal's scrollbar floating in the open space where the picture
+stopped. Measured at 47% of the pane's width before this, above 90% after.
+
+The grid changing is now a reason to lay the pane out again, and the size
+reported back to tmux is where the layout settled rather than the size that
+came in. `tools/redraw_check.py` opens a second, smaller browser on the same
+session and asserts both panes fill their width.
+
+## 0.51.8 — 2026-08-28 14:34 PDT
+
+**The terminal can no longer paint over the side panel.** A boxed CLI keeps its
+own grid and is scaled to fit the pane, and that scale is worked out from a
+measured character cell. A fraction of a pixel of error there, multiplied by a
+couple of hundred columns, put the right edge of the terminal on top of the
+panel. Nothing in the pane legitimately draws outside its box, so the box
+clips now, and the check asks the question the overlap answered wrongly: just
+inside the panel's edge, is the panel what a click would land on.
+
+## 0.51.7 — 2026-08-28 13:39 PDT
+
+**A resource the machine cannot report closes up instead of leaving a hole.**
+Swap and temperature were held invisible rather than removed, so a box with no
+sensor and no swap in use carried two blank columns in the bottom bar forever,
+and the readings either side of them sat oddly far apart. That was trading a
+permanent gap for a nudge that almost never happens. They are gone now when
+there is nothing to say, and drawn again the moment there is.
+
+## 0.51.6 — 2026-08-28 13:32 PDT
+
+**A boxed CLI fills its pane when the side panel is open.** Claude, Grok and
+Gemini draw their own prompt box, and narrowing the grid under them stacks it,
+so CLIque shrinks the picture to clear the panel instead of taking columns
+away. Shrinking the picture shrinks every cell with it, which frees up rows the
+pane was never taking: the terminal sat in the top of its box covering about
+two thirds of the height, with a dead black band underneath it. It takes those
+rows now, and tells tmux about them.
+
+**And it gives the size back when the panel closes.** The zoom was decided on
+the pane's width and height together, so once the extra rows were taken the
+grid was taller than its box, which read as a fresh reason to keep zooming.
+The zoom is decided on width alone now, which is the only thing it was ever
+protecting.
+
+`tools/redraw_check.py` grew the case, against a boxed stand-in rather than a
+paid CLI: it measured 68% coverage before this and asserts better than 90%
+now, opening and closing.
+
+## 0.51.5 — 2026-08-28 13:23 PDT
+
+**The pane settles on a frame instead of a stopwatch.** Opening the side panel,
+the sidebar or zen mode changes the terminal's width, and the refit that
+follows used to run twice: once on the next frame, which measured the box the
+pane had just left, and again 80ms later to correct it. The 80 was a guess. A
+resize observer hands out its callbacks after that first frame and before
+anything is painted, so waiting one more frame is the point at which everything
+measuring the pane has already run, and it is a fact about the browser rather
+than a number that happened to work. One toggle is now one refit, it lands
+sooner than the old one did, and toggling twice quickly collapses to a single
+refit instead of fitting against a box that is already gone.
+
+**Zen mode tells tmux the new size.** Folding away three bars is a bigger change
+to the pane than either of the other two, and it was the one that only ever
+refitted locally.
+
+**A pane that comes back the same size is repainted anyway.** tmux draws a
+client when something it tracks changes, so a layout change that left the grid
+the same size gave it nothing to redraw for, and the terminal kept the frame it
+already had until a keystroke provoked a new one. The browser now asks for that
+frame directly, over the socket it already has. It reaches one client, the one
+that asked, so nobody else's window moves.
+
+**`tools/redraw_check.py`.** Drives a real browser and asserts what the timeout
+was guessing at: one settle per toggle, the terminal's columns matching the tmux
+window's both ways round, and the repaint reaching this browser's view and no
+other.
+
+## 0.51.4 — 2026-08-28 12:26 PDT
+
+**Search reaches past history, not just live sessions.** With the running-only
+filter on, a search already looked past it to find a stopped session. It stopped
+short of the past conversations in the sidebar: a folder whose only match was
+something you closed yesterday was dropped before its history was ever read, and
+Ungrouped was not drawn at all when nothing live was sitting in it. Both now
+count towards what a search can find.
+
+**The clear x in the search box works on the first try.** It was a 17 pixel
+glyph, and a click only counts when the press and the release land on the same
+thing, so a mouse that moved a little between the two did nothing. It is a 26
+pixel target now and it fires on the press, which is also what makes it usable
+with a thumb.
+
+## 0.51.3 — 2026-08-28 11:58 PDT
+
+**Notes no longer lose an edit when you switch session.** A note saves shortly
+after you stop typing, and switching tabs inside that window used to send the
+edit to the wrong session: the change was lost, and if the session you switched
+to had not been opened in that browser yet, its notes file was deleted outright.
+The save now carries the session it was made in.
+
+**Reminders no longer overwrite what you are typing.** The background loop that
+fires note reminders rewrote the whole file from a copy it had read seconds
+earlier, dropping anything typed in the meantime. Both writers now take the same
+lock and re-read before writing.
+
+**The temperature column hides where it said it would.** On a machine with no
+sensor the status bar kept showing an empty TEMP reading instead of stepping
+aside. It also falls back to the hwmon sensors now when the kernel's thermal
+zones report something implausible, rather than giving up on the first answer it
+finds.
+
+**Notes stop sticking on touch.** The panel and notes hover styles sit behind
+the same pointer check as the rest of the app, so tapping a note no longer
+leaves its action buttons lit on the row you last touched. They still appear on
+tap, through focus rather than hover.
+
+Also: the `reminder` webhook event is listed in `API.md` with the other four.
+
+## 0.51.2 — 2026-08-28 11:20 PDT
+
+**A cleaner terminal redraw when the side panel opens.** Opening or closing the
+panel now settles the pane the same way toggling the sidebar does: it fits twice,
+once on the next frame and again once layout has settled, and pushes the new size
+to tmux, so a full-screen CLI redraws to the narrower width instead of spilling
+under the panel.
+
+**Search finds sessions even when the list is filtered to running ones.** Typing
+in the sidebar search now looks past the running-only filter, so you can find and
+open a stopped session without turning the filter off first.
+
+## 0.51.1 — 2026-08-28 11:04 PDT
+
+**Uptime and temperature in the status bar.** The bottom bar now shows how long
+the box has been up, and its temperature when the machine has a sensor to read.
+Like swap, the temperature column hides itself where there is nothing honest to
+say, which is most VMs and containers.
+
+## 0.51.0 — 2026-08-28 10:29 PDT
+
+**A docked side panel, and notes that are a real checklist.** The right edge now
+has an always-on icon rail that opens a panel to a feature for the session in
+front: Notes, Git, Session info, and Export. It is collapsed by default, and
+nothing in it runs while it is shut, so an idle panel costs the browser nothing.
+Drag its edge to resize, and Ctrl+J (or the rail) opens and closes it.
+
+Notes moved out of a text box and into a nested checklist. Each line has a
+checkbox, you can indent lines with Tab to make topics with sub-notes, push a line
+straight into the terminal to act on it, and set a reminder that reaches you
+through your webhook (the same one that pings you when a session is waiting) even
+when the panel is closed. Everything is per session and saved on the server. An
+older plain-text note is carried over the first time you open it.
+
+The Git pane shows the branch, what has changed, and a one-click checkpoint. The
+Session pane shows the directory, CLI, memory and uptime. The Export pane writes
+the scrollback to a file. Each one is scoped to the tab you are on.
+
 ## 0.50.97 — 2026-08-25 18:55 PDT
 
 **Zen mode.** "Zen mode" in the command palette folds away the sidebar, the tabs

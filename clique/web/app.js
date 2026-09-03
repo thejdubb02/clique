@@ -278,6 +278,227 @@ function applyCliTint() {
   const root = document.documentElement.style;
   root.setProperty("--cli", off ? "transparent" : colour);
   root.setProperty("--active-edge", off || !colour ? "var(--accent)" : colour);
+  paintCliMark(s, colour);
+}
+
+/* The active CLI's logo, watermarked into the top-right of the pane.
+ *
+ * The pane edge already carries the CLI's colour, which answers "which one am
+ * I in" for anyone who has learned the colours. This answers it for everyone
+ * else, and at a glance across a screen of panes rather than by reading a tab.
+ * Opposite corner to the theme character on purpose, so a theme with one and
+ * a session with the other do not sit on top of each other.
+ *
+ * Two shapes of icon, the same split `markerFor` makes for the sidebar. A
+ * single-colour glyph becomes a mask tinted with the CLI's own colour, which
+ * is what lets one file serve every mode. A logo that carries its own colours
+ * cannot be a mask - it flattens to a solid square - so it is drawn as the
+ * image it is. A CLI with no icon at all draws nothing here rather than
+ * inventing a letter: a watermark is decoration, and a letter blown up to
+ * a hundred pixels in the corner reads as a mistake. */
+function paintCliMark(active, colour) {
+  const el = $("#cliMark");
+  if (!el) return;
+  const s = active || session(activeId);
+  const cli = s && (state.clis || []).find((c) => c.id === s.cli);
+  const icon = cli && cli.icon;
+  const show = state.settings.cli_watermark !== false && Boolean(icon);
+  el.hidden = !show;
+  if (!show) return;
+  const url = `url("icons/${encodeURIComponent(icon)}")`;
+  const full = Boolean(cli.icon_full_color);
+  el.classList.toggle("is-image", full);
+  if (full) {
+    el.style.backgroundImage = url;
+    el.style.webkitMaskImage = "";
+    el.style.maskImage = "";
+    el.style.background = "";
+    el.style.backgroundImage = url;
+  } else {
+    el.style.backgroundImage = "";
+    el.style.webkitMaskImage = url;
+    el.style.maskImage = url;
+    el.style.background = colour || "var(--dim)";
+  }
+}
+
+/* Working groups: sessions you open and see together.
+ *
+ * Deliberately not folders. A folder files a session in the sidebar and a
+ * session has exactly one; a group is about opening several things at once and
+ * being able to tell at a glance which tabs belong to which piece of work. So
+ * a group can pull from several folders or none, and a session can sit in more
+ * than one. Being in a group changes nothing about where a session lives. */
+function groups() {
+  return state.groups || [];
+}
+
+/* The group a tab is drawn as part of. First match wins, which is the whole
+ * of the rule for a session in two groups: a tab has one edge to colour, and
+ * picking the first keeps it stable rather than flickering between two
+ * colours as the poll reorders anything. */
+function groupOf(sessionId) {
+  return groups().find(
+    (g) => (g.members || []).some((m) => m.session === sessionId)) || null;
+}
+
+/* Open every session in a group, and put its tabs next to each other.
+ *
+ * Adjacency is not decoration here, it is the whole visual. The band under the
+ * tabs only reads as one band if the tabs it runs under are a run; scattered
+ * through the strip the same colour reads as three unrelated pills, which is
+ * what the first version of this did.
+ *
+ * So the members are gathered into one block. Any that were already open are
+ * moved rather than duplicated, which also means opening a group twice is
+ * harmless and tidies the strip instead of growing it.
+ *
+ * A member whose session is gone is reported, never silently skipped, and
+ * never recreated without being asked: a group quietly starting something
+ * somebody deleted on purpose is the worse failure. */
+async function openGroup(group) {
+  let result;
+  try {
+    result = await api(`api/groups/${encodeURIComponent(group.id)}/open`,
+                       { method: "POST", body: "{}" });
+  } catch (err) {
+    return toast(`Could not open ${group.name}: ${err.message || err}`, true);
+  }
+  await refresh();
+  const wanted = result.sessions || [];
+  if (wanted.length) {
+    for (const id of wanted) if (!openTabs.includes(id)) openTabs.push(id);
+    const rest = openTabs.filter((id) => !wanted.includes(id));
+    // Where the block lands: where the first member already was, so opening a
+    // group does not throw you to the end of a strip you were working in.
+    const at = openTabs.findIndex((id) => wanted.includes(id));
+    const cut = Math.max(0, Math.min(at, rest.length));
+    openTabs = [...rest.slice(0, cut), ...wanted, ...rest.slice(cut)];
+    saveWorkspace(true);
+    selectTab(wanted[0]);
+  }
+  const missing = (result.missing || []).length;
+  const failed = (result.failed || []).length;
+  if (missing || failed) {
+    const bits = [];
+    if (missing) bits.push(`${missing} no longer exist`);
+    if (failed) bits.push(`${failed} would not start`);
+    toast(`${group.name}: ${wanted.length} open, ${bits.join(", ")}`, true);
+  } else {
+    toast(`${group.name}: ${wanted.length} open`);
+  }
+}
+
+/* The groups strip at the top of the sidebar.
+ *
+ * This is where a group's *name* lives, which is the half the tab band cannot
+ * carry: the band is three pixels inside a 35px strip and there is nowhere in
+ * it for words. Here there is room, and this is where you launch from anyway.
+ */
+function renderGroups() {
+  const host = $("#groups");
+  if (!host) return;
+  const all = groups();
+  host.hidden = !all.length;
+  if (!all.length) { host.textContent = ""; return; }
+  host.textContent = "";
+  for (const group of all) {
+    const row = mk("div", "group-row");
+    const dot = mk("span", "group-dot");
+    dot.style.background = cssColor(group.color) || "var(--accent)";
+    const name = mk("span", "group-name");
+    name.textContent = group.name;
+    const count = mk("span", "group-count");
+    const live = (group.members || []).filter(
+      (m) => (session(m.session) || {}).alive).length;
+    count.textContent = `${live}/${(group.members || []).length}`;
+    count.title = `${live} of ${(group.members || []).length} running`;
+    const open = mk("button", "group-open");
+    open.type = "button";
+    open.textContent = "Open";
+    open.title = "Open every session in this group, as tabs side by side";
+    open.onclick = (ev) => { ev.stopPropagation(); openGroup(group); };
+    row.append(dot, name, count, open);
+    row.onclick = () => openGroup(group);
+    row.oncontextmenu = (ev) => groupMenu(ev, group);
+    host.appendChild(row);
+  }
+}
+
+function groupMenu(ev, group) {
+  showMenu(ev, [
+    ["Open the group", () => openGroup(group)],
+    ["Rename", () => renameGroup(group)],
+    ["Delete the group", () => deleteGroup(group), true],
+  ]);
+}
+
+async function renameGroup(group) {
+  const name = prompt("Group name", group.name);
+  if (name === null || !name.trim()) return;
+  try {
+    await api(`api/groups/${encodeURIComponent(group.id)}`,
+              { method: "PATCH", body: JSON.stringify({ name: name.trim() }) });
+    await refresh();
+  } catch (err) {
+    toast(`Could not rename it: ${err.message || err}`, true);
+  }
+}
+
+async function deleteGroup(group) {
+  try {
+    await api(`api/groups/${encodeURIComponent(group.id)}/delete`, { method: "POST" });
+    await refresh();
+    toast(`Deleted ${group.name}. The sessions are untouched.`);
+  } catch (err) {
+    toast(`Could not delete it: ${err.message || err}`, true);
+  }
+}
+
+/* Putting a session in a group, from the session's own menu, which is where
+ * you are when you decide it belongs in one. */
+function addToGroup(s) {
+  const all = groups();
+  const rows = all.map((g) => [
+    g.name + ((g.members || []).some((m) => m.session === s.id) ? "  ·  already in it" : ""),
+    () => joinGroup(g.id, s),
+  ]);
+  rows.push(["New group from this session…", () => newGroupFrom(s)]);
+  showMenu(lastMenuEvent, rows);
+}
+
+async function joinGroup(groupId, s) {
+  try {
+    await api(`api/groups/${encodeURIComponent(groupId)}/add`,
+              { method: "POST", body: JSON.stringify({ session: s.id }) });
+    await refresh();
+  } catch (err) {
+    toast(`Could not add it: ${err.message || err}`, true);
+  }
+}
+
+async function newGroupFrom(s) {
+  const name = prompt("Name the group", s.name);
+  if (name === null || !name.trim()) return;
+  try {
+    const made = await api("api/groups", {
+      method: "POST", body: JSON.stringify({ name: name.trim() }),
+    });
+    await joinGroup(made.id, s);
+    toast(`${made.name}: add more sessions from their menus`);
+  } catch (err) {
+    toast(`Could not create it: ${err.message || err}`, true);
+  }
+}
+
+async function leaveGroup(groupId, s) {
+  try {
+    await api(`api/groups/${encodeURIComponent(groupId)}/remove`,
+              { method: "POST", body: JSON.stringify({ session: s.id }) });
+    await refresh();
+  } catch (err) {
+    toast(`Could not remove it: ${err.message || err}`, true);
+  }
 }
 
 function cliColor(cliId, shipped) {
@@ -1014,9 +1235,14 @@ async function sendKey(id, key, label) {
   }
 }
 
+/* When the last poll landed. The pane size label needs it to tell a stale
+ * reading from somebody else's decision, and nothing else has the timestamp. */
+let lastPollAt = 0;
+
 async function refresh() {
   try {
     state = await api("api/state");
+    lastPollAt = Date.now();
     pollFailures = 0;
     $("#offline").hidden = true;
   } catch (err) {
@@ -1032,16 +1258,20 @@ async function refresh() {
   noteBusy(state.sessions);   // before anything renders a work state
   noticeFinished(state.sessions.filter((x) => openTabs.includes(x.id)));
   renderTree();
+  renderGroups();
   renderTabs();
   renderStats();
+  renderPlan();
   renderInbox();
   renderBoard();   // no-op unless the board is open
   updateTitle();
   renderServices();
   renderGuard();
   renderVersion();
+  renderSidePanel();   // a no-op while the panel is shut
   loadOrphans();
   reclaimSize();
+  holdWindow(!document.hidden);
   // First load pulls history in so the sidebar is complete without anyone
   // having to open the palette to trigger it.
   if (!resumable) loadResumable().then(renderTree);
@@ -1228,6 +1458,17 @@ function saveWorkspaceSetting(patch) {
     .catch(() => {});
 }
 
+function fmtUptime(seconds) {
+  const s = Math.max(0, seconds | 0);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m`;
+  return `${s}s`;
+}
+
 function paintStat(id, percent, value, title) {
   const el = $("#" + id);
   if (!el) return;
@@ -1238,6 +1479,85 @@ function paintStat(id, percent, value, title) {
   if (title) el.title = title;
 }
 
+/* What is left of the plan, for the CLI in front.
+ *
+ * Fetched on its own slow timer rather than riding the 3s poll: the windows it
+ * reports move over hours, and the panel is a guest on somebody else's API.
+ * The server caches too, so a dozen open tabs are still one request.
+ *
+ * Shown only for a CLI that declares a probe, which today is the ones whose
+ * vendor publishes one. Everything else gets no column at all rather than a
+ * row of dashes, the same way the status bar treats a missing sensor. */
+let planUsage = [];
+
+async function loadUsage() {
+  try {
+    const payload = await api("api/usage");
+    planUsage = payload.usage || [];
+  } catch (err) {
+    planUsage = [];      // offline, or the setting is off; say nothing
+  }
+  renderPlan();
+}
+
+/* "in 2h" / "in 40m" / "now". A reset an hour out is the number that decides
+ * whether to keep going or stop, so it is worth more than the timestamp. */
+function untilReset(iso) {
+  const at = Date.parse(iso || "");
+  if (!at) return "";
+  const mins = Math.round((at - Date.now()) / 60000);
+  if (mins <= 0) return "now";
+  if (mins < 60) return `in ${mins}m`;
+  const hours = mins / 60;
+  return hours < 24 ? `in ${Math.round(hours)}h` : `in ${Math.round(hours / 24)}d`;
+}
+
+/* A meter each, not a line of text.
+ *
+ * This is the reading that changes what you do next: a week that is 90% gone
+ * means stop starting things. Buried in the machine stats as "PLAN 5H 5%" it
+ * read as one more number beside disk free, which is not what it is. A short
+ * bar is legible at a glance from across the desk, and the exact figure is
+ * still there for anyone who wants it. */
+function planLevel(percent) {
+  return percent >= 90 ? "err" : percent >= 75 ? "wait" : "ok";
+}
+
+function renderPlan() {
+  const el = $("#plan");
+  if (!el) return;
+  const s = activeId ? session(activeId) : null;
+  const found = s && planUsage.find((u) => u.cli === s.cli);
+  const windows = (found && found.windows) || [];
+  el.hidden = !windows.length;
+  if (!windows.length) { el.replaceChildren(); return; }
+
+  el.replaceChildren();
+  for (const w of windows) {
+    const pct = Math.round(w.percent);
+    const when = untilReset(w.resets_at);
+    const meter = mk("span", "plan-w");
+    meter.dataset.level = planLevel(w.percent);
+
+    const key = mk("b", "plan-k");
+    key.textContent = w.label;
+    const track = mk("span", "plan-track");
+    const fill = mk("i", "plan-fill");
+    // scaleX rather than width: the bar sits in a bottom bar beside a dozen
+    // PTYs, and a transform is the one thing that cannot make the browser
+    // lay the row out again.
+    fill.style.transform = `scaleX(${Math.max(w.percent, 0.5) / 100})`;
+    track.appendChild(fill);
+    const value = mk("span", "plan-v");
+    value.textContent = pct + "%";
+
+    meter.append(key, track, value);
+    meter.title = `${w.label}: ${pct}% used`
+      + (when ? `, resets ${when}` : "")
+      + `\nAsked of ${s.cli_label || s.cli} directly, at most once every few minutes.`;
+    el.appendChild(meter);
+  }
+}
 function renderStats() {
   const st = state.stats || {};
   const gb = (mb) => (Math.round((mb || 0) / 1024 * 10) / 10).toFixed(1);
@@ -1261,8 +1581,9 @@ function renderStats() {
             Number(disk.free_gb ?? 0).toFixed(1) + "G free",
             `disk ${disk.percent ?? 0}% used`);
 
-  // Any swap in use means memory pressure already happened. The column stays
-  // even at zero, so it appearing does not shove the tabs sideways.
+  // Any swap in use means memory pressure already happened. A box using none
+  // does not get a column for it — the row closes up rather than holding a
+  // blank the width of "SWAP —.–G".
   const swap = st.swap || {};
   const swapEl = $("#swap");
   if (swapEl) {
@@ -1271,6 +1592,21 @@ function renderStats() {
               gb(swap.used_mb) + "G",
               `swap ${swap.percent ?? 0}% used — memory pressure has already happened`);
   }
+
+  // Temperature, only when the machine actually has a sensor. Like swap, the
+  // column is gone rather than blank when there is nothing honest to say,
+  // which on most VMs is always.
+  const temp = st.temp || {};
+  const tempEl = $("#temp");
+  if (tempEl) {
+    const c = typeof temp.c === "number" ? temp.c : null;
+    tempEl.classList.toggle("is-off", c === null);
+    if (c !== null) paintStat("temp", c, Math.round(c) + "°C", `${c}°C, hottest sensor`);
+  }
+
+  // How long the box has been up. Always available on Linux, so it always shows.
+  const up = (st.uptime && st.uptime.seconds) || 0;
+  paintStat("uptime", 0, fmtUptime(up), `up ${fmtUptime(up)} since boot`);
 
   const n = st.clients ?? 0;
   const tabs = openTabs.length;
@@ -1540,8 +1876,11 @@ function renderTree() {
   const query = $("#q").value.trim().toLowerCase();
   tree.innerHTML = "";
 
+  // A typed search overrides the running-only filter: you search to find a
+  // session to open, and the one you want is often a stopped one. With no
+  // query, the filter applies as before.
   const matches = (s) =>
-    (!activeOnly || s.alive)
+    (!activeOnly || s.alive || Boolean(query))
     && (!query || s.name.toLowerCase().includes(query)
       || s.cwd.toLowerCase().includes(query)
       || (s.branch || "").toLowerCase().includes(query));
@@ -1566,7 +1905,10 @@ function renderTree() {
    * you make afterwards — so it has to be somewhere you can see without
    * scrolling past every folder you already have. */
   const unfiled = live.filter((s) => !running.includes(s) && !filed(s));
-  if (unfiled.length) {
+  // With a query up, Ungrouped is drawn even when nothing live is in it: the
+  // thing being searched for is often a session that was closed, and its
+  // history row has nowhere else to appear.
+  if (unfiled.length || query) {
     groups.push({ id: "__unfiled", name: "Ungrouped", color: "#8b8b8b",
                   collapsed: viewsCollapsed.has("__unfiled"), sessions: unfiled });
   }
@@ -1591,7 +1933,12 @@ function renderTree() {
     // Pinned sessions float to the top of their group, above recency. A stable
     // sort keeps the order within the pinned, and within the rest.
     shown.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-    if ((query || activeOnly) && !shown.length) continue;
+    /* History counts towards whether this group has anything to show. Worked
+     * out here rather than after the skip below, because a search whose only
+     * match is a session you closed yesterday used to drop the whole group
+     * before its history was ever consulted, and the search came up empty. */
+    const hist = group.collapsed && !query ? [] : historyRows(group, query);
+    if ((query || activeOnly) && !shown.length && !hist.length) continue;
 
     const head = document.createElement("div");
     /* A folder holding the session you are looking at says so, whether it is
@@ -1645,7 +1992,7 @@ function renderTree() {
 
     if (group.collapsed && !query) continue;
     for (const s of shown) tree.appendChild(sessionRow(s));
-    for (const row of historyRows(group, query)) tree.appendChild(row);
+    for (const row of hist) tree.appendChild(row);
   }
 
   const dots = $("#railDots");
@@ -2088,8 +2435,12 @@ function showMenu(ev, items) {
   }
   menu.hidden = false;
   menu.style.setProperty("--menu-origin", "top left");
-  menu.style.left = Math.min(ev.clientX, innerWidth - 170) + "px";
-  menu.style.top = Math.min(ev.clientY, innerHeight - menu.offsetHeight - 8) + "px";
+  // Floored at the top edge as well as clamped to the bottom one. Without the
+  // floor a menu taller than the window is placed at a negative offset, which
+  // hides the first rows above the screen -- and since the stylesheet now
+  // makes it scroll, hiding them is no longer even necessary.
+  menu.style.left = Math.max(8, Math.min(ev.clientX, innerWidth - 170)) + "px";
+  menu.style.top = Math.max(8, Math.min(ev.clientY, innerHeight - menu.offsetHeight - 8)) + "px";
 }
 
 /* The destructive item names what is actually there to destroy. Offering
@@ -2100,13 +2451,21 @@ function sessionMenu(ev, s) {
   const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
   showMenu(ev, [
     [s.alive ? "Open" : "Start again", () => openSession(s.id)],
+    ["Open a file", () => openFileSheet(s.id, s.cwd || ".")],
+    ["Attach a file…", () => { openSession(s.id).then(pickFiles); }],
     ...(cliHasTranscript(s.cli) ? [["View conversation", () => openTranscript(s)]] : []),
     ...(cliHasTranscript(s.cli) ? [["Usage", () => openUsage(s)]] : []),
     ...(s.branch || s.dirty ? [["Review changes", () => openDiff(s)]] : []),
     ...(s.branch ? [["Checkpoint — save HEAD + current diff", () => checkpointSession(s)]] : []),
     ["Rename", () => renameSession(s)],
     ["Notes", () => openNote(s)],
-    ["Duplicate — same directory, fresh CLI", () => duplicateSession(s)],
+    ["Duplicate (same CLI, same directory)", () => duplicateSession(s)],
+    ...(otherClis(s).length
+      ? [["Open in another CLI…", () => openInOtherCli(s)]] : []),
+    ["Add to a working group…", () => addToGroup(s)],
+    ...(groupOf(s.id)
+      ? [[`Take out of ${groupOf(s.id).name}`, () => leaveGroup(groupOf(s.id).id, s)]]
+      : []),
     /* Moving a session between folders was drag-and-drop and nothing else.
      *
      * There is no drag on a phone, which made half the sidebar's organisation
@@ -2204,19 +2563,21 @@ function nextLine(row) {
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_SLOP = 10;   // px of drift still counted as holding still
 
-function wireTouchMenus() {
-  const tree = $("#tree");
+/* Takes the container and how to find a pressable row in it, so the sidebar's
+ * sessions and its working groups share one implementation.
+ *
+ * Groups had none of this until 2026-09-03: the rows carried `oncontextmenu`
+ * and nothing else, so from a phone you could open a group and had no way to
+ * rename or delete one. A menu reachable only by right-click is a menu a
+ * phone does not have, which is the rule this repo already writes down. */
+function wireTouchMenus(root, pressTarget) {
+  if (!root) return;
+  const tree = root;
   let timer = null;
   let from = null;
   let fired = false;
 
   const cancel = () => { clearTimeout(timer); timer = null; from = null; };
-
-  const pressTarget = (node) => {
-    const head = node.closest(".folder-head");
-    if (head && head.querySelector(".folder-edit")) return head;
-    return node.closest(".session");
-  };
 
   tree.addEventListener("touchstart", (ev) => {
     cancel();
@@ -2259,6 +2620,43 @@ function wireTouchMenus() {
   }, { passive: false });
 
   tree.addEventListener("touchcancel", cancel, { passive: true });
+}
+
+function wireTermTouchMenus() {
+  const host = $("#terminal");
+  if (!host) return;
+  let timer = null;
+  let from = null;
+  let fired = false;
+  const cancel = () => { clearTimeout(timer); timer = null; from = null; };
+  host.addEventListener("touchstart", (ev) => {
+    cancel();
+    if (ev.touches.length !== 1) return;
+    const touch = ev.touches[0];
+    from = { x: touch.clientX, y: touch.clientY };
+    fired = false;
+    timer = setTimeout(() => {
+      timer = null;
+      if (!from) return;
+      fired = true;
+      if (navigator.vibrate) navigator.vibrate(12);
+      host.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true, cancelable: true,
+        clientX: from.x, clientY: from.y,
+      }));
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+  host.addEventListener("touchmove", (ev) => {
+    if (!from || !ev.touches.length) return;
+    const touch = ev.touches[0];
+    if (Math.abs(touch.clientX - from.x) > LONG_PRESS_SLOP
+        || Math.abs(touch.clientY - from.y) > LONG_PRESS_SLOP) cancel();
+  }, { passive: true });
+  host.addEventListener("touchend", (ev) => {
+    if (fired) { ev.preventDefault(); fired = false; }
+    cancel();
+  }, { passive: false });
+  host.addEventListener("touchcancel", cancel, { passive: true });
 }
 
 const PALETTE = [
@@ -2332,6 +2730,82 @@ function folderMenu(ev, folder) {
  * source's cwd is (a worktree included); making a *new* worktree is the other
  * gesture, in New Session. The copied name is a starting point — auto-title
  * renames it from the first prompt if it was still a generic one. */
+/* Filing a session, and taking it out again.
+ *
+ * Both of these went with the same 0.44.0 edit, so "Move to folder…" and
+ * "Take out of its folder" have each been a ReferenceError since. Restored
+ * together because the first calls the second.
+ */
+async function setFolder(s, folder) {
+  await api("api/sessions/" + encodeURIComponent(s.id), {
+    method: "PATCH", body: JSON.stringify({ folder }),
+  });
+  const where = folder
+    ? ((state.folders || []).find((f) => f.id === folder) || {}).name || "a folder"
+    : "Ungrouped";
+  toast(`${s.name} moved to ${where}`);
+  refresh();
+}
+
+/* Filing a session from the menu.
+ *
+ * Nothing caught either of these because the call is inside a click handler,
+ * where a throw is invisible unless a console happens to be open. smoke.py now
+ * reads every arrow-wrapped call in app.js and fails on one that resolves to
+ * nothing, which is the cheap version of the test that would have caught it.
+ */
+function moveToFolder(s) {
+  const folders = (state.folders || []).filter((f) => f.id.startsWith("f-"));
+  showMenu(lastMenuEvent, folders.map((f) => [
+    f.name + (f.id === s.folder ? "  ·  where it is now" : ""),
+    () => { if (f.id !== s.folder) setFolder(s, f.id); },
+  ]));
+}
+
+/* Every other installed CLI, which is also what decides whether the menu
+ * offers the item at all. One CLI on the box means there is nothing to open
+ * it in, and an item that can only disappoint is worse than no item. */
+function otherClis(s) {
+  return (state.clis || []).filter((c) => c.installed && c.id !== s.cli);
+}
+
+/* The same work, in a different tool.
+ *
+ * Distinct from Duplicate, which starts a second instance of the same CLI.
+ * This starts a different one in the same directory under the same name, so
+ * the two sit side by side as tabs reading the same thing, told apart by the
+ * CLI marker rather than by a suffix nobody asked for. Handing the same job to
+ * Codex that Claude has been chewing on is the point, and it should not mean
+ * retyping a path.
+ *
+ * `mode` is deliberately not carried across. A mode is something a CLI
+ * declares in clis.toml, so the source's mode id means nothing to the target
+ * and would either be rejected or, worse, silently match something unrelated.
+ * The new session takes the target CLI's own default. */
+function openInOtherCli(s) {
+  const others = otherClis(s);
+  if (!others.length) return;
+  showMenu(lastMenuEvent, others.map((c) => [c.label || c.id, () => cloneToCli(s, c)]));
+}
+
+async function cloneToCli(s, cli) {
+  const what = cli.label || cli.id;
+  try {
+    const created = await api("api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        cli: cli.id, cwd: s.cwd, name: s.name,
+        folder: s.folder || undefined,
+      }),
+    });
+    await refresh();
+    openSession(created.id);
+    toast(`“${s.name}” opened in ${what}`);
+  } catch (err) {
+    toast(`Could not open it in ${what}: ${err.message || err}`, true);
+  }
+}
+
 async function duplicateSession(s) {
   try {
     const created = await api("api/sessions", {
@@ -2379,49 +2853,775 @@ async function exportScrollback(s) {
   }
 }
 
-/* A per-session note: a scratchpad that persists as a sidecar .md under the
- * panel's home, so context, a to-do, or where you left off survives a reload
- * and a restart without landing in the project's git status. */
-let _noteFor = null;
+/* =========================================================================
+ * Side panel — a docked, per-session feature rail.
+ *
+ * A thin always-on icon rail on the right edge opens a panel to a feature for
+ * the session in front: Notes, Git, Session info, Export. Collapsed by default,
+ * and while it is shut nothing in here runs — an idle panel costs the browser
+ * nothing. Which pane is open and how wide the panel is are this browser's
+ * business, the same rule that keeps the sidebar width and the tab order local,
+ * so they live in localStorage, not on the server.
+ *
+ * Cost discipline: the panel re-renders on the 3s poll and on a tab switch, but
+ * the Notes pane rebuilds its outline only when the session or pane changes —
+ * a poll just refreshes the "due" chips, so typing is never interrupted and the
+ * DOM is not thrown away every three seconds. The one heavy step, reflowing the
+ * terminal when the panel opens or closes, is debounced.
+ * ===================================================================== */
+
+const PANE_MIN = 240, PANE_MAX = 760, PANE_DEFAULT = 320;
+const PANE_LABEL = { notes: "Notes", git: "Git", info: "Session", export: "Export" };
+const PANE_ICON = { notes: "notebook", git: "git-branch", info: "info", export: "download" };
+
+let panelPane = null;          // open pane id, or null when the panel is shut
+let panelWidth = PANE_DEFAULT;
+let panelKey = "";             // "pane:sessionId" of what is drawn right now
+const notesCache = new Map();  // session id -> items[] (last known, for instant redraw)
+
+const supportsPlaintext = (() => {
+  try {
+    const d = document.createElement("div");
+    d.contentEditable = "plaintext-only";
+    return d.contentEditable === "plaintext-only";
+  } catch (err) { return false; }
+})();
+
+function nowSec() { return Math.floor(Date.now() / 1000); }
+function noteId() { return "n" + Math.random().toString(16).slice(2, 12); }
+
+function panelLoad() {
+  try {
+    const w = parseInt(localStorage.getItem("clique.panel.w"), 10);
+    if (w >= PANE_MIN && w <= PANE_MAX) panelWidth = w;
+    const p = localStorage.getItem("clique.panel.pane");
+    if (p && PANE_LABEL[p]) panelPane = p;
+  } catch (err) { /* private mode: the defaults are fine */ }
+  document.documentElement.style.setProperty("--panel-w", panelWidth + "px");
+}
+function panelSave() {
+  try {
+    localStorage.setItem("clique.panel.w", String(panelWidth));
+    if (panelPane) localStorage.setItem("clique.panel.pane", panelPane);
+    else localStorage.removeItem("clique.panel.pane");
+  } catch (err) { /* nothing to persist to */ }
+}
+
+function togglePanel(pane) {
+  if (panelPane === pane || (!pane && panelPane)) return closePanel();
+  openPanel(pane || panelPane || "notes");
+}
+function openPanel(pane) {
+  if (!PANE_LABEL[pane]) pane = "notes";
+  const was = Boolean(panelPane);
+  panelPane = pane;
+  panelSave();
+  renderSidePanel();
+  if (!was) refitSoon();   // the pane just took width off the terminal
+}
+function closePanel() {
+  if (!panelPane) return;
+  panelPane = null;
+  panelSave();
+  renderSidePanel();
+  refitSoon();
+}
+
+/* Run something once, after the browser has finished laying this change out.
+ *
+ * Two frames, not a timeout. A ResizeObserver delivers its callbacks inside
+ * the same rendering update as the frame that dirtied the layout, and *after*
+ * that frame's requestAnimationFrame callbacks — so the next frame is the
+ * first moment everything that measures the pane has already run. That is a
+ * property of the event loop; the 80ms this replaces was a guess, needlessly
+ * slow on a fast machine and not reliably long enough on a slow one. Keyed, so
+ * a second toggle replaces the first instead of queueing behind it. */
+var _layoutJobs = new Map();
+function afterLayout(key, fn) {
+  cancelAnimationFrame(_layoutJobs.get(key) || 0);
+  _layoutJobs.set(key, requestAnimationFrame(() => {
+    _layoutJobs.set(key, requestAnimationFrame(() => {
+      _layoutJobs.delete(key);
+      try { fn(); } catch (err) { /* nothing laid out yet */ }
+    }));
+  }));
+}
+
+/* The pane changed shape. Measure it, tell tmux, and ask for a frame back. */
+function settlePane() {
+  packTabs();
+  refitAll();
+  reclaimSize(document.hasFocus());
+  repaintPane();
+  renderSessionLine();   // the pane's size just changed, and the strip says so
+}
+
+/* Ask tmux to repaint this browser's own client now.
+ *
+ * tmux draws a client when something it tracks changes. A pane handed back the
+ * same grid it already had changes nothing tmux can see, so whatever the
+ * terminal last drew stays on screen until a keystroke provokes a frame — the
+ * "it does not redraw until you type" half of this. One client, the one this
+ * socket owns; nobody else's window moves. */
+function repaintPane() {
+  if (document.hidden) return;
+  const entry = terms.get(activeId);
+  if (!entry || !entry.ws || entry.ws.readyState !== 1) return;
+  try {
+    entry.ws.send(JSON.stringify({ type: "refresh" }));
+  } catch (err) { /* the socket went while we were measuring */ }
+}
+
+/* Reflow tmux once the layout has settled, not on every pixel of a drag. */
+function refitSoon() {
+  // Opening or closing the panel changes the pane's width, and fitting before
+  // layout has caught up computes a boxed CLI's zoom against the old width, so
+  // it comes back scaled wrong with dead space or spilling under the panel.
+  afterLayout("pane", settlePane);
+}
+
+function paintRail() {
+  for (const btn of document.querySelectorAll(".railr-btn")) {
+    btn.classList.toggle("active", btn.dataset.pane === panelPane);
+  }
+  const notesBtn = document.querySelector('.railr-btn[data-pane="notes"]');
+  if (notesBtn) {
+    const items = notesCache.get(activeId);
+    notesBtn.dataset.flag = items && notesAnyDue(items) ? "1" : "0";
+  }
+}
+
+function renderSidePanel() {
+  paintRail();
+  const wrap = $("#sidepanel");
+  const rez = $("#panelResizer");
+  if (!wrap) return;
+  if (!panelPane) {
+    wrap.hidden = true;
+    if (rez) rez.hidden = true;
+    panelKey = "";
+    return;
+  }
+  wrap.hidden = false;
+  if (rez) rez.hidden = false;
+  const use = $("#panelIcon");
+  if (use) use.setAttribute("href", "#i-" + (PANE_ICON[panelPane] || "notebook"));
+  $("#panelTitle").textContent = PANE_LABEL[panelPane] || "";
+  const s = activeId ? session(activeId) : null;
+  $("#panelFor").textContent = s ? s.name : "no session open";
+  const body = $("#panelBody");
+  const key = panelPane + ":" + (activeId || "");
+  const fresh = key !== panelKey;
+  panelKey = key;
+  if (panelPane === "notes") return renderNotesPane(body, s, fresh);
+  if (panelPane === "git") return renderGitPane(body, s);
+  if (panelPane === "info") return renderInfoPane(body, s);
+  if (panelPane === "export") return renderExportPane(body, s);
+}
+
+/* -------------------------------------------------------- little builders */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function paneEmpty(text) { return mk("p", "pane-empty", text); }
+function paneP(text) { return mk("p", "pane-hint", text); }
+function kvRow(k, v, cls) {
+  const row = mk("div", "kv");
+  row.append(mk("span", "k", k), mk("span", "v" + (cls ? " " + cls : ""), v));
+  return row;
+}
+function paneButton(label, iconName, fn) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "pane-btn";
+  b.innerHTML = icon(iconName) + `<span>${escapeHtml(label)}</span>`;
+  b.onclick = fn;
+  return b;
+}
+
+/* ----------------------------------------------------------- Notes pane */
+
+let notesItems = [];           // the working outline for the session in front
+let notesForId = null;
+let notesHideDone = false;
+let _notesSaveTimer = null;
+let _notesPending = null;      // {id, items} captured when the save was queued
+let _notesLoadToken = 0;
+
+/* The menu/palette entry: bring the panel up on Notes for a session, switching
+ * to that tab first because the panel always follows the session in front. */
 async function openNote(s) {
+  if (s && s.id !== activeId) await openSession(s.id);
+  openPanel("notes");
+}
+
+function renderNotesPane(body, s, fresh) {
+  if (!s) {
+    notesForId = null;
+    body.replaceChildren(paneEmpty("Open a session to take notes for it."));
+    return;
+  }
+  if (!fresh) { refreshNotesDue(); return; }
+  buildNotes(body, s, notesCache.get(s.id) || []);
+  loadNotes(s.id);
+}
+
+async function loadNotes(id) {
+  const token = ++_notesLoadToken;
+  try {
+    const r = await api(`api/sessions/${encodeURIComponent(id)}/notes`);
+    if (token !== _notesLoadToken) return;                 // a newer load won
+    if (panelPane !== "notes" || activeId !== id) return;  // switched away
+    if (_notesPending && _notesPending.id === id) return;    // local edit is newer
+    notesCache.set(id, r.items || []);
+    buildNotes($("#panelBody"), session(id), r.items || []);
+  } catch (err) {
+    if (token === _notesLoadToken && panelPane === "notes" && activeId === id) {
+      $("#panelBody").replaceChildren(
+        paneEmpty("Could not load notes: " + (err.message || err)));
+    }
+  }
+}
+
+function buildNotes(body, s, items) {
+  notesItems = items;
+  notesForId = s.id;
+  body.replaceChildren();
+  const tools = mk("div", "pane-tools");
+  tools.append(paneButton("Add note", "plus", () => {
+    const it = noteNew("");
+    notesItems.push(it);
+    queueSaveNotes();
+    rebuildNotes({ focusId: it.id });
+  }));
+  const hide = paneButton(notesHideDone ? "Show done" : "Hide done", "filter",
+    () => { notesHideDone = !notesHideDone; rebuildNotes(); });
+  if (notesHideDone) hide.classList.add("on");
+  tools.append(hide);
+  body.append(tools);
+  const list = mk("div", "notes-list");
+  list.id = "notesList";
+  body.append(list);
+  paintNotesList(list);
+  body.append(paneP(
+    "Enter starts a new line, Tab indents it, the arrow sends a line to the "
+    + "terminal, and the clock sets a reminder."));
+}
+
+function rebuildNotes(opts = {}) {
+  const list = $("#notesList");
+  if (!list) return;
+  paintNotesList(list);
+  if (opts.focusId) focusNoteText(opts.focusId);
+  paintRail();
+}
+
+function paintNotesList(list) {
+  const kids = [];
+  for (const it of notesItems) {
+    const node = noteRowEl(it);
+    if (node) kids.push(node);
+  }
+  if (!kids.length) {
+    kids.push(paneEmpty("No notes yet. Add one to start a checklist for this session."));
+  }
+  list.replaceChildren(...kids);
+}
+
+function noteNew(text) {
+  const t = nowSec();
+  return {
+    id: noteId(), text: text || "", done: false, collapsed: false,
+    created: t, updated: t, remindAt: null, reminded: false, children: [],
+  };
+}
+
+function noteRowEl(item) {
+  if (notesHideDone && item.done) return null;
+  const wrap = mk("div", "note-item" + (item.done ? " done" : ""));
+  wrap.dataset.id = item.id;
+  const row = mk("div", "note-row");
+
+  const hasKids = Boolean(item.children && item.children.length);
+  const caret = document.createElement("button");
+  caret.type = "button";
+  caret.className = "note-caret" + (hasKids ? "" : " leaf");
+  caret.innerHTML = icon(item.collapsed ? "chevron-right" : "chevron-down");
+  caret.title = item.collapsed ? "Expand" : "Collapse";
+  if (hasKids) caret.onclick = () => toggleCollapse(item.id);
+
+  const check = document.createElement("button");
+  check.type = "button";
+  check.className = "note-check" + (item.done ? " done" : "");
+  check.title = item.done ? "Mark not done" : "Mark done";
+  check.onclick = () => toggleDone(item.id);
+
+  const text = mk("div", "note-text");
+  text.contentEditable = supportsPlaintext ? "plaintext-only" : "true";
+  text.spellcheck = false;
+  text.dataset.placeholder = "New note";
+  text.textContent = item.text || "";
+  wireNoteText(text, item);
+
+  const actions = mk("div", "note-actions");
+  actions.append(
+    noteAct("arrow-right", "Send this line to the terminal", () => sendNoteToTerminal(item)),
+    noteAct("clock", "Set a reminder", (ev) => openRemind(ev, item)),
+    noteAct("plus", "Add a sub-note", () => addChild(item.id)),
+    noteAct("trash", "Delete (its sub-notes move up)", () => removeNote(item.id)),
+  );
+
+  row.append(caret, check, text, actions);
+  wrap.append(row);
+
+  const meta = noteMeta(item);
+  if (meta) wrap.append(meta);
+
+  if (hasKids && !item.collapsed) {
+    const kids = mk("div", "note-children");
+    for (const c of item.children) {
+      const el = noteRowEl(c);
+      if (el) kids.append(el);
+    }
+    wrap.append(kids);
+  }
+  return wrap;
+}
+
+function noteAct(iconName, title, fn) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "note-act";
+  b.title = title;
+  b.innerHTML = icon(iconName);
+  b.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); fn(ev); };
+  return b;
+}
+
+function noteMeta(item) {
+  const meta = mk("div", "note-meta");
+  let any = false;
+  if (item.remindAt) {
+    const chip = mk("span", "note-remind");
+    chip.dataset.at = String(item.remindAt);
+    chip.dataset.reminded = item.reminded ? "1" : "0";
+    if (item.reminded) chip.classList.add("reminded");
+    if (!item.done && !item.reminded && item.remindAt <= nowSec()) chip.classList.add("due");
+    chip.innerHTML = icon("clock") + `<span>${escapeHtml(fmtWhen(item.remindAt))}</span>`;
+    chip.title = "Reminder — click to change";
+    chip.onclick = (ev) => openRemind(ev, item);
+    meta.append(chip);
+    any = true;
+  }
+  if (item.updated) {
+    const t = mk("span", "note-time", "edited " + (ago(item.updated) || "now"));
+    if (item.created) t.title = "Created " + fmtWhen(item.created);
+    meta.append(t);
+    any = true;
+  }
+  return any ? meta : null;
+}
+
+function wireNoteText(elm, item) {
+  elm.oninput = () => {
+    item.text = elm.textContent;
+    item.updated = nowSec();
+    queueSaveNotes();
+  };
+  elm.onkeydown = (ev) => {
+    if (ev.key === "Enter" && !ev.shiftKey) {
+      ev.preventDefault();
+      const id = addSiblingAfter(item.id);
+      if (id) rebuildNotes({ focusId: id });
+    } else if (ev.key === "Tab") {
+      ev.preventDefault();
+      const ok = ev.shiftKey ? outdent(item.id) : indent(item.id);
+      if (ok) rebuildNotes({ focusId: item.id });
+    } else if (ev.key === "Backspace" && elm.textContent === "") {
+      ev.preventDefault();
+      const prev = prevFocusId(item.id);
+      removeNote(item.id);
+      if (prev) focusNoteText(prev);
+    }
+  };
+  elm.onblur = () => flushSaveNotes();
+}
+
+/* ---- outline operations, all on the in-memory tree, then a debounced save ---- */
+
+function noteFind(id, list = notesItems, parent = null) {
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].id === id) return { item: list[i], list, index: i, parent };
+    const deep = noteFind(id, list[i].children || [], list[i]);
+    if (deep) return deep;
+  }
+  return null;
+}
+function addSiblingAfter(id) {
+  const f = noteFind(id);
+  if (!f) return null;
+  const it = noteNew("");
+  f.list.splice(f.index + 1, 0, it);
+  queueSaveNotes();
+  return it.id;
+}
+function addChild(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  const it = noteNew("");
+  f.item.children.push(it);
+  f.item.collapsed = false;
+  queueSaveNotes();
+  rebuildNotes({ focusId: it.id });
+}
+function indent(id) {
+  const f = noteFind(id);
+  if (!f || f.index === 0) return false;     // nothing to become a child of
+  const prev = f.list[f.index - 1];
+  f.list.splice(f.index, 1);
+  (prev.children = prev.children || []).push(f.item);
+  prev.collapsed = false;
+  queueSaveNotes();
+  return true;
+}
+function outdent(id) {
+  const f = noteFind(id);
+  if (!f || !f.parent) return false;          // already at the top level
+  const pf = noteFind(f.parent.id);
+  f.list.splice(f.index, 1);
+  pf.list.splice(pf.index + 1, 0, f.item);
+  queueSaveNotes();
+  return true;
+}
+function removeNote(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  // A delete never silently drops a branch: children move up into its place.
+  f.list.splice(f.index, 1, ...(f.item.children || []));
+  queueSaveNotes();
+  rebuildNotes();
+}
+function toggleDone(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  f.item.done = !f.item.done;
+  f.item.updated = nowSec();
+  queueSaveNotes();
+  rebuildNotes();
+}
+function toggleCollapse(id) {
+  const f = noteFind(id);
+  if (!f) return;
+  f.item.collapsed = !f.item.collapsed;
+  queueSaveNotes();
+  rebuildNotes();
+}
+function setReminder(id, epoch) {
+  const f = noteFind(id);
+  if (!f) return;
+  f.item.remindAt = epoch;
+  f.item.reminded = false;         // a new (or changed) time is a fresh reminder
+  f.item.updated = nowSec();
+  queueSaveNotes();
+  rebuildNotes();
+}
+function prevFocusId(id) {
+  const f = noteFind(id);
+  if (!f) return null;
+  if (f.index > 0) return f.list[f.index - 1].id;
+  return f.parent ? f.parent.id : null;
+}
+
+function focusNoteText(id) {
+  const sel = `.note-item[data-id="${cssEscape(id)}"] > .note-row > .note-text`;
+  const el = document.querySelector(sel);
+  if (!el) return;
+  el.focus();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const s = window.getSelection();
+  s.removeAllRanges();
+  s.addRange(range);
+}
+function cssEscape(v) {
+  return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, "\\$&");
+}
+
+function refreshNotesDue() {
+  if (notesForId !== activeId) return;    // stale; a fresh render will fix it
+  const now = nowSec();
+  for (const chip of document.querySelectorAll("#panelBody .note-remind")) {
+    const at = parseInt(chip.dataset.at, 10) || 0;
+    const done = chip.closest(".note-item").classList.contains("done");
+    const reminded = chip.dataset.reminded === "1";
+    chip.classList.toggle("due", at > 0 && !done && !reminded && at <= now);
+  }
+  paintRail();
+}
+
+function notesAnyDue(items) {
+  const now = nowSec();
+  const walk = (list) => (list || []).some((it) =>
+    (it.remindAt && !it.done && !it.reminded && it.remindAt <= now) || walk(it.children));
+  return walk(items);
+}
+
+async function sendNoteToTerminal(item) {
+  const s = session(activeId);
   if (!s) return;
-  _noteFor = s.id;
-  $("#noteTitle").textContent = `Notes: ${s.name}`;
-  const ta = $("#noteText");
-  ta.value = "";
-  $("#noteStatus").textContent = "Loading...";
-  $("#noteSheet").hidden = false;
-  ta.focus();
+  const text = (item.text || "").trim();
+  if (!text) { toast("That note is empty", true); return; }
   try {
-    const r = await api(`api/sessions/${encodeURIComponent(s.id)}/note`);
-    if (_noteFor === s.id) { ta.value = r.note || ""; $("#noteStatus").textContent = ""; }
-  } catch (err) {
-    if (_noteFor === s.id) $("#noteStatus").textContent = "Could not load";
-  }
-}
-async function saveNote(andClose) {
-  const id = _noteFor;
-  if (!id) return;
-  const note = $("#noteText").value;
-  try {
-    await api(`api/sessions/${encodeURIComponent(id)}/note`, {
-      method: "POST", body: JSON.stringify({ note }),
+    await api(`api/sessions/${encodeURIComponent(s.id)}/send`, {
+      method: "POST", body: JSON.stringify({ text, enter: false }),
     });
-    $("#noteStatus").textContent = "Saved";
-    if (andClose) closeNote();
+    toast(`Sent to ${s.name} — press Enter to run`);
   } catch (err) {
-    // Keep the sheet open on failure so the text is never lost.
-    $("#noteStatus").textContent = `Could not save: ${err.message || err}`;
+    toast(String(err.message || err), true);
   }
 }
-function closeNote() { $("#noteSheet").hidden = true; _noteFor = null; }
+
+function queueSaveNotes() {
+  paintRail();
+  // Capture the session and the outline as they are *now*, not as they will be
+  // when the timer fires. Switching sessions inside the debounce window used to
+  // send the new session's outline to the new session's endpoint: the edit was
+  // lost, and if that session had never been opened here its outline was the
+  // empty one, which the server reads as "delete the file".
+  _notesPending = { id: notesForId, items: notesItems };
+  clearTimeout(_notesSaveTimer);
+  _notesSaveTimer = setTimeout(flushSaveNotes, 600);
+}
+async function flushSaveNotes() {
+  clearTimeout(_notesSaveTimer);
+  _notesSaveTimer = null;
+  const pending = _notesPending;
+  _notesPending = null;
+  if (!pending || !pending.id) return;
+  const { id, items } = pending;
+  notesCache.set(id, items);
+  try {
+    await api(`api/sessions/${encodeURIComponent(id)}/notes`, {
+      method: "POST", body: JSON.stringify({ items }),
+    });
+  } catch (err) {
+    toast("Notes did not save: " + (err.message || err), true);
+  }
+}
+
+/* ---- the inline reminder time picker ---- */
+
+let _remindItem = null;
+function openRemind(ev, item) {
+  _remindItem = item;
+  const pop = $("#remindPop");
+  const input = $("#remindAt");
+  input.value = epochToLocalInput(item.remindAt);
+  $("#remindClear").hidden = !item.remindAt;
+  pop.hidden = false;
+  const w = 232, h = pop.offsetHeight || 130;
+  const x = ev && ev.clientX ? ev.clientX : innerWidth - w - 48;
+  const y = ev && ev.clientY ? ev.clientY : 120;
+  pop.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + "px";
+  pop.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + "px";
+  input.focus();
+}
+function closeRemind() { $("#remindPop").hidden = true; _remindItem = null; }
+
+function epochToLocalInput(epoch) {
+  if (!epoch) return "";
+  const d = new Date(epoch * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    + `T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function localInputToEpoch(v) {
+  if (!v) return null;
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? Math.floor(t / 1000) : null;
+}
+function fmtWhen(epoch) {
+  if (!epoch) return "";
+  return new Date(epoch * 1000).toLocaleString([],
+    { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/* ----------------------------------------------------------- Git pane */
+
+function renderGitPane(body, s) {
+  if (!s) {
+    body.replaceChildren(paneEmpty("Open a session to see its git status."));
+    return;
+  }
+  const kids = [];
+  const kv = mk("div", "pane-kv");
+  kv.append(kvRow("Branch", s.branch || "not a git branch"));
+  kv.append(kvRow("Changes",
+    s.dirty ? `${s.dirty} file${s.dirty === 1 ? "" : "s"} changed` : "clean",
+    s.dirty ? "warn" : ""));
+  kv.append(kvRow("Directory", shortPath(s.cwd || ""), "mono"));
+  kids.push(kv);
+  const tools = mk("div", "pane-tools");
+  if (s.branch || s.dirty) tools.append(paneButton("Review changes", "git-branch", () => openDiff(s)));
+  if (s.branch) tools.append(paneButton("Checkpoint now", "arrow-down-to-line", () => checkpointSession(s)));
+  kids.push(tools);
+  if (s.branch) {
+    kids.push(paneP("A checkpoint saves HEAD and the current diff to a file under "
+      + ".clique-checkpoints/, so you can see or undo what an agent changed."));
+  }
+  body.replaceChildren(...kids);
+}
+
+/* --------------------------------------------------------- Session info pane */
+
+function renderInfoPane(body, s) {
+  if (!s) {
+    body.replaceChildren(paneEmpty("Open a session to see its details."));
+    return;
+  }
+  const kv = mk("div", "pane-kv");
+  kv.append(kvRow("State", s.alive
+    ? (s.command || s.cli_label || s.cli || "running") : "stopped"));
+  kv.append(kvRow("Directory", s.cwd || "—", "mono"));
+  if (s.project) kv.append(kvRow("Project", s.project));
+  if (s.branch) {
+    kv.append(kvRow("Branch", s.branch + (s.dirty ? ` · ${s.dirty} changed` : ""),
+      s.dirty ? "warn" : ""));
+  }
+  kv.append(kvRow("CLI", s.cli_label || s.cli || "—"));
+  if (s.pid) kv.append(kvRow("PID", String(s.pid), "mono"));
+  if (typeof s.rss === "number" && s.rss > 0) kv.append(kvRow("Memory", humanBytes(s.rss)));
+  if (s.created) kv.append(kvRow("Up", ago(s.created) || "just now"));
+  if (s.activity) kv.append(kvRow("Quiet for", ago(s.activity) || "just now"));
+  const tools = mk("div", "pane-tools");
+  tools.append(paneButton("Open a file", "chevron-right",
+    () => openFileSheet(s.id, s.cwd || ".")));
+  body.replaceChildren(kv, tools);
+}
+
+/* ----------------------------------------------------------- Export pane */
+
+function renderExportPane(body, s) {
+  if (!s) {
+    body.replaceChildren(paneEmpty("Open a session to export its scrollback."));
+    return;
+  }
+  const tools = mk("div", "pane-tools");
+  tools.append(paneButton("Export scrollback", "download", () => exportScrollback(s)));
+  body.replaceChildren(
+    paneP("Write this session's whole scrollback to a timestamped text file "
+      + "under .clique-exports/ in its directory — a clean log to keep, search "
+      + "or share."),
+    tools);
+}
+
+/* ----------------------------------------------------- panel wiring + resize */
+
+function wireSidePanel() {
+  for (const btn of document.querySelectorAll(".railr-btn")) {
+    btn.onclick = () => togglePanel(btn.dataset.pane);
+  }
+  $("#panelClose").onclick = () => closePanel();
+  wirePanelResizer();
+
+  $("#remindSet").onclick = () => {
+    if (!_remindItem) return;
+    const epoch = localInputToEpoch($("#remindAt").value);
+    if (!epoch) { toast("Pick a date and time", true); return; }
+    setReminder(_remindItem.id, epoch);
+    closeRemind();
+  };
+  $("#remindClear").onclick = () => {
+    if (_remindItem) setReminder(_remindItem.id, null);
+    closeRemind();
+  };
+  // Click anywhere off the popover closes it, but not the chip that opened it.
+  document.addEventListener("pointerdown", (ev) => {
+    const pop = $("#remindPop");
+    if (!pop.hidden && !pop.contains(ev.target)
+        && !ev.target.closest(".note-remind, .note-act")) {
+      closeRemind();
+    }
+  }, true);
+  addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !$("#remindPop").hidden) { closeRemind(); return; }
+    // Ctrl/Cmd+J toggles the panel, a mirror of Ctrl+B for the sidebar.
+    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey
+        && (ev.key === "j" || ev.key === "J")) {
+      ev.preventDefault();
+      togglePanel(panelPane || "notes");
+    }
+  });
+}
+
+function setPanelWidth(px, persist) {
+  const w = Math.min(Math.max(Math.round(px), PANE_MIN), PANE_MAX);
+  panelWidth = w;
+  document.documentElement.style.setProperty("--panel-w", w + "px");
+  if (persist) panelSave();
+  return w;
+}
+
+function wirePanelResizer() {
+  const handle = $("#panelResizer");
+  if (!handle) return;
+  let frame = 0;
+  handle.onpointerdown = (ev) => {
+    ev.preventDefault();
+    handle.setPointerCapture(ev.pointerId);
+    handle.classList.add("dragging");
+    document.body.classList.add("resizing");
+    // The panel sits between the terminal and the far-right rail, so its width
+    // is the distance from the pointer to the rail's inner edge.
+    const railW = $("#railR") ? $("#railR").offsetWidth : 38;
+    const move = (e) => {
+      setPanelWidth((innerWidth - railW) - e.clientX, false);
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          const entry = terms.get(activeId);
+          if (entry) { try { entry.fit.fit(); } catch (err) { /* hidden */ } }
+        });
+      }
+    };
+    const up = () => {
+      handle.releasePointerCapture(ev.pointerId);
+      handle.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+      handle.onpointermove = null;
+      handle.onpointerup = null;
+      panelSave();
+      packTabs();
+      refitAll();
+    };
+    handle.onpointermove = move;
+    handle.onpointerup = up;
+  };
+  handle.ondblclick = () => { setPanelWidth(PANE_DEFAULT, true); refitAll(); };
+  handle.onkeydown = (ev) => {
+    const step = ev.shiftKey ? 32 : 8;
+    if (ev.key === "ArrowLeft") setPanelWidth(panelWidth + step, true);   // wider
+    else if (ev.key === "ArrowRight") setPanelWidth(panelWidth - step, true);
+    else return;
+    ev.preventDefault();
+    refitAll();
+  };
+}
 
 /* Zen mode: fold away the sidebar, tabs and status bars, leaving the terminal
  * and the prompt. Hiding the chrome resizes the pane, so refit tmux once the
  * layout has settled. The corner button (or the palette) brings it all back. */
 function toggleZen(on) {
   const now = document.body.classList.toggle("zen", on);
-  requestAnimationFrame(() => { try { refitAll(); } catch (err) { /* nothing laid out yet */ } });
+  // The same settle as the sidebar and the panel: this hides three bars, which
+  // is a bigger change to the pane than either, and it used to refit without
+  // ever telling tmux the new height.
+  afterLayout("pane", settlePane);
   if (now) { const e = terms.get(activeId); if (e && e.term) e.term.focus(); }
   return now;
 }
@@ -2547,6 +3747,7 @@ function tabsFingerprint() {
       unread(s) ? 1 : 0, attention.has(id) ? 1 : 0,
       reviewLockedOf(id) ? 1 : 0,
       s.cwd || "", s.signal || "", s.cli || "",
+      (groupOf(id) || {}).id || "", (groupOf(id) || {}).color || "",
     ].join("\x1f");
   }).join("\x1e") + "\x1d" + (activeId || "");
 }
@@ -2577,6 +3778,28 @@ function renderTabs() {
       (workState(s) === "error" ? " error" : "") +
       (reviewLockedOf(id) ? " locked" : "") +
       (attention.has(id) ? " attention" : "");
+    /* The group band, drawn inside the tab rather than above the strip.
+     *
+     * Chrome puts a labelled band over its tab groups, which costs a row of
+     * height. There is no row to spare here: the strip is 35px and on a phone
+     * it is competing with the pane for the only screen there is. So the band
+     * is a rule along the bottom edge of the tabs themselves, continuous
+     * across a run of them, and the group's name lives in the sidebar where
+     * there is room for words. Same treatment on both, no phone special case.
+     *
+     * The ends are rounded only where the run actually ends, which is what
+     * turns three coloured tabs into one band instead of three. */
+    const grp = groupOf(id);
+    if (grp) {
+      tab.classList.add("grouped");
+      tab.style.setProperty("--group", cssColor(grp.color) || "var(--accent)");
+      const prev = openTabs[index - 1];
+      const next = openTabs[index + 1];
+      const same = (other) => other && (groupOf(other) || {}).id === grp.id;
+      if (!same(prev)) tab.classList.add("group-start");
+      if (!same(next)) tab.classList.add("group-end");
+      tab.title = `${grp.name} · ${tab.title || ""}`.trim();
+    }
     /* A mark nobody can name is a mark nobody trusts.
      *
      * The tab carries up to three of them — a status ring, an attention glow,
@@ -2644,6 +3867,61 @@ function renderTabs() {
   renderSessionLine();
 }
 
+/* Say what size the pane is drawn at, but only when that is not the obvious
+ * answer.
+ *
+ * Two things make a pane a size nobody asked for, and both are deliberate.
+ * A tmux window has exactly one size shared by every client attached to it,
+ * so the browser in front sets it and everyone else draws at that. And a CLI
+ * that paints its own prompt box has its columns kept and its picture shrunk,
+ * because narrowing the grid is what stacks the box. From the outside both
+ * look like a bug: text smaller than you left it, or a band of dead space
+ * down one side.
+ *
+ * A label is the cheapest thing that turns "why does my pane look wrong" into
+ * a fact, and it stays quiet when the pane is simply drawn at its own fit —
+ * which is almost always. */
+function paneSizeNote(id) {
+  const entry = terms.get(id);
+  const s = session(id);
+  if (!entry || !entry.term) return null;
+  const cols = entry.term.cols, rows = entry.term.rows;
+  if (!claimable(cols, rows)) return null;
+  const size = `${cols}x${rows}`;
+
+  /* What tmux is actually painting, straight off the poll. A pane drawing a
+   * different grid from the window tmux thinks it has is the case a person
+   * cannot fix from where they are standing, so it goes first. Asking the fit
+   * addon instead does not work: each browser fits its own box quite happily
+   * and has no idea the window underneath belongs to somebody else. */
+  /* ...but only from a poll that has actually seen our own last claim. The
+   * size arrives on a 3s cycle, so for a moment after this browser asserts a
+   * size the poll still holds the previous one, and reading that as somebody
+   * else's doing made the label accuse a window that was not there. A fixed
+   * delay does not work either: two browsers taking the size off each other
+   * both keep claiming, and neither would ever be told. Comparing the two
+   * clocks is exact, and it tells whichever browser is *not* winning. */
+  const settled = !entry.claimedAt || lastPollAt > entry.claimedAt;
+  if (settled && s && s.cols && s.rows && (s.cols !== cols || s.rows !== rows)) {
+    return {
+      text: `another window set ${s.cols}x${s.rows}`,
+      title: `This pane is drawing ${size}, but tmux has the window at ${s.cols}x${s.rows}. `
+           + "A tmux window has one size shared by everything attached to it, so "
+           + "whichever browser is in front sets it. Click this pane to take it back.",
+    };
+  }
+  const el = entry.term.element;
+  if (el && (el.style.transform || "").includes("scale")) {
+    return {
+      text: `${size} · scaled to fit`,
+      title: "This CLI draws its own prompt box, so the columns are kept and the "
+           + "picture is shrunk rather than the grid narrowed. Close the side panel "
+           + "or widen the window to get the full size back.",
+    };
+  }
+  return null;
+}
+
 /* The status line under the tabs: what the session in front is doing, at a
  * glance. Its process, where, which branch, how long it has been up and how
  * long it has been quiet. Every fact already rides on the session in the 3s
@@ -2667,6 +3945,11 @@ function renderSessionLine() {
   if (s.branch) {
     const dirty = s.dirty ? ` · <span class="git-dirty">${s.dirty} changed</span>` : "";
     parts.push(`<span class="sl-branch">${escapeHtml(s.branch)}${dirty}</span>`);
+  }
+  const size = paneSizeNote(activeId);
+  if (size) {
+    parts.push(
+      `<span class="sl-size" title="${escapeHtml(size.title)}">${escapeHtml(size.text)}</span>`);
   }
   const tail = [];
   const up = ago(s.created);
@@ -2835,6 +4118,22 @@ function promptWanted() {
   const mode = state.settings.input_mode || "auto";
   if (mode === "panel") return true;
   if (mode === "terminal") return false;
+  /* A phone gets the box whatever the CLI draws for itself.
+   *
+   * Typing into the terminal means typing through the keyboard's input method
+   * one keystroke at a time, and on Android that path is not reliable: Gboard
+   * predicts, autocorrects and pastes into a hidden field the terminal keeps
+   * emptying under it, loses track of what it thinks is there, and re-commits
+   * the whole line. The pane fills with the same sentence over and over, and
+   * it is worst with a suggestion or a paste, which is when the keyboard has
+   * the most to re-commit. Reported 2026-09-02: "it starts spamming the same
+   * line of text already entered over and over again, its really bad".
+   *
+   * Composing in an ordinary textarea and sending the finished line never
+   * goes near that. The cost is the CLI's own box sitting above ours, which
+   * is one bar of screen against a phone you cannot type on. `terminal` still
+   * overrides this for anyone who wants the raw thing. */
+  if (handheld()) return true;
   const s = session(activeId);
   return !(s && s.own_input);
 }
@@ -3006,6 +4305,19 @@ async function dropFiles(list) {
       toast(`Could not save ${file.name}: ${err.message}`, true);
     }
   }
+}
+
+/* Ask the OS for a file, then hand it to the same path a drop takes.
+ *
+ * `dropFiles` uploads it into the session's scratch folder and puts the path
+ * where the CLI can see it, so this adds a route in rather than a feature.
+ * The input is reset afterwards or picking the same file twice in a row fires
+ * no change event and looks broken. */
+function pickFiles() {
+  const input = $("#filePick");
+  if (!input) return;
+  if (!activeId) { toast("Open a session first, then attach the file to it.", true); return; }
+  input.click();
 }
 
 /* The pane with nothing in it.
@@ -3286,6 +4598,17 @@ function trimPath(text) {
   return trimUrl(out);
 }
 
+function pathFromText(text) {
+  let raw = String(text || "").trim();
+  if (!raw || /\s/.test(raw) || raw.length > 1024) return "";
+  raw = raw.replace(/^['"`]+|['"`]+$/g, "");
+  PATH_RE.lastIndex = 0;
+  const match = PATH_RE.exec(/^[~./]/.test(raw) ? raw : (" " + raw));
+  if (!match) return "";
+  const got = trimPath(match[1]);
+  return got === raw ? got : "";
+}
+
 function pathRange(line, full, captured) {
   const start = line.indexOf(captured, Math.max(0, full.index));
   const at = start >= 0 ? start : full.index + (full[0].length - captured.length);
@@ -3532,12 +4855,10 @@ async function sendDiffComment() {
  * conversation, and the numbers line up in its monospace pre. */
 async function openUsage(s) {
   fileSession = s.id;
-  fileAsked = " usage:" + s.id;
+  fileAsked = "\u0000usage:" + s.id;
   $("#fileTitle").textContent = (s.name || "Session") + " — usage";
   $("#filePath").textContent = "token usage";
-  $("#fileText").hidden = true; $("#fileText").textContent = "";
-  $("#fileImg").hidden = true; $("#fileImg").removeAttribute("src");
-  $("#fileTurns").hidden = true; $("#fileTurns").textContent = "";
+  resetFileBody();
   $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading…";
   $("#file").hidden = false;
   let data;
@@ -3580,10 +4901,8 @@ async function openTranscript(s) {
   fileAsked = "\u0000transcript:" + s.id;   // no real path collides with this
   $("#fileTitle").textContent = s.name || "Conversation";
   $("#filePath").textContent = "conversation";
-  $("#fileText").hidden = true; $("#fileText").textContent = "";
-  $("#fileImg").hidden = true; $("#fileImg").removeAttribute("src");
-  $("#fileTurns").hidden = true; $("#fileTurns").textContent = "";
-  $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading\u2026";
+  resetFileBody();
+  $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading...";
   $("#file").hidden = false;
   let data;
   try {
@@ -3635,14 +4954,9 @@ async function openFileSheet(sessionId, path) {
   fileAsked = asked;
   $("#fileTitle").textContent = asked.split("/").pop() || asked;
   $("#filePath").textContent = asked;
-  $("#fileText").hidden = true;
-  $("#fileText").textContent = "";
-  $("#fileImg").hidden = true;
-  $("#fileImg").removeAttribute("src");
-  $("#fileTurns").hidden = true;
-  $("#fileTurns").textContent = "";
+  resetFileBody();
   $("#fileNote").hidden = false;
-  $("#fileNote").textContent = "Looking…";
+  $("#fileNote").textContent = "Looking...";
   $("#file").hidden = false;
   try {
     const info = await api(
@@ -3657,17 +4971,63 @@ async function openFileSheet(sessionId, path) {
   }
 }
 
+function resetFileBody() {
+  $("#fileText").hidden = true;
+  $("#fileText").textContent = "";
+  $("#fileImg").hidden = true;
+  $("#fileImg").removeAttribute("src");
+  $("#fileTurns").hidden = true;
+  $("#fileTurns").textContent = "";
+  const list = $("#fileList");
+  if (list) { list.hidden = true; list.textContent = ""; }
+  const up = $("#fileUp");
+  if (up) up.hidden = true;
+}
+
+function fileParentPath(info) {
+  const p = String((info && info.path) || "").replace(/\\/g, "/");
+  if (!p) return "";
+  const parts = p.split("/").filter((bit, i) => bit !== "" || i === 0);
+  if (parts.length < 2) return "";
+  parts.pop();
+  const parent = parts.join("/") || "/";
+  return parent === p ? "" : parent;
+}
+
+const DIR_LIST_HINT = "200";
+
+function showFileList(entries, truncated) {
+  const list = $("#fileList");
+  if (!list) return;
+  list.textContent = "";
+  for (const row of entries || []) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = row.name === ".." ? "Parent folder" : row.name;
+    const kind = document.createElement("span");
+    kind.className = "kind";
+    kind.textContent = row.kind === "dir" ? "folder" : "file";
+    btn.append(name, kind);
+    btn.onclick = () => openFileSheet(fileSession, row.path);
+    list.append(btn);
+  }
+  list.hidden = !list.childElementCount;
+  if (truncated) {
+    const note = $("#fileNote");
+    note.hidden = false;
+    note.textContent = "First " + DIR_LIST_HINT + " entries shown.";
+  }
+}
+
 function showFile(info) {
   $("#fileTitle").textContent = info.name || info.asked || "File";
   $("#filePath").textContent = info.path || info.asked || fileAsked;
   const note = $("#fileNote");
   const text = $("#fileText");
   const img = $("#fileImg");
-  text.hidden = true;
-  text.textContent = "";
-  img.hidden = true;
-  img.removeAttribute("src");
-  $("#fileTurns").hidden = true;
+  resetFileBody();
   note.hidden = true;
 
   if (info.kind === "text") {
@@ -3683,19 +5043,28 @@ function showFile(info) {
     img.src = "api/sessions/" + encodeURIComponent(fileSession)
       + "/file?path=" + encodeURIComponent(info.asked || fileAsked) + "&raw=1";
   } else if (info.kind === "dir") {
-    note.hidden = false;
-    note.textContent = "That is a directory. Send the path if you want to work from it.";
+    const entries = info.entries || [];
+    if (entries.length) {
+      showFileList(entries, info.truncated);
+    } else {
+      note.hidden = false;
+      note.textContent = "That folder is empty.";
+    }
   } else if (info.kind === "binary") {
     note.hidden = false;
-    note.textContent = "Not text — copy or send the path to open it in something that can.";
+    note.textContent = "Not text. Copy or send the path to open it in something that can.";
   } else {
     note.hidden = false;
-    note.textContent = "Nothing at that path from this session’s directory.";
+    note.textContent = "Nothing at that path from this session's directory.";
   }
+
+  const parent = (info.kind === "dir") ? "" : fileParentPath(info);
+  const up = $("#fileUp");
+  if (up) up.hidden = !parent;
 
   // Editing rides the preview: only an untruncated text file offers Edit (a
   // truncated one would save back a fraction of itself), and never a directory,
-  // image, or credential — the server refuses those regardless.
+  // image, or credential. The server refuses those regardless.
   currentFile = info;
   fileEditing = false;
   $("#fileEdit").hidden = true;
@@ -3718,6 +5087,8 @@ function startFileEdit() {
   ta.hidden = false;
   $("#fileText").hidden = true;
   $("#fileNote").hidden = true;
+  if ($("#fileList")) $("#fileList").hidden = true;
+  if ($("#fileUp")) $("#fileUp").hidden = true;
   for (const sel of ["#fileEditBtn", "#fileSend", "#fileCopy"]) $(sel).hidden = true;
   $("#fileSave").hidden = false;
   $("#fileCancel").hidden = false;
@@ -3755,8 +5126,7 @@ async function saveFileEdit() {
 
 function closeFileSheet() {
   $("#file").hidden = true;
-  $("#fileImg").removeAttribute("src");
-  $("#fileText").textContent = "";
+  resetFileBody();
   $("#fileEdit").hidden = true;
   $("#fileEdit").value = "";
   fileEditing = false;
@@ -4539,11 +5909,33 @@ function layoutPane(entry) {
   if (!entry || !entry.term || !entry.fit) return;
   const boxed = sessionOwnsInput(entry.id);
   const cell = paneCellPx(entry.term);
-  const scale = paneZoomScale(
-    entry.el.clientWidth, entry.el.clientHeight,
-    entry.term.cols, entry.term.rows, cell.w, cell.h);
+  /* Measure from where the terminal actually starts, not from the left of its
+   * box: the two differ by the pane's padding, and scaling to the wrong one of
+   * them is how the picture ended up a few pixels wider than the room it had. */
+  const box = entry.el.getBoundingClientRect();
+  const start = entry.term.element ? entry.term.element.getBoundingClientRect().left : box.left;
+  const availW = Math.max(0, box.right - start);
+  const scale = paneWidthScale(availW, entry.term.cols, cell.w);
   if (paneShouldZoom(boxed, scale)) {
-    applyPaneZoom(entry.term, scale);
+    // Shrinking the picture shrinks every cell with it, so more rows fit in
+    // the height than did before, and the pane has to take them. Without
+    // this the panel opened, the grid scaled down to clear it, and the
+    // bottom fifth of the terminal went dead black. Columns are left exactly
+    // where they are: keeping them is the entire reason this zooms.
+    const fitRows = Math.floor(entry.el.clientHeight / (cell.h * scale));
+    if (fitRows >= 4 && fitRows !== entry.term.rows) {
+      // Resize unscaled, so the terminal measures itself in honest pixels,
+      // and put the transform back afterwards.
+      applyPaneZoom(entry.term, 1);
+      entry.relaying = true;
+      try {
+        entry.term.resize(entry.term.cols, fitRows);
+      } catch (err) { /* not laid out yet */ } finally {
+        entry.relaying = false;
+      }
+    }
+    applyPaneZoom(entry.term, scale,
+                  entry.term.cols * cell.w, entry.term.rows * cell.h);
     return;
   }
   applyPaneZoom(entry.term, 1);
@@ -4567,7 +5959,7 @@ function showActivePane() {
   const entry = terms.get(activeId);
   if (!entry) { renderCopyChip(); return; }
   paintPane(entry);
-  entry.term.focus();
+  if (paneWantsFocus()) entry.term.focus();
   renderCopyChip();
   requestAnimationFrame(() => {
     if (terms.get(activeId) !== entry) return;
@@ -4594,6 +5986,7 @@ function selectTab(id) {
   showActivePane();
   renderTabs();
   renderTree();
+  renderSidePanel();   // re-scope the open pane to the session in front
   saveWorkspace();
   landFocus();
   // On a phone, opening a session slides the drawer shut so the pane is in front.
@@ -4790,8 +6183,15 @@ async function attachNow(id) {
    * away, and a host that guessed "I am not" would stay blank if you
    * had clicked *to* it while it was still attaching. */
   host.dataset.session = id;
+  /* `touch-action: none` is what makes a finger reach the scroll handler
+   * below at all. Without it the browser claims a vertical drag for the
+   * native scroll of `.xterm-viewport`, whose scroll area is exactly one
+   * screen tall because xterm renders the buffer itself, so the gesture is
+   * swallowed to move something that cannot move and the pane never gets a
+   * touchmove. Measured: one touchstart, zero touchmoves. The cost is
+   * pinch-zoom on the pane, which a terminal has its own font control for. */
   host.style.cssText = "position:absolute;inset:0;padding:6px 8px;" +
-    "pointer-events:none";
+    "pointer-events:none;touch-action:none";
   box.appendChild(host);
 
   // Built with the theme already on, not with the built-in dark and a repaint
@@ -4805,6 +6205,9 @@ async function attachNow(id) {
     theme: termTheme(currentTheme()),
     scrollback: 20000,
     cursorBlink: true,
+    // A hollow cursor in the pane you are not typing into. With several panes
+    // open, two solid blocks both look like the live one.
+    cursorInactiveStyle: "outline",
     allowProposedApi: true,
     rightClickSelectsWord: true,
     // Drag-select has to win on a Mac too. xterm's default only honours
@@ -5036,13 +6439,30 @@ async function attachNow(id) {
 
     send(data);
   });
-  term.onResize(({ cols, rows }) => {
+  term.onResize(() => {
     if (entry.kicking) return;     // paintPane's one-column nudge is not a resize
+    if (entry.relaying) return;    // our own fit; it reports once it settles
+
+    /* The grid changed shape without the box changing, so the ResizeObserver
+     * that normally drives a re-layout never fires. It matters because a boxed
+     * CLI's zoom is computed from its column count: leave it alone and the
+     * scale stays the one that suited the grid we no longer have. That is what
+     * a second browser does to this one. It resizes the shared tmux window,
+     * this pane's grid follows, the scale does not, and the terminal ends up
+     * drawn at half size in a full-width box with xterm's scrollbar floating
+     * in the open space where the picture stopped. */
+    entry.relaying = true;
+    try { layoutPane(entry); } finally { entry.relaying = false; }
+
+    // Report where it settled, not the size that came in: laying out may have
+    // fitted again on top of it.
+    const cols = entry.term.cols, rows = entry.term.rows;
     if (id !== activeId) return;   // a hidden tab must not resize the window
     if (document.hidden || !document.hasFocus()) return;
     if (!claimable(cols, rows)) return;
     if (entry.ws && entry.ws.readyState === 1) {
-      entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
+      entry.claimedAt = Date.now();
+      entry.ws.send(JSON.stringify({ type: "resize", cols, rows, handheld: handheld() }));
     }
   });
 }
@@ -5133,25 +6553,52 @@ async function okToSend(text, whoLabel) {
   });
 }
 
+/* Empty the box the way writing to it from anywhere else in this file does.
+ *
+ * A bare `value = ""` leaves the textarea the height of the paragraph that
+ * was in it until the next keystroke, and tells nothing downstream that it
+ * emptied -- the move button stayed lit over an empty box for the same
+ * reason. */
+function clearPrompt() {
+  const box = $("#prompt");
+  box.value = "";
+  growPrompt(box);
+  showDraftMove();
+}
+
+/* One send at a time.
+ *
+ * `run` waits on a confirm and then on a request, and the box is not emptied
+ * until both are done, so a second Enter arriving in between sent the same
+ * sentence again. A key that repeats, a double tap, and an Android keyboard
+ * committing a suggestion with an Enter of its own all do exactly that. */
+let sending = false;
+
 async function run(text) {
-  if (!text.trim() || !activeId) return;
+  if (!text.trim() || !activeId || sending) return;
   if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
-  const who = session(activeId);
-  if (!await okToSend(text, `“${who ? who.name : "this session"}”`)) return;
-  for (let i = 0; i < repeat; i++) {
-    if (!control({ type: "run", text, enter: true })) {
-      await api(`api/sessions/${activeId}/send`, {
-        method: "POST", body: JSON.stringify({ text, enter: true }),
-      });
+  sending = true;
+  try {
+    const who = session(activeId);
+    if (!await okToSend(text, `“${who ? who.name : "this session"}”`)) return;
+    for (let i = 0; i < repeat; i++) {
+      if (!control({ type: "run", text, enter: true })) {
+        await api(`api/sessions/${activeId}/send`, {
+          method: "POST", body: JSON.stringify({ text, enter: true }),
+        });
+      }
     }
+    maybeAutoTitle(activeId, text);
+    clearPrompt();
+    saveDraft(true);   // sent, so there is no longer a draft
+    setRepeat(1);
+  } finally {
+    sending = false;
   }
-  maybeAutoTitle(activeId, text);
-  $("#prompt").value = "";
-  saveDraft(true);   // sent, so there is no longer a draft
-  setRepeat(1);
 }
 
 async function runShell(text) {
+  if (sending) return;
   /* "Shell" sends a raw command rather than a prompt. The active pane belongs
    * to a CLI, so the command goes to a shell session for the same directory —
    * reusing one if it exists, creating it if not. Typing `rm -rf` into Claude's
@@ -5159,26 +6606,31 @@ async function runShell(text) {
   const current = session(activeId);
   if (!current) return;
   if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
-  if (!await okToSend(text, "a shell for this directory")) return;
-  let shell = state.sessions.find(
-    (s) => s.cli === "shell" && s.cwd === current.cwd && s.alive);
-  if (!shell) {
-    const created = await api("api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        cli: "shell", cwd: current.cwd, folder: current.folder,
-        name: "shell: " + (current.cwd.split("/").pop() || current.cwd),
-      }),
+  sending = true;
+  try {
+    if (!await okToSend(text, "a shell for this directory")) return;
+    let shell = state.sessions.find(
+      (s) => s.cli === "shell" && s.cwd === current.cwd && s.alive);
+    if (!shell) {
+      const created = await api("api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          cli: "shell", cwd: current.cwd, folder: current.folder,
+          name: "shell: " + (current.cwd.split("/").pop() || current.cwd),
+        }),
+      });
+      await refresh();
+      shell = session(created.id);
+    }
+    await openSession(shell.id);
+    await api(`api/sessions/${shell.id}/send`, {
+      method: "POST", body: JSON.stringify({ text, enter: true }),
     });
-    await refresh();
-    shell = session(created.id);
+    clearPrompt();
+    saveDraft(true);   // sent, so there is no longer a draft
+  } finally {
+    sending = false;
   }
-  await openSession(shell.id);
-  await api(`api/sessions/${shell.id}/send`, {
-    method: "POST", body: JSON.stringify({ text, enter: true }),
-  });
-  $("#prompt").value = "";
-  saveDraft(true);   // sent, so there is no longer a draft
 }
 
 function setRepeat(value) {
@@ -5392,12 +6844,17 @@ function fillCwdList() {
   pick.disabled = !dirs.length;
 }
 
+/* `paths` may be plain strings or {value, label} pairs. A datalist option
+ * shows its text content beside the value it would insert, which is how a
+ * project can say "wsg-sentinel" while still filling the field with the path
+ * nobody remembers. */
 function fillDatalist(paths) {
   const list = $("#cwdList");
   list.textContent = "";
-  for (const cwd of paths) {
+  for (const item of paths) {
     const option = document.createElement("option");
-    option.value = cwd;
+    option.value = typeof item === "string" ? item : item.value;
+    if (typeof item !== "string" && item.label) option.textContent = item.label;
     list.appendChild(option);
   }
 }
@@ -5418,7 +6875,33 @@ let browseTimer = null;
 function browseFrom(text) {
   clearTimeout(browseTimer);
   if (!text.startsWith("/") && !text.startsWith("~")) {
-    return fillDatalist(knownDirs().map((d) => d.cwd));
+    /* Not a path, so it is a name. The two suggestions the dialog already had
+     * both assume you know something: the dropdown knows where you have been,
+     * and the completion below needs the first few characters of the path.
+     * Neither answers "the one called sentinel", which on a box with forty
+     * repos across three parent directories is the actual question. */
+    const known = knownDirs()
+      .filter((d) => !text || d.cwd.toLowerCase().includes(text.toLowerCase()))
+      .map((d) => d.cwd);
+    if (text.trim().length < 2) return fillDatalist(known);
+    browseTimer = setTimeout(async () => {
+      let found = [];
+      try {
+        found = (await api("api/projects?q=" + encodeURIComponent(text))).projects || [];
+      } catch {
+        return fillDatalist(known);   // never worth interrupting a launch over
+      }
+      if ($("#newForm").cwd.value.trim() !== text) return;   // they typed on
+      // Somewhere you have already worked stays ahead of a fresh find: it is
+      // the better guess, and the search is what covers the case it misses.
+      const seen = new Set(known);
+      fillDatalist([
+        ...known.map((cwd) => ({ value: cwd, label: cwd })),
+        ...found.filter((p) => !seen.has(p.path))
+          .map((p) => ({ value: p.path, label: p.name + " · " + p.path })),
+      ]);
+    }, 200);
+    return;
   }
   browseTimer = setTimeout(async () => {
     let dirs = [];
@@ -5623,19 +7106,78 @@ function extendedAnsi(theme) {
 
 const _termThemes = new Map();
 
+/* Blend two hex colours. Used to derive the quieter terminal tokens rather
+ * than making every theme spell them out and get one of them wrong. */
+function mix(from, to, amount) {
+  const read = (hex) => {
+    const value = hex.replace("#", "");
+    const full = value.length === 3 ? [...value].map((c) => c + c).join("") : value;
+    return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+  };
+  const [a, b] = [read(from), read(to)];
+  const channel = (i) => Math.round(a[i] + (b[i] - a[i]) * amount);
+  return "#" + [0, 1, 2].map((i) => channel(i).toString(16).padStart(2, "0")).join("");
+}
+
+/* The terminal tokens a theme should not have to spell out.
+ *
+ * Same bargain as `derived()` makes for the panel: a theme stays one block in
+ * themes.js, and anything that follows mechanically from what it already said
+ * is worked out here. Three of them, each fixing something a theme could not
+ * have got right by hand:
+ *
+ * `cursorAccent` is the character *underneath* a block cursor. Left unset it
+ * falls back to xterm's own default rather than this theme's background, so
+ * the character under the cursor could come out invisible.
+ *
+ * `selectionForeground` is picked from the luminance of the selection colour,
+ * because a theme with a pale selection and one with a dark selection cannot
+ * both use the same text colour on top of it, and dragging over a line you
+ * then cannot read is not a selection.
+ *
+ * `selectionInactiveBackground` is the same selection blended halfway back to
+ * the background, so the pane you are not looking at holds its selection
+ * without competing with the one you are. */
+function termTokens(theme) {
+  const term = theme.term || {};
+  const out = { ...term };
+  if (term.background && !out.cursorAccent) out.cursorAccent = term.background;
+  if (term.selectionBackground) {
+    if (!out.selectionForeground) {
+      out.selectionForeground = luminance(term.selectionBackground) > 0.4
+        ? "#101010" : "#f5f5f5";
+    }
+    if (!out.selectionInactiveBackground && term.background) {
+      out.selectionInactiveBackground =
+        mix(term.selectionBackground, term.background, 0.5);
+    }
+  }
+  return out;
+}
+
 function termTheme(theme) {
-  if (!theme.tint_greys) return theme.term || {};
   let built = _termThemes.get(theme);
   if (!built) {
-    built = { ...theme.term, extendedAnsi: extendedAnsi(theme) };
+    built = termTokens(theme);
+    if (theme.tint_greys) built.extendedAnsi = extendedAnsi(theme);
     _termThemes.set(theme, built);
   }
   return built;
 }
 
+/* Themes that have been renamed, old id to new.
+ *
+ * The id is what gets stored, so renaming one silently drops whoever was
+ * wearing it back to the default and looks like the panel forgot. Two entries
+ * is not a migration system; it is the cheapest way to make a rename free, and
+ * the row can be deleted once nobody could plausibly still be on the old id. */
+const THEME_RENAMED = { tetris: "bricks", pacman: "chompy" };
+
 function currentTheme() {
   const themes = window.CLIQUE_THEMES || {};
   const s = state.settings;
+  const renamed = THEME_RENAMED[s.theme];
+  if (renamed && themes[renamed]) return themes[renamed];
   if (s.theme && themes[s.theme]) return themes[s.theme];
   // No preset chosen: the base appearance picks which built-in to use.
   const wantsLight = s.appearance === "light" ||
@@ -5672,6 +7214,107 @@ function derived(theme) {
     "scrim": light ? "#2b313bb0" : "#000000aa",
     "shadow": light ? "#2b313b33" : "#00000088",
   };
+}
+
+/* ------------------------------------------------------------------ theme art
+ *
+ * A theme may carry a figure, watermarked into the bottom-right of the pane.
+ * Two ways to say what it is, and a theme picks one:
+ *
+ *   art: { src: "art/plumber.png" }        a drawing we ship
+ *   art: { w, h, pal, rows }               a grid drawn in this file
+ *
+ * The grid form becomes one SVG data URI, built once per theme and cached; the
+ * file form is just a URL. Either way it ends up as a background-image, so a
+ * repaint costs the browser nothing and there is no second element in the
+ * terminal's way.
+ *
+ * The two are composited differently and that is not a detail. A grid is drawn
+ * to a palette we control, every colour a mid-tone, so it can use the extreme
+ * blends below and keep the text perfectly untouched. A supplied drawing has
+ * blacks and whites in it, and an extreme blend eats exactly those, so it is
+ * laid over at a lower opacity instead. That costs the text a little contrast
+ * where the two overlap, which is the honest trade for taking artwork as it
+ * comes rather than dictating a palette to whoever drew it.
+ *
+ * Runs of the same colour on a row collapse into one rect, which takes a
+ * fourteen-wide figure from a couple of hundred rects to about forty. That
+ * matters only because the whole thing then fits in a URI small enough to sit
+ * in a style property without being worth a file.
+ *
+ * It sits *above* the terminal in the stack and still reads as being behind
+ * the text, which is the trick worth understanding: the layer is composited
+ * with `lighten` on a dark theme and `darken` on a light one. Both are
+ * per-channel extremes, so wherever a glyph is painted the glyph wins the
+ * comparison and comes through untouched, and the figure only fills the space
+ * between. Text stays exactly as legible as it was with no figure at all.
+ * Painting it underneath instead would mean making the terminal's own
+ * background transparent, which costs a renderer path we would rather not own.
+ */
+const _artUrls = new Map();
+
+function themeArt(theme) {
+  let built = _artUrls.get(theme);
+  if (built) return built;
+  const art = theme && theme.art;
+  built = { url: "", ratio: 0, blend: "" };
+  if (art && art.src) {
+    // No ratio: the box is fixed and the drawing is contained inside it,
+    // anchored bottom-right, so a tall figure and a wide one both sit in the
+    // corner properly without the theme having to measure anything.
+    built = { url: `url("${encodeURI(art.src)}")`, ratio: 0, blend: art.blend || "normal" };
+  } else if (art && art.rows && art.rows.length) {
+    const pal = art.pal || {};
+    const w = art.w || art.rows[0].length;
+    const h = art.h || art.rows.length;
+    const rects = [];
+    art.rows.forEach((row, y) => {
+      let x = 0;
+      while (x < row.length) {
+        const ch = row[x];
+        let run = 1;
+        while (x + run < row.length && row[x + run] === ch) run++;
+        if (pal[ch]) {
+          rects.push(`<rect x="${x}" y="${y}" width="${run}" height="1" fill="${pal[ch]}"/>`);
+        }
+        x += run;
+      }
+    });
+    if (rects.length) {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' +
+        `${w} ${h}" shape-rendering="crispEdges">${rects.join("")}</svg>`;
+      built = {
+        url: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        ratio: w / h, blend: art.blend || "auto",
+      };
+    }
+  }
+  _artUrls.set(theme, built);
+  return built;
+}
+
+/* Put the current theme's figure in the corner, or take it away.
+ *
+ * Opacity differs by base on purpose. `lighten` on a dark pane adds light to
+ * a nearly black field and is seen readily; `darken` on a white one has more
+ * headroom before it starts competing with the text, and the same number
+ * looks like a stain rather than a watermark. */
+function paintThemeArt(theme) {
+  const el = $("#themeArt");
+  if (!el) return;
+  const light = (theme.base || "dark") === "light";
+  const { url, ratio, blend } = state.settings.theme_art === false
+    ? { url: "", ratio: 0, blend: "" } : themeArt(theme);
+  el.hidden = !url;
+  if (!url) return;
+  el.style.backgroundImage = url;
+  // A grid knows its own shape and gets an aspect ratio. A drawing is
+  // contained in the fixed box instead, and must not be smoothed away by the
+  // pixelated rendering the grids need.
+  el.classList.toggle("is-drawing", !ratio);
+  el.style.aspectRatio = ratio ? String(ratio) : "";
+  el.style.mixBlendMode = blend === "normal" ? "normal" : light ? "darken" : "lighten";
+  el.style.opacity = blend === "normal" ? (light ? "0.10" : "0.12") : light ? "0.10" : "0.13";
 }
 
 /* Monospace stacks that exist on Windows, Mac and Linux.
@@ -5752,8 +7395,12 @@ function applySettings() {
   // terminal's own selection colour agree with the theme. Without it a light
   // theme still gets dark scrollbars.
   root.style.colorScheme = theme.base || "dark";
+  // Both ways of choosing a theme have to agree afterwards: picking from the
+  // dropdown relabels the rows, and pressing Use in a row moves the dropdown.
+  if (!$("#settings").hidden) renderThemeMaker();
   root.style.setProperty("--font-panel", (s.font_panel || 13) + "px");
   paintFontChrome();
+  paintThemeArt(theme);
 
   /* Applied when it changes, not on every poll.
    *
@@ -5863,6 +7510,7 @@ async function saveSettings(changes) {
   // does not become the timer-based reclaim two windows would fight over.
   reclaimSize();
   renderTree();
+  renderGroups();
   renderTabs();
 }
 
@@ -5889,19 +7537,222 @@ async function refreshStorage() {
   }
 }
 
-function openSettings() {
-  const s = state.settings;
-  renderSupport();   // About is one click away, so the list has to be there
+/* Themes made here, as opposed to the presets that ship in themes.js.
+ *
+ * They are merged into the same map the presets live in, keyed by id, which is
+ * the whole integration: `currentTheme()`, the picker and the palette all read
+ * that map and none of them need to know where a theme came from. Kept out of
+ * the 3s poll on purpose — a theme is a couple of dozen colours and changes
+ * about twice a year, so it is fetched at boot and again when one changes. */
+let customThemes = new Set();
+let canGenerateThemes = false;
 
-  const themeSelect = $("#setTheme");
-  themeSelect.innerHTML = "";
+async function loadThemes() {
+  let payload;
+  try {
+    payload = await api("api/themes");
+  } catch (err) {
+    return;   // the presets still work; a missing list is not worth a toast
+  }
+  const themes = window.CLIQUE_THEMES || (window.CLIQUE_THEMES = {});
+  // Drop the ones we added last time before merging, so a theme deleted on
+  // another device disappears here rather than lingering until a reload.
+  for (const id of customThemes) delete themes[id];
+  customThemes = new Set();
+  for (const theme of payload.themes || []) {
+    if (!theme || !theme.id) continue;
+    themes[theme.id] = theme;
+    customThemes.add(theme.id);
+  }
+  canGenerateThemes = Boolean(payload.can_generate);
+  applySettings();               // the theme in use may have just arrived
+  if (!$("#settings").hidden) renderThemeMaker();
+}
+
+/* The list of themes made here, each with a way to remove it. Only these get
+ * a delete: a preset is not ours to take away. */
+/* Grouped rather than marked with a glyph.
+ *
+ * Which themes come with a character is not guessable from the name, and a
+ * marker character next to the ones that do would need a legend somewhere to
+ * say what it meant. An `optgroup` says it in words, costs nothing, is a
+ * native control so it survives a phone and a screen reader, and hides behind
+ * no hover or right-click.
+ *
+ * The order does not move: themes.js already declares the plain presets, then
+ * the ones with a figure, and loadThemes merges anything made here onto the
+ * end. The groups fall on those boundaries exactly, so muscle memory for where
+ * a theme sits in the list is untouched. */
+function fillThemeSelect() {
+  const select = $("#setTheme");
+  if (!select) return;
+  const stored = state.settings.theme || "";
+  const chosen = THEME_RENAMED[stored] || stored;
+  select.replaceChildren();
+  const groups = new Map();
+  const groupFor = (label) => {
+    let group = groups.get(label);
+    if (!group) {
+      group = document.createElement("optgroup");
+      group.label = label;
+      groups.set(label, group);
+      select.appendChild(group);
+    }
+    return group;
+  };
   for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
     const option = document.createElement("option");
     option.value = id;
     option.textContent = theme.label;
-    option.selected = id === (s.theme || "");
-    themeSelect.appendChild(option);
+    option.selected = id === chosen;
+    // Made here first: one of those could carry art one day, and it would
+    // still belong with the rest of yours rather than filed by a feature.
+    groupFor(customThemes.has(id) ? "Made here"
+             : theme.art ? "With a character" : "Presets").appendChild(option);
   }
+  select.value = chosen;
+}
+
+/* The themes the rotation may pick from.
+ *
+ * A wrapped list of checkboxes rather than a multi-select: a phone cannot
+ * ctrl-click, and this is the one control in the sheet where somebody is
+ * choosing eight things out of twenty. Grouped the same way the picker above
+ * is, and in the same order, so the two read as the same list twice rather
+ * than as two different lists.
+ *
+ * Ticking one writes the whole pool back. The order is the list's, not the
+ * order they were ticked, because nothing downstream cares: the server picks
+ * at random from it. */
+function renderThemeRotation() {
+  const pool = $("#themeRotatePool");
+  if (!pool) return;
+  const on = new Set(state.settings.theme_rotate_pool || []);
+  pool.classList.toggle("is-off", !state.settings.theme_rotate);
+  pool.replaceChildren();
+  const groups = new Map();
+  const groupFor = (label) => {
+    let items = groups.get(label);
+    if (!items) {
+      const block = mk("div", "rotate-group");
+      const head = mk("div", "rotate-head");
+      head.textContent = label;
+      items = mk("div", "rotate-items");
+      block.append(head, items);
+      pool.appendChild(block);
+      groups.set(label, items);
+    }
+    return items;
+  };
+  for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
+    const label = mk("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = on.has(id);
+    box.onchange = () => {
+      const next = [];
+      for (const el of pool.querySelectorAll("input[type=checkbox]")) {
+        if (el.checked) next.push(el.dataset.theme);
+      }
+      saveSettings({ theme_rotate_pool: next });
+    };
+    box.dataset.theme = id;
+    const name = document.createElement("span");
+    name.textContent = theme.label || id;
+    label.append(box, name);
+    groupFor(customThemes.has(id) ? "Made here"
+             : theme.art ? "With a character" : "Presets").appendChild(label);
+  }
+}
+
+/* The two schedule fields and the pool only mean anything while the rotation
+ * is on, and a live control that does nothing is worse than a greyed one. */
+function syncThemeRotate() {
+  const on = $("#setThemeRotate").checked;
+  $("#setThemeRotateHours").disabled = !on;
+  $("#setThemeRotateAt").disabled = !on;
+  $("#themeRotatePool").classList.toggle("is-off", !on);
+}
+
+function renderThemeMaker() {
+  fillThemeSelect();   // picking from a row has to move the picker too
+  renderThemeRotation();
+  const note = $("#themeGenNote");
+  const gen = $("#themeGen");
+  if (!note || !gen) return;
+  gen.disabled = !canGenerateThemes;
+  note.textContent = canGenerateThemes
+    ? "Describe a mood. A model picks the colours that need taste; the rest are worked out and checked for contrast."
+    : "Add a model provider under Models first, and point the theme feature at it.";
+
+  const mine = $("#themeMine");
+  if (!mine) return;
+  mine.replaceChildren();
+  const themes = window.CLIQUE_THEMES || {};
+  for (const id of customThemes) {
+    const theme = themes[id];
+    if (!theme) continue;
+    const row = mk("div", "theme-row");
+    const swatch = mk("span", "theme-swatch");
+    swatch.style.background = (theme.panel || {}).bg || "#000";
+    swatch.style.borderColor = (theme.panel || {}).accent || "#888";
+    const name = mk("span", "theme-name");
+    name.textContent = theme.label || id;
+    const use = mk("button", "theme-use");
+    use.type = "button";
+    use.textContent = (state.settings.theme || "") === id ? "in use" : "Use";
+    use.disabled = (state.settings.theme || "") === id;
+    use.onclick = () => saveSettings({ theme: id }).then(renderThemeMaker);
+    const drop = mk("button", "theme-drop");
+    drop.type = "button";
+    drop.title = "Delete this theme";
+    drop.textContent = "\u00d7";
+    drop.onclick = async () => {
+      try {
+        await api(`api/themes/${encodeURIComponent(id)}/delete`, { method: "POST" });
+      } catch (err) {
+        return toast("Could not delete it: " + (err.message || err), true);
+      }
+      await refresh();      // the setting may have fallen back to the default
+      await loadThemes();
+      renderThemeMaker();
+    };
+    row.append(swatch, name, use, drop);
+    mine.appendChild(row);
+  }
+}
+
+async function generateTheme() {
+  const box = $("#themePrompt");
+  const gen = $("#themeGen");
+  const wanted = (box.value || "").trim();
+  if (!wanted) return box.focus();
+  gen.disabled = true;
+  const was = gen.textContent;
+  gen.textContent = "Making it\u2026";
+  try {
+    const made = await api("api/themes/generate", {
+      method: "POST", body: JSON.stringify({ prompt: wanted }),
+    });
+    box.value = "";
+    await loadThemes();
+    await saveSettings({ theme: made.id });   // made it, so wear it
+    toast(`"${made.label}" is on`);
+  } catch (err) {
+    toast(err.message || String(err), true);
+  } finally {
+    gen.textContent = was;
+    gen.disabled = false;
+    renderThemeMaker();
+  }
+}
+
+function openSettings() {
+  const s = state.settings;
+  renderSupport();   // About is one click away, so the list has to be there
+
+  fillThemeSelect();
+  renderThemeMaker();
   $("#setAppearance").value = s.appearance || "dark";
   $("#setInputMode").value = s.input_mode || "auto";
 
@@ -5953,9 +7804,18 @@ function openSettings() {
     secretBox.placeholder = s.webhook_secret_set ? "set — leave blank to keep" : "";
   }
   $("#setCliTint").checked = s.cli_tint !== false;
+  $("#setThemeArt").checked = s.theme_art !== false;
+  $("#setThemeRotate").checked = Boolean(s.theme_rotate);
+  $("#setThemeRotateHours").value = s.theme_rotate_hours || 24;
+  $("#setThemeRotateAt").value = s.theme_rotate_at || "07:00";
+  syncThemeRotate();
+  $("#setCliWatermark").checked = s.cli_watermark !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
   // into, and a poll landing mid-edit would move their cursor.
+  if (document.activeElement !== $("#setProjectRoots")) {
+    $("#setProjectRoots").value = (s.project_roots || []).join("\n");
+  }
   if (document.activeElement !== $("#setArtDirs")) {
     $("#setArtDirs").value = (s.artifact_dirs || []).join("\n");
   }
@@ -6127,13 +7987,22 @@ function renderSnippetRows() {
 
 function wire() {
   $("#q").oninput = () => { syncQClear(); renderTree(); };
-  $("#qClear").onclick = () => {
+  const clearSearch = () => {
     const q = $("#q");
+    if (q.value === "") return;
     q.value = "";
     syncQClear();
     renderTree();
     q.focus();
   };
+  /* On the press, not the click. A click only fires when the press and the
+   * release land on the same element, and on a target this size a pixel of
+   * drift put the release on the input instead — which is why it read as
+   * "the x works if you hold still and not otherwise". preventDefault keeps
+   * the caret in the box instead of moving focus to the button. onclick stays
+   * for the keyboard, and clearing an empty box does nothing. */
+  $("#qClear").onpointerdown = (ev) => { ev.preventDefault(); clearSearch(); };
+  $("#qClear").onclick = clearSearch;
   $("#newTab").onclick = openModal;
   $("#settingsBtn").onclick = openSettings;
   $("#whatsNew").onclick = () => showChangelog(baseVersion(state.version));
@@ -6155,6 +8024,10 @@ function wire() {
   $("#llmForm").onsubmit = addProvider;
 
   $("#setTheme").onchange = (ev) => saveSettings({ theme: ev.target.value });
+  $("#themeGen").onclick = generateTheme;
+  $("#themePrompt").onkeydown = (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); generateTheme(); }
+  };
   $("#setFontFamily").onchange = (ev) => saveSettings({ font_family: ev.target.value });
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
@@ -6205,6 +8078,72 @@ function wire() {
     }
   };
   $("#setCliTint").onchange = (ev) => saveSettings({ cli_tint: ev.target.checked });
+  $("#setThemeArt").onchange = (ev) => saveSettings({ theme_art: ev.target.checked });
+  $("#setThemeRotate").onchange = (ev) => {
+    saveSettings({ theme_rotate: ev.target.checked });
+    syncThemeRotate();
+  };
+  $("#setThemeRotateHours").onchange = (ev) => {
+    const hours = Math.max(1, Math.min(720, parseInt(ev.target.value, 10) || 24));
+    ev.target.value = hours;
+    saveSettings({ theme_rotate_hours: hours });
+  };
+  $("#setThemeRotateAt").onchange = (ev) => {
+    // The browser hands back "" for a half-typed time. Writing that would be
+    // refused by the server and leave the field disagreeing with what is
+    // stored, so the old value is put back instead.
+    if (!/^\d{2}:\d{2}$/.test(ev.target.value)) {
+      ev.target.value = state.settings.theme_rotate_at || "07:00";
+      return;
+    }
+    saveSettings({ theme_rotate_at: ev.target.value });
+  };
+  $("#themeRotateNow").onclick = async () => {
+    try {
+      const got = await api("api/themes/rotate", { method: "POST", body: "{}" });
+      await refresh();
+      renderThemeMaker();
+      const theme = (window.CLIQUE_THEMES || {})[got.theme];
+      toast("Now wearing " + ((theme && theme.label) || got.theme));
+    } catch (err) {
+      toast("Tick some themes for it to choose from first", true);
+    }
+  };
+  $("#setCliWatermark").onchange = (ev) => saveSettings({ cli_watermark: ev.target.checked });
+
+  /* Reloading an installed app.
+   *
+   * A PWA has no address bar, so there is no reload: if the panel ever gets
+   * into a state a fresh load would fix, an installed app has nothing to press
+   * and the only way out is to close and reopen it from the home screen. This
+   * is that button, and it is shown only where it is the only way, which is why
+   * a browser tab does not get one. `standalone` is the installed case
+   * everywhere except iOS, which has its own flag and predates the standard.
+   *
+   * The service worker is asked to update first. It does not cache, so a plain
+   * reload already fetches fresh code, but the worker itself is the one thing a
+   * reload would otherwise keep, and "reload" meaning "all of it except the
+   * part that serves you" is a promise not worth making. Failure is ignored:
+   * an update that cannot happen should not stop the reload that can. */
+  const installed = matchMedia("(display-mode: standalone)").matches
+    || matchMedia("(display-mode: fullscreen)").matches
+    || matchMedia("(display-mode: minimal-ui)").matches
+    || navigator.standalone === true;
+  const reload = $("#reloadBtn");
+  if (reload) {
+    reload.hidden = !installed;
+    reload.onclick = async () => {
+      reload.disabled = true;
+      try {
+        const reg = navigator.serviceWorker
+          && await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+      } catch (err) {
+        /* offline, or no worker. The reload below is the point. */
+      }
+      location.reload();
+    };
+  }
   $("#setArtShow").onchange = (ev) => {
     saveSettings({ artifacts_show: ev.target.checked });
     pollArtifacts();
@@ -6214,6 +8153,11 @@ function wire() {
   $("#setArtDirs").onblur = (ev) => {
     saveSettings({ artifact_dirs: ev.target.value.split("\n") });
     pollArtifacts();
+  };
+  // Same reasoning as above. Nothing has to invalidate the two-minute walk
+  // cache by hand: the roots are part of its key, so changing them is a miss.
+  $("#setProjectRoots").onblur = (ev) => {
+    saveSettings({ project_roots: ev.target.value.split("\n") });
   };
   // The toggle carries the days field: unchecked stores 0 (off); checked stores
   // whatever the field says, defaulting to 14 the first time it is switched on.
@@ -6413,6 +8357,12 @@ function wire() {
     if (!$("#prompt").value.trim()) return;
     pickSession("Move this draft to…", moveDraft);
   };
+  $("#attachFile").onclick = pickFiles;
+  $("#filePick").onchange = (ev) => {
+    const chosen = ev.target.files;
+    if (chosen && chosen.length) dropFiles(chosen);
+    ev.target.value = "";
+  };
   $("#run").onclick = () => run($("#prompt").value);
   $("#runShell").onclick = () => runShell($("#prompt").value);
   $("#reviewLock").onclick = () => toggleReviewLock(activeId);
@@ -6431,7 +8381,15 @@ function wire() {
     // closing menus that were not open.
     if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); focusTerminal(); return; }
     if (ev.key === "Tab" && expandInBox(ev.target)) { ev.preventDefault(); return; }
-    if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); run(ev.target.value); }
+    if (ev.key === "Enter" && !ev.shiftKey) {
+      // An input method mid-word reports Enter too: Gboard commits a
+      // suggestion with one. Sending there takes half a sentence and leaves
+      // the keyboard's idea of the field out of step with the field, which is
+      // where the duplication starts.
+      if (ev.isComposing || ev.keyCode === 229) return;
+      ev.preventDefault();
+      run(ev.target.value);
+    }
   };
   $("#prompt").oninput = (ev) => {
     growPrompt(ev.target);
@@ -6496,10 +8454,58 @@ function wire() {
   };
   $("#follow").onclick = () => setFollow(activeId, true);
   $("#copySel").onclick = () => copyPaneSelection();
+  $("#openSel").onclick = () => {
+    const path = pathFromText(paneSelection());
+    if (path && activeId) openFileSheet(activeId, path);
+  };
+  $("#fileUp").onclick = () => {
+    const parent = currentFile && fileParentPath(currentFile);
+    if (parent && fileSession) openFileSheet(fileSession, parent);
+  };
   $("#terminal").addEventListener("contextmenu", (ev) => {
     // A canvas has no native copy. Right-click with a selection copies;
     // without one, leave the event so a browser menu can still appear.
+    // A path under the pointer, or a selected path, is offered as Open:
+    // click already does that on desktop, but a phone has no hover to
+    // discover the link and no right-click either.
+    const entry = terms.get(activeId);
+    const under = entry ? panePathAt(entry.term, ev.clientX, ev.clientY) : "";
+    const picked = pathFromText(paneSelection());
+    const path = under || picked;
+    if (path && activeId) {
+      ev.preventDefault();
+      const name = path.split("/").filter(Boolean).pop() || path;
+      showMenu(ev, [
+        ["Open " + name, () => openFileSheet(activeId, path)],
+        ["Copy path", () => copyText(path).then(() => toast("Path copied"))],
+        ["Send path", () => toast("Path is in " + deliverPath(path))],
+      ]);
+      return;
+    }
     if (copyPaneSelection()) ev.preventDefault();
+    else if (matchMedia("(pointer: coarse)").matches && activeId) {
+      const s = session(activeId);
+      if (!s) return;
+      ev.preventDefault();
+      // Copy first, because it is the thing you long-pressed the output for.
+      // A finger drag is our scroll and there is no other gesture that makes
+      // an xterm selection, so without these you cannot get an error message
+      // off the screen of a phone at all.
+      const term = entry && entry.term;
+      const row = term ? paneCellAt(term, ev.clientX, ev.clientY).y : -1;
+      const here = term && row >= 0
+        ? (term.buffer.active.getLine(row) || { translateToString: () => "" })
+            .translateToString(true).trimEnd()
+        : "";
+      showMenu(ev, [
+        ...(here ? [["Copy this line", () => copyText(here)
+          .then(() => toast("Line copied"))]] : []),
+        ["Copy what is on screen", () => { if (!copyPaneVisible()) toast("Nothing there to copy yet"); }],
+        ["Copy the last 20 lines", () => copyPaneLast(20)],
+        ["Attach a file…", pickFiles],
+        ["Open a file in this folder", () => openFileSheet(s.id, s.cwd || ".")],
+      ]);
+    }
   });
   $("#artBtn").onclick = openArtifacts;
   $("#artClose").onclick = closeArtifacts;
@@ -6508,15 +8514,7 @@ function wire() {
     if (ev.target === $("#art")) closeArtifacts();          // the backdrop
   };
   $("#zenExit").onclick = () => toggleZen(false);
-  $("#noteSave").onclick = () => saveNote(false);
-  $("#noteClose").onclick = () => saveNote(true);
-  $("#noteSheet").onclick = (ev) => { if (ev.target.id === "noteSheet") saveNote(true); };
-  $("#noteText").addEventListener("keydown", (ev) => {
-    // Esc and Cmd/Ctrl+Enter both save and close; a note is never lost to a stray key.
-    if (ev.key === "Escape" || (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey))) {
-      ev.preventDefault(); ev.stopPropagation(); saveNote(true);
-    }
-  });
+  wireSidePanel();
   $("#fileClose").onclick = closeFileSheet;
   $("#file").onclick = (ev) => {
     if (ev.target === $("#file")) closeFileSheet();
@@ -7183,6 +9181,8 @@ function paletteCommands() {
   add("What's new", "This release, in Settings",
       () => showChangelog(baseVersion(state.version)));
   add("Toggle sidebar", "Ctrl+B", () => setSidebar($("#sidebar").hidden));
+  add(panelPane ? "Close the side panel" : "Open the side panel",
+      "Notes, git, session info and export. Ctrl+J", () => togglePanel(panelPane || "notes"));
   add("Full screen", "The pane, not the browser. Ctrl+Shift+F", toggleFullscreen);
   if (installPrompt) {
     add("Install as an app", "Its own window — no tabs, no URL bar", installApp);
@@ -7200,6 +9200,8 @@ function paletteCommands() {
         current.name + " — nothing is killed either way",
         () => setArchived(current, !current.archived));
     add("Copy working directory", current.cwd, () => copyText(current.cwd));
+    add("Open a file", "Look at a path in this session's folder",
+        () => openFileSheet(current.id, current.cwd || "."));
     add("Copy what's on screen", "The visible pane, not the scrollback",
         () => { copyPaneSelection() || copyPaneVisible(); });
     add("Copy the last 50 lines", "The recent output, scrollback and all — no dragging",
@@ -7210,8 +9212,12 @@ function paletteCommands() {
       add("Interrupt (Ctrl-C)", "Send Ctrl-C to pause what the session is doing",
           () => sendKey(current.id, "C-c", "Paused"));
     }
-    add("Notes for this session", "A sidecar .md to jot context, a to-do, or where you left off",
+    add("Notes for this session", "A nested checklist in the side panel — to-dos, context, reminders",
         () => openNote(current));
+    add("Git and checkpoints", "Branch, what's changed, and a checkpoint, in the side panel",
+        () => openPanel("git"));
+    add("Session info", "Directory, CLI, memory and uptime, in the side panel",
+        () => openPanel("info"));
     add("Focus the terminal", current.name, focusTerminal);
     add(document.body.classList.contains("zen") ? "Exit zen mode" : "Zen mode",
         "Hide everything but the terminal and the prompt", () => toggleZen());
@@ -7234,10 +9240,23 @@ function paletteCommands() {
     add("Close every tab", `${openTabs.length} open · every session keeps running`,
         closeAllTabs);
   }
+  /* Always offered here, even where the status bar hides the button. The
+   * button is for the installed app, which has no address bar; the palette is
+   * for anyone who would rather type it, and for a keyboard that cannot reach
+   * the browser's own reload because the pane has the keys. */
+  for (const g of groups()) {
+    const live = (g.members || []).filter((m) => (session(m.session) || {}).alive).length;
+    add("Open group: " + g.name,
+        `${(g.members || []).length} sessions · ${live} already running`,
+        () => openGroup(g));
+  }
+  add("Reload the panel", "Sessions keep running; tabs and layout come back",
+      () => { const b = $("#reloadBtn"); if (b) b.onclick(); else location.reload(); });
 
   for (const [id, theme] of Object.entries(window.CLIQUE_THEMES || {})) {
+    const what = theme.art ? theme.base + " · has a character" : theme.base;
     add("Theme: " + theme.label,
-        (state.settings.theme || "") === id ? "in use" : theme.base,
+        (state.settings.theme || "") === id ? "in use" : what,
         () => saveSettings({ theme: id }));
   }
   for (const mode of ["dark", "light", "system"]) {
@@ -7269,6 +9288,21 @@ function closeAllTabs() {
 function focusTerminal() {
   const entry = terms.get(activeId);
   if (entry) entry.term.focus();
+}
+
+/* Whether the pane should be handed the keyboard when nobody asked it to be.
+ *
+ * On a desktop, yes: the pane is where you type unless you deliberately went
+ * to the prompt box. On a phone showing the panel's box it is the opposite,
+ * and this is not a preference. Focusing xterm's hidden textarea is what puts
+ * the phone keyboard's input method back on the terminal, which is the exact
+ * path 0.66.0 moved typing off because Android duplicates the line down it.
+ * Showing the box and then focusing the pane anyway left the fix half done.
+ *
+ * Focus nothing instead and let the first tap decide. `focusTerminal` itself
+ * is untouched: Escape out of the prompt box is somebody asking. */
+function paneWantsFocus() {
+  return !(handheld() && promptWanted());
 }
 
 /* Smart focus: after a switch, land in the prompt box so a new prompt is one
@@ -7404,6 +9438,23 @@ function paneGridCell(term, clientX, clientY) {
   return { col, row };
 }
 
+function panePathAt(term, clientX, clientY) {
+  if (!term) return "";
+  const cell = paneCellAt(term, clientX, clientY);
+  const line = term.buffer.active.getLine(cell.y);
+  if (!line) return "";
+  const own = line.translateToString(true);
+  PATH_RE.lastIndex = 0;
+  let match;
+  while ((match = PATH_RE.exec(own)) !== null) {
+    const raw = trimPath(match[1]);
+    if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
+    const at = pathRange(own, match, raw);
+    if (cell.x + 1 >= at.start && cell.x + 1 <= at.end) return raw;
+  }
+  return "";
+}
+
 function sendPaneClick(term, clientX, clientY, sessionId) {
   const entry = terms.get(sessionId || activeId);
   if (!entry || !entry.ws || entry.ws.readyState !== 1) return;
@@ -7451,27 +9502,45 @@ function paneCellPx(term) {
   return { w: size * 0.6, h: size * 1.2 };
 }
 
-function paneZoomScale(availW, availH, cols, rows, cellW, cellH) {
-  if (availW < 2 || availH < 2 || cols < 1 || rows < 1 || cellW < 1 || cellH < 1) {
-    return 1;
-  }
-  const needW = cols * cellW, needH = rows * cellH;
-  if (needW <= availW && needH <= availH) return 1;
-  return Math.min(availW / needW, availH / needH);
+/* How far a boxed CLI's picture has to shrink to clear the pane's width.
+ *
+ * Width alone, deliberately. The zoom exists to protect the *columns*:
+ * narrowing the grid is what stacks a boxed CLI's prompt, and rows are free to
+ * follow the box like any other terminal's. Letting the height vote used to
+ * trap the pane — taking the rows the zoom had freed made the grid taller than
+ * its box, which read as a fresh reason to keep zooming, so closing the panel
+ * never gave the full size back. */
+function paneWidthScale(availW, cols, cellW) {
+  if (availW < 2 || cols < 1 || cellW < 1) return 1;
+  const need = cols * cellW;
+  return need <= availW ? 1 : availW / need;
 }
 
 function paneShouldZoom(boxed, scale) {
   return Boolean(boxed) && scale < 1 && scale >= PANE_ZOOM_MIN;
 }
 
-function applyPaneZoom(term, scale) {
+/* Scale the picture, and tell the terminal how wide it really is.
+ *
+ * The width matters as much as the transform. xterm sizes its viewport (and
+ * therefore its scrollbar) from its own root element, while the screen it
+ * draws follows the column count — so a pane that deliberately keeps a wide
+ * grid inside a narrower box leaves the two disagreeing, and the scrollbar
+ * ends up stranded partway across with terminal text on both sides of it.
+ * Giving the root the grid's true width makes them agree, and the transform
+ * then shrinks both together. */
+function applyPaneZoom(term, scale, naturalW, naturalH) {
   const el = term && term.element;
   if (!el) return;
   if (!scale || scale >= 0.995) {
     el.style.transform = "";
     el.style.transformOrigin = "";
+    el.style.width = "";
+    el.style.height = "";
     return;
   }
+  if (naturalW) el.style.width = Math.ceil(naturalW) + "px";
+  if (naturalH) el.style.height = Math.ceil(naturalH) + "px";
   el.style.transformOrigin = "top left";
   el.style.transform = "scale(" + scale + ")";
 }
@@ -7663,12 +9732,92 @@ function wirePaneClipboard(term, host, sessionId) {
     e.preventDefault();
     e.stopPropagation();
   }, { capture: true, passive: false });
+
+  /* The same scroll, with a finger, because a phone has no wheel.
+   *
+   * This was simply missing. Scrolling the pane has always been our own wheel
+   * handler rather than the browser's, since xterm needs telling which of the
+   * two buffers a scroll belongs to, and nothing was listening for touch at
+   * all. So on a phone the pane did not scroll, and it looked like a broken
+   * gesture rather than an absent one.
+   *
+   * The branch is the wheel's, unchanged: a full-screen app owns its own view
+   * and is sent wheel events to move it, anything else scrolls the pane's own
+   * scrollback.
+   *
+   * Pixels are carried between moves rather than rounded away. A slow drag
+   * moves a few pixels per event, every one of which truncates to zero lines,
+   * and the pane would not move at all until you flicked. Keeping the
+   * remainder is the difference between a gesture that tracks your thumb and
+   * one that only responds to violence.
+   *
+   * A short movement is left alone so a tap still reaches the CLI and a
+   * long-press can still start a selection. */
+  const TOUCH_SLOP = 8;
+  let touchY = 0;
+  let touchX = 0;
+  let carried = 0;
+  let dragging = false;
+  let tracking = false;
+
+  host.addEventListener("touchstart", (e) => {
+    tracking = e.touches.length === 1;
+    dragging = false;
+    carried = 0;
+    if (!tracking) return;
+    touchY = e.touches[0].clientY;
+    touchX = e.touches[0].clientX;
+  }, { capture: true, passive: true });
+
+  host.addEventListener("touchmove", (e) => {
+    if (!tracking || e.touches.length !== 1) return;
+    /* Deliberately not gated on `sessionOwnsInput`, which the wheel handler
+     * above does gate on. The wheel can afford it: a CLI that does not own its
+     * input is left to the browser's native scrolling. A finger has no such
+     * fallback, because `touch-action: none` above is exactly what took the
+     * gesture away from the browser, so gating here means a shell session
+     * simply does not scroll. Which is how this was written the first time. */
+    const y = e.touches[0].clientY;
+    const moved = touchY - y;
+    if (!dragging) {
+      if (Math.abs(moved) < TOUCH_SLOP) return;   // still might be a tap
+      dragging = true;
+      touchY = y;
+      return;
+    }
+    const cell = paneCellPx(term);
+    const height = (cell && cell.h) || 17;
+    carried += touchY - y;
+    touchY = y;
+    const lines = Math.trunc(carried / height);
+    if (lines) {
+      carried -= lines * height;
+      const s = session(sessionId);
+      if (s && s.alt) {
+        sendPaneWheel(term, touchX, y, lines < 0, Math.abs(lines), sessionId);
+      } else {
+        term.scrollLines(lines);
+      }
+    }
+    // Held even on a move that did not add up to a line yet: releasing it
+    // would let the page rubber-band underneath a half-finished drag.
+    e.preventDefault();
+    e.stopPropagation();
+  }, { capture: true, passive: false });
+
+  host.addEventListener("touchend", () => { tracking = false; dragging = false; },
+                        { capture: true, passive: true });
+  host.addEventListener("touchcancel", () => { tracking = false; dragging = false; },
+                        { capture: true, passive: true });
 }
 
 function renderCopyChip() {
-  const chip = $("#copySel");
-  if (!chip) return;
-  chip.hidden = !paneSelection();
+  const wrap = $("#selChips");
+  const open = $("#openSel");
+  const picked = paneSelection();
+  const has = Boolean(picked && picked.trim());
+  if (wrap) wrap.hidden = !has;
+  if (open) open.hidden = !pathFromText(picked);
 }
 
 function typingInAField(el) {
@@ -7934,6 +10083,48 @@ function wireResizer() {
  * fires before the document is focused (Brave and Chrome), so a hasFocus()
  * gate here used to swallow the reclaim and leave the dots until you
  * clicked the pane. */
+/* Who gets to set the shared tmux window when more than one panel is open.
+ *
+ * `document.hasFocus()` was doing this job and cannot: it is per browser
+ * window, and a desktop panel on one machine and a phone in your hand both
+ * report true at the same time, because both are true. So on every poll each
+ * one saw the window at the other's size, decided it had been resized out from
+ * under it, and claimed it back. Two clients, three seconds apart, forever: the
+ * CLI reflows to 162 columns, then to 42, then back, and the phone is unusable
+ * for as long as a desktop panel is open somewhere.
+ *
+ * The rule now is Justin's, and it is a product decision rather than a
+ * heuristic: **a handheld wins.** A phone is only ever picked up to do
+ * something that could not wait, so when one is awake and in front of you it
+ * should own the window and the desktop should get out of the way.
+ *
+ * A phone in a pocket does not count, and does not need to be special-cased:
+ * a backgrounded tab or a dark screen is `document.hidden`, which is already
+ * the first thing this checks.
+ *
+ * A desktop still claims on any real action — selecting a tab, coming back to
+ * the window, clicking into the pane — because that is the moment you are
+ * using it, and it still claims on the poll while it is being used, so a lone
+ * desktop panel recovers from tmux's dot-fill exactly as it did. What it no
+ * longer does is assert its size purely for being open. */
+let lastTouch = 0;
+const TOUCH_ACTIVE_MS = 45000;
+
+for (const kind of ["keydown", "pointerdown", "touchstart"]) {
+  addEventListener(kind, () => { lastTouch = Date.now(); }, { capture: true, passive: true });
+}
+
+/* Touch as the primary input, which is the honest test for "this is a phone
+ * or a tablet". Not the width: a narrow desktop window is still a desktop, and
+ * a tablet in landscape is still the thing that should win. */
+function handheld() {
+  return matchMedia("(pointer: coarse)").matches;
+}
+
+function recentlyUsed() {
+  return Date.now() - lastTouch < TOUCH_ACTIVE_MS;
+}
+
 function claimable(cols, rows) {
   // A collapsed or hidden tab measures as almost nothing. Sending that
   // as the shared window's size is how coming back left a sea of dots.
@@ -7941,9 +10132,36 @@ function claimable(cols, rows) {
   return cols >= 20 && rows >= 8;
 }
 
+/* A phone tells the server it is still here, and tells it when it is not.
+ *
+ * The server decides who owns the shared tmux window and a handheld wins, but
+ * a phone that already owns it has nothing left to resize, so without this the
+ * claim would lapse under an idle phone and the desktop would take the window
+ * back mid-read. And without the release, putting the phone down would lock
+ * the desktop out until the backstop timer expired.
+ *
+ * Only from a phone, only while it is awake and looking at a session. A
+ * desktop never sends either: it is not claiming anything. */
+function holdWindow(alive) {
+  if (!handheld()) return;
+  const entry = terms.get(activeId);
+  if (!entry || !entry.ws || entry.ws.readyState !== 1) return;
+  entry.ws.send(JSON.stringify({ type: alive ? "hold" : "release" }));
+}
+
+document.addEventListener("visibilitychange", () => holdWindow(!document.hidden));
+// A phone locked or swapped away often gets pagehide rather than a clean
+// visibilitychange, and letting go is the half that must not be missed.
+addEventListener("pagehide", () => holdWindow(false));
+
 function reclaimSize(force) {
   if (document.hidden) return;
   if (!force && !document.hasFocus()) return;
+  /* The poll-driven reclaim is the one that fights, so it is the one that
+   * needs a reason. A handheld always has one. A desktop needs to have been
+   * touched recently; being merely open is not a claim on somebody else's
+   * screen. `force` is always a real action and always wins. */
+  if (!force && !handheld() && !recentlyUsed()) return;
   const entry = terms.get(activeId);
   const s = session(activeId);
   if (!entry || !s || !s.alive) return;
@@ -7956,7 +10174,8 @@ function reclaimSize(force) {
   // because the numbers already matched is how a screen of dots lasted
   // until you clicked.
   if (!force && s.cols && s.rows && cols === s.cols && rows === s.rows) return;
-  entry.ws.send(JSON.stringify({ type: "resize", cols, rows }));
+  entry.claimedAt = Date.now();
+  entry.ws.send(JSON.stringify({ type: "resize", cols, rows, handheld: handheld() }));
 }
 
 function refitAll() {
@@ -8062,9 +10281,7 @@ function setSidebar(show) {
   // size to tmux — after the layout has actually settled, not at 0ms. Fitting
   // too early computes a boxed CLI's zoom against the old width, and the pane
   // comes back scaled wrong with a stray scrollbar and dead space beside it.
-  const settle = () => { packTabs(); refitAll(); reclaimSize(document.hasFocus()); };
-  requestAnimationFrame(settle);
-  setTimeout(settle, 80);
+  afterLayout("pane", settlePane);
 }
 
 /* Carry the browser's own state across the rename, once.
@@ -8129,7 +10346,10 @@ function wireKeyRow() {
     const btn = ev.target.closest("[data-key]");
     if (!btn || !activeId) return;
     sendPaneKey(activeId, btn.dataset.key);
-    focusTerminal();
+    // The key went over the socket, not through the keyboard, so nothing here
+    // needed focus. Taking it back would put a phone's next word into the
+    // terminal after a single tap on Esc.
+    if (paneWantsFocus()) focusTerminal();
   });
 }
 
@@ -8160,15 +10380,30 @@ function wirePeekTooltips() {
 
 wire();
 wireResizer();
-wireTouchMenus();
+wireTouchMenus($("#tree"), (node) => {
+  const head = node.closest(".folder-head");
+  if (head && head.querySelector(".folder-edit")) return head;
+  return node.closest(".session");
+});
+wireTouchMenus($("#groups"), (node) => node.closest(".group-row"));
+wireTermTouchMenus();
 wirePeekTooltips();
 wireKeyRow();
+panelLoad();   // restore panel width + which pane, before the first render
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");
 // A phone starts with the drawer closed and the pane in front, whatever a
 // desktop session in the same browser last left the sidebar at.
 if (isMobile()) setSidebar(false);
 bootWorkspace();
+// Themes made here, once. They are wanted on any device the moment it loads,
+// and they change about twice a year, so this is a boot fetch rather than
+// weight on every poll.
+loadThemes();
+loadUsage();
+// Its own cadence: plan windows move over hours and this is somebody else's
+// API. The server caches on top of this, so extra tabs cost nothing.
+setInterval(loadUsage, 5 * 60 * 1000);
 setInterval(refresh, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and
 // nobody is waiting on a screenshot to the second.
