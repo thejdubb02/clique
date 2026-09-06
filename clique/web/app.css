@@ -511,7 +511,11 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
             background: var(--bg);
             container-type: inline-size; container-name: termpane;
             isolation: isolate; }
-#terminal { position: absolute; inset: 0; padding: 6px 8px; }
+#terminal { position: absolute; inset: 0; padding: 6px 8px;
+            /* A finger drag scrolls the pane (our own touch handler); it must
+               not also start a native text selection and the iOS copy callout.
+               xterm keeps its own selection model, so desktop copy is unaffected. */
+            -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 #terminal.hidden { visibility: hidden; }
 
 /* The theme's character, watermarked into the corner.
@@ -1317,6 +1321,10 @@ body.is-fs #fullScr .ico-fs-leave { display: block; }
      decoration, which is what it was until 2026-09-02. */
   body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
                   env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  /* The body padding shrinks its content box, so a full 100dvh shell overflows
+     it and clips the bottom row (the input bar, the last of the scrollback) on
+     a phone. Take the top and bottom insets back out of the shell's height. */
+  #shell { height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
   /* Fixed to the viewport, so the body's padding does not move it. Undo after
      a kill lives in here, and the home indicator is about 34px of it. */
   #toast { bottom: calc(18px + env(safe-area-inset-bottom)); }

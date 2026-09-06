@@ -356,7 +356,7 @@ class Panel:
         current = settings.get("theme") or ""
         choices = [t for t in pool if t != current] or pool
         self.store.update_settings(
-            {"theme": random.choice(choices), "theme_rotate_last": int(slot)}
+            {"theme": random.choice(choices), "theme_rotate_last": int(slot)}  # noqa: S311, a theme pick is not a secret
         )
         return self.store.settings.get("theme") or ""
 
@@ -887,8 +887,10 @@ class Panel:
             # rather than by id, because the tab strip has to colour a tab by
             # its group on the first paint and a second round trip for that is
             # a flicker nobody asked for.
-            "groups": [dataclasses.asdict(g) for g in sorted(
-                self.store.groups, key=lambda g: (g.order, g.name.lower()))],
+            "groups": [
+                dataclasses.asdict(g)
+                for g in sorted(self.store.groups, key=lambda g: (g.order, g.name.lower()))
+            ],
             "sessions": self.sessions_view(panes),
             "clis": [c.as_dict() for c in self.registry.types().values()],
             # Almost always empty, which is the point — this carries the
@@ -2259,13 +2261,15 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"ok": gone}, 200 if gone else 404)
                 if len(parts) == 4 and parts[3] == "add":
                     group = self.panel.store.group_add_session(
-                        parts[2], str(body.get("session") or ""))
+                        parts[2], str(body.get("session") or "")
+                    )
                     if not group:
                         return self._json({"error": "no such group or session"}, 404)
                     return self._json(dataclasses.asdict(group))
                 if len(parts) == 4 and parts[3] == "remove":
                     group = self.panel.store.group_remove_session(
-                        parts[2], str(body.get("session") or ""))
+                        parts[2], str(body.get("session") or "")
+                    )
                     if not group:
                         return self._json({"error": "no such group"}, 404)
                     return self._json(dataclasses.asdict(group))
@@ -2273,7 +2277,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._open_group(parts[2], bool(body.get("recreate")))
             if path == "/api/groups":
                 group = self.panel.store.add_group(
-                    body.get("name") or "New group", body.get("color"),
+                    body.get("name") or "New group",
+                    body.get("color"),
                     body.get("members"),
                 )
                 if group is None:
@@ -2471,11 +2476,13 @@ class Handler(BaseHTTPRequestHandler):
             if not recreate:
                 missing.append(member)
                 continue
-            made = self.panel.create_session({
-                "cli": member.get("cli") or "",
-                "cwd": member.get("cwd") or "",
-                "name": member.get("name") or "",
-            })
+            made = self.panel.create_session(
+                {
+                    "cli": member.get("cli") or "",
+                    "cwd": member.get("cwd") or "",
+                    "name": member.get("name") or "",
+                }
+            )
             if made.get("error"):
                 failed.append({"session": sid, "error": made["error"]})
                 continue
@@ -2485,11 +2492,15 @@ class Handler(BaseHTTPRequestHandler):
             self.panel.store.group_add_session(group_id, made["id"])
             opened.append(made["id"])
             started.append(made["id"])
-        return self._json({
-            "group": dataclasses.asdict(self.panel.store.group(group_id) or group),
-            "sessions": opened, "started": started,
-            "missing": missing, "failed": failed,
-        })
+        return self._json(
+            {
+                "group": dataclasses.asdict(self.panel.store.group(group_id) or group),
+                "sessions": opened,
+                "started": started,
+                "missing": missing,
+                "failed": failed,
+            }
+        )
 
     def _artifacts(self, session_id: str) -> None:
         """What this session's working directory has to show.
@@ -2998,8 +3009,7 @@ class Handler(BaseHTTPRequestHandler):
             # reporting goes with it: the alternate screen is hidden from every
             # session, because tmux ignores it to keep history and a browser
             # that honoured it would sit in a buffer that has none.
-            filt = (termstrip.boxed_stream() if (cli and cli.own_input)
-                    else termstrip.plain_stream())
+            filt = termstrip.boxed_stream() if (cli and cli.own_input) else termstrip.plain_stream()
 
             def outbound(data: bytes, _filt=filt) -> None:
                 if _filt is not None:

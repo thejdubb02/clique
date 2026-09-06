@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.67.1 — 2026-09-05 17:39 PDT
+
+**Two more phone fixes.** Dragging to scroll the terminal in the installed app no
+longer starts a text selection and the copy menu, so a scroll stays a scroll.
+And the safe-area padding no longer pushes the bottom of the screen off the
+display, so the input bar and the last of the scrollback are visible again on a
+phone.
+
 ## 0.67.0 — 2026-09-02 18:51 PDT
 
 **The three things a phone still could not do.** All from the review a second
