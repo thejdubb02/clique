@@ -64,7 +64,8 @@ body {
    app fits the space left and the prompt sits above the keyboard instead of
    behind it, and the header cannot be scrolled off the top. A no-op otherwise,
    so the normal and safe-area heights are untouched. */
-html.kb-open #shell { height: var(--app-h, 100%); }
+html.kb-open body { height: var(--app-h, 100dvh); }
+html.kb-open #shell { height: 100%; }   /* fills body, so its safe-area padding is subtracted for free */
 
 /* ------------------------------------------------------------------ sidebar */
 

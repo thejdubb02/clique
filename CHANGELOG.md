@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.67.3 — 2026-09-05 19:38 PDT
+
+**Two follow-up fixes to the phone keyboard handling.** In the installed app the
+input bar could still slip behind the keyboard, because the keyboard-aware height
+did not account for the safe-area padding; it now does. And a pinch-zoom, which
+also shrinks the viewport, was being mistaken for the keyboard; it no longer is.
+
 ## 0.67.2 — 2026-09-05 19:07 PDT
 
 **The keyboard no longer covers the prompt, and the header stays put.** On a

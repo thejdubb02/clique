@@ -10389,7 +10389,9 @@ function trackKeyboard() {
   if (!vv) return;
   const root = document.documentElement;
   const apply = () => {
-    if (window.innerHeight - vv.height > 120) {   // a keyboard, not browser chrome
+    // vv.height * vv.scale so a pinch-zoom (which also shrinks vv.height) is not
+    // mistaken for a keyboard; only a real keyboard leaves a gap here.
+    if (window.innerHeight - vv.height * vv.scale > 120) {
       root.style.setProperty("--app-h", Math.round(vv.height) + "px");
       root.classList.add("kb-open");
       window.scrollTo(0, 0);   // iOS scrolls the layout viewport; pin it back
