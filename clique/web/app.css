@@ -59,6 +59,12 @@ body {
    with `overflow: hidden` -- which is the safe area re-created one level
    down. */
 #shell { display: flex; height: 100%; }
+/* Keyboard-aware. When the on-screen keyboard shrinks the visible viewport,
+   trackKeyboard() adds .kb-open and sets --app-h to the visible height, so the
+   app fits the space left and the prompt sits above the keyboard instead of
+   behind it, and the header cannot be scrolled off the top. A no-op otherwise,
+   so the normal and safe-area heights are untouched. */
+html.kb-open #shell { height: var(--app-h, 100%); }
 
 /* ------------------------------------------------------------------ sidebar */
 

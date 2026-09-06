@@ -10378,6 +10378,31 @@ function wirePeekTooltips() {
   }
 }
 
+/* Keep the app inside the space the on-screen keyboard leaves. Without it the
+ * keyboard covers the prompt and the browser scrolls the header off the top.
+ * VisualViewport reports the visible area on iOS and Android; the class is added
+ * only while a real chunk is covered, so the normal and safe-area layouts are
+ * untouched. Android also gets interactive-widget=resizes-content, which usually
+ * handles this before a gap ever appears here. */
+function trackKeyboard() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const root = document.documentElement;
+  const apply = () => {
+    if (window.innerHeight - vv.height > 120) {   // a keyboard, not browser chrome
+      root.style.setProperty("--app-h", Math.round(vv.height) + "px");
+      root.classList.add("kb-open");
+      window.scrollTo(0, 0);   // iOS scrolls the layout viewport; pin it back
+    } else {
+      root.classList.remove("kb-open");
+      root.style.removeProperty("--app-h");
+    }
+  };
+  vv.addEventListener("resize", apply);
+  vv.addEventListener("scroll", apply);
+  apply();
+}
+
 wire();
 wireResizer();
 wireTouchMenus($("#tree"), (node) => {
@@ -10389,6 +10414,7 @@ wireTouchMenus($("#groups"), (node) => node.closest(".group-row"));
 wireTermTouchMenus();
 wirePeekTooltips();
 wireKeyRow();
+trackKeyboard();
 panelLoad();   // restore panel width + which pane, before the first render
 setSidebarWidth(storedSidebarWidth(), false);
 setSidebar(localStorage.getItem("clique.sidebar") !== "0");

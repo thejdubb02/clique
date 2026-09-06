@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.67.2 — 2026-09-05 19:07 PDT
+
+**The keyboard no longer covers the prompt, and the header stays put.** On a
+phone, opening the keyboard now shrinks the app to the space above it, so the
+text field sits above the keyboard and the top of the screen no longer scrolls
+off. It uses the browser's own keyboard-resize hint where that is supported, and
+tracks the visible viewport everywhere else.
+
 ## 0.67.1 — 2026-09-05 17:39 PDT
 
 **Two more phone fixes.** Dragging to scroll the terminal in the installed app no
