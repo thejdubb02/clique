@@ -383,6 +383,73 @@ def _run(panel) -> int:
             {"before": before, "after": after},
         )
 
+        # A stat the machine cannot report is gone, not blank. Most VMs have no
+        # temperature sensor and no swap in use, and holding those columns open
+        # left two permanent holes in the row.
+        gaps = page.evaluate(
+            """() => {
+              const q = (s) => document.querySelector(s);
+              const swap = q('#swap'), temp = q('#temp');
+              swap.classList.add('is-off');
+              temp.classList.add('is-off');
+              const load = q('#load').getBoundingClientRect();
+              const up = q('#uptime').getBoundingClientRect();
+              const cpu = q('#cpu').getBoundingClientRect();
+              const mem = q('#mem').getBoundingClientRect();
+              return {
+                off: temp.getBoundingClientRect().width + swap.getBoundingClientRect().width,
+                between: up.left - load.right,
+                normal: mem.left - cpu.right,
+              };
+            }"""
+        )
+        check("a stat with no reading takes no width", gaps["off"] < 1, gaps)
+
+        # Nothing in the bar may be cut off mid-word. Readings drop out whole
+        # as the row narrows; the plan meters cost it real estate and the first
+        # attempt at them left VIEWS reading "VIEW". Asked at three widths
+        # because the row is the window minus the sidebar, so collapsing the
+        # sidebar has to change the answer.
+        OVERHANG = """() => {
+          const bar = document.querySelector('#statusbar').getBoundingClientRect();
+          const bad = [];
+          for (const el of document.querySelectorAll('#stats > .stat')) {
+            if (!el.offsetParent) continue;
+            const r = el.getBoundingClientRect();
+            if (r.right > bar.right + 1 || r.left < bar.left - 1) bad.push(el.id || '?');
+          }
+          return bad;
+        }"""
+        for width, label in ((1280, "at a normal window"), (900, "at a narrow one")):
+            page.set_viewport_size({"width": width, "height": 860})
+            page.wait_for_timeout(350)
+            over = page.evaluate(OVERHANG)
+            check(f"no reading hangs off the status bar {label}", over == [], over)
+        page.evaluate("() => setSidebar(false)")
+        page.wait_for_timeout(400)
+        check("nor with the sidebar collapsed", page.evaluate(OVERHANG) == [],
+              page.evaluate(OVERHANG))
+        page.evaluate("() => setSidebar(true)")
+        page.set_viewport_size({"width": 1280, "height": 860})
+        page.wait_for_timeout(350)
+        # No CLI in this check declares a usage probe, so the block stays away
+        # rather than sitting there empty.
+        check("the plan block is absent for a CLI that cannot report it",
+              page.evaluate("() => document.querySelector('#plan').hidden") is True)
+        check(
+            "and leaves no gap where it was",
+            abs(gaps["between"] - gaps["normal"]) < 1,
+            gaps,
+        )
+        shown = page.evaluate(
+            """() => {
+              const temp = document.querySelector('#temp');
+              temp.classList.remove('is-off');
+              return temp.getBoundingClientRect().width;
+            }"""
+        )
+        check("a stat that comes back is drawn again", shown > 10, shown)
+
         print("the theme reached the terminal")
         sessions = page.locator(f'.session[data-id="{mine}"]')
         if sessions.count():
@@ -394,6 +461,370 @@ def _run(panel) -> int:
                 " return s ? getComputedStyle(s).backgroundColor : ''; }"
             )
             print(f"       terminal background: {painted or '(none set)'}")
+
+            # The pane's scrollbar was the last raw browser control in the
+            # panel. It has to follow the theme like everything else, and it
+            # has to keep following when the theme changes.
+            bar = page.evaluate(
+                """() => {
+                  const vp = document.querySelector('.xterm-viewport');
+                  if (!vp) return null;
+                  const cs = getComputedStyle(vp);
+                  return {width: cs.scrollbarWidth, color: cs.scrollbarColor};
+                }"""
+            )
+            check("the pane's scrollbar is thin, not the browser default",
+                  bool(bar) and bar["width"] == "thin", bar)
+            check("and it is coloured, not auto",
+                  bool(bar) and bar["color"] not in ("", "auto"), bar)
+            before = bar["color"] if bar else ""
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: 'dracula'})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(600)
+            after = page.evaluate(
+                "() => { const v = document.querySelector('.xterm-viewport');"
+                " return v ? getComputedStyle(v).scrollbarColor : ''; }"
+            )
+            check("and it changes with the theme", after and after != before,
+                  {"before": before, "after": after})
+            page.screenshot(path=str(SHOTS / "terminal-dracula.png"))
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: ''})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(400)
+
+            # The character a theme carries. Nothing else in this suite can see
+            # it: it is a background image on an element with no text, sized as
+            # a percentage of a pane, blended into the terminal. Every part of
+            # that is invisible to a test that reasons about the code.
+            print("working groups, and the band that shows them")
+            # Put the strip back afterwards. This test opens tabs and makes one
+            # of them active, and everything below drags across whichever pane
+            # is in front: leaving a fresh empty shell there broke three copy
+            # assertions that had nothing to do with groups.
+            was_active = page.evaluate("() => activeId")
+            # The band is the whole visual and it only reads as a band if the
+            # tabs it runs under are adjacent. Scattered through the strip the
+            # same colour is three unrelated pills, which is what the first
+            # version of this drew.
+            # Two sessions of its own: the sandbox has one, and a group of one
+            # cannot show that a band runs across a run of tabs.
+            made = page.evaluate(
+                """async () => {
+                  const post = (u, b) => fetch(u, {method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify(b || {})}).then((r) => r.json());
+                  const g = await post('/api/groups',
+                    {name: 'Visual group', color: '#7aa2f7'});
+                  const ids = [];
+                  for (const n of ['group one', 'group two']) {
+                    const s = await post('/api/sessions',
+                      {cli: 'shell', cwd: '/tmp', name: n});
+                    if (s.id) { ids.push(s.id); await post(`/api/groups/${g.id}/add`,
+                      {session: s.id}); }
+                  }
+                  await refresh();
+                  return {gid: g.id, ids};
+                }"""
+            )
+            page.wait_for_timeout(1500)
+            check("the sidebar lists the group",
+                  page.evaluate(
+                      "() => !!document.querySelector('#groups .group-row')") is True)
+            page.evaluate("() => document.querySelector('#groups .group-open').click()")
+            page.wait_for_timeout(4000)
+            band = page.evaluate(
+                """() => {
+                  const tabs = [...document.querySelectorAll('#tabs .tab')];
+                  const at = tabs.map((t, i) => t.classList.contains('grouped') ? i : -1)
+                    .filter((i) => i >= 0);
+                  const starts = tabs.filter((t) => t.classList.contains('group-start')).length;
+                  const ends = tabs.filter((t) => t.classList.contains('group-end')).length;
+                  const one = tabs.find((t) => t.classList.contains('grouped'));
+                  const after = one ? getComputedStyle(one, '::after') : null;
+                  return {at, starts, ends,
+                          h: after ? after.height : '', bg: after ? after.backgroundColor : '',
+                          barHeight: document.querySelector('#tabbar').getBoundingClientRect().height};
+                }"""
+            )
+            check("both members are in the group", len(band["at"]) == 2, band)
+            check("their tabs sit next to each other",
+                  len(band["at"]) == 2 and band["at"][1] == band["at"][0] + 1, band)
+            check("and read as one band, not two pills",
+                  band["starts"] == 1 and band["ends"] == 1, band)
+            check("the band is drawn in the group's colour",
+                  band["h"] == "3px" and "122, 162, 247" in band["bg"], band)
+            # The point of putting it inside the tab: a phone has no row to give.
+            check("and costs the strip no height", band["barHeight"] <= 36, band)
+            page.locator("#tabbar").screenshot(path=str(SHOTS / "group-band.png"))
+            page.evaluate(
+                """async (gid) => {
+                  await fetch(`/api/groups/${gid}/delete`, {method:'POST'});
+                  await refresh();
+                }""", made["gid"])
+            page.wait_for_timeout(400)
+            check("deleting the group leaves the tabs alone",
+                  page.evaluate(
+                      "() => document.querySelectorAll('#tabs .tab.grouped').length") == 0)
+            page.evaluate(
+                """async (ids) => { for (const id of ids)
+                     await fetch(`/api/sessions/${id}`, {method:'DELETE'}); }""",
+                made["ids"])
+            page.wait_for_timeout(800)
+            page.evaluate("(id) => { if (id) selectTab(id); }", was_active)
+            page.wait_for_timeout(800)
+            check("and the pane you were on is back in front",
+                  page.evaluate("() => activeId") == was_active)
+
+            print("reloading an installed app")
+            # A PWA has no address bar, so there is no reload in it. The button
+            # exists for exactly that case and is deliberately absent from a
+            # browser tab, where it would duplicate a control the browser
+            # already has in a row that is already full.
+            check("a browser tab has no reload button",
+                  page.evaluate("() => document.querySelector('#reloadBtn').hidden") is True)
+            page.evaluate("() => openPalette()")
+            page.wait_for_timeout(300)
+            page.keyboard.type("reload")
+            page.wait_for_timeout(400)
+            offered = page.evaluate(
+                """() => [...document.querySelectorAll('#palette .pal-row')]
+                     .some((r) => r.textContent.includes('Reload the panel'))"""
+            )
+            check("but the palette offers it anywhere", offered is True)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+
+            print("the CLI's logo in the corner")
+            # The pane edge already carries the CLI colour. This is the same
+            # question answered for someone who has not learned the colours,
+            # and it has to stay faint enough that output crossing it reads.
+            mark = page.evaluate(
+                """() => {
+                  const el = document.querySelector('#cliMark');
+                  if (!el) return null;
+                  const cs = getComputedStyle(el);
+                  const box = el.getBoundingClientRect();
+                  const pane = document.querySelector('#termwrap').getBoundingClientRect();
+                  return {
+                    hidden: el.hidden, opacity: parseFloat(cs.opacity),
+                    w: Math.round(box.width), h: Math.round(box.height),
+                    mask: cs.maskImage || cs.webkitMaskImage || '',
+                    image: cs.backgroundImage || '',
+                    tint: cs.backgroundColor, events: cs.pointerEvents,
+                    topRight: box.right <= pane.right + 1 && box.top >= pane.top - 1,
+                  };
+                }"""
+            )
+            check("the active CLI's logo is drawn", bool(mark) and not mark["hidden"], mark)
+            check("it is the icon, one way or the other",
+                  bool(mark) and ("url(" in mark["mask"] or "url(" in mark["image"]), mark)
+            check("faint enough to read output through",
+                  bool(mark) and 0 < mark["opacity"] <= 0.12, mark)
+            check("big enough to recognise across a screen",
+                  bool(mark) and mark["w"] >= 60 and mark["h"] >= 60, mark)
+            check("in the top-right, opposite the theme character",
+                  bool(mark) and mark["topRight"], mark)
+            check("and it cannot be clicked",
+                  bool(mark) and mark["events"] == "none", mark)
+            # A single-colour glyph is masked and takes the CLI's own colour,
+            # which is the whole reason one file can serve every mode.
+            if "url(" in (mark or {}).get("mask", ""):
+                check("a mono glyph is tinted, not left grey",
+                      mark["tint"] not in ("rgba(0, 0, 0, 0)", "transparent"), mark["tint"])
+            gone = page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({cli_watermark: false})});
+                  await refresh();
+                  return document.querySelector('#cliMark').hidden;
+                }"""
+            )
+            check("turning it off turns it off", gone is True, gone)
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({cli_watermark: true})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(300)
+
+            print("the theme's character in the corner")
+            wide = page.viewport_size or {"width": 1440, "height": 900}
+            page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: 'plumber', theme_art: true})});
+                  await refresh();
+                }"""
+            )
+            page.wait_for_timeout(600)
+            art = page.evaluate(
+                """() => {
+                  const el = document.querySelector('#themeArt');
+                  if (!el) return null;
+                  const cs = getComputedStyle(el);
+                  const box = el.getBoundingClientRect();
+                  const pane = document.querySelector('#termwrap').getBoundingClientRect();
+                  return {
+                    display: cs.display, blend: cs.mixBlendMode,
+                    opacity: parseFloat(cs.opacity), image: cs.backgroundImage.slice(0, 40),
+                    events: cs.pointerEvents,
+                    w: box.width, h: box.height,
+                    insidePane: box.right <= pane.right + 1 && box.bottom <= pane.bottom + 1,
+                  };
+                }"""
+            )
+            check("a theme with a figure draws one", bool(art) and art["display"] != "none", art)
+            check("it is a picture, not an element full of text",
+                  bool(art) and "url(" in art["image"], art)
+            # A drawing is composited normally: the extreme blends the grid
+            # form uses would eat its blacks and whites. What has to hold is
+            # that it is faint enough to read straight through, which the
+            # next check is.
+            check("it is a drawing, sized to the box rather than to a grid",
+                  bool(art) and art["blend"] == "normal", art)
+            check("faint enough to read through",
+                  bool(art) and 0 < art["opacity"] <= 0.14, art)
+            check("and it cannot be clicked",
+                  bool(art) and art["events"] == "none", art)
+            check("it stays inside the pane",
+                  bool(art) and art["insidePane"], art)
+            check("and it is big enough to be a character, not a speck",
+                  bool(art) and art["h"] > 80 and art["w"] > 60, art)
+            page.screenshot(path=str(SHOTS / "theme-art.png"))
+
+            # The gate is the pane's width, not the window's. A window query
+            # would be wrong by exactly the width of the sidebar, which is the
+            # mistake the status bar's readings already made once.
+            page.set_viewport_size({"width": 700, "height": wide["height"]})
+            page.wait_for_timeout(500)
+            narrow = page.evaluate(
+                "() => getComputedStyle(document.querySelector('#themeArt')).display"
+            )
+            check("a narrow pane takes it away", narrow == "none", narrow)
+            page.set_viewport_size(wide)
+            page.wait_for_timeout(500)
+            back = page.evaluate(
+                "() => getComputedStyle(document.querySelector('#themeArt')).display"
+            )
+            check("and gives it back with the room", back != "none", back)
+
+            off = page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme_art: false})});
+                  await refresh();
+                  const el = document.querySelector('#themeArt');
+                  return {hidden: el.hidden,
+                          shown: getComputedStyle(el).display !== 'none'};
+                }"""
+            )
+            check("turning it off turns it off", bool(off) and off["hidden"], off)
+
+            plain = page.evaluate(
+                """async () => {
+                  await fetch('/api/settings', {method:'PATCH',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({theme: '', theme_art: true})});
+                  await refresh();
+                  return document.querySelector('#themeArt').hidden;
+                }"""
+            )
+            check("a theme with no figure draws nothing", plain is True, plain)
+            page.wait_for_timeout(300)
+
+        print("the session menu, actually clicked")
+        # Being defined is not the assertion; the menu working is. Two of these
+        # items threw a ReferenceError for twelve releases and the suite stayed
+        # green, because a throw inside a click handler goes to a console
+        # nobody has open.
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        row = page.locator(f'.session[data-id="{mine}"]').first
+        if row.count():
+            row.click(button="right")
+            page.wait_for_timeout(350)
+            labels = page.evaluate(
+                "() => [...document.querySelectorAll('#menu button')].map((b) => b.textContent)"
+            )
+            check("right-click opens the session menu", len(labels) > 4, labels)
+            check("and it offers another CLI when one is installed",
+                  any("another CLI" in x for x in labels), labels)
+
+            def click_item(needle):
+                return page.evaluate(
+                    """(needle) => {
+                      const b = [...document.querySelectorAll('#menu button')]
+                        .find((x) => x.textContent.includes(needle));
+                      if (!b) return false;
+                      b.click();
+                      return true;
+                    }""",
+                    needle,
+                )
+
+            # Opening the submenu is the part that used to throw.
+            check("Move to folder opens the folder list", click_item("Move to folder"))
+            page.wait_for_timeout(350)
+            folders = page.evaluate(
+                "() => [...document.querySelectorAll('#menu button')].map((b) => b.textContent)"
+            )
+            check("and the list has folders in it", len(folders) > 0, folders)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+
+            row.click(button="right")
+            page.wait_for_timeout(300)
+            check("Open in another CLI lists the others", click_item("another CLI"))
+            page.wait_for_timeout(350)
+            clis = page.evaluate(
+                "() => [...document.querySelectorAll('#menu button')].map((b) => b.textContent)"
+            )
+            check("and names at least one", len(clis) > 0, clis)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+        check("no menu item threw", not errors, errors)
+
+        print("finding a project by name in the new-session dialog")
+        # The unit tests prove the walk. This proves the box people actually
+        # type into is wired to it: a bare name is not a path, and before this
+        # the field answered nothing at all for one.
+        page.evaluate("openModal()")
+        page.wait_for_timeout(400)
+        page.fill('#newForm [name=cwd]', "clique")
+        page.wait_for_timeout(1200)
+        listed = page.evaluate(
+            """() => [...document.querySelectorAll('#cwdList option')]
+                     .map((o) => ({value: o.value, label: o.textContent}))"""
+        )
+        check("typing a name fills the suggestions", len(listed) > 0, listed)
+        check("and one of them is this repo",
+              any(o["value"].rstrip("/").endswith("/clique") for o in listed), listed)
+        check("the value is a path it can launch in",
+              all(o["value"].startswith("/") for o in listed), listed)
+        check("and a found project shows its name beside the path",
+              any(" · " in (o["label"] or "") for o in listed), listed)
+        page.fill('#newForm [name=cwd]', "")
+        page.wait_for_timeout(200)
+        page.evaluate("document.querySelector('#modal').hidden = true")
+        page.wait_for_timeout(300)
 
         print("copy from the pane")
         # A shell has no mouse tracking, so a drag is a selection. The chip
@@ -457,7 +888,14 @@ def _run(panel) -> int:
             "/api/sessions", "POST", {"cli": "boxed", "cwd": "/tmp", "name": "boxed copy"}
         )["id"]
         page.wait_for_timeout(400)
-        page.evaluate("(id) => openSession(id)", boxed)
+        # Pull the session list before opening it. Half of what the panel does
+        # with a pane it reads off the record rather than the terminal --
+        # `own_input` is what decides whether a click is forwarded to the CLI at
+        # all -- and a session made through the API is not in `state.sessions`
+        # until a poll brings it in. The UI refreshes on create; a test that
+        # skips it is testing a panel that does not know what it is looking at,
+        # and this one silently was from 0.62.0 until 2026-09-02.
+        page.evaluate("async (id) => { await refresh(); await openSession(id); }", boxed)
         try:
             page.wait_for_function(
                 """() => {
@@ -471,8 +909,18 @@ def _run(panel) -> int:
             )
         except Exception as err:  # noqa: BLE001 — the checks below name what failed
             print(f"       boxed pane did not draw: {err}")
-        boxed_host = page.locator("#terminal .xterm").first
-        boxed_box = boxed_host.bounding_box() if boxed_host.count() else None
+        # The *active* pane, not the first one in the DOM. Panes for other
+        # sessions stay mounted, so `.first` is whichever was created earliest
+        # and clicking its box aims at a session nobody is looking at.
+        boxed_box = page.evaluate(
+            """() => {
+              const e = terms.get(activeId);
+              const el = e && e.term && e.term.element;
+              if (!el) return null;
+              const b = el.getBoundingClientRect();
+              return { x: b.x, y: b.y, width: b.width, height: b.height };
+            }"""
+        )
         tracking = page.evaluate(
             """() => {
               const e = terms.get(activeId);
@@ -674,18 +1122,64 @@ def _run(panel) -> int:
                 _remove_session(sid)
 
         print("a path you can look at")
-        sample = Path("/tmp/clique-visual-file.md")
+        work = SANDBOX / "work"
+        sample = work / "clique-visual-file.md"
         sample.write_text("# Hello from a click\n\nNot an editor.\n", encoding="utf-8")
-        page.evaluate("(id) => openFileSheet(id, '/tmp/clique-visual-file.md')", mine)
-        page.wait_for_timeout(500)
+        (work / "sub").mkdir(exist_ok=True)
+        (work / "sub" / "inside.md").write_text("nested file\n", encoding="utf-8")
+        shutil.copy(
+            Path(__file__).resolve().parents[1] / "clique" / "web" / "brand" / "icon-64.png",
+            work / "shot.png",
+        )
+        page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(sample)])
+        page.wait_for_function(
+            """() => {
+              const el = document.getElementById('fileText');
+              return el && !el.hidden && (el.innerText || '').includes('Hello from a click');
+            }""",
+            timeout=8000,
+        )
         check("the file sheet opens", page.locator("#file").is_visible())
         shown = page.locator("#fileText").inner_text()
         check("and it shows the text", "Hello from a click" in shown, shown[:80])
         page.locator("#file").screenshot(path=str(SHOTS / "file-sheet.png"))
+
+        page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(work / "shot.png")])
+        page.wait_for_function(
+            """() => {
+              const el = document.getElementById('fileImg');
+              return el && !el.hidden && el.complete && el.naturalWidth > 0;
+            }""",
+            timeout=8000,
+        )
+        check("an image opens in the sheet", page.locator("#fileImg").is_visible())
+        page.locator("#file").screenshot(path=str(SHOTS / "file-image.png"))
+
+        page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(work)])
+        page.wait_for_function(
+            "() => document.querySelectorAll('#fileList button').length > 0",
+            timeout=8000,
+        )
+        listed = page.locator("#fileList button").all_inner_texts()
+        check(
+            "a directory lists its files",
+            any("clique-visual-file.md" in t for t in listed),
+            listed[:8],
+        )
+        page.locator("#file").screenshot(path=str(SHOTS / "file-dir.png"))
+        page.locator("#fileList button").filter(has_text="clique-visual-file.md").first.click()
+        page.wait_for_function(
+            """() => {
+              const el = document.getElementById('fileText');
+              return el && !el.hidden && (el.innerText || '').includes('Hello from a click');
+            }""",
+            timeout=8000,
+        )
+        check("clicking a listing opens the file", "Hello from a click" in page.locator("#fileText").inner_text())
+
         page.keyboard.press("Escape")
         page.wait_for_timeout(200)
         check("escape closes it", page.locator("#file").is_hidden())
-        sample.unlink(missing_ok=True)
 
         page.screenshot(path=str(SHOTS / "panel.png"), full_page=False)
 
@@ -725,6 +1219,122 @@ def _run(panel) -> int:
         page.screenshot(path=str(SHOTS / "settings.png"))
         check("settings opens", page.locator("#settings").is_visible())
 
+        # The theme maker lives at the bottom of a scrolling pane, which is
+        # exactly where the About tab once disappeared. Being in the DOM is
+        # not the assertion; being on screen is. Run here, with the sheet
+        # already open, so it cannot disturb anything that follows.
+        # Earlier tests left the sheet on another pane, and the panes are
+        # hidden rather than scrolled past, so ask for Appearance by name.
+        page.click('#setTabs button[data-pane="appearance"]')
+        page.wait_for_timeout(300)
+        page.evaluate(
+            "() => { const p = document.querySelector('#settings .panes');"
+            " if (p) p.scrollTop = p.scrollHeight; }"
+        )
+        page.wait_for_timeout(300)
+        for sel, name in (
+            ("#themePrompt", "the description box"),
+            ("#themeGen", "the generate button"),
+            ("#themeGenNote", "the note saying what it needs"),
+        ):
+            node = page.locator(sel)
+            box = node.bounding_box() if node.count() else None
+            check(f"{name} is on screen in Appearance",
+                  bool(box) and box["width"] > 20 and box["height"] > 8, box)
+        check("the button is off until a provider is set up",
+              page.evaluate("() => document.querySelector('#themeGen').disabled") is True)
+
+        # Which themes come with a character, said in the picker itself. A
+        # marker glyph would have needed a legend; a group says it in words.
+        # Worth asserting because it is easy to break by adding a theme and
+        # not thinking about which group it lands in.
+        picker = page.evaluate(
+            """() => {
+              const sel = document.querySelector('#setTheme');
+              if (!sel) return null;
+              const groups = [...sel.querySelectorAll('optgroup')].map((g) => ({
+                label: g.label,
+                items: [...g.querySelectorAll('option')].map((o) => o.value),
+              }));
+              return {
+                groups,
+                loose: [...sel.children].filter((c) => c.tagName === 'OPTION').length,
+                total: sel.querySelectorAll('option').length,
+              };
+            }"""
+        )
+        check("the theme picker is grouped", bool(picker) and len(picker["groups"]) >= 2, picker)
+        check("and no theme escapes a group",
+              bool(picker) and picker["loose"] == 0, picker)
+        named = {g["label"]: g["items"] for g in (picker or {}).get("groups", [])}
+        drawn = named.get("With a character", [])
+        check("the seven with a figure are grouped as such",
+              sorted(drawn) == sorted(
+                  ["aincrad", "bricks", "chompy", "drizzt",
+                   "fellowship", "plumber", "triforce"]), drawn)
+        check("and the plain presets are not in with them",
+              "dracula" in named.get("Presets", []), named.get("Presets"))
+        check("every theme is still reachable",
+              bool(picker) and picker["total"] == page.evaluate(
+                  "() => Object.keys(window.CLIQUE_THEMES || {}).length"), picker)
+
+        # The rotation: the same list again as checkboxes, because a phone
+        # cannot ctrl-click a multi-select. What matters visually is that the
+        # two lists agree, that ticking one actually stores it, and that the
+        # schedule fields grey out with the switch rather than sitting there
+        # live and doing nothing.
+        print("rotating through the themes you like")
+        rot = page.evaluate(
+            """() => {
+              const pool = document.querySelector('#themeRotatePool');
+              if (!pool) return null;
+              const boxes = [...pool.querySelectorAll('input[type=checkbox]')];
+              const rows = [...pool.querySelectorAll('label')];
+              return {
+                count: boxes.length,
+                ids: boxes.map((b) => b.dataset.theme),
+                groups: [...pool.querySelectorAll('.rotate-head')].map((h) => h.textContent),
+                shortest: Math.min(...rows.map((r) => Math.round(
+                  r.getBoundingClientRect().height))),
+                hoursOff: document.querySelector('#setThemeRotateHours').disabled,
+                atOff: document.querySelector('#setThemeRotateAt').disabled,
+              };
+            }"""
+        )
+        every = page.evaluate("() => Object.keys(window.CLIQUE_THEMES || {}).length")
+        check("every theme can be put in the rotation", bool(rot) and rot["count"] == every, rot)
+        check("grouped the same way the picker is",
+              bool(rot) and "With a character" in rot["groups"], rot)
+        check("a thumb can hit a row", bool(rot) and rot["shortest"] >= 44, rot)
+        check("the schedule is greyed out until it is switched on",
+              bool(rot) and rot["hoursOff"] and rot["atOff"], rot)
+        stored = page.evaluate(
+            """async () => {
+              document.querySelector('#setThemeRotate').click();
+              await new Promise((r) => setTimeout(r, 400));
+              await refresh();
+              // Looked up again rather than held across the save: writing a
+              // setting re-renders the pool, and a box captured before that is
+              // a detached node nothing is listening to.
+              const box = document.querySelector('#themeRotatePool input[type=checkbox]');
+              box.click();
+              await new Promise((r) => setTimeout(r, 400));
+              await refresh();
+              return {
+                pool: state.settings.theme_rotate_pool,
+                on: state.settings.theme_rotate,
+                live: !document.querySelector('#setThemeRotateAt').disabled,
+                wanted: box.dataset.theme,
+              };
+            }"""
+        )
+        check("switching it on ungreys the schedule", stored.get("live") is True, stored)
+        check("and ticking a theme puts it in the pool",
+              stored.get("pool") == [stored.get("wanted")] and stored.get("on") is True, stored)
+        page.screenshot(path=str(SHOTS / "theme-rotation.png"))
+
+        page.screenshot(path=str(SHOTS / "theme-maker.png"))
+
         # Phone build, first pass: a narrow viewport, reloaded so the mobile
         # bootstrap runs (drawer starts closed), then the drawer opened over the
         # pane. Not asserted yet — screenshots to iterate the layout on.
@@ -737,8 +1347,246 @@ def _run(panel) -> int:
         )
         page.wait_for_timeout(900)
         page.screenshot(path=str(SHOTS / "mobile-closed.png"))
+
+        print("scrolling the pane with a finger")
+        # Three separate things had to be true for this to work and none of
+        # them was, so it is worth pinning all three. tmux has to keep history
+        # (it kept none while the CLI held the alternate screen), the browser
+        # has to be showing the buffer that history is in (it was showing the
+        # alternate one), and something has to turn a drag into a scroll (the
+        # pane only ever listened for a wheel). A phone has no wheel.
+        page.evaluate(
+            """() => { const e = [...terms.values()][0];
+                 for (let i = 0; i < 400; i++) e.term.write('scrollback ' + i + '\\r\\n'); }"""
+        )
+        page.wait_for_timeout(900)
+        state = page.evaluate(
+            """() => { const t = [...terms.values()][0].term;
+                 const host = document.querySelector('#terminal > div[data-session]');
+                 return {kind: t.buffer.active.type, back: t.buffer.active.baseY,
+                         touch: host ? getComputedStyle(host).touchAction : ''}; }"""
+        )
+        check("the pane shows the buffer that holds history",
+              state["kind"] == "normal", state)
+        check("and there is history in it", state["back"] > 20, state)
+        check("the pane claims the gesture rather than the browser",
+              state["touch"] == "none", state)
+
+        cdp = context.new_cdp_session(page)
+        cdp.send("Emulation.setTouchEmulationEnabled",
+                 {"enabled": True, "maxTouchPoints": 1})
+        box = page.evaluate(
+            """() => { const r = document.querySelector('#terminal').getBoundingClientRect();
+                 return {x: Math.round(r.x + r.width / 2),
+                         y: Math.round(r.y + r.height / 2)}; }"""
+        )
+
+        def finger(dy: int) -> None:
+            cdp.send("Input.dispatchTouchEvent",
+                     {"type": "touchStart", "touchPoints": [box]})
+            for i in range(1, 21):
+                cdp.send("Input.dispatchTouchEvent", {
+                    "type": "touchMove",
+                    "touchPoints": [{"x": box["x"], "y": box["y"] + dy * i // 20}]})
+            cdp.send("Input.dispatchTouchEvent",
+                     {"type": "touchEnd", "touchPoints": []})
+            page.wait_for_timeout(500)
+
+        where = lambda: page.evaluate(          # noqa: E731 - a probe, not a design
+            "() => [...terms.values()][0].term.buffer.active.viewportY")
+        page.evaluate("() => [...terms.values()][0].term.scrollToBottom()")
+        page.wait_for_timeout(300)
+        bottom = where()
+        finger(300)
+        back = where()
+        check("dragging down goes back through the scrollback", back < bottom,
+              {"from": bottom, "to": back})
+        finger(-300)
+        check("and dragging up comes forward again", where() > back,
+              {"from": back, "to": where()})
+        # Typing on a phone, which is a different question from typing on a
+        # desktop and was got wrong twice. Touch emulation is on from the
+        # scroll test above, so `(pointer: coarse)` matches and this is the
+        # real code path rather than a stub.
+        print("typing on a phone goes to the box, not the terminal")
+        # Its own, because the earlier boxed sessions are gone by now and the
+        # only thing left is a shell, which draws no box of its own and so
+        # would have had the panel's one anyway. The whole question here is
+        # what happens to a CLI that *does* draw one.
+        phone_boxed = _api(
+            "/api/sessions", "POST", {"cli": "boxed", "cwd": "/tmp", "name": "phone typing"}
+        )["id"]
+        page.wait_for_timeout(600)
+        typing = page.evaluate(
+            """async (id) => {
+              await refresh();
+              const boxed = state.sessions.find((s) => s.id === id && s.own_input);
+              if (!boxed) return { skipped: true };
+              await openSession(boxed.id);
+              await new Promise((r) => setTimeout(r, 700));
+              const active = () => document.activeElement;
+              const inPane = (el) => !!(el && el.classList
+                && el.classList.contains('xterm-helper-textarea'));
+              const before = inPane(active());
+              const key = document.querySelector('#keyrow [data-key]');
+              if (key) key.click();
+              await new Promise((r) => setTimeout(r, 300));
+              return {
+                coarse: matchMedia('(pointer: coarse)').matches,
+                ownInput: true,
+                boxShown: !document.querySelector('#inputbar').hidden,
+                paneTookFocusOnOpen: before,
+                paneTookFocusFromKeyRow: inPane(active()),
+              };
+            }""",
+            phone_boxed,
+        )
+        if typing.get("skipped"):
+            print("       the boxed stand-in did not arrive; nothing to test with")
+        else:
+            check("a phone gets the panel's box even for a CLI with its own",
+                  typing["coarse"] and typing["boxShown"], typing)
+            # The half of 0.66.0 that was missing: the box was drawn and the
+            # pane was handed the keyboard anyway, so Gboard went on typing
+            # into the terminal and went on duplicating the line.
+            check("opening a session does not hand the keyboard to the pane",
+                  typing["paneTookFocusOnOpen"] is False, typing)
+            check("and a key-row tap does not take it back",
+                  typing["paneTookFocusFromKeyRow"] is False, typing)
+
+        # Everything a phone can only do by long-pressing, and the menu it
+        # long-presses into. All three were reported by a second model on
+        # 2026-09-02 and confirmed against the code before being believed.
+        print("what a phone can actually reach")
         page.evaluate("setSidebar(true)")
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(500)
+        menu = page.evaluate(
+            """async () => {
+              const row = document.querySelector('#tree .session');
+              if (!row) return { skipped: true };
+              row.dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true, clientX: 40, clientY: 300 }));
+              await new Promise((r) => setTimeout(r, 250));
+              const el = document.querySelector('#menu');
+              const box = el.getBoundingClientRect();
+              const cs = getComputedStyle(el);
+              return {
+                rows: el.querySelectorAll('button').length,
+                top: Math.round(box.top),
+                bottom: Math.round(box.bottom),
+                windowH: innerHeight,
+                scrolls: cs.overflowY === 'auto' || cs.overflowY === 'scroll',
+                reachable: el.scrollHeight > el.clientHeight
+                  ? el.scrollHeight > 0 : true,
+              };
+            }"""
+        )
+        if not menu.get("skipped"):
+            # It ran off both ends at once: the clamp goes negative when the
+            # menu is taller than the window, hiding Open above the screen
+            # while Kill sat below it, with nothing to scroll.
+            check("the long-press menu starts on screen",
+                  menu["top"] >= 0, menu)
+            check("and ends on screen", menu["bottom"] <= menu["windowH"] + 1, menu)
+            check("scrolling to the rest of it is possible",
+                  menu["scrolls"] and menu["reachable"], menu)
+        page.evaluate("() => { document.querySelector('#menu').hidden = true; }")
+
+        # Its own group rather than the one the desktop pass made: that one may
+        # or may not have survived to here, and a check that quietly skips
+        # itself is a check that stops being run.
+        page.evaluate(
+            """async () => {
+              if (document.querySelector('#groups .group-row')) return;
+              await fetch('/api/groups', {method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: 'Phone group', color: '#7aa2f7'})});
+              await refresh();
+            }"""
+        )
+        page.wait_for_timeout(500)
+        groups_touch = page.evaluate(
+            """async () => {
+              const row = document.querySelector('#groups .group-row');
+              if (!row) return { skipped: true };
+              const at = row.getBoundingClientRect();
+              const point = { clientX: at.x + 20, clientY: at.y + 10 };
+              row.dispatchEvent(new TouchEvent('touchstart', {
+                bubbles: true, cancelable: true,
+                touches: [new Touch({ identifier: 1, target: row, ...point })] }));
+              await new Promise((r) => setTimeout(r, 800));
+              const open = !document.querySelector('#menu').hidden;
+              const items = [...document.querySelectorAll('#menu button')]
+                .map((b) => b.textContent);
+              document.querySelector('#menu').hidden = true;
+              return { open, items };
+            }"""
+        )
+        if groups_touch.get("skipped"):
+            print("       no group in the sidebar to press")
+        else:
+            # Rename and delete were right-click only, so from a phone you
+            # could launch a working group and never change or remove one.
+            check("a working group answers a long press", groups_touch["open"], groups_touch)
+            check("and offers more than the Open button already does",
+                  any("ename" in t for t in groups_touch["items"]), groups_touch)
+
+        reachable = page.evaluate(
+            """async () => {
+              const attach = document.querySelector('#attachFile');
+              const term = document.querySelector('#terminal');
+              const at = term.getBoundingClientRect();
+              term.dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true,
+                clientX: Math.round(at.x + 30), clientY: Math.round(at.y + 30) }));
+              await new Promise((r) => setTimeout(r, 250));
+              const items = [...document.querySelectorAll('#menu button')]
+                .map((b) => b.textContent);
+              document.querySelector('#menu').hidden = true;
+              return {
+                attachShown: !!attach && attach.offsetParent !== null,
+                picker: !!document.querySelector('#filePick'),
+                paneItems: items,
+              };
+            }"""
+        )
+        check("a phone can hand a session a file", reachable["attachShown"]
+              and reachable["picker"], reachable)
+        # A finger drag is our scroll, so nothing left makes an xterm
+        # selection and the Copy chip never appears. Without these you cannot
+        # get an error message off the screen at all.
+        check("and can copy output off the pane",
+              any("Copy" in t for t in reachable["paneItems"]), reachable)
+
+        # The narrowest phone anyone still has. The attach button is one more
+        # control in a bar that was already tight, and a row that overflows
+        # here puts Run off the edge of the screen.
+        page.set_viewport_size({"width": 320, "height": 568})
+        page.wait_for_timeout(500)
+        narrow = page.evaluate(
+            """() => {
+              const bar = document.querySelector('#inputbar');
+              const run = document.querySelector('#run');
+              const clip = run.getBoundingClientRect();
+              return {
+                over: bar.scrollWidth - bar.clientWidth,
+                promptW: Math.round(
+                  document.querySelector('#prompt').getBoundingClientRect().width),
+                runRight: Math.round(clip.right),
+                width: innerWidth,
+              };
+            }"""
+        )
+        check("the input bar fits a 320px phone", narrow["over"] <= 0, narrow)
+        # It measured 26px before the bar was allowed to wrap: every control
+        # around it refuses to shrink and the textarea was the only thing
+        # giving. Narrower than one word, on the box a phone types prompts in.
+        check("and the prompt box is a box", narrow["promptW"] >= 180, narrow)
+        check("and Run is still on the screen",
+              narrow["runRight"] <= narrow["width"] + 1, narrow)
+        page.set_viewport_size({"width": 390, "height": 844})
+
+        page.wait_for_timeout(300)
         page.screenshot(path=str(SHOTS / "mobile-drawer.png"))
 
         browser.close()

@@ -191,6 +191,32 @@ def _global_options(history_limit: int) -> list[str]:
         "-g",
         "history-limit",
         str(history_limit),
+        # Scrollback, and the reason there was none.
+        #
+        # Every agent CLI here enters the alternate screen at startup, and an
+        # alternate-screen pane keeps no history by design: measured
+        # `history_size=0` against a 20000 limit on every live Claude session.
+        # So the capture this panel sends a reattaching browser had nothing to
+        # send, and a phone opening a session saw exactly one screenful with
+        # nothing above it. That read as "touch scrolling is broken" when
+        # scrolling was working perfectly and there was simply nothing there.
+        #
+        # With this off tmux ignores the switch, the CLI draws into the normal
+        # buffer, and output that scrolls off the top becomes history: measured
+        # 279 lines against 0 for the identical program. A TUI that repaints in
+        # place still creates none, so an input box being redrawn does not fill
+        # the scrollback with copies of itself.
+        #
+        # The trade is real and worth stating: a full-screen program that exits
+        # no longer has its screen restored, so `vim` in a shell session leaves
+        # its last frame behind. For a panel whose whole purpose is reading
+        # what an agent did, keeping the transcript is the better half of that
+        # bargain.
+        ";",
+        "set-option",
+        "-g",
+        "alternate-screen",
+        "off",
         # A CLI's bell should not steal focus in a browser tab, and we render
         # our own tab bar, so tmux's status line is duplicate chrome.
         ";",
@@ -251,14 +277,39 @@ def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -
 
 
 def lock_size(mux: str, socket: str | None = SOCKET) -> None:
-    """Stop this window following whoever last attached.
+    """Stop this session's windows following whoever last attached.
 
-    Global `window-size` stays `latest` so creating a detached session does
-    not crash tmux. Per window it is `manual`: a hidden tab reconnecting
-    cannot punch dots into the pane you are looking at.
+    Global `window-size` stays `latest` because setting it to `manual` kills
+    the tmux 3.4 server outright the next time a detached session is created,
+    and `default-size` does not rescue it. Measured, not assumed.
+
+    So it is locked per window, and it has to be *every* window rather than
+    the session's current one. A window created after the lock inherits the
+    global `latest` and collapses to the size of the next client to attach:
+    200x50 became 80x23 the moment a browser arrived. That is invisible in a
+    one-window session, which is all CLIque makes itself, and waiting to bite
+    on a session someone split inside tmux or on an adopted foreign one.
+
+    `resize-window` still moves a locked window, which is how the focused
+    browser keeps its own size.
     """
     with contextlib.suppress(TmuxError, OSError):
-        _run(["set-window-option", "-t", _session_target(mux), "window-size", "manual"], socket)
+        listing = _run(
+            ["list-windows", "-t", _session_target(mux), "-F", "#{window_index}"], socket
+        )
+        for line in listing.splitlines():
+            index = line.strip()
+            if index:
+                _run(
+                    [
+                        "set-window-option",
+                        "-t",
+                        f"{_session_target(mux)}:{index}",
+                        "window-size",
+                        "manual",
+                    ],
+                    socket,
+                )
 
 
 def lock_existing(socket: str | None = SOCKET) -> None:
@@ -342,6 +393,27 @@ def resize_window(mux: str, cols: int, rows: int, socket: str | None = SOCKET) -
         _run(
             ["resize-window", "-t", _session_target(mux), "-x", str(cols), "-y", str(rows)], socket
         )
+
+
+def refresh_client(view: str, socket: str | None = SOCKET) -> None:
+    """Force the browser attached to ``view`` to repaint, now.
+
+    tmux draws a client when something it tracks changes. A pane handed back
+    the same grid it already had after a layout change has changed nothing
+    tmux can see, so whatever the terminal last drew stays on screen until a
+    keystroke provokes a frame.
+
+    `refresh-client` addresses a *client*, not a session, so the view's own
+    client is looked up first. A view holds exactly one browser and the real
+    session lists no clients of its own, so this can never repaint a window
+    somebody else is looking at.
+    """
+    with contextlib.suppress(TmuxError, OSError):
+        listing = _run(["list-clients", "-t", _session_target(view), "-F", "#{client_tty}"], socket)
+        for line in listing.splitlines():
+            tty = line.strip()
+            if tty:
+                _run(["refresh-client", "-t", tty], socket)
 
 
 def list_sessions(socket: str | None = SOCKET, prefix: str | None = None) -> list[Pane]:

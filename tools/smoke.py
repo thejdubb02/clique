@@ -20,6 +20,7 @@ from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from clique import app as app_mod
 from clique import attention, files, gitinfo, notify, services, termstrip, tmux, working
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
@@ -161,9 +162,12 @@ def main() -> int:
     (tmp / "shot.png").write_bytes(png)
     (tmp / "bin.dat").write_bytes(b"\x00\x01\x02")
     (tmp / "sub").mkdir()
+    (tmp / "sub" / "child.md").write_text("nested\n", encoding="utf-8")
     (tmp / "big.txt").write_bytes(b"x" * (files.TEXT_CAP + 8))
     check("strips a compiler suffix", files.clean("src/app.js:42:7") == "src/app.js")
     check("strips trailing punctuation", files.clean("docs/foo.md.") == "docs/foo.md")
+    check("a lone dot is this folder", files.clean(".") == ".")
+    check("and so is parent", files.clean("..") == "..")
     text = files.inspect(str(tmp), "note.md")
     check("reads a relative text file", text["kind"] == "text" and text["text"] == "hello\n", text)
     check(
@@ -176,7 +180,24 @@ def main() -> int:
     check(
         "a nul in the first block is binary", files.inspect(str(tmp), "bin.dat")["kind"] == "binary"
     )
-    check("a directory is a directory", files.inspect(str(tmp), "sub")["kind"] == "dir")
+    listing = files.inspect(str(tmp), "sub")
+    check("a directory is a directory", listing["kind"] == "dir")
+    names = [row["name"] for row in listing.get("entries") or []]
+    check(
+        "and it lists what is inside",
+        "child.md" in names and ".." in names,
+        names,
+    )
+    check(
+        "listed paths stay inside the folder",
+        all(row["path"].startswith(str(tmp / "sub")) or row["name"] == ".."
+            for row in listing.get("entries") or []),
+        listing.get("entries"),
+    )
+    top = files.inspect(str(tmp), ".")
+    top_names = [row["name"] for row in top.get("entries") or []]
+    check("the session folder listing has no parent climb", ".." not in top_names, top_names)
+    check("and it still names a child", "note.md" in top_names, top_names)
     check(
         "missing stays missing, not an error",
         files.inspect(str(tmp), "nope.md")["kind"] == "missing",
@@ -189,6 +210,12 @@ def main() -> int:
         ".. outside the session dir is refused by the default fence",
         climbed["kind"] == "missing",
         climbed,
+    )
+    outside_abs = files.inspect(str(tmp), "/etc/hostname")
+    check(
+        "an absolute path outside the session dir is refused",
+        outside_abs["kind"] == "missing" and not outside_abs.get("entries"),
+        outside_abs,
     )
     # Credential and key material is refused even inside the session dir, and by
     # its whole family / key extensions — .env.local and a .pem, not just .env.
@@ -334,6 +361,137 @@ def main() -> int:
     check("and the next read has the branch", got["branch"] == "visual" and got["dirty"] == 1, got)
     shutil.rmtree(plain, ignore_errors=True)
     shutil.rmtree(repo, ignore_errors=True)
+
+    print("working groups")
+    from clique.store import Group, _clean_members
+
+    # A member is a snapshot, not just an id. That is what lets a group whose
+    # session was deleted offer it back instead of quietly being one short.
+    kept = _clean_members([
+        {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"},
+        {"session": "a", "cli": "grok", "cwd": "/srv/y", "name": "dupe"},
+        {"session": "", "cli": "grok"},
+        {"session": "b", "extra": "dropped", "cli": "grok", "cwd": "/srv/z", "name": "B"},
+        "not a dict",
+    ])
+    check("a member keeps what it takes to rebuild it",
+          kept[0] == {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"}, kept)
+    check("the same session cannot be added twice", len(kept) == 2, kept)
+    check("a member with no session is dropped",
+          all(m["session"] for m in kept), kept)
+    check("and nothing else a caller sent is stored",
+          all(set(m) == {"session", "cli", "cwd", "name"} for m in kept), kept)
+    check("a member that is not even a dict is ignored", len(kept) == 2, kept)
+    wide = _clean_members([{"session": f"s{i}"} for i in range(40)])
+    check("a group you could not see at a glance is capped", len(wide) == 24, len(wide))
+
+    group = Group(id="g-1", name="Morning")
+    check("a group starts empty and coloured", group.members == [] and group.color)
+
+    print("who owns the shared tmux window")
+    # A tmux window has one size and every attached client sees it, so two
+    # panels of different shapes cannot both be right. This used to be settled
+    # by document.hasFocus(), which is per browser window: a desktop on one
+    # machine and a phone in your hand both report true, so both claimed it
+    # every poll and the CLI reflowed between 162 and 42 columns forever.
+    from clique.app import _handheld, _may_size_window
+
+    _handheld.clear()
+    check("with no phone about, a desktop sizes the window",
+          _may_size_window("sm-test", False) is True)
+    check("a phone always may", _may_size_window("sm-test", True) is True)
+    check("and once it has, the desktop may not",
+          _may_size_window("sm-test", False) is False)
+    check("the phone still may, repeatedly",
+          _may_size_window("sm-test", True) and _may_size_window("sm-test", True))
+    check("another session is unaffected",
+          _may_size_window("sm-other", False) is True)
+
+    # Releasing is the ordinary way out: a phone going into a pocket should
+    # not lock a desktop out until a timer expires.
+    _handheld.pop("sm-test", None)
+    check("after the phone lets go, the desktop may again",
+          _may_size_window("sm-test", False) is True)
+
+    # The backstop, for a phone that vanishes without saying so.
+    _handheld.clear()
+    _may_size_window("sm-test", True)
+    _handheld["sm-test"] = time.time() - (app_mod.HANDHELD_HOLD + 1)
+    check("a claim older than the hold has expired",
+          _may_size_window("sm-test", False) is True)
+    check("and the stale entry is pruned", "sm-test" not in _handheld, dict(_handheld))
+    _handheld.clear()
+
+    print("finding a project by name")
+    import tempfile
+
+    from clique import projects
+
+    sand = Path(tempfile.mkdtemp(prefix="clique-projects-"))
+    (sand / "work" / "wsg-sentinel").mkdir(parents=True)
+    (sand / "work" / "wsg-sentinel" / ".git").mkdir()
+    (sand / "work" / "notes").mkdir()
+    # A repo inside a repo, which is the shape that broke the first version of
+    # the walk: treating a project root as a leaf made every client directory
+    # inside a client repo invisible.
+    (sand / "clients" / ".git").mkdir(parents=True)
+    (sand / "clients" / "acme-carwash").mkdir()
+    (sand / "clients" / "acme-carwash" / "package.json").write_text("{}", encoding="utf-8")
+    # The things a walk must not wander into. `.cache` is the real one: on the
+    # box this was written for it is 11GB.
+    (sand / ".cache" / "junk" / "pyproject.toml").parent.mkdir(parents=True)
+    (sand / ".cache" / "junk" / "pyproject.toml").write_text("", encoding="utf-8")
+    (sand / "work" / "node_modules" / "left-pad").mkdir(parents=True)
+    (sand / "work" / "node_modules" / "left-pad" / "package.json").write_text(
+        "{}", encoding="utf-8"
+    )
+
+    projects.forget()
+    found, partial = projects.index(home=sand)
+    names = sorted(p.name for p in found)
+    check("it finds the repos", "wsg-sentinel" in names and "clients" in names, names)
+    check(
+        "including a project inside a project",
+        "acme-carwash" in names,
+        names,
+    )
+    check("a directory with no marker is not a project", "notes" not in names, names)
+    check("it does not walk into a hidden directory", "junk" not in names, names)
+    check("or into node_modules", "left-pad" not in names, names)
+    check("and it finished", partial is False)
+
+    hit = projects.search("sentinel", home=sand)
+    check(
+        "searching by name finds the path",
+        [x["path"] for x in hit["projects"]] == [str(sand / "work" / "wsg-sentinel")],
+        hit,
+    )
+    check("and says what kind it is", hit["projects"][0]["kind"] == "git", hit)
+    kinds = {x["name"]: x["kind"] for x in projects.search("", home=sand)["projects"]}
+    check("a manifest with no repo still counts", kinds.get("acme-carwash") == "node", kinds)
+    # The ranking is the part somebody notices: the directory *called* the
+    # thing has to beat the one that merely contains it in its path.
+    (sand / "work" / "sentinel-old").mkdir()
+    (sand / "work" / "sentinel-old" / ".git").mkdir()
+    projects.forget()
+    order = [x["name"] for x in projects.search("sentinel-old", home=sand)["projects"]]
+    check("an exact name outranks a path match", order[:1] == ["sentinel-old"], order)
+    check("nothing matches nonsense", projects.search("zzzz", home=sand)["projects"] == [])
+
+    projects.forget()
+    narrow = projects.search("", [str(sand / "clients")], home=sand)
+    check(
+        "naming a root narrows the walk to it",
+        all(x["path"].startswith(str(sand / "clients")) for x in narrow["projects"]),
+        narrow,
+    )
+    projects.forget()
+    check(
+        "a root inside another root is not walked twice",
+        len(projects._roots([str(sand), str(sand / "work")], sand)) == 1,
+    )
+    shutil.rmtree(sand, ignore_errors=True)
+    projects.forget()
 
     print("engine")
     tmux.bootstrap(SOCKET, history_limit=9000)
@@ -696,6 +854,26 @@ def main() -> int:
                 done.returncode == 0,
                 done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "",
             )
+
+        # Every handler a menu item points at has to exist.
+        #
+        # `node --check` parses app.js and is perfectly happy with a call to a
+        # function nobody wrote: the reference is only resolved when somebody
+        # clicks. That is how "Move to folder…" spent twelve releases throwing
+        # a ReferenceError into a console nobody had open, and it is a whole
+        # class of bug that costs one regex to close. Arrow-wrapped calls are
+        # the menu idiom throughout, so that is what this reads.
+        source = (ROOT / "clique" / "web" / "app.js").read_text(encoding="utf-8")
+        declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", source))
+        called = set(re.findall(r"\(\)\s*=>\s*([A-Za-z_$][\w$]*)\s*\(", source))
+        # Things that are legitimately not ours: globals, and methods reached
+        # through an object rather than by bare name.
+        ambient = {
+            "alert", "confirm", "fetch", "close", "open", "print", "reload",
+            "Boolean", "Number", "String",       # builtins used as callbacks
+        }
+        missing = sorted(called - declared - ambient)
+        check("every menu handler app.js calls is defined in it", not missing, missing)
 
         # The decisions inside app.js, tested without a browser. See
         # tools/frontend_check.js for why that is possible without a build.

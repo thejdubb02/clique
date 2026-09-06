@@ -105,6 +105,39 @@ DEFAULT_SETTINGS = {
     "status_on_icon": True,
     #: Preset palette id from web/themes.js. "" is the built-in dark.
     "theme": "",
+    #: Wear a different one every so often, picked at random from the ones you
+    #: ticked. Off by default: a panel that changes its own colours without
+    #: being asked is a fault, not a feature.
+    "theme_rotate": False,
+    #: How often, in hours. 24 is a different theme every morning; 1 is the
+    #: shortest it will go, because below that it is a distraction rather than
+    #: a change of scene.
+    "theme_rotate_hours": 24,
+    #: What time of day the change lands, "HH:MM" on the server's own clock.
+    #: With an interval under a day this is the anchor the rest are counted
+    #: from, so "07:00" every 6 hours means 07:00, 13:00, 19:00, 01:00.
+    "theme_rotate_at": "07:00",
+    #: The themes it may choose from: preset ids from web/themes.js and stored
+    #: theme ids, mixed freely. Empty means nothing happens — there is no
+    #: "all of them" default, because the point is the ones you like.
+    "theme_rotate_pool": [],
+    #: Bookkeeping, not a preference: the slot last acted on, in unix seconds.
+    #: It is what stops a panel that has been shut all week applying six
+    #: changes the moment it opens.
+    "theme_rotate_last": 0,
+    #: Ask each running CLI what is left of its plan, for the status bar.
+    "usage_bar": True,
+    #: Where to look for projects when the new-session dialog is asked for one
+    #: by name. Empty means the home directory, which is the answer that is
+    #: right on a machine nobody has told us about. Name directories here when
+    #: your work lives somewhere else, or when home is big enough that the walk
+    #: is worth narrowing.
+    "project_roots": [],
+    #: The character a theme carries, watermarked into the corner of the pane.
+    #: Only seven of the presets have one; on the rest the setting does
+    #: nothing. On, because a theme that draws nothing is not a theme anybody
+    #: went looking for, and it takes itself away wherever the room is needed.
+    "theme_art": True,
     #: "dark" | "light" | "system". Themes carry their own base, so this only
     #: decides which built-in is used when no preset is chosen.
     "appearance": "dark",
@@ -156,6 +189,12 @@ DEFAULT_SETTINGS = {
     #: second box under it, and one that does not — a shell, a readline tool —
     #: keeps the panel's, which is also the only place Run, the repeat counter
     #: and a saved draft live. "panel" always shows it, "terminal" never does.
+    #:
+    #: One exception, and it is not the CLI's to make: on a touch device "auto"
+    #: always shows the box. Typing into the terminal there goes through the
+    #: phone keyboard's input method, and Android's duplicates the line rather
+    #: than typing it. The decision is the browser's, so it lives in the front
+    #: end; this note is here so the setting reads honestly from either side.
     #:
     #: The mode pill is not part of this. It is the control for a CLI's
     #: permission mode, and hiding it along with the prompt box was the bug in
@@ -223,6 +262,11 @@ DEFAULT_SETTINGS = {
     #: a Claude prompt to a shell is a mistake that costs a paragraph of
     #: apology. An edge on the pane and the active tab, in the CLI's colour.
     "cli_tint": True,
+    #: The active CLI's logo, faint in the top-right of the pane. The edge
+    #: tint answers "which CLI am I in" for anyone who has learned the
+    #: colours; this answers it for everyone else, and across a screen of
+    #: panes rather than by reading a tab.
+    "cli_watermark": True,
     #: Per-CLI overrides of the colour shipped in clis.toml, because one
     #: person's palette is another person's invisible-on-their-theme.
     #: {"claude": "#d97757"}. An empty entry means "use the shipped one".
@@ -294,6 +338,36 @@ class Folder:
     order: int = 0
 
 
+#: How many working groups one panel will hold. Not a technical limit: a
+#: sidebar of forty groups is a worse sidebar than one of five, and the point
+#: of a group is that you can see it at a glance.
+GROUP_LIMIT = 40
+
+
+@dataclass
+class Group:
+    """Sessions you always open together.
+
+    Not a folder, and the difference is the whole feature. A folder files a
+    session in the sidebar and a session has exactly one. A group is about
+    opening and seeing things at once: it can pull from several folders or
+    from none, a session can belong to more than one, and being in a group
+    changes nothing about where a session lives.
+
+    Each member carries `cli`, `cwd` and `name` alongside the session id, so a
+    member whose session has been reaped or deleted can be offered back rather
+    than silently vanishing from the group. A group that quietly opens two of
+    the three things it promised is worse than one that says the third is gone.
+    """
+
+    id: str
+    name: str
+    color: str = "#7aa2f7"
+    #: [{"session": id, "cli": str, "cwd": str, "name": str}]
+    members: list[dict] = field(default_factory=list)
+    order: int = 0
+
+
 @dataclass
 class Session:
     id: str
@@ -349,6 +423,33 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _clean_members(raw: list[dict] | None) -> list[dict]:
+    """Members as we will store them: a session id and enough to rebuild it.
+
+    Anything else a caller sends is dropped rather than stored. This ends up in
+    a JSON file that is read back and handed to the browser, so it is not the
+    place to keep whatever shape somebody happened to POST.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        sid = str(item.get("session") or "").strip()[:64]
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        out.append({
+            "session": sid,
+            "cli": str(item.get("cli") or "").strip()[:64],
+            "cwd": str(item.get("cwd") or "").strip()[:4096],
+            "name": str(item.get("name") or "").strip()[:120],
+        })
+        if len(out) >= 24:      # a group you cannot see at a glance is a folder
+            break
+    return out
+
+
 def auto_folder(cwd: str, folders: list[Folder]) -> str | None:
     """File a new session by where it runs.
 
@@ -395,6 +496,48 @@ def _clean_patterns(value) -> list[str]:
         if len(out) >= 100:
             break
     return out
+
+
+#: Enough themes to rotate through that nobody hits it, few enough that a
+#: malformed PATCH cannot make the settings object enormous.
+ROTATE_POOL_LIMIT = 64
+
+
+def clock_time(text: str) -> tuple[int, int] | None:
+    """"HH:MM" as (hour, minute), or None if it is not one.
+
+    Written here rather than with `datetime.strptime` because this is asked
+    on every settings write and has to say no to "7", "25:00" and "" without
+    raising through the caller.
+    """
+    hour, sep, minute = str(text or "").partition(":")
+    if not sep or not hour.isdigit() or not minute.isdigit():
+        return None
+    hour, minute = int(hour), int(minute)
+    if 0 <= hour <= 23 and 0 <= minute <= 59:
+        return hour, minute
+    return None
+
+
+def _clean_theme_pool(value) -> list[str]:
+    """Theme ids, deduplicated and in the order they were sent.
+
+    Never checked against the themes that exist: the presets live in
+    `web/themes.js` and the server has never read that file. A pool naming one
+    that has gone is not an error, it is a theme id the browser will fall back
+    from the same way it does for any other missing one.
+    """
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        # The empty id is the built-in dark theme, not a missing value, so it
+        # is kept like any other. Dropping it as falsy is what stopped the
+        # first theme in the list from ever going in the rotation.
+        name = str("" if item is None else item).strip()[:64]
+        if name not in out:
+            out.append(name)
+    return out[:ROTATE_POOL_LIMIT]
 
 
 def _clean_snippets(value) -> list[dict]:
@@ -446,8 +589,10 @@ class Store:
             )
         self._lock = threading.RLock()
         self.folders: list[Folder] = []
+        self.groups: list[Group] = []
         self.sessions: list[Session] = []
         self.settings: dict = dict(DEFAULT_SETTINGS)
+        self.themes: list[dict] = []
         self._load()
 
     # ------------------------------------------------------------ persistence
@@ -467,6 +612,10 @@ class Store:
         self.folders = [
             Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__}) for f in folders
         ]
+        self.groups = [
+            Group(**{k: v for k, v in g.items() if k in Group.__annotations__})
+            for g in (raw.get("groups") or [])
+        ]
         self.sessions = [
             Session(**{k: v for k, v in s.items() if k in Session.__annotations__})
             for s in raw.get("sessions", [])
@@ -477,6 +626,16 @@ class Store:
         # Bring-your-own-key LLM providers. Kept out of `settings` on purpose:
         # each carries an encrypted key, and settings is echoed to every read
         # client — providers are fetched only on demand, keys never in the poll.
+        # Themes somebody made here. Top level rather than inside `settings`
+        # because each is a couple of dozen colours and `settings` rides every
+        # poll — these are fetched once and again when one changes.
+        themes = raw.get("themes")
+        self.themes = (
+            [t for t in themes if isinstance(t, dict) and t.get("id")]
+            if isinstance(themes, list)
+            else []
+        )
+
         llm = raw.get("llm") if isinstance(raw.get("llm"), dict) else {}
         providers = llm.get("providers")
         routes = llm.get("routes")
@@ -505,8 +664,10 @@ class Store:
         payload = {
             "version": 1,
             "folders": [asdict(f) for f in self.folders],
+            "groups": [asdict(g) for g in self.groups],
             "sessions": [asdict(s) for s in self.sessions],
             "settings": self.settings,
+            "themes": self.themes,
             "llm": self.llm,
         }
         tmp = self.path.with_suffix(".json.tmp")
@@ -691,6 +852,18 @@ class Store:
                     self.settings[key] = str(value or "").strip()[:2048]
                 elif key in ("theme", "appearance", "input_mode"):
                     self.settings[key] = str(value or "")[:64]
+                elif key == "theme_rotate_hours":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(1, min(int(value), 720))
+                elif key == "theme_rotate_at":
+                    # A real time or nothing. A malformed one here would leave
+                    # the rotation silently never firing, which looks exactly
+                    # like the feature being broken.
+                    text = str(value or "").strip()[:5]
+                    if clock_time(text) is not None:
+                        self.settings[key] = text
+                elif key == "theme_rotate_pool":
+                    self.settings[key] = _clean_theme_pool(value)
                 elif key == "notify_idle_seconds":
                     with contextlib.suppress(TypeError, ValueError):
                         self.settings[key] = max(2, min(int(value), 120))
@@ -805,6 +978,126 @@ class Store:
     def folder(self, folder_id: str) -> Folder | None:
         with self._lock:
             return next((f for f in self.folders if f.id == folder_id), None)
+
+    # ----------------------------------------------------------------- themes
+
+    #: Enough to keep every theme anyone liked, few enough that a runaway
+    #: script cannot turn the state file into a colour database.
+    THEME_LIMIT = 40
+
+    def add_theme(self, theme: dict) -> dict:
+        """Store a finished theme and hand back the stored copy, id and all.
+
+        The caller has already validated and derived it — this only owns the
+        id, the ordering and the ceiling. Oldest goes when the ceiling is hit,
+        because a theme somebody is still using is one they will have selected,
+        and the selected one is never the oldest for long.
+        """
+        with self._lock:
+            stored = {**theme, "id": f"t-{uuid.uuid4().hex[:8]}", "created": int(time.time())}
+            self.themes.append(stored)
+            del self.themes[: max(0, len(self.themes) - self.THEME_LIMIT)]
+            self._write()
+            return stored
+
+    def delete_theme(self, theme_id: str) -> bool:
+        """Forget a theme, and stop wearing it if it was the one on.
+
+        Falling back to the default matters: the settings sheet that would let
+        you pick another is drawn in the theme you just deleted, so leaving the
+        setting pointing at nothing is how the panel comes back unpainted.
+        """
+        with self._lock:
+            before = len(self.themes)
+            self.themes = [t for t in self.themes if t.get("id") != theme_id]
+            if len(self.themes) == before:
+                return False
+            if self.settings.get("theme") == theme_id:
+                self.settings["theme"] = ""
+            # And out of the rotation, or it would be put back on later by a
+            # feature the person deleting it has probably forgotten about.
+            pool = self.settings.get("theme_rotate_pool")
+            if isinstance(pool, list) and theme_id in pool:
+                self.settings["theme_rotate_pool"] = [t for t in pool if t != theme_id]
+            self._write()
+            return True
+
+    # ---------------------------------------------------------------- groups
+
+    def group(self, group_id: str) -> Group | None:
+        return next((g for g in self.groups if g.id == group_id), None)
+
+    def add_group(self, name: str, color: str | None = None,
+                  members: list[dict] | None = None) -> Group | None:
+        with self._lock:
+            if len(self.groups) >= GROUP_LIMIT:
+                return None
+            group = Group(
+                id=f"g-{uuid.uuid4().hex[:8]}",
+                name=(name or "").strip()[:60] or "New group",
+                color=colour(color, PALETTE[len(self.groups) % len(PALETTE)]),
+                members=_clean_members(members),
+                order=len(self.groups),
+            )
+            self.groups.append(group)
+            self._write()
+            return group
+
+    def update_group(self, group_id: str, **fields) -> Group | None:
+        with self._lock:
+            found = self.group(group_id)
+            if not found:
+                return None
+            if "name" in fields:
+                found.name = str(fields["name"] or "").strip()[:60] or found.name
+            if "color" in fields:
+                found.color = colour(fields["color"], found.color)
+            if "members" in fields:
+                found.members = _clean_members(fields["members"])
+            if "order" in fields:
+                with contextlib.suppress(TypeError, ValueError):
+                    found.order = int(fields["order"])
+            self._write()
+            return found
+
+    def delete_group(self, group_id: str) -> bool:
+        with self._lock:
+            before = len(self.groups)
+            self.groups = [g for g in self.groups if g.id != group_id]
+            if len(self.groups) == before:
+                return False
+            self._write()
+            return True
+
+    def group_add_session(self, group_id: str, session_id: str) -> Group | None:
+        """Put a session in a group, remembering what it takes to rebuild it.
+
+        The snapshot is the point. A member is stored as the session id *plus*
+        its CLI, directory and name, so a group whose session has since been
+        deleted can offer to start it again instead of quietly being one
+        member short.
+        """
+        with self._lock:
+            group = self.group(group_id)
+            found = self.session(session_id)
+            if not group or not found:
+                return None
+            group.members = [m for m in group.members if m.get("session") != session_id]
+            group.members.append({
+                "session": found.id, "cli": found.cli,
+                "cwd": found.cwd, "name": found.name,
+            })
+            self._write()
+            return group
+
+    def group_remove_session(self, group_id: str, session_id: str) -> Group | None:
+        with self._lock:
+            group = self.group(group_id)
+            if not group:
+                return None
+            group.members = [m for m in group.members if m.get("session") != session_id]
+            self._write()
+            return group
 
     def add_folder(self, name: str, color: str | None = None) -> Folder:
         with self._lock:
