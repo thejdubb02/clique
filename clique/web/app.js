@@ -10388,11 +10388,21 @@ function trackKeyboard() {
   const vv = window.visualViewport;
   if (!vv) return;
   const root = document.documentElement;
+  let applied = "";
   const apply = () => {
     // vv.height * vv.scale so a pinch-zoom (which also shrinks vv.height) is not
     // mistaken for a keyboard; only a real keyboard leaves a gap here.
-    if (window.innerHeight - vv.height * vv.scale > 120) {
-      root.style.setProperty("--app-h", Math.round(vv.height) + "px");
+    const open = window.innerHeight - vv.height * vv.scale > 120;
+    const want = open ? Math.round(vv.height) + "px" : "";
+    // Only when the answer actually changes. This runs on vv's *scroll* event
+    // as well as its resize, and the pin below is itself a scroll: re-applying
+    // an unchanged height meant every scroll scheduled another one, so iOS
+    // scrolling the focused input into view and this scrolling it back fought
+    // each other and the bottom of the app jittered.
+    if (want === applied) return;
+    applied = want;
+    if (open) {
+      root.style.setProperty("--app-h", want);
       root.classList.add("kb-open");
       window.scrollTo(0, 0);   // iOS scrolls the layout viewport; pin it back
     } else {

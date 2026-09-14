@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.67.4 — 2026-09-14 08:56 PDT
+
+**The bottom of the app stopped jittering with the keyboard up.** The keyboard
+handler pins the page back to the top, and it was also listening for the visual
+viewport's scroll event, so the pin was itself a scroll that re-ran the handler.
+iOS scrolls the focused input into view, this scrolled it back, and the two
+fought. It now does nothing unless the visible height has actually changed.
+
 ## 0.67.3 — 2026-09-05 19:38 PDT
 
 **Two follow-up fixes to the phone keyboard handling.** In the installed app the
