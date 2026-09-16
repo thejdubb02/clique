@@ -29,13 +29,13 @@ If you run more than two coding agents at once, you already know the problem: te
 
 ## Who it's for
 
-**Using one AI coding agent?** Claude Code, Codex, Cursor's CLI, Gemini, Grok, Antigravity — CLIque puts it in your browser. Kick off a task, close the laptop, and check on it from your phone on the couch. Nothing to babysit, nothing to install but Python and tmux.
+**Using one AI coding agent?** Claude Code, Codex, Cursor's CLI, Gemini, Grok, Antigravity. CLIque puts it in your browser. Kick off a task, close the laptop, and check on it from your phone on the couch. Nothing to babysit, nothing to install but Python and tmux.
 
-**Running several at once?** You already know the problem: terminals everywhere, no idea which one is waiting on you, a conversation you cannot get back to. CLIque is the one screen in front of all of them — folders, a status ring on each, one click to jump, and a real phone notification when one wants you.
+**Running several at once?** You already know the problem: terminals everywhere, no idea which one is waiting on you, a conversation you cannot get back to. CLIque is the one screen in front of all of them: folders, a status ring on each, one click to jump, and a real phone notification when one wants you.
 
 **Driving a fleet?** Run ten agents across ten repos, each in its own git worktree so they do not step on each other, reap the idle ones to reclaim memory and resume them later exactly where they left off, and script the whole thing over an HTTP API.
 
-It is **not** an IDE, not another AI, and not a replacement for your CLIs — it is the control panel in front of the tools you already use. If you want the tool to *be* the agent, look elsewhere.
+It is **not** an IDE, not another AI, and not a replacement for your CLIs. It is the control panel in front of the tools you already use. If you want the tool to *be* the agent, look elsewhere.
 
 ## What it looks like
 
@@ -43,7 +43,7 @@ It is **not** an IDE, not another AI, and not a replacement for your CLIs — it
   <img src="docs/screenshots/desktop.png" alt="CLIque desktop: five coding agents across two folders, each with its icon, memory and status, and a live terminal pane" width="850">
 </p>
 
-Several agents in folders — Claude, Codex, Grok, Gemini, a shell — each with its
+Several agents in folders (Claude, Codex, Grok, Gemini, a shell), each with its
 own icon, the git branch it is on, its memory, and a status dot. The same list
 is a tap away on a phone:
 
@@ -59,18 +59,18 @@ New here? The [user guide](docs/guide.md) walks through everything below.
 |---|---|
 | **Command palette** | `Ctrl`/`Cmd`+`K`: fuzzy jump between sessions, most-recently-used first. `>` commands, `@` sessions, `~` past conversations. |
 | **History** | Every conversation your CLIs have kept, filed by directory, resumable in one click. Repeated runs of the same scheduled agent fold into one row. |
-| **Resume & reap** | An idle tab has its process stopped after a few hours — ~700 MB freed for an idle Claude — and its tab greys out. Click it and it resumes exactly where it was. Ten open tabs cost what two do. |
-| **Worktrees** | Start a session in its own git worktree, so several agents work the same repo at once without touching each other's files. Delete the session and the worktree goes too — unless it has uncommitted work. |
-| **Conversation view** | A CLI that draws full-screen keeps no scrollback; **View conversation** reads its transcript back — your turns and the assistant's prose, tools and thinking left out — in a clean sheet. |
+| **Resume & reap** | An idle tab has its process stopped after a few hours (~700 MB freed for an idle Claude), and its tab greys out. Click it and it resumes exactly where it was. Ten open tabs cost what two do. |
+| **Worktrees** | Start a session in its own git worktree, so several agents work the same repo at once without touching each other's files. Delete the session and the worktree goes too, unless it has uncommitted work. |
+| **Conversation view** | A CLI that draws full-screen keeps no scrollback; **View conversation** reads its transcript back (your turns and the assistant's prose, tools and thinking left out) in a clean sheet. |
 | **Agent-drivable** | A one-word `state` per session, a `wait`-until-done call, and a skill, so an agent can drive CLIque itself: fan one task across many repos and collect the results. |
-| **Filter** | One button in the sidebar hides every stopped session — and any folder left empty by it — so a list of two dozen collapses to what is actually running. |
+| **Filter** | One button in the sidebar hides every stopped session (and any folder left empty by it), so a list of two dozen collapses to what is actually running. |
 | **Folders** | A tree. Drag to reorder folders and sessions, or drop a session on a folder to file it. Double-click rename, right-click, search, collapse to a rail (`Ctrl`/`Cmd`+`B`). Each row names the git branch it is on, and how many files have changed. |
-| **Tabs** | Drag to reorder, `Alt`+`1`–`9` to jump. Names shrink first; what still will not fit lands in **N more**, wearing the same working / waiting ring. Closing a tab is not killing the session. |
+| **Tabs** | Drag to reorder, `Alt`+`1`-`9` to jump. Names shrink first; what still will not fit lands in **N more**, wearing the same working / waiting ring. Closing a tab is not killing the session. |
 | **Same work, another CLI** | Right-click a session and open it in a different installed CLI: same name, same directory, same folder. The two sit side by side as tabs, told apart by the CLI marker. Hand Codex what Claude has been chewing on without retyping a path. |
 | **Working groups** | Sessions you always open together: a Claude, a Gemini and a Grok, from one directory or three unrelated ones. One click opens them side by side under a coloured band. Not folders, which file a session in one place: a group can pull from several and a session can be in more than one. The band lives inside the tab strip rather than above it, so it costs no height on a phone. |
 | **New session** | Pick a CLI, a directory and a folder. Type a project *name* instead of a path and it finds the root: anything holding a `.git`, a `pyproject.toml`, a `package.json` or another project marker, searched under your home directory or wherever you point it. Hidden directories are never opened, so a cache or a virtualenv costs nothing. |
 | **Terminal** | Live output, full scrollback on reattach, resize, auto-reconnect, themed to the panel. Drag to copy, even when the CLI wants the mouse. `Ctrl`/`Cmd`+`C` copies a selection and interrupts when there isn't one; `Ctrl`/`Cmd`+`Shift`+`C` copies the screen. |
-| **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. A URL that wrapped onto the next line is still one link. A file path opens a read-only look — copy it, or drop it into the prompt. |
+| **Links** | URLs in the pane are clickable: a new tab, or a new window with `Ctrl`/`Cmd`. `http(s)` only. A URL that wrapped onto the next line is still one link. A file path opens a read-only look: copy it, or drop it into the prompt. |
 | **Scroll lock** | Scroll up and the view detaches from the stream. A badge says how far behind you are; the bottom, the lock, or `Ctrl`/`Cmd`+`Shift`+`L` catches you up. |
 | **Paste a screenshot** | `Ctrl`/`Cmd`+`V` saves the image into the session's own directory and drops the path where you were typing. Nothing is sent until you press enter. |
 | **See what it made** | An agent writes a screenshot into the session's directory and a count appears in the tab bar. Grid, full size, and the path back into your prompt in one click. |
@@ -78,7 +78,7 @@ New here? The [user guide](docs/guide.md) walks through everything below.
 | **Prompt drafts** | A half-typed instruction survives a tab switch, a reload, and a closed laptop. Per session, on the server, so it follows you to another device. |
 | **Workspace** | Open tabs, their order, the one in front, and which groups are collapsed live on the server. A reload attaches the tab you are looking at, then warms the rest in the background without resizing the pane. Sign in somewhere else and the strip is where you left it. |
 | **Status** | A ring around the CLI's own logo: an arc turning means working, a steady pulse means finished and waiting for you, idle draws nothing. The logo is never recoloured. |
-| **The box** | CPU, memory, disk and **VIEWS** in the bottom bar. Views is live connections on the box, not open tabs — hover if the number looks high; extras are another window or a phone. A reading the machine cannot report is not drawn at all, and readings drop out whole as the row narrows rather than being cut off mid-word. |
+| **The box** | CPU, memory, disk and **VIEWS** in the bottom bar. Views is live connections on the box, not open tabs. Hover if the number looks high; extras are another window or a phone. A reading the machine cannot report is not drawn at all, and readings drop out whole as the row narrows rather than being cut off mid-word. |
 | **Plan left** | For the session in front, a meter each for whatever windows its CLI reports, green until three quarters and red past ninety, with the reset time on hover as a countdown. The panel does not know whose API that is: a CLI declares where its token is, which URL answers and which fields hold the numbers, so another vendor is a block of config. The token is read, spent on one request and dropped, and only percentages reach the browser. |
 | **Waiting on you** | Three tiers: tmux's clock, regexes you declare per CLI, and a `POST .../attention` a session fires from your own hook. Nothing here knows which vendor is talking. |
 | **Unread** | A dot on anything that produced output while you were elsewhere, and a rule in the pane where you stopped reading. |
@@ -93,7 +93,7 @@ New here? The [user guide](docs/guide.md) walks through everything below.
 | **Monitoring** | `GET /healthz` answers without a login. Point Uptime Kuma, Gatus or Healthchecks at it. Anonymously it says `{"ok": true}` and nothing else. |
 | **Security** | Password login (scrypt), API tokens, CSRF, `Origin` and `Host` checks, CSP with per-response nonces. See [SECURITY.md](SECURITY.md). |
 | **Touch** | Long press a session for the menu right-click gives, with tap targets sized for a finger. |
-| **Phone & PWA** | Install it as its own app — no tabs, no URL bar, full screen from the bottom bar. Built for a phone browser too: a drawer sidebar, a full-width pane, an on-screen row for the keys a terminal needs (Esc, Tab, Ctrl+C, arrows), and a wheel that scrolls a full-screen CLI's own view. |
+| **Phone & PWA** | Install it as its own app: no tabs, no URL bar, full screen from the bottom bar. Built for a phone browser too: a drawer sidebar, a full-width pane, an on-screen row for the keys a terminal needs (Esc, Tab, Ctrl+C, arrows), and a wheel that scrolls a full-screen CLI's own view. |
 
 Not built, on purpose: subagent visualisation, a respawn controller, multi-host, a Ralph loop. Those need to know which vendor is talking. This product does not.
 
