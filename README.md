@@ -190,6 +190,12 @@ https://fdroid.useclique.dev/repo
 
 The panel needs nothing special for it. The app is an ordinary API client, so anything it can do, a script can do too.
 
+## On a PC
+
+There is a desktop client for Windows: [clique-desktop](https://github.com/thejdubb02/clique-desktop). It is a dedicated window around this panel, with its own icon in the taskbar, a toast when a session starts waiting on you, and an updater that offers a new version and then waits for you to say when.
+
+About 8 MB, because it uses the Edge WebView2 runtime Windows already ships rather than bundling a browser. It is a viewer, not a second engine: CLIque itself stays on the Linux box, where tmux is.
+
 ## Contributing
 
 Patches welcome, with a short filter: [CONTRIBUTING.md](CONTRIBUTING.md). Feature ideas that need to know which vendor is talking get refused. That is the product, not a freeze.
