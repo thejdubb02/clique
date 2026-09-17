@@ -15,8 +15,10 @@ uses Trusted Publishing, and it fires when a GitHub Release is published, not
 on a push. So `main` running ahead of PyPI is normal and expected; cutting a
 release is what catches it up.
 
-`uvx clique-panel` works. Last cut: `v0.55.0` on 2026-08-29, verified by
-installing from PyPI into a clean venv rather than trusting the workflow.
+`uvx clique-panel` works. Last cut: `v0.67.8` on 2026-09-17, carrying 0.67.5
+through 0.67.7 with it. That gap is the lesson: 0.67.1 through 0.67.4 sat
+untagged for nine days while the site told strangers to `pip install`, and
+nothing noticed until `shipped_check.py` was run on purpose.
 
 `python3 tools/shipped_check.py` is the thing that actually catches drift here:
 panel version, README badge, working tree, unpushed commits, the tag, what
@@ -175,6 +177,27 @@ quarter.
   face value. History cache, unbounded notify threads, CSP `connect-src`.
 - **Long-uptime memory.** Read RSS after a quiet stretch, before the next
   restart.
+
+## The Android client
+
+Native, and its own repo: [clique-android](https://github.com/thejdubb02/clique-android).
+Its roadmap is `docs/port-plan.md` there, not here, and the work is tracked on
+the **CLIque** board in Kaneo.
+
+Two things about it that are the panel's business rather than the app's:
+
+- **A phone claims the shared tmux window, and now gives it back.** Fixed in
+  0.67.8. The client side of that rule is untouched on purpose: `recentlyUsed()`
+  is also what stops two desktop panels resizing each other every three seconds.
+- **Answering a signalling session must not attach to it.** Opening a session
+  repaints the pane, the panel reads output-after-a-signal as the session having
+  carried on, and the signal is gone in under three seconds. Measured, not
+  guessed. It is why the app's Approve and Deny live on the notification. The
+  same trap applies to anything else that acts on a waiting session.
+
+Distribution is our own F-Droid repository at `fdroid.useclique.dev`, so a
+release reaches a phone as an update notification. The official F-Droid
+catalogue is a separate, slower thing and is not done.
 
 ## Not on this list
 
