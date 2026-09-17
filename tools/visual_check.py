@@ -1589,6 +1589,33 @@ def _run(panel) -> int:
         page.wait_for_timeout(300)
         page.screenshot(path=str(SHOTS / "mobile-drawer.png"))
 
+        # Installed, with the panel unreachable. In a standalone window there
+        # is no URL bar and no reload button, so without a fallback the app is
+        # a blank screen that looks exactly like a broken app. Justin hit this
+        # on 2026-09-17 with his phone off the tailnet and had no way to tell
+        # the difference from the outside.
+        print("\nthe installed app with nothing to talk to")
+        ready = page.evaluate(
+            """async () => {
+              if (!navigator.serviceWorker) return "no service worker support";
+              const reg = await navigator.serviceWorker.ready;
+              return reg.active ? reg.active.state : "never activated";
+            }"""
+        )
+        check("the service worker is running", ready == "activated", ready)
+        context.set_offline(True)
+        try:
+            page.goto(BASE, wait_until="domcontentloaded")
+            body = page.inner_text("body")
+            check("it says the panel could not be reached", "Cannot reach" in body, body[:80])
+            check("and offers a way back in", page.locator("button").count() >= 1)
+            page.screenshot(path=str(SHOTS / "offline.png"))
+        finally:
+            context.set_offline(False)
+        page.goto(BASE, wait_until="networkidle")
+        check("and the panel returns once it can be reached",
+              page.locator("#tabbar").is_visible())
+
         browser.close()
 
     print(f"\nscreenshots in {SHOTS}")

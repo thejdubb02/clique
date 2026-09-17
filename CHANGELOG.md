@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.67.5 — 2026-09-16 19:03 PDT
+
+**The installed app now says when it cannot reach the panel.** It used to show
+nothing at all: a blank window with no address bar, no reload button and no
+message, so a panel that was merely unreachable looked exactly like an app that
+was broken. It now shows a page that says the panel did not answer and offers a
+way back in, and it reloads itself when the network returns, so a dropped VPN or
+a walk out of wifi range does not need anyone to notice and reopen it.
+
 ## 0.67.4 — 2026-09-14 08:56 PDT
 
 **The bottom of the app stopped jittering with the keyboard up.** The keyboard
