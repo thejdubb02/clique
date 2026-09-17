@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.67.7 — 2026-09-17 09:09 PDT
+
+**Pair a device instead of typing a token into it.** An API token is forty-odd
+characters, which is a copy and paste on a laptop and a transcription error on
+a phone. The panel now hands out a short code, in two groups of four, with none
+of the characters people mistype. A device trades the code for a real token
+named after itself, so it can be recognised and revoked later like any other.
+
+The code is single use, expires in two minutes, and there is never more than
+one outstanding. Minting one still requires being inside the panel; only
+redeeming it is open, because the device doing that has no credential yet. Five
+wrong guesses burn the code, and every refusal reads the same whatever the
+reason, because saying which tells a guesser where they are.
+
+This is the groundwork for native clients. The plan, the order and what is
+refused are in `ROADMAP.md`.
+
 ## 0.67.6 — 2026-09-17 07:56 PDT
 
 **The Android keyboard stopped pasting back what you had just sent.** Accept a

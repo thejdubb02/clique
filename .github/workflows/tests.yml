@@ -35,3 +35,5 @@ jobs:
         run: python3 tools/resume_check.py
       - name: the theme rotation
         run: python3 tools/rotate_check.py
+      - name: pairing a device
+        run: python3 tools/pair_check.py

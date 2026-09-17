@@ -41,6 +41,52 @@ credential and nothing can attach them to a cross-site request by accident.
 Requests to an unrecognised `Host` are refused with `403` before authentication
 runs at all.
 
+### Pairing a device
+
+A token is forty-odd characters. Nobody types that into a phone, so a native
+client had no reasonable way in. Pairing trades a short code for a real token.
+
+The rule above still holds: **the authorisation happens on the box.** Somebody
+already inside the panel asks for a code and the box displays it. What crosses
+the network is only the redemption of a short secret the box chose, single use,
+expiring in two minutes, with never more than one outstanding.
+
+#### `POST /api/pair`
+
+Authenticated. Mints a code, replacing any code already waiting.
+
+```json
+{ "code": "K7PM-3XQF", "expires_in": 120 }
+```
+
+The alphabet has no `0`/`O`, `1`/`I`/`L` or `U`. The dash is cosmetic and is
+ignored coming back in, as is case.
+
+#### `GET /api/pair`
+
+Authenticated. `{ "expires_in": 87 }`, or `0` when nothing is outstanding, so
+the panel can show a countdown.
+
+#### `DELETE /api/pair`
+
+Authenticated. Takes the code back off the screen without waiting it out.
+
+#### `POST /api/pair/claim`
+
+**The one unauthenticated write**, because the device making it has no
+credential yet. `{ "code": "k7pm-3xqf", "name": "Justin's Pixel" }` returns
+`201` and a token, named after the device so it can be recognised and revoked
+later:
+
+```json
+{ "token": "mxp_...", "id": "tk_1a2b3c4d", "name": "Justin's Pixel" }
+```
+
+Anything else is `403 pairing code not accepted`, and deliberately so for every
+reason: wrong, expired, already used, none outstanding, too many attempts.
+Saying which would tell a guesser where they are. Five wrong guesses burn the
+code, and twelve attempts a minute across all codes is the ceiling.
+
 ## Reading
 
 ### `GET /api/state`

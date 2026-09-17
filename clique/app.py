@@ -43,6 +43,7 @@ from . import (
     migrate,
     notes,
     notify,
+    pairing,
     projects,
     secretbox,
     services,
@@ -231,6 +232,10 @@ class Panel:
         self._last_reap = 0.0
         self._last_idle_reap = 0.0
         self._last_sweep = 0.0
+        #: One outstanding device-pairing code. In memory on purpose: a
+        #: restart invalidating a code somebody is mid-way through typing is
+        #: the correct outcome, and a file would only make it outlive that.
+        self.pairing = pairing.Desk()
         #: Sessions whose resume is being watched (see _recover_dead_resume).
         #: Stopping or deleting one takes it out, so a session someone shut
         #: down inside the grace window is never resurrected behind them.
@@ -1262,6 +1267,31 @@ class Panel:
                 killed.append(mux)
         return {"killed": killed}
 
+    def pair_start(self) -> dict:
+        """Mint a pairing code for a device that cannot be typed at."""
+        code, seconds = self.pairing.start()
+        return {"code": pairing.grouped(code), "expires_in": seconds}
+
+    def pair_waiting(self) -> dict:
+        return {"expires_in": self.pairing.waiting()}
+
+    def pair_cancel(self) -> dict:
+        self.pairing.cancel()
+        return {"expires_in": 0}
+
+    def pair_claim(self, body: dict) -> dict | None:
+        """Trade a correct code for a token, once. None means no.
+
+        Deliberately one answer for every kind of no: wrong code, expired
+        code, no code outstanding, too many attempts. Telling a caller which
+        of those it was is telling them how to search.
+        """
+        if not self.pairing.redeem(str(body.get("code") or "")):
+            return None
+        name = str(body.get("name") or "").strip()[:60] or "paired device"
+        token, raw = self.tokens.create(name)
+        return {"token": raw, "id": token.id, "name": token.name}
+
     def start_session(self, session_id: str, *, allow_resume: bool = True) -> dict:
         """Start a stopped session again. Same id, name, folder, directory.
 
@@ -1866,6 +1896,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/state":
                 return self._json(self.panel.state(reveal_urls=self._cookie_authed))
+            if path == "/api/pair":
+                return self._json(self.panel.pair_waiting())
             if path == "/api/stats":
                 snap = sysinfo.snapshot(self.panel.clients)
                 snap["guard"] = self.panel.resource_guard()
@@ -2189,13 +2221,28 @@ class Handler(BaseHTTPRequestHandler):
             # from before per-session tokens) is still accepted for any session.
             and (not token.session or token.session == path.split("/")[3])
         )
-        if not attention_only:
+        # Claiming a pairing code is the other write an unauthenticated caller
+        # may make, and that is the entire point of it: the device doing it
+        # has no credential yet, which is what it is here to collect. The code
+        # is the gate, and the box chose and displayed it. Minting the code
+        # still requires being inside the panel; only the redemption is open.
+        pair_claim = path == "/api/pair/claim"
+        if not attention_only and not pair_claim:
             allowed, reason = self._may_write()
             if not allowed:
                 return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
 
         try:
             body = self._body()
+            if path == "/api/pair":
+                return self._json(self.panel.pair_start())
+            if path == "/api/pair/claim":
+                paired = self.panel.pair_claim(body)
+                # One answer for every kind of no. Which kind it was is a hint
+                # about how to search, and there is nothing to gain by giving it.
+                if not paired:
+                    return self._json({"error": "pairing code not accepted"}, 403)
+                return self._json(paired, 201)
             if path == "/api/sessions":
                 return self._json(self.panel.create_session(body), 201)
             if path == "/api/sessions/adopt":
@@ -2891,6 +2938,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if len(parts) == 3 and parts[1] == "sessions":
                 return self._json(self.panel.delete_session(parts[2]))
+            # Taking a code back off the screen, rather than waiting it out.
+            if path == "/api/pair":
+                return self._json(self.panel.pair_cancel())
             if len(parts) == 3 and parts[1] == "folders":
                 ok = self.panel.store.remove_folder(parts[2])
                 return self._json({"ok": ok}, 200 if ok else 404)
