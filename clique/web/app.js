@@ -6559,11 +6559,45 @@ async function okToSend(text, whoLabel) {
  * was in it until the next keystroke, and tells nothing downstream that it
  * emptied -- the move button stayed lit over an empty box for the same
  * reason. */
-function clearPrompt() {
+function clearPrompt(sent) {
   const box = $("#prompt");
+  /* Emptying the box is not as simple as assigning to it, on a phone.
+   *
+   * An Android keyboard keeps its own copy of the field while it is offering
+   * a correction, held as positions rather than text. Assign to .value
+   * underneath that and the keyboard and the field stop agreeing: every later
+   * keystroke is applied against where the old words were, so what was
+   * already sent comes back, and keeps coming back, until the app is
+   * restarted. Justin hit this by accepting a spelling suggestion and then
+   * sending (2026-09-17), and described it as everything he typed pasting
+   * back what he had just written.
+   *
+   * Blurring ends whatever the keyboard had in flight, which is the one thing
+   * that reliably resyncs the two. The refocus is synchronous and inside the
+   * tap that sent, so the keyboard stays up. Only on a handheld, and only
+   * when the box actually has focus: blur and refocus are not free on a
+   * phone, and the ordinary case must not pay for the broken one.
+   */
+  const live = handheld() && document.activeElement === box;
+  if (live) box.blur();
   box.value = "";
+  if (live) box.focus();
   growPrompt(box);
   showDraftMove();
+  /* And if it comes back anyway, take it out once.
+   *
+   * Only the exact text that was just sent, and only on the next frame.
+   * Nobody retypes a whole prompt in sixteen milliseconds, so this cannot eat
+   * anything a person meant to keep, and it cannot loop: it runs once per
+   * send, not on a timer. */
+  if (sent) {
+    requestAnimationFrame(() => {
+      if (box.value.trim() === sent.trim()) {
+        box.value = "";
+        growPrompt(box);
+      }
+    });
+  }
 }
 
 /* One send at a time.
@@ -6589,7 +6623,7 @@ async function run(text) {
       }
     }
     maybeAutoTitle(activeId, text);
-    clearPrompt();
+    clearPrompt(text);
     saveDraft(true);   // sent, so there is no longer a draft
     setRepeat(1);
   } finally {
@@ -6626,7 +6660,7 @@ async function runShell(text) {
     await api(`api/sessions/${shell.id}/send`, {
       method: "POST", body: JSON.stringify({ text, enter: true }),
     });
-    clearPrompt();
+    clearPrompt(text);
     saveDraft(true);   // sent, so there is no longer a draft
   } finally {
     sending = false;

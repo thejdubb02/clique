@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.67.6 — 2026-09-17 07:56 PDT
+
+**The Android keyboard stopped pasting back what you had just sent.** Accept a
+spelling suggestion, send, and from then on everything typed came back with
+what was already sent attached, over and over, until the app was restarted. The
+box was emptied by assigning to it, and an Android keyboard holds its own copy
+of the field while it is offering a correction, kept as positions rather than
+text. Assigning underneath that leaves the two out of step, and every later
+keystroke is applied against where the old words used to be. It now ends what
+the keyboard has in flight before emptying the box, which resyncs them, and
+takes the text out once more if it comes back anyway.
+
+**A refused host now says which host.** "host not allowed" named neither the
+value nor the setting that fixes it, which matters because this panel is built
+to sit behind a proxy and a proxy is exactly what gets that wrong.
+
 ## 0.67.5 — 2026-09-16 19:03 PDT
 
 **The installed app now says when it cannot reach the panel.** It used to show
