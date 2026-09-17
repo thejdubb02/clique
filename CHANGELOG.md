@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.67.8 — 2026-09-17 11:51 PDT
+
+**A phone no longer leaves your desktop panel in a screen of dots.** A tmux
+window has one size, shared by every client attached to it, so a phone opening
+a session shrinks the panel looking at the same one. A handheld is allowed to
+win that, deliberately: a phone is picked up to do the thing that could not
+wait. What was missing is the other half. Nothing put the window back when the
+phone let go, and a desktop panel only takes its size back on the poll if it
+has been touched in the last 45 seconds, so one sitting there untouched showed
+a 53 column pane inside a 235 column window until somebody clicked it.
+
+The server now remembers the last size a desktop asked for, whether or not it
+was allowed to move the window at the time, and restores that on release. A
+read-only viewer is excluded, because a viewer does not size what other people
+are looking at. The rule that stops two desktop panels resizing each other
+every three seconds is untouched, and a phone that dies without saying so is
+still the 90 second backstop.
+
 ## 0.67.7 — 2026-09-17 09:09 PDT
 
 **Pair a device instead of typing a token into it.** An API token is forty-odd
