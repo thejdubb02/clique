@@ -178,6 +178,18 @@ ruff check .
 
 They will not catch a UI that renders wrong. Open the page for that.
 
+## On your phone
+
+There is a native Android client: [clique-android](https://github.com/thejdubb02/clique-android). It pairs to your own panel with a short code, lists your sessions grouped the way the sidebar groups them, opens a terminal, and sends a real keystroke, so you can stop a runaway agent with Ctrl-C or answer a permission prompt from the notification without opening the app.
+
+Install it from our own F-Droid repository and it updates itself:
+
+```
+https://fdroid.useclique.dev/repo
+```
+
+The panel needs nothing special for it. The app is an ordinary API client, so anything it can do, a script can do too.
+
 ## Contributing
 
 Patches welcome, with a short filter: [CONTRIBUTING.md](CONTRIBUTING.md). Feature ideas that need to know which vendor is talking get refused. That is the product, not a freeze.
