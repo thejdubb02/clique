@@ -1566,9 +1566,15 @@ _PEEK_LOCK = threading.Lock()
 #: a killed tab, a dead battery, a tunnel. The ordinary case is an explicit
 #: `release` the moment the screen goes dark, so this never has to be waited
 #: out. A visible phone refreshes it every poll with `hold`.
+#: The backstop only drops the claim so a desktop may size again; it does
+#: not restore a remembered desktop size. Restoring is `release`. A phone
+#: that dies without releasing is still handled by this timer, just not
+#: instantly; that is the whole backstop, not a second mechanism.
 HANDHELD_HOLD = 90.0
 #: mux name -> when a handheld last claimed the window.
 _handheld: dict[str, float] = {}
+#: mux name -> last (cols, rows, when) a non-handheld client asked for.
+_desktop_size: dict[str, tuple[int, int, float]] = {}
 _handheld_lock = threading.Lock()
 
 
@@ -1602,6 +1608,15 @@ def _may_size_window(mux: str, handheld: bool) -> bool:
         # opened on a phone.
         for name in [k for k, at in _handheld.items() if now - at > HANDHELD_HOLD]:
             del _handheld[name]
+        # Remembered desktop sizes prune the same way, so a long-lived panel
+        # does not accumulate an entry per session it ever opened. Kept while
+        # a phone still holds that mux: that size is what `release` restores.
+        for name in [
+            k
+            for k, rec in _desktop_size.items()
+            if now - rec[2] > HANDHELD_HOLD and k not in _handheld
+        ]:
+            del _desktop_size[name]
         if handheld:
             _handheld[mux] = now
             return True
@@ -3168,7 +3183,16 @@ class Handler(BaseHTTPRequestHandler):
             # Tiny sizes are a collapsed or hidden tab measuring itself,
             # not a phone — those still clear 20x8. Applying them is how
             # a background reconnect left a screen of dots.
-            if may_write and _may_size_window(session.mux, bool(message.get("handheld"))):
+            handheld = bool(message.get("handheld"))
+            if may_write and not handheld:
+                # Last size a desktop asked for, whether or not it was
+                # allowed to move the window *then*. A desktop refused while
+                # a phone held is exactly the one whose size needs restoring
+                # on `release`. A read-only viewer is still excluded: it does
+                # not get to size the shared window later any more than now.
+                with _handheld_lock:
+                    _desktop_size[session.mux] = (cols, rows, time.time())
+            if may_write and _may_size_window(session.mux, handheld):
                 tmux.resize_window(session.mux, cols, rows, session.socket)
         elif kind == "hold":
             # A handheld saying it is still here and still awake. Cheap on
@@ -3183,8 +3207,14 @@ class Handler(BaseHTTPRequestHandler):
             # and it is what stops a desktop waiting out a two-minute lockout
             # after you put the phone down.
             if may_write:
+                remembered = None
                 with _handheld_lock:
                     _handheld.pop(session.mux, None)
+                    remembered = _desktop_size.get(session.mux)
+                if remembered:
+                    tmux.resize_window(
+                        session.mux, remembered[0], remembered[1], session.socket
+                    )
         elif kind == "refresh":
             # Repaint this browser's own view and nobody else's. The pane can
             # come back from a layout change the same size it went in at, and

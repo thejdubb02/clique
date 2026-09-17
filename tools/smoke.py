@@ -394,9 +394,10 @@ def main() -> int:
     # by document.hasFocus(), which is per browser window: a desktop on one
     # machine and a phone in your hand both report true, so both claimed it
     # every poll and the CLI reflowed between 162 and 42 columns forever.
-    from clique.app import _handheld, _may_size_window
+    from clique.app import Handler, _desktop_size, _handheld, _may_size_window
 
     _handheld.clear()
+    _desktop_size.clear()
     check("with no phone about, a desktop sizes the window",
           _may_size_window("sm-test", False) is True)
     check("a phone always may", _may_size_window("sm-test", True) is True)
@@ -421,6 +422,78 @@ def main() -> int:
           _may_size_window("sm-test", False) is True)
     check("and the stale entry is pruned", "sm-test" not in _handheld, dict(_handheld))
     _handheld.clear()
+
+    # When the phone lets go, the server puts the window back. A desktop
+    # panel that is merely open will not reclaim (recentlyUsed is 45s), so
+    # without this it sits in tmux's dot-fill at the phone's size.
+    resizes: list[tuple] = []
+    real_resize = app_mod.tmux.resize_window
+
+    def capture_resize(mux, cols, rows, socket=None):
+        resizes.append((mux, int(cols), int(rows)))
+
+    app_mod.tmux.resize_window = capture_resize
+    try:
+        session = SimpleNamespace(mux="sm-restore", socket=SOCKET)
+        bridge = SimpleNamespace(resize=lambda *a, **k: None)
+        handler = object.__new__(Handler)
+
+        def control(payload: bytes) -> None:
+            handler._control(session, bridge, payload, True)
+
+        control(b'{"type":"resize","cols":53,"rows":20,"handheld":true}')
+        check("a phone resize is applied",
+              resizes[-1] == ("sm-restore", 53, 20), resizes)
+
+        before = list(resizes)
+        control(b'{"type":"resize","cols":235,"rows":60,"handheld":false}')
+        check("a desktop resize while held is not applied",
+              resizes == before, resizes)
+        remembered = _desktop_size.get("sm-restore")
+        check("but that size is remembered",
+              remembered is not None and remembered[:2] == (235, 60),
+              dict(_desktop_size))
+
+        resizes.clear()
+        control(b'{"type":"release"}')
+        check("release restores the remembered desktop size",
+              resizes == [("sm-restore", 235, 60)], resizes)
+        check("and the phone's hold is gone",
+              "sm-restore" not in _handheld, dict(_handheld))
+
+        _handheld.clear()
+        _desktop_size.clear()
+        resizes.clear()
+        crashed = False
+        try:
+            control(b'{"type":"release"}')
+        except Exception as exc:  # noqa: BLE001 — the check is that nothing raises
+            crashed = True
+            detail = repr(exc)
+        else:
+            detail = ""
+        check("release with no remembered size does not crash",
+              not crashed, detail)
+        check("and does not resize", resizes == [], resizes)
+
+        # Same prune as the hold: a stale remembered size goes, unless a
+        # phone still holds that mux (that size is what release restores).
+        _handheld.clear()
+        _desktop_size.clear()
+        _desktop_size["sm-restore"] = (235, 60, time.time() - (app_mod.HANDHELD_HOLD + 1))
+        _may_size_window("sm-restore", False)
+        check("a stale remembered size is pruned",
+              "sm-restore" not in _desktop_size, dict(_desktop_size))
+
+        _may_size_window("sm-restore", True)
+        _desktop_size["sm-restore"] = (235, 60, time.time() - (app_mod.HANDHELD_HOLD + 1))
+        _may_size_window("sm-restore", False)
+        check("a remembered size is kept while the phone still holds",
+              "sm-restore" in _desktop_size, dict(_desktop_size))
+    finally:
+        app_mod.tmux.resize_window = real_resize
+        _handheld.clear()
+        _desktop_size.clear()
 
     print("finding a project by name")
     import tempfile
