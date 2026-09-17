@@ -1804,6 +1804,28 @@ class Handler(BaseHTTPRequestHandler):
             self.panel.trust_proxy and self.headers.get("X-Forwarded-Proto", "").lower() == "https"
         )
 
+    def _refuse_host(self) -> None:
+        """403, naming the host it objected to.
+
+        The bare "host not allowed" was a dead end: this panel is meant to sit
+        behind a proxy, the proxy decides what Host the panel sees, and the
+        message named neither the value nor the setting that fixes it. On
+        2026-09-17 that cost an afternoon on a deployment where every other
+        check passed. Reflected as text/plain and clipped, because the value
+        is whatever the caller sent.
+        """
+        seen = "".join(c for c in self._fwd_host() if c.isprintable())[:100]
+        self._send(
+            403,
+            (
+                f"host not allowed: {seen or '(none sent)'}\n"
+                "This panel refuses a Host it does not recognise, which is what "
+                "stops a hostile page rebinding DNS at it. Behind a proxy, name "
+                "the host in CLIQUE_ALLOWED_HOSTS.\n"
+            ).encode(),
+            "text/plain",
+        )
+
     def _host_ok(self) -> bool:
         """Runs before anything else, including auth.
 
@@ -1824,7 +1846,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, query = self._route()
 
         if path == "/ws":
@@ -2086,7 +2108,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, _ = self._route()
 
         if path == "/":
@@ -2804,7 +2826,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, _ = self._route()
         allowed, reason = self._may_write()
         if not allowed:
@@ -2860,7 +2882,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, _ = self._route()
         allowed, reason = self._may_write()
         if not allowed:
