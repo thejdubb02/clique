@@ -8071,6 +8071,56 @@ function wire() {
   $("#setHistorySidebar").onchange = (ev) => {
     saveSettings({ history_in_sidebar: ev.target.checked }).then(renderTree);
   };
+  /* Pairing a device.
+   *
+   * The code is short-lived on purpose, so the screen has to say how long is
+   * left rather than leave someone typing a code that died while they walked
+   * to the other device. The countdown is the whole UI: there is nothing to
+   * configure and nothing to get wrong. */
+  let pairTimer = 0;
+
+  const pairIdle = () => {
+    clearInterval(pairTimer);
+    pairTimer = 0;
+    $("#pairBox").innerHTML =
+      '<button type="button" id="pairStart">Pair a device</button>';
+    $("#pairStart").onclick = pairBegin;
+  };
+
+  const pairShow = (code, seconds) => {
+    clearInterval(pairTimer);
+    $("#pairBox").innerHTML =
+      `<div class="pair-code">${escapeHtml(code)}</div>` +
+      '<p class="note pair-left"><span id="pairLeft"></span> ' +
+      '<button type="button" id="pairCancel" class="ghost">Cancel</button></p>';
+    $("#pairCancel").onclick = async () => {
+      // Taking it back off the screen, rather than leaving a live code up
+      // because the pairing was abandoned halfway.
+      await api("api/pair", { method: "DELETE" }).catch(() => {});
+      pairIdle();
+    };
+    let left = seconds;
+    const tick = () => {
+      if (left <= 0) return pairIdle();
+      $("#pairLeft").textContent =
+        `Type it into the device within ${left}s.`;
+      left -= 1;
+    };
+    tick();
+    pairTimer = setInterval(tick, 1000);
+  };
+
+  async function pairBegin() {
+    try {
+      const got = await api("api/pair", { method: "POST" });
+      pairShow(got.code, got.expires_in);
+    } catch (err) {
+      toast("Could not get a pairing code");
+    }
+  }
+
+  $("#pairStart").onclick = pairBegin;
+
   $("#setHistoryDays").oninput = (ev) => {
     $("#outHistoryDays").textContent = ev.target.value;
   };

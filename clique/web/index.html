@@ -896,6 +896,17 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
          <code>{"ok": true}</code> and nothing more — no version, no names.
          Signed in, or with a token, it adds uptime, session counts and whether
          tmux is reachable.</p>
+      <h3>Pair a device</h3>
+      <p class="note">A token is forty characters: fine to paste, miserable to
+         type. Pairing hands one to a phone or a tablet instead. A short code
+         appears here, you type it into the device, and the device gets its own
+         token named after itself, which shows up in <code>token list</code> and
+         revokes like any other. The code lasts two minutes, works once, and
+         never leaves this screen.</p>
+      <div id="pairBox">
+        <button type="button" id="pairStart">Pair a device</button>
+      </div>
+
       <div id="tokenRows" class="token-rows"></div>
     </section>
 

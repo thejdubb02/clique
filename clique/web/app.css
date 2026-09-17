@@ -2542,3 +2542,18 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
   /* A tab you cannot hit is worse than a tab you cannot read all of. */
   .tab { min-height: 35px; }
 }
+
+/* Pairing a device. The code is the whole point of the screen while it is up,
+ * so it is large, spaced, and monospaced: it is going to be read off one
+ * screen and typed into another, and that is a job the font has to help with. */
+#pairBox { margin: 8px 0 14px; }
+.pair-code {
+  font: 600 clamp(22px, 7vw, 30px)/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--field, rgba(255, 255, 255, 0.06));
+  text-align: center;
+  user-select: all;   /* one tap selects the lot, for reading or copying */
+}
+.pair-left { margin: 6px 0 0; text-align: center; }
