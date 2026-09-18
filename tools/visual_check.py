@@ -886,6 +886,81 @@ def _run(panel) -> int:
         page.evaluate("document.querySelector('#modal').hidden = true")
         page.wait_for_timeout(300)
 
+        print("the mode pill does not sit on the pane")
+        # A CLI that draws its own prompt hides ours and leaves the pill, the
+        # paperclip and the lock. Reported 2026-09-18 as the pill covering the
+        # bottom line of the terminal. Forced here rather than waited for,
+        # because it needs a CLI with modes and its own input.
+        before = page.evaluate(
+            """() => {
+              const bar = document.querySelector("#inputbar");
+              const wrap = document.querySelector("#termwrap");
+              if (!bar || !wrap) return null;
+              const pill = document.querySelector("#modePill");
+              pill.hidden = false;
+              pill.textContent = "auto mode on (shift+tab to cycle)";
+              for (const sel of ["#prompt", ".stepper", ".runsplit"]) {
+                const el = document.querySelector(sel);
+                if (el) el.hidden = true;
+              }
+              bar.hidden = false;
+              bar.classList.add("pill-only");
+              return true;
+            }"""
+        )
+        if before:
+            page.wait_for_timeout(700)
+            lap = page.evaluate(
+                """() => {
+                  const bar = document.querySelector("#inputbar").getBoundingClientRect();
+                  const wrap = document.querySelector("#termwrap").getBoundingClientRect();
+                  // The pane for the session being looked at, not the first in
+                  // the DOM: panes for other sessions stay mounted and hidden.
+                  let scr = null, rows = 0, cell = 0;
+                  for (const s of document.querySelectorAll(".xterm-screen")) {
+                    const r = s.getBoundingClientRect();
+                    if (r.height > 0 && r.width > 0) { scr = r; break; }
+                  }
+                  const rowsEl = document.querySelector(".xterm-rows");
+                  if (rowsEl) {
+                    rows = rowsEl.children.length;
+                    if (rows) cell = rowsEl.children[0].getBoundingClientRect().height;
+                  }
+                  return {
+                    barTop: Math.round(bar.top), wrapBottom: Math.round(wrap.bottom),
+                    screenBottom: scr ? Math.round(scr.bottom) : null,
+                    rows: rows, cell: Math.round(cell * 100) / 100,
+                    found: document.querySelectorAll(".xterm-screen").length,
+                  };
+                }"""
+            )
+            # Two different failures, so two checks. The bar sitting on the
+            # wrapper is a layout overlap; the rows outrunning the wrapper is a
+            # stale fit, and the second is invisible in a screenshot.
+            check(
+                "the bar starts below the pane, not on top of it",
+                lap["barTop"] >= lap["wrapBottom"] - 1,
+                lap,
+            )
+            check(
+                "and the rows the terminal drew fit inside the pane",
+                lap["screenBottom"] is not None
+                and lap["screenBottom"] <= lap["wrapBottom"] + 1,
+                lap,
+            )
+            page.locator("#inputbar").screenshot(path=str(SHOTS / "pill-only-bar.png"))
+            page.evaluate(
+                """() => {
+                  const bar = document.querySelector("#inputbar");
+                  bar.classList.remove("pill-only");
+                  document.querySelector("#modePill").hidden = true;
+                  for (const sel of ["#prompt", ".stepper", ".runsplit"]) {
+                    const el = document.querySelector(sel);
+                    if (el) el.hidden = false;
+                  }
+                }"""
+            )
+
         print("a link with no https:// in front of it")
         # node runs these out of the file. This runs the shipped file as the
         # browser actually loaded it, which is what catches a scope or syntax

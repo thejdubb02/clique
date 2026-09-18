@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.67.12 — 2026-09-18 14:24 PDT
+
+**The bottom line of the terminal is no longer half cut off.** It looked like the
+input bar was sitting on top of the pane. It was not: the terminal was drawing
+one row more than it had room for, and that row was clipped in the middle by the
+pane's own edge.
+
+The fitting addon measures the terminal's parent, and the pane's padding is not
+on that element, so it offered a row that did not fit. Measured on a 737 pixel
+pane: 49 rows proposed against 48 rows of room. The extra row is now handed back
+before the terminal is resized, and the trimmed count is compared against the
+rows already on screen, so nothing resizes twice or oscillates.
+
+Most visible with a CLI that draws its own prompt, where our prompt box is hidden
+and the bar is a single pill, because that is when the pane is tallest.
+
 ## 0.67.11 — 2026-09-18 12:18 PDT
 
 **A web address without the `https://` in front of it is now a link.** Our own

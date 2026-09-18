@@ -6518,7 +6518,40 @@ function layoutPane(entry) {
     return;
   }
   applyPaneZoom(entry.term, 1);
-  try { entry.fit.fit(); } catch (err) { /* not laid out yet */ }
+  try { fitPaneRows(entry, cell, box); } catch (err) { /* not laid out yet */ }
+}
+
+/* FitAddon's own fit(), with the last row taken back when it does not fit.
+ *
+ * It measures the terminal's parent, and the pane's padding is not on that
+ * element, so it offers one row more than there is room for. The extra row is
+ * drawn, hangs past #termwrap, and is clipped mid-glyph: on screen that reads
+ * as the input bar covering the bottom line of the terminal, which is how it
+ * was reported. Measured on a 737px pane: 49 rows proposed, 48 rows of room.
+ *
+ * Nothing oscillates, because the trimmed count is compared against the rows
+ * the terminal already has. A second pass proposes the same too-large number,
+ * trims it to the same value, and asks for no resize at all. */
+function fitPaneRows(entry, cell, box) {
+  const dims = entry.fit.proposeDimensions ? entry.fit.proposeDimensions() : null;
+  if (!dims || !(dims.cols > 0) || !(dims.rows > 0)) {
+    entry.fit.fit();
+    return;
+  }
+  // From where the terminal actually starts, for the same reason the width
+  // above does: the pane's padding sits between the two.
+  const top = entry.term.element
+    ? entry.term.element.getBoundingClientRect().top : box.top;
+  const room = box.bottom - top;
+  let rows = dims.rows;
+  while (rows > 4 && cell.h > 0 && rows * cell.h > room) rows--;
+  if (dims.cols === entry.term.cols && rows === entry.term.rows) return;
+  entry.relaying = true;
+  try {
+    entry.term.resize(dims.cols, rows);
+  } finally {
+    entry.relaying = false;
+  }
 }
 
 function paintPane(entry) {
