@@ -102,8 +102,15 @@ _RULE_CHARS = frozenset(
 
 
 def is_rule(line: str) -> bool:
-    """Whether this line is frame rather than content."""
-    return not (set(line) - _RULE_CHARS)
+    """Whether this line is frame rather than content.
+
+    Whitespace is asked of the character rather than listed, because a CLI pads
+    its frame with more than a space. Claude Code ends a bare prompt row with a
+    non-breaking space, and against a literal set that one invisible character
+    made the row content: it survived the filter, then `rstrip` took it off
+    again, and a peek came back reading `\u276f`.
+    """
+    return all(ch.isspace() or ch in _RULE_CHARS for ch in line)
 
 
 def content_lines(text: str) -> list[str]:

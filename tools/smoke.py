@@ -786,6 +786,35 @@ def main() -> int:
         "an arrow-key menu hint is",
         attention.verdict_text("Choose one: (Use arrow keys)", [], []) == "waiting",
     )
+    # What a peek and the row's "saying" line both rest on: a pane is mostly
+    # frame, and the frame has to be droppable without knowing any CLI.
+    check(
+        "a rule of box drawing is frame",
+        attention.is_rule("\u2500" * 40),
+    )
+    check(
+        "a bare prompt mark is frame",
+        attention.is_rule("\u276f"),
+    )
+    check(
+        "and still is when the CLI pads it with a non-breaking space",
+        attention.is_rule("\u276f\xa0"),
+    )
+    check(
+        "a rule padded the same way is still frame",
+        attention.is_rule("\u2500" * 40 + "\xa0"),
+    )
+    check(
+        "a line with one real word in it is content",
+        not attention.is_rule("\u2500" * 40 + " Ran 1 shell command"),
+    )
+    check(
+        "content_lines keeps what was said and drops the frame around it",
+        attention.content_lines(
+            "\u2500" * 20 + "\n\u276f\xa0\nRan 1 shell command\n   \n"
+        ) == ["Ran 1 shell command"],
+    )
+
     check(
         "a traceback is an error, not a question",
         attention.verdict_text("Traceback (most recent call last):\n  File", [], []) == "error",

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.67.13 — 2026-09-18 16:52 PDT
+
+**A peek no longer comes back reading `❯`.** Peeking at a session, and the
+"saying" line under every row in the sidebar, both rest on dropping the frame a
+CLI draws: a line is not worth quoting when every character in it is a box rule,
+a separator or a prompt mark.
+
+Whitespace was a list of two characters, a space and a tab, and Claude Code ends
+its bare prompt row with a non-breaking space. That one invisible character made
+the row content rather than frame, so it survived the filter, and then `rstrip`
+took it off again and left a lone prompt glyph as the last thing the session
+said. A rule padded the same way got through beside it.
+
+Whitespace is now asked of the character rather than listed, which covers every
+kind of space a CLI can pad with instead of the two that were guessed.
+
+Found on the phone, where the new peek control put four lines of frame under a
+session row and made it obvious.
+
 ## 0.67.12 — 2026-09-18 14:24 PDT
 
 **The bottom line of the terminal is no longer half cut off.** It looked like the
