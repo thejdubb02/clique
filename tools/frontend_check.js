@@ -442,5 +442,86 @@ console.log("what's new");
         !changelogHasNews("0.50.24", ""));
 }
 
+console.log("markdown in the file sheet");
+{
+  const code = region(
+    "/* parseMarkdown: blocks from a string, no DOM. */",
+    "function renderMarkdown("
+  );
+  const { parseMarkdown } = new Function(code + "; return { parseMarkdown };")();
+  const walk = (n, acc) => {
+    if (!n) return acc;
+    if (Array.isArray(n)) { n.forEach((x) => walk(x, acc)); return acc; }
+    acc.push(n);
+    walk(n.inlines, acc); walk(n.children, acc); walk(n.items, acc);
+    walk(n.header, acc); walk(n.rows, acc);
+    return acc;
+  };
+
+  for (let n = 1; n <= 6; n++) {
+    const b = parseMarkdown("#".repeat(n) + " Title")[0];
+    check("heading h" + n, b && b.type === "heading" && b.level === n, b);
+  }
+
+  const para = parseMarkdown("hello world")[0];
+  check("a paragraph", para && para.type === "paragraph"
+    && para.inlines[0] && para.inlines[0].text === "hello world", para);
+
+  const fenced = parseMarkdown("```js\n# not a heading\n- not a list\n```");
+  check("fenced contents are not markdown",
+        fenced.length === 1 && fenced[0].type === "code"
+        && fenced[0].text.indexOf("# not a heading") >= 0
+        && fenced[0].text.indexOf("- not a list") >= 0, fenced);
+  check("and keeps the language", fenced[0] && fenced[0].lang === "js", fenced[0]);
+
+  const tildes = parseMarkdown("~~~\n# still code\n~~~")[0];
+  check("tilde fences are code too",
+        tildes && tildes.type === "code" && tildes.text.indexOf("# still code") >= 0,
+        tildes);
+
+  const ul = parseMarkdown("- a\n- b")[0];
+  check("unordered list",
+        ul && ul.type === "list" && !ul.ordered && ul.items.length === 2, ul);
+
+  const ol = parseMarkdown("1. a\n2. b")[0];
+  check("ordered list",
+        ol && ol.type === "list" && ol.ordered && ol.items.length === 2, ol);
+
+  const table = parseMarkdown("| a | b |\n| --- | ---: |\n| 1 | 2 |")[0];
+  check("a table", table && table.type === "table" && table.rows.length === 1, table);
+  check("and its alignment row",
+        table && table.align && table.align[1] === "right", table && table.align);
+
+  const hr = parseMarkdown("---")[0];
+  check("a rule", hr && hr.type === "hr", hr);
+
+  const quote = parseMarkdown("> quoted")[0];
+  check("a blockquote", quote && quote.type === "blockquote", quote);
+
+  const inline = parseMarkdown(
+    "use `x` **bold** __also__ *em* _em2_ [ok](https://ex.com) "
+    + "[bad](javascript:alert(1)) \\*star\\*"
+  )[0];
+  const nodes = walk(inline, []);
+  check("inline code", nodes.some((n) => n.type === "code" && n.text === "x"));
+  check("** and __ are bold", nodes.filter((n) => n.type === "strong").length === 2);
+  check("* and _ are italic", nodes.filter((n) => n.type === "em").length === 2);
+  check("http link survives",
+        nodes.some((n) => n.type === "link" && n.href === "https://ex.com"));
+  check("javascript: is not a link",
+        !nodes.some((n) => n.type === "link" && /javascript:/i.test(n.href || "")),
+        nodes.filter((n) => n.type === "link"));
+  const jsOnly = parseMarkdown("[XSS](javascript:alert(1))")[0];
+  const jsText = walk(jsOnly, []).filter((n) => n.type === "text").map((n) => n.text).join("");
+  check("and it does not leave a stray parenthesis", jsText === "XSS", jsText);
+  const esc = parseMarkdown("\\*star\\*")[0];
+  check("escaped asterisk is text",
+        esc && esc.type === "paragraph"
+        && esc.inlines.length === 1
+        && esc.inlines[0].type === "text"
+        && esc.inlines[0].text === "*star*",
+        esc);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

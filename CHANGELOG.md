@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.67.10 — 2026-09-18 11:26 PDT
+
+**A Markdown file opens as a document, not as a wall of hashes and pipes.**
+Agents write Markdown constantly, and until now clicking one got you its source.
+Headings, lists, tables, fenced code, quotes and links now render in the file
+sheet, with a **Source** button to see the raw file and Edit still editing the
+raw text. A truncated file renders what arrived and still says so.
+
+Images referenced from a document load when they sit beside it, which is the
+case worth having: a note that points at the screenshot next to it now shows it.
+
+The renderer builds the page element by element rather than handing HTML to the
+browser, because a working directory is not a trusted place: a cloned repository
+can contain a file written to attack whoever opens it. Nothing from a file is
+ever parsed as HTML, and a link that is not `http`, `https` or `mailto` renders
+as plain text rather than something clickable.
+
 ## 0.67.9 — 2026-09-18 10:19 PDT
 
 **A long path the pane printed is clickable again.** Paths were matched one

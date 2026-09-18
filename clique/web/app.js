@@ -4733,6 +4733,7 @@ let fileAsked = "";
 let fileSession = "";
 let currentFile = null;   // the info the file sheet last rendered, for editing
 let fileEditing = false;
+let fileShowSource = false;   // Markdown sheet: true while the raw <pre> is up
 
 function filePathNow() {
   return ($("#filePath").textContent || fileAsked || "").trim();
@@ -5002,6 +5003,11 @@ function resetFileBody() {
   if (list) { list.hidden = true; list.textContent = ""; }
   const up = $("#fileUp");
   if (up) up.hidden = true;
+  fileShowSource = false;
+  const doc = $("#fileDoc");
+  if (doc) { doc.hidden = true; doc.textContent = ""; }
+  const srcBtn = $("#fileSource");
+  if (srcBtn) { srcBtn.hidden = true; srcBtn.textContent = "Source"; }
 }
 
 function fileParentPath(info) {
@@ -5041,6 +5047,495 @@ function showFileList(entries, truncated) {
   }
 }
 
+function isMarkdownPath(p) {
+  return /\.(md|markdown|mdown|mkd)$/i.test(String(p || "").split(/[?#]/)[0]);
+}
+
+/* parseMarkdown: blocks from a string, no DOM. */
+function mdHrefKind(href) {
+  const u = String(href || "").trim();
+  if (!u) return "empty";
+  if (/^(https?:|mailto:)/i.test(u)) return "abs";
+  if (/^[a-z][a-z0-9+.-]*:/i.test(u) || u.startsWith("//")) return "unsafe";
+  return "rel";
+}
+
+function splitMdCells(line) {
+  let s = String(line || "").trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  const cells = [];
+  let cur = "";
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "\\" && i + 1 < s.length) { cur += s[i + 1]; i++; continue; }
+    if (s[i] === "|") { cells.push(cur.trim()); cur = ""; continue; }
+    cur += s[i];
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+function mdAlign(cell) {
+  const t = String(cell || "").replace(/\s/g, "");
+  if (!/^:?-+:?$/.test(t)) return null;
+  const left = t.startsWith(":");
+  const right = t.endsWith(":");
+  if (left && right) return "center";
+  if (right) return "right";
+  if (left) return "left";
+  return "";
+}
+
+function parseMarkdown(text) {
+  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+  const fenceOpen = (line) => {
+    const m = String(line).match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (!m) return null;
+    return { ch: m[1][0], n: m[1].length, info: m[2].trim().split(/\s+/).filter(Boolean)[0] || "" };
+  };
+  const fenceClose = (line, open) => {
+    const m = String(line).match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+    return !!(m && m[1][0] === open.ch && m[1].length >= open.n);
+  };
+  const heading = (line) => String(line).match(/^ {0,3}(#{1,6})(?: +(.*?))?\s*$/);
+  const isHr = (line) =>
+    /^ {0,3}(?:(?:-[\t ]*){3,}|(?:\*[\t ]*){3,}|(?:_[\t ]*){3,})\s*$/.test(line);
+  const quoteStrip = (line) => {
+    const m = String(line).match(/^ {0,3}> ?(.*)$/);
+    return m ? m[1] : null;
+  };
+  const listMark = (line) => {
+    const m = String(line || "").match(/^( *)([-*+]|\d+\.) (.*)$/);
+    if (!m) return null;
+    return { indent: m[1].length, ordered: /\d/.test(m[2]), start: parseInt(m[2], 10) || 1, rest: m[3] };
+  };
+  const looksTable = (i) => {
+    if (i + 1 >= lines.length) return false;
+    if (lines[i].indexOf("|") < 0) return false;
+    const header = splitMdCells(lines[i]);
+    const sep = splitMdCells(lines[i + 1]);
+    return header.length > 0 && sep.length > 0 && sep.every((c) => mdAlign(c) !== null);
+  };
+  const isInterrupt = (i) => {
+    const line = lines[i];
+    if (/^\s*$/.test(line)) return true;
+    if (fenceOpen(line) || heading(line) || isHr(line) || listMark(line)) return true;
+    if (quoteStrip(line) !== null) return true;
+    if (looksTable(i)) return true;
+    return false;
+  };
+  const pad = (cells, n) => {
+    const out = cells.slice(0, n);
+    while (out.length < n) out.push("");
+    return out;
+  };
+  const parseList = (startI, base, depth) => {
+    const first = listMark(lines[startI]);
+    const ordered = first.ordered;
+    const items = [];
+    let i = startI;
+    while (i < lines.length) {
+      const mark = listMark(lines[i]);
+      if (!mark || mark.indent !== base || mark.ordered !== ordered) break;
+      let itemText = mark.rest;
+      let nested = null;
+      i++;
+      while (i < lines.length) {
+        const line = lines[i];
+        if (/^\s*$/.test(line)) break;
+        const sub = listMark(line);
+        if (sub && sub.indent === base) break;
+        if (sub && sub.indent < base) break;
+        if (sub && sub.indent > base) {
+          if (depth < 1) {
+            const got = parseList(i, sub.indent, depth + 1);
+            nested = got.block;
+            i = got.i;
+            continue;
+          }
+          itemText += "\n" + sub.rest;
+          i++;
+          continue;
+        }
+        const lead = (line.match(/^ */) || [""])[0].length;
+        if (lead > base) {
+          itemText += "\n" + line.trim();
+          i++;
+          continue;
+        }
+        break;
+      }
+      const item = { inlines: parseInlines(itemText) };
+      if (nested) item.children = nested;
+      items.push(item);
+    }
+    return { block: { type: "list", ordered, start: first.start, items }, i };
+  };
+
+  const blocks = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*$/.test(line)) { i++; continue; }
+    const open = fenceOpen(line);
+    if (open) {
+      i++;
+      const body = [];
+      while (i < lines.length && !fenceClose(lines[i], open)) body.push(lines[i++]);
+      if (i < lines.length) i++;
+      blocks.push({ type: "code", lang: open.info, text: body.join("\n") });
+      continue;
+    }
+    const h = heading(line);
+    if (h) {
+      const title = (h[2] || "").replace(/\s+#+\s*$/, "").trim();
+      blocks.push({ type: "heading", level: h[1].length, inlines: parseInlines(title) });
+      i++;
+      continue;
+    }
+    if (isHr(line)) { blocks.push({ type: "hr" }); i++; continue; }
+    if (looksTable(i)) {
+      const headerCells = splitMdCells(lines[i]);
+      const sep = splitMdCells(lines[i + 1]);
+      const align = headerCells.map((_, k) => mdAlign(sep[k] || "") || "");
+      const header = headerCells.map(parseInlines);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].indexOf("|") >= 0 && !/^\s*$/.test(lines[i])
+          && !fenceOpen(lines[i]) && !isHr(lines[i]) && !heading(lines[i])) {
+        rows.push(pad(splitMdCells(lines[i]), header.length).map(parseInlines));
+        i++;
+      }
+      blocks.push({ type: "table", header, align, rows });
+      continue;
+    }
+    if (listMark(line)) {
+      const got = parseList(i, listMark(line).indent, 0);
+      blocks.push(got.block);
+      i = got.i;
+      continue;
+    }
+    const quoted = quoteStrip(line);
+    if (quoted !== null) {
+      const inner = [];
+      while (i < lines.length) {
+        const q = quoteStrip(lines[i]);
+        if (q === null) break;
+        inner.push(q);
+        i++;
+      }
+      blocks.push({ type: "blockquote", children: parseMarkdown(inner.join("\n")) });
+      continue;
+    }
+    const buf = [line];
+    i++;
+    while (i < lines.length && !isInterrupt(i)) buf.push(lines[i++]);
+    blocks.push({ type: "paragraph", inlines: parseInlines(buf.join("\n")) });
+  }
+  return blocks;
+}
+
+function takeMdLink(text, i) {
+  if (text[i] !== "[") return null;
+  let j = i + 1;
+  while (j < text.length) {
+    if (text[j] === "\\") { j += 2; continue; }
+    if (text[j] === "]" && text[j + 1] === "(") {
+      let k = j + 2;
+      let depth = 1;
+      while (k < text.length) {
+        if (text[k] === "\\") { k += 2; continue; }
+        if (text[k] === "(") depth++;
+        else if (text[k] === ")") {
+          depth--;
+          if (depth === 0) {
+            let href = text.slice(j + 2, k).trim();
+            if (href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1).trim();
+            return { alt: text.slice(i + 1, j), href, end: k + 1 };
+          }
+        }
+        k++;
+      }
+      return null;
+    }
+    if (text[j] === "]") return null;
+    j++;
+  }
+  return null;
+}
+
+function findMdDelim(text, from, delim) {
+  let j = from;
+  while (j < text.length) {
+    if (text[j] === "\\") { j += 2; continue; }
+    if (text[j] === "`") {
+      const c = text.indexOf("`", j + 1);
+      if (c < 0) return -1;
+      j = c + 1;
+      continue;
+    }
+    if (text.startsWith(delim, j)) return j;
+    j++;
+  }
+  return -1;
+}
+
+function parseInlines(text) {
+  text = String(text || "");
+  const out = [];
+  let i = 0;
+  let buf = "";
+  const pushText = (s) => {
+    if (!s) return;
+    const last = out[out.length - 1];
+    if (last && last.type === "text") last.text += s;
+    else out.push({ type: "text", text: s });
+  };
+  const flush = () => { pushText(buf); buf = ""; };
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "\\" && i + 1 < text.length) { buf += text[i + 1]; i += 2; continue; }
+    if (ch === "`") {
+      const close = text.indexOf("`", i + 1);
+      if (close >= 0) {
+        flush();
+        out.push({ type: "code", text: text.slice(i + 1, close) });
+        i = close + 1;
+        continue;
+      }
+    }
+    if (ch === "!" && text[i + 1] === "[") {
+      const got = takeMdLink(text, i + 1);
+      if (got) {
+        flush();
+        const kind = mdHrefKind(got.href);
+        const alt = got.alt.replace(/\\(.)/g, "$1");
+        if (kind === "unsafe" || kind === "empty") pushText(alt);
+        else out.push({ type: "image", src: got.href, alt });
+        i = got.end;
+        continue;
+      }
+    }
+    if (ch === "[") {
+      const got = takeMdLink(text, i);
+      if (got) {
+        flush();
+        const kind = mdHrefKind(got.href);
+        const kids = parseInlines(got.alt);
+        if (kind === "unsafe" || kind === "empty") {
+          for (const k of kids) {
+            if (k.type === "text") pushText(k.text);
+            else out.push(k);
+          }
+        } else out.push({ type: "link", href: got.href, children: kids });
+        i = got.end;
+        continue;
+      }
+    }
+    if (ch === "_" && /[A-Za-z0-9]/.test(text[i - 1] || "")) { buf += ch; i++; continue; }
+    if (ch === "*" || ch === "_") {
+      const dbl = text.startsWith(ch + ch, i);
+      const delim = dbl ? ch + ch : ch;
+      const close = findMdDelim(text, i + delim.length, delim);
+      if (close >= 0 && close > i + delim.length) {
+        flush();
+        out.push({
+          type: dbl ? "strong" : "em",
+          children: parseInlines(text.slice(i + delim.length, close)),
+        });
+        i = close + delim.length;
+        continue;
+      }
+    }
+    buf += ch;
+    i++;
+  }
+  flush();
+  return out;
+}
+
+function renderMarkdown(blocks, opts) {
+  opts = opts || {};
+  const frag = document.createDocumentFragment();
+  for (const b of blocks || []) {
+    const el = mdBlock(b, opts);
+    if (el) frag.append(el);
+  }
+  return frag;
+}
+
+function mdBlock(b, opts) {
+  if (!b) return null;
+  if (b.type === "heading") {
+    const level = Math.min(6, Math.max(1, b.level || 1));
+    const el = document.createElement("h" + level);
+    mdInlines(el, b.inlines, opts);
+    return el;
+  }
+  if (b.type === "paragraph") {
+    const el = document.createElement("p");
+    mdInlines(el, b.inlines, opts);
+    return el;
+  }
+  if (b.type === "code") {
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    if (b.lang) code.className = "language-" + b.lang;
+    code.textContent = b.text || "";
+    pre.append(code);
+    return pre;
+  }
+  if (b.type === "blockquote") {
+    const el = document.createElement("blockquote");
+    for (const c of b.children || []) {
+      const kid = mdBlock(c, opts);
+      if (kid) el.append(kid);
+    }
+    return el;
+  }
+  if (b.type === "hr") return document.createElement("hr");
+  if (b.type === "list") {
+    const el = document.createElement(b.ordered ? "ol" : "ul");
+    if (b.ordered && b.start && b.start !== 1) el.start = b.start;
+    for (const item of b.items || []) {
+      const li = document.createElement("li");
+      mdInlines(li, item.inlines, opts);
+      if (item.children) {
+        const nested = mdBlock(item.children, opts);
+        if (nested) li.append(nested);
+      }
+      el.append(li);
+    }
+    return el;
+  }
+  if (b.type === "table") {
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    (b.header || []).forEach((cell, i) => {
+      const th = document.createElement("th");
+      const al = (b.align || [])[i];
+      if (al) th.style.textAlign = al;
+      mdInlines(th, cell, opts);
+      headRow.append(th);
+    });
+    thead.append(headRow);
+    table.append(thead);
+    const tbody = document.createElement("tbody");
+    for (const row of b.rows || []) {
+      const tr = document.createElement("tr");
+      (row || []).forEach((cell, i) => {
+        const td = document.createElement("td");
+        const al = (b.align || [])[i];
+        if (al) td.style.textAlign = al;
+        mdInlines(td, cell, opts);
+        tr.append(td);
+      });
+      tbody.append(tr);
+    }
+    table.append(tbody);
+    return table;
+  }
+  return null;
+}
+
+function mdInlines(parent, inlines, opts) {
+  for (const n of inlines || []) {
+    if (n.type === "text") parent.append(document.createTextNode(n.text || ""));
+    else if (n.type === "code") {
+      const el = document.createElement("code");
+      el.textContent = n.text || "";
+      parent.append(el);
+    } else if (n.type === "strong" || n.type === "em") {
+      const el = document.createElement(n.type === "strong" ? "strong" : "em");
+      mdInlines(el, n.children, opts);
+      parent.append(el);
+    } else if (n.type === "link") parent.append(mdLink(n, opts));
+    else if (n.type === "image") parent.append(mdImage(n, opts));
+    else if (n.children) mdInlines(parent, n.children, opts);
+  }
+}
+
+function mdLink(n, opts) {
+  const href = String(n.href || "").trim();
+  const kind = mdHrefKind(href);
+  if (kind === "abs") {
+    const a = document.createElement("a");
+    a.href = href;
+    a.rel = "noopener noreferrer";
+    mdInlines(a, n.children, opts);
+    if (/^https?:/i.test(href)) {
+      a.onclick = (ev) => {
+        ev.preventDefault();
+        openLink(href, ev.ctrlKey || ev.metaKey);
+      };
+    }
+    return a;
+  }
+  if (kind === "rel") {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.className = "md-path";
+    mdInlines(a, n.children, opts);
+    const path = resolveMdPath(opts.filePath, href);
+    a.onclick = (ev) => {
+      ev.preventDefault();
+      if (opts.sessionId && path) openFileSheet(opts.sessionId, path);
+    };
+    return a;
+  }
+  const span = document.createElement("span");
+  mdInlines(span, n.children, opts);
+  return span;
+}
+
+function mdImage(n, opts) {
+  const src = String(n.src || "").trim();
+  const alt = n.alt || "";
+  const kind = mdHrefKind(src);
+  if (kind === "abs" && /^https?:/i.test(src)) {
+    const a = document.createElement("a");
+    a.href = src;
+    a.rel = "noopener noreferrer";
+    a.textContent = alt || src;
+    a.onclick = (ev) => {
+      ev.preventDefault();
+      openLink(src, ev.ctrlKey || ev.metaKey);
+    };
+    return a;
+  }
+  if (kind === "rel" && opts.sessionId) {
+    const img = document.createElement("img");
+    img.alt = alt;
+    const path = resolveMdPath(opts.filePath, src);
+    img.src = "api/sessions/" + encodeURIComponent(opts.sessionId)
+      + "/file?path=" + encodeURIComponent(path) + "&raw=1";
+    return img;
+  }
+  return document.createTextNode(alt || src);
+}
+
+function resolveMdPath(fromFile, rel) {
+  const raw = String(rel || "").trim().split(/[?#]/)[0];
+  if (!raw) return "";
+  const from = String(fromFile || "").replace(/\\/g, "/");
+  let joined;
+  if (raw.startsWith("/")) joined = raw;
+  else {
+    const slash = from.lastIndexOf("/");
+    const dir = slash < 0 ? "." : (slash === 0 ? "/" : from.slice(0, slash));
+    joined = dir === "." ? raw : dir === "/" ? "/" + raw.replace(/^\//, "") : dir + "/" + raw;
+  }
+  const parts = [];
+  const abs = joined.startsWith("/");
+  for (const p of joined.split("/")) {
+    if (p === "" || p === ".") continue;
+    if (p === "..") { if (parts.length) parts.pop(); continue; }
+    parts.push(p);
+  }
+  return (abs ? "/" : "") + parts.join("/");
+}
+
 function showFile(info) {
   $("#fileTitle").textContent = info.name || info.asked || "File";
   $("#filePath").textContent = info.path || info.asked || fileAsked;
@@ -5051,8 +5546,26 @@ function showFile(info) {
   note.hidden = true;
 
   if (info.kind === "text") {
-    text.hidden = false;
     text.textContent = info.text || "";
+    const md = isMarkdownPath(info.path || info.asked || fileAsked);
+    const doc = $("#fileDoc");
+    const srcBtn = $("#fileSource");
+    if (md && doc) {
+      fileShowSource = false;
+      const frag = renderMarkdown(parseMarkdown(info.text || ""), {
+        sessionId: fileSession,
+        filePath: info.path || info.asked || fileAsked,
+      });
+      doc.textContent = "";
+      doc.append(frag);
+      doc.hidden = false;
+      text.hidden = true;
+      if (srcBtn) { srcBtn.hidden = false; srcBtn.textContent = "Source"; }
+    } else {
+      text.hidden = false;
+      if (doc) { doc.hidden = true; doc.textContent = ""; }
+      if (srcBtn) srcBtn.hidden = true;
+    }
     if (info.truncated) {
       note.hidden = false;
       note.textContent = "First 256 KB shown. Copy the path to open the rest.";
@@ -5106,10 +5619,11 @@ function startFileEdit() {
   ta.value = currentFile.text || "";
   ta.hidden = false;
   $("#fileText").hidden = true;
+  if ($("#fileDoc")) $("#fileDoc").hidden = true;
   $("#fileNote").hidden = true;
   if ($("#fileList")) $("#fileList").hidden = true;
   if ($("#fileUp")) $("#fileUp").hidden = true;
-  for (const sel of ["#fileEditBtn", "#fileSend", "#fileCopy"]) $(sel).hidden = true;
+  for (const sel of ["#fileEditBtn", "#fileSend", "#fileCopy", "#fileSource"]) $(sel).hidden = true;
   $("#fileSave").hidden = false;
   $("#fileCancel").hidden = false;
   ta.focus();
@@ -8635,6 +9149,14 @@ function wire() {
   $("#fileEditBtn").onclick = startFileEdit;
   $("#fileSave").onclick = saveFileEdit;
   $("#fileCancel").onclick = cancelFileEdit;
+  $("#fileSource").onclick = () => {
+    if (!currentFile || currentFile.kind !== "text") return;
+    if (!isMarkdownPath(currentFile.path || currentFile.asked || fileAsked)) return;
+    fileShowSource = !fileShowSource;
+    $("#fileText").hidden = !fileShowSource;
+    if ($("#fileDoc")) $("#fileDoc").hidden = fileShowSource;
+    $("#fileSource").textContent = fileShowSource ? "Rendered" : "Source";
+  };
   // Ctrl/Cmd+S saves from inside the editor; Escape backs out to the preview.
   $("#fileEdit").onkeydown = (ev) => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key === "s") { ev.preventDefault(); saveFileEdit(); }

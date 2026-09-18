@@ -427,15 +427,18 @@ def _run(panel) -> int:
             check(f"no reading hangs off the status bar {label}", over == [], over)
         page.evaluate("() => setSidebar(false)")
         page.wait_for_timeout(400)
-        check("nor with the sidebar collapsed", page.evaluate(OVERHANG) == [],
-              page.evaluate(OVERHANG))
+        check(
+            "nor with the sidebar collapsed", page.evaluate(OVERHANG) == [], page.evaluate(OVERHANG)
+        )
         page.evaluate("() => setSidebar(true)")
         page.set_viewport_size({"width": 1280, "height": 860})
         page.wait_for_timeout(350)
         # No CLI in this check declares a usage probe, so the block stays away
         # rather than sitting there empty.
-        check("the plan block is absent for a CLI that cannot report it",
-              page.evaluate("() => document.querySelector('#plan').hidden") is True)
+        check(
+            "the plan block is absent for a CLI that cannot report it",
+            page.evaluate("() => document.querySelector('#plan').hidden") is True,
+        )
         check(
             "and leaves no gap where it was",
             abs(gaps["between"] - gaps["normal"]) < 1,
@@ -473,10 +476,14 @@ def _run(panel) -> int:
                   return {width: cs.scrollbarWidth, color: cs.scrollbarColor};
                 }"""
             )
-            check("the pane's scrollbar is thin, not the browser default",
-                  bool(bar) and bar["width"] == "thin", bar)
-            check("and it is coloured, not auto",
-                  bool(bar) and bar["color"] not in ("", "auto"), bar)
+            check(
+                "the pane's scrollbar is thin, not the browser default",
+                bool(bar) and bar["width"] == "thin",
+                bar,
+            )
+            check(
+                "and it is coloured, not auto", bool(bar) and bar["color"] not in ("", "auto"), bar
+            )
             before = bar["color"] if bar else ""
             page.evaluate(
                 """async () => {
@@ -491,8 +498,11 @@ def _run(panel) -> int:
                 "() => { const v = document.querySelector('.xterm-viewport');"
                 " return v ? getComputedStyle(v).scrollbarColor : ''; }"
             )
-            check("and it changes with the theme", after and after != before,
-                  {"before": before, "after": after})
+            check(
+                "and it changes with the theme",
+                after and after != before,
+                {"before": before, "after": after},
+            )
             page.screenshot(path=str(SHOTS / "terminal-dracula.png"))
             page.evaluate(
                 """async () => {
@@ -539,9 +549,10 @@ def _run(panel) -> int:
                 }"""
             )
             page.wait_for_timeout(1500)
-            check("the sidebar lists the group",
-                  page.evaluate(
-                      "() => !!document.querySelector('#groups .group-row')") is True)
+            check(
+                "the sidebar lists the group",
+                page.evaluate("() => !!document.querySelector('#groups .group-row')") is True,
+            )
             page.evaluate("() => document.querySelector('#groups .group-open').click()")
             page.wait_for_timeout(4000)
             band = page.evaluate(
@@ -559,12 +570,21 @@ def _run(panel) -> int:
                 }"""
             )
             check("both members are in the group", len(band["at"]) == 2, band)
-            check("their tabs sit next to each other",
-                  len(band["at"]) == 2 and band["at"][1] == band["at"][0] + 1, band)
-            check("and read as one band, not two pills",
-                  band["starts"] == 1 and band["ends"] == 1, band)
-            check("the band is drawn in the group's colour",
-                  band["h"] == "3px" and "122, 162, 247" in band["bg"], band)
+            check(
+                "their tabs sit next to each other",
+                len(band["at"]) == 2 and band["at"][1] == band["at"][0] + 1,
+                band,
+            )
+            check(
+                "and read as one band, not two pills",
+                band["starts"] == 1 and band["ends"] == 1,
+                band,
+            )
+            check(
+                "the band is drawn in the group's colour",
+                band["h"] == "3px" and "122, 162, 247" in band["bg"],
+                band,
+            )
             # The point of putting it inside the tab: a phone has no row to give.
             check("and costs the strip no height", band["barHeight"] <= 36, band)
             page.locator("#tabbar").screenshot(path=str(SHOTS / "group-band.png"))
@@ -572,28 +592,36 @@ def _run(panel) -> int:
                 """async (gid) => {
                   await fetch(`/api/groups/${gid}/delete`, {method:'POST'});
                   await refresh();
-                }""", made["gid"])
+                }""",
+                made["gid"],
+            )
             page.wait_for_timeout(400)
-            check("deleting the group leaves the tabs alone",
-                  page.evaluate(
-                      "() => document.querySelectorAll('#tabs .tab.grouped').length") == 0)
+            check(
+                "deleting the group leaves the tabs alone",
+                page.evaluate("() => document.querySelectorAll('#tabs .tab.grouped').length") == 0,
+            )
             page.evaluate(
                 """async (ids) => { for (const id of ids)
                      await fetch(`/api/sessions/${id}`, {method:'DELETE'}); }""",
-                made["ids"])
+                made["ids"],
+            )
             page.wait_for_timeout(800)
             page.evaluate("(id) => { if (id) selectTab(id); }", was_active)
             page.wait_for_timeout(800)
-            check("and the pane you were on is back in front",
-                  page.evaluate("() => activeId") == was_active)
+            check(
+                "and the pane you were on is back in front",
+                page.evaluate("() => activeId") == was_active,
+            )
 
             print("reloading an installed app")
             # A PWA has no address bar, so there is no reload in it. The button
             # exists for exactly that case and is deliberately absent from a
             # browser tab, where it would duplicate a control the browser
             # already has in a row that is already full.
-            check("a browser tab has no reload button",
-                  page.evaluate("() => document.querySelector('#reloadBtn').hidden") is True)
+            check(
+                "a browser tab has no reload button",
+                page.evaluate("() => document.querySelector('#reloadBtn').hidden") is True,
+            )
             page.evaluate("() => openPalette()")
             page.wait_for_timeout(300)
             page.keyboard.type("reload")
@@ -628,21 +656,35 @@ def _run(panel) -> int:
                 }"""
             )
             check("the active CLI's logo is drawn", bool(mark) and not mark["hidden"], mark)
-            check("it is the icon, one way or the other",
-                  bool(mark) and ("url(" in mark["mask"] or "url(" in mark["image"]), mark)
-            check("faint enough to read output through",
-                  bool(mark) and 0 < mark["opacity"] <= 0.12, mark)
-            check("big enough to recognise across a screen",
-                  bool(mark) and mark["w"] >= 60 and mark["h"] >= 60, mark)
-            check("in the top-right, opposite the theme character",
-                  bool(mark) and mark["topRight"], mark)
-            check("and it cannot be clicked",
-                  bool(mark) and mark["events"] == "none", mark)
+            check(
+                "it is the icon, one way or the other",
+                bool(mark) and ("url(" in mark["mask"] or "url(" in mark["image"]),
+                mark,
+            )
+            check(
+                "faint enough to read output through",
+                bool(mark) and 0 < mark["opacity"] <= 0.12,
+                mark,
+            )
+            check(
+                "big enough to recognise across a screen",
+                bool(mark) and mark["w"] >= 60 and mark["h"] >= 60,
+                mark,
+            )
+            check(
+                "in the top-right, opposite the theme character",
+                bool(mark) and mark["topRight"],
+                mark,
+            )
+            check("and it cannot be clicked", bool(mark) and mark["events"] == "none", mark)
             # A single-colour glyph is masked and takes the CLI's own colour,
             # which is the whole reason one file can serve every mode.
             if "url(" in (mark or {}).get("mask", ""):
-                check("a mono glyph is tinted, not left grey",
-                      mark["tint"] not in ("rgba(0, 0, 0, 0)", "transparent"), mark["tint"])
+                check(
+                    "a mono glyph is tinted, not left grey",
+                    mark["tint"] not in ("rgba(0, 0, 0, 0)", "transparent"),
+                    mark["tint"],
+                )
             gone = page.evaluate(
                 """async () => {
                   await fetch('/api/settings', {method:'PATCH',
@@ -691,22 +733,28 @@ def _run(panel) -> int:
                 }"""
             )
             check("a theme with a figure draws one", bool(art) and art["display"] != "none", art)
-            check("it is a picture, not an element full of text",
-                  bool(art) and "url(" in art["image"], art)
+            check(
+                "it is a picture, not an element full of text",
+                bool(art) and "url(" in art["image"],
+                art,
+            )
             # A drawing is composited normally: the extreme blends the grid
             # form uses would eat its blacks and whites. What has to hold is
             # that it is faint enough to read straight through, which the
             # next check is.
-            check("it is a drawing, sized to the box rather than to a grid",
-                  bool(art) and art["blend"] == "normal", art)
-            check("faint enough to read through",
-                  bool(art) and 0 < art["opacity"] <= 0.14, art)
-            check("and it cannot be clicked",
-                  bool(art) and art["events"] == "none", art)
-            check("it stays inside the pane",
-                  bool(art) and art["insidePane"], art)
-            check("and it is big enough to be a character, not a speck",
-                  bool(art) and art["h"] > 80 and art["w"] > 60, art)
+            check(
+                "it is a drawing, sized to the box rather than to a grid",
+                bool(art) and art["blend"] == "normal",
+                art,
+            )
+            check("faint enough to read through", bool(art) and 0 < art["opacity"] <= 0.14, art)
+            check("and it cannot be clicked", bool(art) and art["events"] == "none", art)
+            check("it stays inside the pane", bool(art) and art["insidePane"], art)
+            check(
+                "and it is big enough to be a character, not a speck",
+                bool(art) and art["h"] > 80 and art["w"] > 60,
+                art,
+            )
             page.screenshot(path=str(SHOTS / "theme-art.png"))
 
             # The gate is the pane's width, not the window's. A window query
@@ -765,8 +813,11 @@ def _run(panel) -> int:
                 "() => [...document.querySelectorAll('#menu button')].map((b) => b.textContent)"
             )
             check("right-click opens the session menu", len(labels) > 4, labels)
-            check("and it offers another CLI when one is installed",
-                  any("another CLI" in x for x in labels), labels)
+            check(
+                "and it offers another CLI when one is installed",
+                any("another CLI" in x for x in labels),
+                labels,
+            )
 
             def click_item(needle):
                 return page.evaluate(
@@ -808,20 +859,29 @@ def _run(panel) -> int:
         # the field answered nothing at all for one.
         page.evaluate("openModal()")
         page.wait_for_timeout(400)
-        page.fill('#newForm [name=cwd]', "clique")
+        page.fill("#newForm [name=cwd]", "clique")
         page.wait_for_timeout(1200)
         listed = page.evaluate(
             """() => [...document.querySelectorAll('#cwdList option')]
                      .map((o) => ({value: o.value, label: o.textContent}))"""
         )
         check("typing a name fills the suggestions", len(listed) > 0, listed)
-        check("and one of them is this repo",
-              any(o["value"].rstrip("/").endswith("/clique") for o in listed), listed)
-        check("the value is a path it can launch in",
-              all(o["value"].startswith("/") for o in listed), listed)
-        check("and a found project shows its name beside the path",
-              any(" · " in (o["label"] or "") for o in listed), listed)
-        page.fill('#newForm [name=cwd]', "")
+        check(
+            "and one of them is this repo",
+            any(o["value"].rstrip("/").endswith("/clique") for o in listed),
+            listed,
+        )
+        check(
+            "the value is a path it can launch in",
+            all(o["value"].startswith("/") for o in listed),
+            listed,
+        )
+        check(
+            "and a found project shows its name beside the path",
+            any(" · " in (o["label"] or "") for o in listed),
+            listed,
+        )
+        page.fill("#newForm [name=cwd]", "")
         page.wait_for_timeout(200)
         page.evaluate("document.querySelector('#modal').hidden = true")
         page.wait_for_timeout(300)
@@ -1124,7 +1184,20 @@ def _run(panel) -> int:
         print("a path you can look at")
         work = SANDBOX / "work"
         sample = work / "clique-visual-file.md"
-        sample.write_text("# Hello from a click\n\nNot an editor.\n", encoding="utf-8")
+        sample.write_text(
+            "# Hello from a click\n\n"
+            "Not an editor.\n\n"
+            "## A heading\n\n"
+            "| col | other |\n"
+            "| --- | ---: |\n"
+            "| a | b |\n"
+            "| c | d |\n\n"
+            "```js\n"
+            "# not a heading\n"
+            "```\n\n"
+            "[safe](https://example.com) and [XSS](javascript:alert(1))\n",
+            encoding="utf-8",
+        )
         (work / "sub").mkdir(exist_ok=True)
         (work / "sub" / "inside.md").write_text("nested file\n", encoding="utf-8")
         shutil.copy(
@@ -1134,14 +1207,89 @@ def _run(panel) -> int:
         page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(sample)])
         page.wait_for_function(
             """() => {
-              const el = document.getElementById('fileText');
+              const el = document.getElementById('fileDoc');
               return el && !el.hidden && (el.innerText || '').includes('Hello from a click');
             }""",
             timeout=8000,
         )
         check("the file sheet opens", page.locator("#file").is_visible())
-        shown = page.locator("#fileText").inner_text()
+        shown = page.locator("#fileDoc").inner_text()
         check("and it shows the text", "Hello from a click" in shown, shown[:80])
+        check(
+            "javascript: label is plain text",
+            "XSS" in shown and "XSS)" not in shown,
+            shown[shown.find("safe") :][:40] if "safe" in shown else shown[:80],
+        )
+        md = page.evaluate(
+            """() => {
+              const doc = document.getElementById('fileDoc');
+              const text = document.getElementById('fileText');
+              const src = document.getElementById('fileSource');
+              const hrefs = [...doc.querySelectorAll('a')].map(
+                (a) => a.getAttribute('href') || ''
+              );
+              return {
+                h2: doc.querySelectorAll('h2').length,
+                tableRows: doc.querySelectorAll('table tr').length,
+                pre: doc.querySelectorAll('pre').length,
+                jsLinks: hrefs.filter((h) => /javascript:/i.test(h)).length,
+                sourceLabel: src ? src.textContent : '',
+                sourceHidden: !src || src.hidden,
+                docHidden: doc.hidden,
+                textHidden: text.hidden,
+              };
+            }"""
+        )
+        # A rendered document is the one thing here that an assertion cannot
+        # judge: headings can exist and still be unreadable, and a table can
+        # have rows and still be a mess. Keep the picture.
+        page.locator("#file").screenshot(path=str(SHOTS / "file-markdown.png"))
+        check("rendered markdown has an h2", md.get("h2", 0) >= 1, md)
+        check("a table has rows", md.get("tableRows", 0) >= 2, md)
+        check("a fenced block is a pre", md.get("pre", 0) >= 1, md)
+        check("javascript: is not an <a>", md.get("jsLinks", 1) == 0, md)
+        check(
+            "Source is offered on a markdown file",
+            not md.get("sourceHidden") and md.get("sourceLabel") == "Source",
+            md,
+        )
+        page.locator("#fileSource").click()
+        page.wait_for_timeout(150)
+        after_src = page.evaluate(
+            """() => {
+              const doc = document.getElementById('fileDoc');
+              const text = document.getElementById('fileText');
+              const src = document.getElementById('fileSource');
+              return {
+                docHidden: doc.hidden,
+                textHidden: text.hidden,
+                label: src.textContent,
+                raw: text.innerText || '',
+              };
+            }"""
+        )
+        check(
+            "Source shows the raw pre",
+            after_src.get("docHidden")
+            and not after_src.get("textHidden")
+            and after_src.get("label") == "Rendered"
+            and "javascript:alert(1)" in after_src.get("raw", ""),
+            after_src,
+        )
+        page.locator("#fileSource").click()
+        page.wait_for_timeout(150)
+        back = page.evaluate(
+            """() => ({
+              docHidden: document.getElementById('fileDoc').hidden,
+              textHidden: document.getElementById('fileText').hidden,
+              label: document.getElementById('fileSource').textContent,
+            })"""
+        )
+        check(
+            "Rendered puts the document back",
+            not back.get("docHidden") and back.get("textHidden") and back.get("label") == "Source",
+            back,
+        )
         page.locator("#file").screenshot(path=str(SHOTS / "file-sheet.png"))
 
         page.evaluate("([id, p]) => openFileSheet(id, p)", [mine, str(work / "shot.png")])
@@ -1170,12 +1318,15 @@ def _run(panel) -> int:
         page.locator("#fileList button").filter(has_text="clique-visual-file.md").first.click()
         page.wait_for_function(
             """() => {
-              const el = document.getElementById('fileText');
+              const el = document.getElementById('fileDoc');
               return el && !el.hidden && (el.innerText || '').includes('Hello from a click');
             }""",
             timeout=8000,
         )
-        check("clicking a listing opens the file", "Hello from a click" in page.locator("#fileText").inner_text())
+        check(
+            "clicking a listing opens the file",
+            "Hello from a click" in page.locator("#fileDoc").inner_text(),
+        )
 
         page.keyboard.press("Escape")
         page.wait_for_timeout(200)
@@ -1239,10 +1390,15 @@ def _run(panel) -> int:
         ):
             node = page.locator(sel)
             box = node.bounding_box() if node.count() else None
-            check(f"{name} is on screen in Appearance",
-                  bool(box) and box["width"] > 20 and box["height"] > 8, box)
-        check("the button is off until a provider is set up",
-              page.evaluate("() => document.querySelector('#themeGen').disabled") is True)
+            check(
+                f"{name} is on screen in Appearance",
+                bool(box) and box["width"] > 20 and box["height"] > 8,
+                box,
+            )
+        check(
+            "the button is off until a provider is set up",
+            page.evaluate("() => document.querySelector('#themeGen').disabled") is True,
+        )
 
         # Which themes come with a character, said in the picker itself. A
         # marker glyph would have needed a legend; a group says it in words.
@@ -1264,19 +1420,29 @@ def _run(panel) -> int:
             }"""
         )
         check("the theme picker is grouped", bool(picker) and len(picker["groups"]) >= 2, picker)
-        check("and no theme escapes a group",
-              bool(picker) and picker["loose"] == 0, picker)
+        check("and no theme escapes a group", bool(picker) and picker["loose"] == 0, picker)
         named = {g["label"]: g["items"] for g in (picker or {}).get("groups", [])}
         drawn = named.get("With a character", [])
-        check("the seven with a figure are grouped as such",
-              sorted(drawn) == sorted(
-                  ["aincrad", "bricks", "chompy", "drizzt",
-                   "fellowship", "plumber", "triforce"]), drawn)
-        check("and the plain presets are not in with them",
-              "dracula" in named.get("Presets", []), named.get("Presets"))
-        check("every theme is still reachable",
-              bool(picker) and picker["total"] == page.evaluate(
-                  "() => Object.keys(window.CLIQUE_THEMES || {}).length"), picker)
+        check(
+            "the seven with a figure are grouped as such",
+            sorted(drawn)
+            == sorted(
+                ["aincrad", "bricks", "chompy", "drizzt", "fellowship", "plumber", "triforce"]
+            ),
+            drawn,
+        )
+        check(
+            "and the plain presets are not in with them",
+            "dracula" in named.get("Presets", []),
+            named.get("Presets"),
+        )
+        check(
+            "every theme is still reachable",
+            bool(picker)
+            and picker["total"]
+            == page.evaluate("() => Object.keys(window.CLIQUE_THEMES || {}).length"),
+            picker,
+        )
 
         # The rotation: the same list again as checkboxes, because a phone
         # cannot ctrl-click a multi-select. What matters visually is that the
@@ -1303,11 +1469,17 @@ def _run(panel) -> int:
         )
         every = page.evaluate("() => Object.keys(window.CLIQUE_THEMES || {}).length")
         check("every theme can be put in the rotation", bool(rot) and rot["count"] == every, rot)
-        check("grouped the same way the picker is",
-              bool(rot) and "With a character" in rot["groups"], rot)
+        check(
+            "grouped the same way the picker is",
+            bool(rot) and "With a character" in rot["groups"],
+            rot,
+        )
         check("a thumb can hit a row", bool(rot) and rot["shortest"] >= 44, rot)
-        check("the schedule is greyed out until it is switched on",
-              bool(rot) and rot["hoursOff"] and rot["atOff"], rot)
+        check(
+            "the schedule is greyed out until it is switched on",
+            bool(rot) and rot["hoursOff"] and rot["atOff"],
+            rot,
+        )
         stored = page.evaluate(
             """async () => {
               document.querySelector('#setThemeRotate').click();
@@ -1329,8 +1501,11 @@ def _run(panel) -> int:
             }"""
         )
         check("switching it on ungreys the schedule", stored.get("live") is True, stored)
-        check("and ticking a theme puts it in the pool",
-              stored.get("pool") == [stored.get("wanted")] and stored.get("on") is True, stored)
+        check(
+            "and ticking a theme puts it in the pool",
+            stored.get("pool") == [stored.get("wanted")] and stored.get("on") is True,
+            stored,
+        )
         page.screenshot(path=str(SHOTS / "theme-rotation.png"))
 
         page.screenshot(path=str(SHOTS / "theme-maker.png"))
@@ -1366,15 +1541,14 @@ def _run(panel) -> int:
                  return {kind: t.buffer.active.type, back: t.buffer.active.baseY,
                          touch: host ? getComputedStyle(host).touchAction : ''}; }"""
         )
-        check("the pane shows the buffer that holds history",
-              state["kind"] == "normal", state)
+        check("the pane shows the buffer that holds history", state["kind"] == "normal", state)
         check("and there is history in it", state["back"] > 20, state)
-        check("the pane claims the gesture rather than the browser",
-              state["touch"] == "none", state)
+        check(
+            "the pane claims the gesture rather than the browser", state["touch"] == "none", state
+        )
 
         cdp = context.new_cdp_session(page)
-        cdp.send("Emulation.setTouchEmulationEnabled",
-                 {"enabled": True, "maxTouchPoints": 1})
+        cdp.send("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 1})
         box = page.evaluate(
             """() => { const r = document.querySelector('#terminal').getBoundingClientRect();
                  return {x: Math.round(r.x + r.width / 2),
@@ -1382,28 +1556,33 @@ def _run(panel) -> int:
         )
 
         def finger(dy: int) -> None:
-            cdp.send("Input.dispatchTouchEvent",
-                     {"type": "touchStart", "touchPoints": [box]})
+            cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [box]})
             for i in range(1, 21):
-                cdp.send("Input.dispatchTouchEvent", {
-                    "type": "touchMove",
-                    "touchPoints": [{"x": box["x"], "y": box["y"] + dy * i // 20}]})
-            cdp.send("Input.dispatchTouchEvent",
-                     {"type": "touchEnd", "touchPoints": []})
+                cdp.send(
+                    "Input.dispatchTouchEvent",
+                    {
+                        "type": "touchMove",
+                        "touchPoints": [{"x": box["x"], "y": box["y"] + dy * i // 20}],
+                    },
+                )
+            cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
             page.wait_for_timeout(500)
 
-        where = lambda: page.evaluate(          # noqa: E731 - a probe, not a design
-            "() => [...terms.values()][0].term.buffer.active.viewportY")
+        where = lambda: page.evaluate(  # noqa: E731 - a probe, not a design
+            "() => [...terms.values()][0].term.buffer.active.viewportY"
+        )
         page.evaluate("() => [...terms.values()][0].term.scrollToBottom()")
         page.wait_for_timeout(300)
         bottom = where()
         finger(300)
         back = where()
-        check("dragging down goes back through the scrollback", back < bottom,
-              {"from": bottom, "to": back})
+        check(
+            "dragging down goes back through the scrollback",
+            back < bottom,
+            {"from": bottom, "to": back},
+        )
         finger(-300)
-        check("and dragging up comes forward again", where() > back,
-              {"from": back, "to": where()})
+        check("and dragging up comes forward again", where() > back, {"from": back, "to": where()})
         # Typing on a phone, which is a different question from typing on a
         # desktop and was got wrong twice. Touch emulation is on from the
         # scroll test above, so `(pointer: coarse)` matches and this is the
@@ -1444,15 +1623,24 @@ def _run(panel) -> int:
         if typing.get("skipped"):
             print("       the boxed stand-in did not arrive; nothing to test with")
         else:
-            check("a phone gets the panel's box even for a CLI with its own",
-                  typing["coarse"] and typing["boxShown"], typing)
+            check(
+                "a phone gets the panel's box even for a CLI with its own",
+                typing["coarse"] and typing["boxShown"],
+                typing,
+            )
             # The half of 0.66.0 that was missing: the box was drawn and the
             # pane was handed the keyboard anyway, so Gboard went on typing
             # into the terminal and went on duplicating the line.
-            check("opening a session does not hand the keyboard to the pane",
-                  typing["paneTookFocusOnOpen"] is False, typing)
-            check("and a key-row tap does not take it back",
-                  typing["paneTookFocusFromKeyRow"] is False, typing)
+            check(
+                "opening a session does not hand the keyboard to the pane",
+                typing["paneTookFocusOnOpen"] is False,
+                typing,
+            )
+            check(
+                "and a key-row tap does not take it back",
+                typing["paneTookFocusFromKeyRow"] is False,
+                typing,
+            )
 
         # Everything a phone can only do by long-pressing, and the menu it
         # long-presses into. All three were reported by a second model on
@@ -1485,11 +1673,13 @@ def _run(panel) -> int:
             # It ran off both ends at once: the clamp goes negative when the
             # menu is taller than the window, hiding Open above the screen
             # while Kill sat below it, with nothing to scroll.
-            check("the long-press menu starts on screen",
-                  menu["top"] >= 0, menu)
+            check("the long-press menu starts on screen", menu["top"] >= 0, menu)
             check("and ends on screen", menu["bottom"] <= menu["windowH"] + 1, menu)
-            check("scrolling to the rest of it is possible",
-                  menu["scrolls"] and menu["reachable"], menu)
+            check(
+                "scrolling to the rest of it is possible",
+                menu["scrolls"] and menu["reachable"],
+                menu,
+            )
         page.evaluate("() => { document.querySelector('#menu').hidden = true; }")
 
         # Its own group rather than the one the desktop pass made: that one may
@@ -1528,8 +1718,11 @@ def _run(panel) -> int:
             # Rename and delete were right-click only, so from a phone you
             # could launch a working group and never change or remove one.
             check("a working group answers a long press", groups_touch["open"], groups_touch)
-            check("and offers more than the Open button already does",
-                  any("ename" in t for t in groups_touch["items"]), groups_touch)
+            check(
+                "and offers more than the Open button already does",
+                any("ename" in t for t in groups_touch["items"]),
+                groups_touch,
+            )
 
         reachable = page.evaluate(
             """async () => {
@@ -1550,13 +1743,19 @@ def _run(panel) -> int:
               };
             }"""
         )
-        check("a phone can hand a session a file", reachable["attachShown"]
-              and reachable["picker"], reachable)
+        check(
+            "a phone can hand a session a file",
+            reachable["attachShown"] and reachable["picker"],
+            reachable,
+        )
         # A finger drag is our scroll, so nothing left makes an xterm
         # selection and the Copy chip never appears. Without these you cannot
         # get an error message off the screen at all.
-        check("and can copy output off the pane",
-              any("Copy" in t for t in reachable["paneItems"]), reachable)
+        check(
+            "and can copy output off the pane",
+            any("Copy" in t for t in reachable["paneItems"]),
+            reachable,
+        )
 
         # The narrowest phone anyone still has. The attach button is one more
         # control in a bar that was already tight, and a row that overflows
@@ -1582,8 +1781,7 @@ def _run(panel) -> int:
         # around it refuses to shrink and the textarea was the only thing
         # giving. Narrower than one word, on the box a phone types prompts in.
         check("and the prompt box is a box", narrow["promptW"] >= 180, narrow)
-        check("and Run is still on the screen",
-              narrow["runRight"] <= narrow["width"] + 1, narrow)
+        check("and Run is still on the screen", narrow["runRight"] <= narrow["width"] + 1, narrow)
         page.set_viewport_size({"width": 390, "height": 844})
 
         page.wait_for_timeout(300)
@@ -1613,8 +1811,7 @@ def _run(panel) -> int:
         finally:
             context.set_offline(False)
         page.goto(BASE, wait_until="networkidle")
-        check("and the panel returns once it can be reached",
-              page.locator("#tabbar").is_visible())
+        check("and the panel returns once it can be reached", page.locator("#tabbar").is_visible())
 
         browser.close()
 
