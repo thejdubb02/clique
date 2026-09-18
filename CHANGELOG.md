@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.67.9
+
+**A long path the pane printed is clickable again.** Paths were matched one
+terminal row at a time while URLs were matched across the whole wrapped line.
+Anything long enough to wrap was therefore split between two rows, and neither
+half matches on its own, so it quietly stopped being a link. The paths this hit
+were the long ones, which are exactly the ones worth clicking rather than
+retyping: a pasted screenshot's path is about seventy characters and wraps on a
+phone, in a narrow pane, or in a pane a phone has just resized.
+
+Paths now read across the wrapped line the same way URLs already did, and light
+up on every row they cross.
+
 ## 0.67.8 — 2026-09-17 11:51 PDT
 
 **A phone no longer leaves your desktop panel in a screen of dots.** A tmux

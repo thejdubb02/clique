@@ -204,6 +204,35 @@ console.log("a login link that wrapped is still one link");
           === "https://auth.openai.com/codex/device/extra");
 }
 
+console.log("a path that wrapped is still one link");
+{
+  const code = region("function paneRowsText", "function openLink");
+  const { panePathLinks } = new Function(code + "; return { panePathLinks };")();
+  const full = "/root/platform/clique/.claude-images/paste-1789750882398-fc77b1bf.png";
+  // 69 characters, so a narrow pane or a phone splits it. Each half on its own
+  // matches nothing, which is why long paths were the ones that never worked.
+  const parts = [
+    { y: 12, text: "wrote /root/platform/clique/.claude-imag" },
+    { y: 13, text: "es/paste-1789750882398-fc77b1bf.png" },
+  ];
+  const first = panePathLinks(parts, 12);
+  const second = panePathLinks(parts, 13);
+  check("the first row carries a link", first.length === 1, first);
+  check("so does the second", second.length === 1, second);
+  check("both name the whole path, not their own half",
+        first[0] && second[0] && first[0].path === full && second[0].path === full,
+        [first, second]);
+  check("the first row's slice starts after the word before it",
+        first[0] && first[0].x0 === 7 && first[0].x1 === 40, first);
+  check("the second row's slice is the remainder",
+        second[0] && second[0].x0 === 1 && second[0].x1 === 35, second);
+  const one = panePathLinks([{ y: 3, text: "see /tmp/foo.md here" }], 3);
+  check("a path that fits on one row still works",
+        one.length === 1 && one[0].path === "/tmp/foo.md", one);
+  check("and a URL is still not a path",
+        panePathLinks([{ y: 4, text: "https://example.com/docs/foo.md" }], 4).length === 0);
+}
+
 console.log("things that sit on top of other things");
 {
   // A preview that outranks a menu is a menu nobody can use — and it fails

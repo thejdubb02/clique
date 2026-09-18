@@ -4609,6 +4609,34 @@ function pathFromText(text) {
   return got === raw ? got : "";
 }
 
+/* Every path on one *wrapped* line, as the per-row segments xterm wants.
+ *
+ * Read across the whole wrapped line rather than a single row, exactly as the
+ * URL pass does. A path long enough to wrap is split between rows and neither
+ * half matches on its own, so the longest paths -- the ones most worth
+ * clicking -- were the only ones that never became links at all.
+ *
+ * Pure, so it can be tested without a terminal: tools/frontend_check.js. */
+function panePathLinks(parts, lineNumber) {
+  const text = paneRowsText(parts);
+  const out = [];
+  PATH_RE.lastIndex = 0;
+  let match;
+  while ((match = PATH_RE.exec(text)) !== null) {
+    const raw = trimPath(match[1]);
+    if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
+    const at = pathRange(text, match, raw);
+    // A URL's path is not a file path. The character before an http(s)
+    // match is `:`; skip anything sitting on that.
+    if (at.start > 1 && text[at.start - 2] === ":") continue;
+    for (const seg of paneUrlSegments(parts, at.start - 1, raw.length)) {
+      if (seg.y !== lineNumber) continue;
+      out.push({ path: raw, x0: seg.x0, x1: seg.x1, y: seg.y });
+    }
+  }
+  return out;
+}
+
 function pathRange(line, full, captured) {
   const start = line.indexOf(captured, Math.max(0, full.index));
   const at = start >= 0 ? start : full.index + (full[0].length - captured.length);
@@ -4678,19 +4706,11 @@ function wireLinks(term, sessionId) {
           });
         }
       }
-      const own = line.translateToString(true);
-      PATH_RE.lastIndex = 0;
-      while ((match = PATH_RE.exec(own)) !== null) {
-        const raw = trimPath(match[1]);
-        if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
-        const at = pathRange(own, match, raw);
-        // A URL's path is not a file path. The character before an http(s)
-        // match is `:`; skip anything sitting on that.
-        if (at.start > 1 && own[at.start - 2] === ":") continue;
+      for (const hit of panePathLinks(parts, lineNumber)) {
         links.push({
-          range: { start: { x: at.start, y: lineNumber },
-                   end: { x: at.end, y: lineNumber } },
-          text: raw,
+          range: { start: { x: hit.x0, y: hit.y },
+                   end: { x: hit.x1, y: hit.y } },
+          text: hit.path,
           decorations: { underline: true, pointerCursor: true },
           activate(event, path) {
             if (event.ctrlKey || event.metaKey) {
