@@ -233,6 +233,51 @@ console.log("a path that wrapped is still one link");
         panePathLinks([{ y: 4, text: "https://example.com/docs/foo.md" }], 4).length === 0);
 }
 
+console.log("a host with no https:// in front of it");
+{
+  const code = region("function paneRowsText", "function openLink");
+  const { paneBareLinks, panePathLinks } = new Function(
+    code + "; return { paneBareLinks, panePathLinks };")();
+  const bare = (text, y) => paneBareLinks([{ y: y || 1, text }], y || 1);
+  check("our own output is a link",
+        bare("repo at fdroid.useclique.dev/repo (ver")[0]
+          && bare("repo at fdroid.useclique.dev/repo (ver")[0].url
+             === "https://fdroid.useclique.dev/repo", bare("repo at fdroid.useclique.dev/repo (ver"));
+  check("the scheme is added, not assumed present",
+        bare("see github.com/thejdubb02/clique")[0].url
+          === "https://github.com/thejdubb02/clique");
+  check("a trailing period belongs to the sentence",
+        bare("go to useclique.dev/docs.")[0].url === "https://useclique.dev/docs");
+  check("and a wrapping bracket to the prose",
+        bare("(useclique.dev/docs)")[0].url === "https://useclique.dev/docs");
+  // The slash is the whole defence against filenames: .md, .sh, .pl, .zip and
+  // .mov are all real TLDs, so a bare dotted word can never be enough.
+  check("README.md is not a domain", bare("edit README.md now").length === 0);
+  check("neither is build.sh", bare("run build.sh now").length === 0);
+  check("nor a Perl script", bare("perl gen.pl now").length === 0);
+  check("a dotted directory in a path is not a host",
+        bare("wrote /root/.claude/projects/x").length === 0);
+  check("an email address is not a host",
+        bare("mail user@host.com/x").length === 0);
+  check("the tail of a real URL is not matched a second time",
+        bare("https://example.com/docs").length === 0);
+  check("a version number is not a TLD", bare("in v1.2/file.txt").length === 0);
+  const parts = [
+    { y: 5, text: "install from fdroid.usecliq" },
+    { y: 6, text: "ue.dev/repo today" },
+  ];
+  check("a host that wrapped is still one link",
+        paneBareLinks(parts, 5).length === 1 && paneBareLinks(parts, 6).length === 1
+          && paneBareLinks(parts, 5)[0].url === "https://fdroid.useclique.dev/repo",
+        [paneBareLinks(parts, 5), paneBareLinks(parts, 6)]);
+  // The two passes must not both claim the same text, or the pane gets two
+  // overlapping links on one run of characters.
+  check("a host with a file on the end is a link, not a path",
+        panePathLinks([{ y: 7, text: "see fdroid.useclique.dev/repo/index.xml" }], 7).length === 0);
+  check("and a real relative path is still a path",
+        panePathLinks([{ y: 8, text: "wrote docs/foo.md" }], 8).length === 1);
+}
+
 console.log("things that sit on top of other things");
 {
   // A preview that outranks a menu is a menu nobody can use — and it fails

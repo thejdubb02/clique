@@ -4559,7 +4559,7 @@ function paneHostIsRemote(hostname) {
 function tidyCopiedLink(text) {
   if (!text || text.indexOf("\n") < 0) return text;
   const joined = text.replace(/\s+/g, "");
-  if (/^https?:\/\//i.test(joined)) return joined;
+  if (/^https?:\/\//i.test(joined) || BARE_HOST.test(joined)) return joined;
   return text;
 }
 
@@ -4567,6 +4567,17 @@ function tidyCopiedLink(text) {
  * and a file extension. Bare words and host/path URLs without a scheme are
  * not matches — those are how you click `example.com/foo` by accident. */
 const PATH_RE = /(?:^|[\s"'`=(])((?:~\/|\.{1,2}\/|\/)[^\s"'`<>]+|[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+\.[A-Za-z0-9]{1,12})/g;
+
+/* A host and path with no scheme, the way our own output prints one:
+ * "fdroid.useclique.dev/repo". The slash is not optional. Without it a domain
+ * cannot be told apart from a filename, and .md, .sh, .pl, .zip and .mov are
+ * all real top-level domains, so README.md would have become a link.
+ *
+ * The character before it has to be a space, a quote or an opening bracket.
+ * That is what keeps /root/.claude/x, user@host.com/y and the tail of a real
+ * https:// URL out: each of those has a slash, a dot or a letter in front. */
+const BARE_RE = /(?:^|[\s"'`=(\[<])((?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\/[^\s"'`<>]*)/g;
+const BARE_HOST = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\//;
 
 /* Trailing punctuation almost always belongs to the sentence, not the URL:
  * "see https://example.com/docs." and "(https://example.com)". Brackets are
@@ -4625,6 +4636,7 @@ function panePathLinks(parts, lineNumber) {
   while ((match = PATH_RE.exec(text)) !== null) {
     const raw = trimPath(match[1]);
     if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
+    if (BARE_HOST.test(raw)) continue;   // a host with a path, not a file
     const at = pathRange(text, match, raw);
     // A URL's path is not a file path. The character before an http(s)
     // match is `:`; skip anything sitting on that.
@@ -4632,6 +4644,28 @@ function panePathLinks(parts, lineNumber) {
     for (const seg of paneUrlSegments(parts, at.start - 1, raw.length)) {
       if (seg.y !== lineNumber) continue;
       out.push({ path: raw, x0: seg.x0, x1: seg.x1, y: seg.y });
+    }
+  }
+  return out;
+}
+
+/* Every scheme-less host+path on one wrapped line, as per-row segments.
+ * Mirrors panePathLinks. The scheme is put on here rather than at the click,
+ * because openLink only ever opens http(s) and the pane text carries none.
+ *
+ * Pure, so it can be tested without a terminal: tools/frontend_check.js. */
+function paneBareLinks(parts, lineNumber) {
+  const text = paneRowsText(parts);
+  const out = [];
+  BARE_RE.lastIndex = 0;
+  let match;
+  while ((match = BARE_RE.exec(text)) !== null) {
+    const raw = trimUrl(match[1]);
+    if (!raw) continue;
+    const at = pathRange(text, match, raw);
+    for (const seg of paneUrlSegments(parts, at.start - 1, raw.length)) {
+      if (seg.y !== lineNumber) continue;
+      out.push({ url: "https://" + raw, x0: seg.x0, x1: seg.x1, y: seg.y });
     }
   }
   return out;
@@ -4705,6 +4739,17 @@ function wireLinks(term, sessionId) {
             },
           });
         }
+      }
+      for (const hit of paneBareLinks(parts, lineNumber)) {
+        links.push({
+          range: { start: { x: hit.x0, y: hit.y },
+                   end: { x: hit.x1, y: hit.y } },
+          text: hit.url,
+          decorations: { underline: true, pointerCursor: true },
+          activate(event, uri) {
+            handlePaneUrl(uri, event, sessionId);
+          },
+        });
       }
       for (const hit of panePathLinks(parts, lineNumber)) {
         links.push({
@@ -10075,6 +10120,7 @@ function panePathAt(term, clientX, clientY) {
   while ((match = PATH_RE.exec(own)) !== null) {
     const raw = trimPath(match[1]);
     if (!raw || raw.startsWith("//") || raw.includes("://")) continue;
+    if (BARE_HOST.test(raw)) continue;
     const at = pathRange(own, match, raw);
     if (cell.x + 1 >= at.start && cell.x + 1 <= at.end) return raw;
   }

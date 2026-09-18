@@ -886,6 +886,38 @@ def _run(panel) -> int:
         page.evaluate("document.querySelector('#modal').hidden = true")
         page.wait_for_timeout(300)
 
+        print("a link with no https:// in front of it")
+        # node runs these out of the file. This runs the shipped file as the
+        # browser actually loaded it, which is what catches a scope or syntax
+        # slip that the region extractor would never notice. The pane itself
+        # is left alone: later checks read it.
+        linked = page.evaluate(
+            """() => {
+              if (typeof paneBareLinks !== "function") return { err: "not defined" };
+              const parts = [
+                { y: 1, text: "grab it at fdroid.usecliq" },
+                { y: 2, text: "ue.dev/repo now" },
+              ];
+              return {
+                first: paneBareLinks(parts, 1).map((h) => h.url),
+                second: paneBareLinks(parts, 2).map((h) => h.url),
+                asPath: panePathLinks(parts, 1).length + panePathLinks(parts, 2).length,
+              };
+            }"""
+        )
+        want = ["https://fdroid.useclique.dev/repo"]
+        check(
+            "the browser turns a bare host into a link",
+            isinstance(linked, dict) and linked.get("first") == want
+            and linked.get("second") == want,
+            linked,
+        )
+        check(
+            "and does not also claim it as a file path",
+            isinstance(linked, dict) and linked.get("asPath") == 0,
+            linked,
+        )
+
         print("copy from the pane")
         # A shell has no mouse tracking, so a drag is a selection. The chip
         # and the clipboard are how we know it actually landed.

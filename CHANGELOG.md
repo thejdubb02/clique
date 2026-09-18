@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.67.11 — 2026-09-18 12:18 PDT
+
+**A web address without the `https://` in front of it is now a link.** Our own
+output prints them that way, and clicking `fdroid.useclique.dev/repo` did
+nothing at all. The pane now underlines a host with a path and opens it over
+https, wrapped across two rows or not.
+
+The slash is required, and that is the whole of the defence against filenames:
+`.md`, `.sh`, `.pl`, `.zip` and `.mov` are all real top-level domains, so a
+bare dotted word can never be enough to tell a domain from `README.md`. A dotted
+directory inside a path, an email address, and the tail of a real `https://` URL
+are all still left alone.
+
 ## 0.67.10 — 2026-09-18 11:26 PDT
 
 **A Markdown file opens as a document, not as a wall of hashes and pipes.**
