@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.67.9
+## 0.67.9 — 2026-09-18 10:19 PDT
 
 **A long path the pane printed is clickable again.** Paths were matched one
 terminal row at a time while URLs were matched across the whole wrapped line.
