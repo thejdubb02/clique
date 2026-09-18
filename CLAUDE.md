@@ -120,6 +120,26 @@ they already belong.
    The same applies to any other tool we borrow ideas from, including the
    VS Code Claude Code extension.
 
+## Three surfaces, and only one of them costs anything
+
+The panel is the product. Two clients wrap it, and a new feature does not reach
+them on the same terms:
+
+| | What it is | What a new panel feature costs it |
+|---|---|---|
+| **PWA** | the panel, installed | nothing, it is the same page |
+| **Desktop** (`clique-desktop`) | a Windows window around the panel | nothing, it is a webview of the same page |
+| **Android** (`clique-android`) | a native app with its own terminal | a port, every time |
+
+So the question at the end of a feature is only ever about the phone, and it
+gets asked out loud rather than assumed: **does Android need this, and if not,
+why not?** A yes becomes a tiered row in `clique-android/docs/port-plan.md`, a
+no goes in that file's Tier 3, which exists so leaving something out is a
+decision on the record instead of an oversight.
+
+Three releases, none implied by another: PyPI for the panel, our own F-Droid
+repo for the phone, a GitHub release for the desktop exe.
+
 ## It has to work on a phone
 
 Every feature, menu and settings pane is built for a phone browser and the
