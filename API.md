@@ -883,7 +883,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `appearance` | `"dark"` \| `"light"` \| `"system"` | Base used when no preset is chosen |
 | `font_panel` | 9–28 | Sidebar and chrome |
 | `font_terminal` | 9–28 | The pane, read at a different distance. Also the `+`/`−` stepper in the bottom-right |
-| `font_family` | `"system"` \| `"menlo"` \| `"consolas"` \| `"ubuntu"` \| `"courier"` | Monospace stack for the pane. Each id is a fallback chain that exists on Windows, Mac and Linux, so a missing font still lines up. Unknown ids are dropped |
+| `font_family` | `"system"` \| `"menlo"` \| `"consolas"` \| `"ubuntu"` \| `"courier"` \| `"nerd"` | Monospace stack for the pane. Each id is a fallback chain that exists on Windows, Mac and Linux, so a missing font still lines up. Unknown ids are dropped. A chain only protects you from a font being *absent*: one that is installed with no regular face makes every line italic, which is what `"ubuntu"` did on a Windows machine carrying an italic-only Ubuntu Mono |
 | `palette_hotkey` | bool | Whether `Ctrl`+`K` opens the palette or is handed to the pane |
 | `history_in_sidebar` | bool | Past conversations listed under live sessions. **Off by default** — a month of work is several hundred of them, and at that ratio the sidebar stops showing what is running. The palette still searches all of it |
 | `history_days` | int | How far back the sidebar goes when the above is on. Default 14. Does not limit the palette |
