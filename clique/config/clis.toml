@@ -34,6 +34,11 @@
 #               order wrong and the pill will confidently name the wrong mode,
 #               which is worse than having no pill.
 #   mode_label  text shown in the pill, {mode} substituted
+#   quick_commands  a list of strings, each sent into the pane as if typed and
+#               Enter pressed, when its button is tapped — one row, one button
+#               per entry. Presence of this key is what makes the row appear;
+#               omit it and no row shows for that CLI. There is no per-CLI
+#               branch in the code, same as `modes`.
 #   resume      argv used instead of `args` when reattaching to a known
 #               {cli_session_id}
 #   own_input   true if this CLI draws its own input box at the bottom of the
@@ -77,6 +82,7 @@ icon       = "claude.svg"
 modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
+quick_commands = ["/clear", "/compact"]
 
 # Extra regexes on top of the generic question marks every CLI already gets
 # (y/n, Do you want, a numbered choice). Match one and the session's ring
@@ -125,6 +131,30 @@ error = [
 dir     = "~/.claude/projects"
 layout  = "dashed-dir"
 pattern = "*.jsonl"
+
+# How much of the plan is spent, for the status bar. Read by `clique/usage.py`,
+# which does exactly what this says and knows nothing else: take the token out
+# of that file at that path, ask that URL, and pull those fields out of the
+# reply. The token is spent on the request and never reaches the browser, and
+# any failure is silence rather than an error.
+#
+# Delete this block and the bar simply stops showing it. Another CLI that
+# publishes the same kind of endpoint is another block, not a code change.
+[cli.claude.usage]
+url         = "https://api.anthropic.com/api/oauth/usage"
+token_file  = "~/.claude/.credentials.json"
+token_field = "claudeAiOauth.accessToken"
+headers     = { "anthropic-beta" = "oauth-2025-04-20" }
+
+  [[cli.claude.usage.window]]
+  label   = "5H"
+  percent = "five_hour.utilization"
+  resets  = "five_hour.resets_at"
+
+  [[cli.claude.usage.window]]
+  label   = "7D"
+  percent = "seven_day.utilization"
+  resets  = "seven_day.resets_at"
 
 [cli.gemini]
 label      = "Gemini CLI"

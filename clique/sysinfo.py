@@ -6,6 +6,7 @@ on a tool whose whole argument is that it adds nothing to the box.
 
 from __future__ import annotations
 
+import glob
 import os
 import threading
 import time
@@ -136,6 +137,52 @@ def load() -> dict:
     }
 
 
+def uptime() -> dict:
+    """Seconds since the box booted.
+
+    A quiet sanity read: a host that reboots under you takes every session with
+    it, so "up 12 days" versus "up 3 minutes" is worth a glance. Always available
+    on Linux, so it always shows.
+    """
+    try:
+        with open("/proc/uptime") as fh:
+            seconds = float(fh.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return {"seconds": 0}
+    return {"seconds": int(seconds)}
+
+
+def temperature() -> dict:
+    """The hottest CPU or board sensor in Celsius, when the machine exposes one.
+
+    Best-effort and often absent: a VM or a container usually has no sensor, so
+    an empty dict is the honest answer and the status bar hides the column just
+    as it does for swap. Reads the kernel's thermal zones first, then hwmon as a
+    fallback, and keeps only physically plausible readings so a bogus zone does
+    not report 0 or 8000 degrees.
+    """
+    plausible: list[float] = []
+    for pattern in (
+        "/sys/class/thermal/thermal_zone*/temp",
+        "/sys/class/hwmon/hwmon*/temp*_input",
+    ):
+        for path in glob.glob(pattern):
+            try:
+                with open(path) as fh:
+                    celsius = int(fh.read().strip()) / 1000.0
+            except (OSError, ValueError):
+                continue
+            if 0.0 < celsius < 150.0:
+                plausible.append(celsius)
+        # Only a usable reading ends the search. A box whose thermal zones all
+        # report 0 still deserves the hwmon fallback it advertises.
+        if plausible:
+            break  # thermal zones are enough; do not double-count with hwmon
+    if not plausible:
+        return {}
+    return {"c": round(max(plausible), 1)}
+
+
 _RSS_TTL = 8.0
 _proc_cache: dict = {"at": 0.0, "rss": {}, "kids": {}}
 _PAGE_KB = os.sysconf("SC_PAGE_SIZE") // 1024
@@ -197,6 +244,8 @@ def snapshot(clients: int = 0) -> dict:
         "swap": swap(),
         "disk": disk(),
         "load": load(),
+        "uptime": uptime(),
+        "temp": temperature(),
         "clients": clients,
     }
 
