@@ -17,8 +17,8 @@ uses Trusted Publishing, and it fires when a GitHub Release is published, not
 on a push. So `main` running ahead of PyPI is normal and expected; cutting a
 release is what catches it up.
 
-`uvx clique-panel` works. Last cut: `v0.67.8` on 2026-09-17, carrying 0.67.5
-through 0.67.7 with it. That gap is the lesson: 0.67.1 through 0.67.4 sat
+`uvx clique-panel` works. Last cut: `v0.69.0` on 2026-09-19, carrying 0.68.2
+through 0.69.0 with it. That gap is the lesson: 0.67.1 through 0.67.4 sat
 untagged for nine days while the site told strangers to `pip install`, and
 nothing noticed until `shipped_check.py` was run on purpose.
 
@@ -38,23 +38,25 @@ panel, the desktop and the phone sit in one list instead of three. This file
 keeps what does not fit on a card: why something is ranked where it is, what
 was measured, and what was tried and did not work.
 
-Next, in order, as of 2026-09-19:
+Next, in order, as of 2026-09-19 (evening):
 
 | | Card |
 |---|---|
 | 13px of phantom horizontal scroll on a phone | CLQ-62 |
 | Local echo, so the pane stops feeling like a web page | CLQ-64 |
 | Session templates | CLQ-54 |
-| A setup hook when CLIque makes a worktree | CLQ-55 |
-| `GET /api/briefing`, computed not generated | CLQ-51 |
 | The key row keys are too narrow, and that is a decision | CLQ-63 |
-| CLI-declared quick commands | CLQ-66 |
 | Per-session CPU, and a reap advisor | CLQ-56 |
 | Auto-resume when a usage limit resets | CLQ-68 |
 | The rest of the phone pass | CLQ-65 |
 | An MCP server over API.md | CLQ-53 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
 | Typography | CLQ-67 |
+
+Session templates (CLQ-54) can now actually deliver what it promises: the
+worktree half used to be the failure it warned about (a template that makes a
+worktree and leaves you with no `node_modules`), and that half shipped as
+CLQ-55 below.
 
 The phone and desktop cards live on the same board: CLQ-10 to CLQ-17 and
 CLQ-59, CLQ-60 for Android, CLQ-57 and CLQ-58 for the desktop.
@@ -89,6 +91,17 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **The worktree setup hook**, 0.69.0. `.clique-setup` and `.clique-copy`,
+  both ordinary tracked files in the repo rather than CLIque settings, so a
+  worktree made on any machine gets them for free — no more failing on the
+  first `npm i` because a fresh worktree has no `.env`. CLQ-55.
+- **`GET /api/briefing`**, 0.68.4. Every session actually waiting on or
+  erroring for a person, in one call, reshaped from what `sessions_view()`
+  already computes. No UI reads it yet — the right rail and the Android
+  notification body are still ahead of it. CLQ-51.
+- **CLI-declared quick commands**, 0.68.3. A `quick_commands` list in
+  `clis.toml`, next to `modes`; one row of one-tap buttons, no per-CLI code.
+  Claude Code got `/clear` and `/compact`. CLQ-66.
 - **QR login**, 0.68.0. The pairing code was already here; what was missing was
   the browser, because a scanned code had to become a session cookie rather
   than an API token. CLQ-49.
