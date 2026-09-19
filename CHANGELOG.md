@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.68.2 — 2026-09-19 08:00 PDT
+
+**A phone that is switched off no longer holds the desktop at phone size.**
+Closing the Android app does not always close its connection: the app is killed,
+or the network goes, and the panel is left holding a socket nobody is behind.
+The thread reading it parked forever, and behind that thread sat a terminal and
+a tmux viewer that still counted as attached, so the reaper skipped it. Every
+view of a session shares one window size, so a phone that had been off for
+thirteen hours was still pinning a 53x47 pane onto the desktop.
+
+The panel already pinged every 25 seconds without ever noticing that nothing
+came back. Two unanswered pings now end the connection, which releases the
+terminal and the viewer with it. A connection that is answering is untouched,
+and a browser or the Android app both answer without being asked.
+
 ## 0.68.1 — 2026-09-18 18:41 PDT
 
 **The desktop client's own version, next to the panel's.** The version in the

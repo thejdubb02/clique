@@ -3254,8 +3254,23 @@ class Handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _keepalive(ws: WebSocket, stop: threading.Event) -> None:
+        """Ping, and drop a peer that has stopped answering.
+
+        A peer that vanishes without closing its TCP connection — a phone whose
+        app was killed or whose network went away, a laptop that slept — leaves
+        `recv` parked on a socket that will never deliver another byte, and
+        behind that thread sit a PTY and a tmux viewer. The viewer still counts
+        as attached, so the reaper skips it forever, and because every session
+        in a group shares one window size, a closed phone goes on pinning the
+        desktop's pane to 53x47. A pong is the only proof the other end is
+        still there, so two missed ones end the connection and the handler's
+        own cleanup takes the viewer with it.
+        """
         while not stop.wait(PING_SECONDS):
             if ws.closed:
+                return
+            if time.monotonic() - ws.last_recv > PING_SECONDS * 3:
+                ws.drop()
                 return
             ws.ping()
 
