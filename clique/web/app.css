@@ -1802,6 +1802,14 @@ a.give-value { color: var(--accent); }
 /* The version in the corner, and the dot that says the notes are worth a look.
    Styled as text, not a button: it is a link to a document, and dressing it
    as a control would make it the loudest thing in an otherwise quiet footer. */
+/* The shell's own version sits beside the panel's, quieter, because it answers
+ * a different question: not what the server is running, but what this window
+ * is. Plain text, so it does not look like the changelog button next to it. */
+.version-shell {
+  color: var(--dim);
+  cursor: default;
+}
+
 .version-link {
   background: none; border: 0; padding: 0; font: inherit; color: inherit;
   cursor: pointer; display: inline-flex; align-items: center; gap: 5px;

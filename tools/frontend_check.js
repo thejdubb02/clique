@@ -145,6 +145,30 @@ console.log("directories the panel already knows");
   check("a directory with both is running, not recent", kindOf("/srv/dupe") === "running");
 }
 
+console.log("which app is holding this page");
+{
+  const code = region("function shellLabel", "function renderVersion");
+  const { shellLabel } = new Function(code + "; return { shellLabel };")();
+
+  check("a desktop shell is named with its version",
+        shellLabel({ kind: "desktop", version: "0.3.12" }) === "desktop 0.3.12");
+  check("a browser has no shell, so nothing is drawn",
+        shellLabel(undefined) === "");
+  check("and neither does a page that never set it",
+        shellLabel(null) === "");
+  check("a shell with no version still says what it is",
+        shellLabel({ kind: "desktop" }) === "desktop");
+  check("whitespace is not a version",
+        shellLabel({ kind: "desktop", version: "   " }) === "desktop");
+  check("a shell with no kind says nothing, because the version alone would " +
+        "read as the panel's",
+        shellLabel({ version: "0.3.12" }) === "");
+  check("a non-string version is ignored rather than printed",
+        shellLabel({ kind: "desktop", version: 3 }) === "desktop");
+  check("something that is not an object is not a shell",
+        shellLabel("desktop 0.3.12") === "");
+}
+
 console.log("paths a pane printed");
 {
   const code = region("const LINK_RE", "function openLink");

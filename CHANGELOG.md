@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.68.1 — 2026-09-18 18:41 PDT
+
+**The desktop client's own version, next to the panel's.** The version in the
+corner is the server's, and in the desktop client that is not the version of
+the thing on screen. It had shipped eleven releases with nowhere at all to read
+which one was running.
+
+A shell that wraps the panel now announces itself before any page script, and
+the footer and the About tab print it beside the panel version: `v0.68.1 ·
+desktop 0.3.12`. A browser announces nothing and nothing is drawn, which is the
+same page it was before.
+
 ## 0.68.0 — 2026-09-18 17:42 PDT
 
 **Sign in on a phone by scanning a QR code.** Pairing already minted a short

@@ -1477,6 +1477,37 @@ def _run(panel) -> int:
         page.screenshot(path=str(SHOTS / "settings.png"))
         check("settings opens", page.locator("#settings").is_visible())
 
+        print("which app is holding this page")
+        footer = page.locator("#version")
+        check(
+            "a browser draws no shell version",
+            page.locator("#version .version-shell").count() == 0,
+            footer.inner_text(),
+        )
+        # The desktop client sets this before any page script runs. Setting it
+        # here and re-rendering is the same path, without needing Windows.
+        page.evaluate(
+            """() => {
+              window.cliqueShell = { kind: "desktop", version: "0.3.12" };
+              renderVersion();
+            }"""
+        )
+        page.wait_for_timeout(150)
+        shell_text = footer.inner_text()
+        check(
+            "the desktop client's own version is drawn beside the panel's",
+            "desktop 0.3.12" in shell_text and "v" in shell_text,
+            shell_text,
+        )
+        check(
+            "and the panel version is still the button that opens the changelog",
+            page.locator("#version .version-link").count() == 1,
+            shell_text,
+        )
+        page.locator("#version").screenshot(path=str(SHOTS / "version-shell.png"))
+        page.evaluate("() => { delete window.cliqueShell; renderVersion(); }")
+        page.wait_for_timeout(150)
+
         print("sign-in QR")
         page.click('#setTabs button[data-pane="api"]')
         page.wait_for_timeout(300)

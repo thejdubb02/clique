@@ -1407,6 +1407,21 @@ function noticeUpgrade() {
         { label: "Reload", run: () => location.reload() });
 }
 
+/* What is holding this page, when something is.
+ *
+ * The panel's version is the server's, and in the desktop client that is not
+ * the version of the thing on screen: the desktop shipped eleven releases with
+ * nowhere at all to read which one was running. A shell that wraps the panel
+ * announces itself before any page script (window.cliqueShell), and a browser
+ * does not, so this returns "" and nothing is drawn. */
+function shellLabel(shell) {
+  if (!shell || typeof shell !== "object") return "";
+  const kind = typeof shell.kind === "string" ? shell.kind.trim() : "";
+  const version = typeof shell.version === "string" ? shell.version.trim() : "";
+  if (!kind) return "";
+  return version ? kind + " " + version : kind;
+}
+
 function renderVersion() {
   const el = $("#version");
   const running = baseVersion(state.version);
@@ -1417,6 +1432,7 @@ function renderVersion() {
     // First load ever. Stamp it quietly; nothing to announce.
     saveWorkspaceSetting({ changelog_seen: running });
     el.textContent = "v" + state.version;
+    appendShell(el);
     return;
   }
 
@@ -1428,7 +1444,20 @@ function renderVersion() {
   label.title = "What changed in this release";
   label.onclick = () => showChangelog(running);
   el.append(label);
+  appendShell(el);
   paintWhatsNew();
+}
+
+/* Plain text, not a second button: the panel version opens the changelog and
+ * the shell version has nothing to open. */
+function appendShell(el) {
+  const text = shellLabel(window.cliqueShell);
+  if (!text) return;
+  const tag = document.createElement("span");
+  tag.className = "version-shell";
+  tag.textContent = " \u00b7 " + text;
+  tag.title = "The app this panel is running inside";
+  el.append(tag);
 }
 
 function paintWhatsNew() {
@@ -8510,7 +8539,11 @@ function openSettings() {
   $("#cssBoth").value = s.css_both || "";
   $("#cssPanel").value = s.css_panel || "";
   $("#cssTerminal").value = s.css_terminal || "";
-  $("#aboutVersion").textContent = "version " + (state.version || "");
+  {
+    const shell = shellLabel(window.cliqueShell);
+    $("#aboutVersion").textContent =
+      "version " + (state.version || "") + (shell ? " \u00b7 " + shell : "");
+  }
   /* Prefilled report links.
    *
    * The version and the browser are the two things every report needs and
