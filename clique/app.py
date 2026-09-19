@@ -1009,6 +1009,7 @@ class Panel:
         # session can clean it up. The name and everything below then see the
         # worktree as the working directory, because it is.
         worktree = ""
+        setup_sh = None
         if body.get("worktree"):
             repo = gitinfo.repo_root(cwd)
             if not repo:
@@ -1020,6 +1021,10 @@ class Panel:
             if not made:
                 raise ValueError(why)
             cwd = worktree = made
+            # .clique-copy and .clique-setup, if the repo declares either —
+            # see gitinfo.worktree_setup for why both live in the repo rather
+            # than in CLIque's own config.
+            setup_sh = gitinfo.worktree_setup(repo, made)
         name = (body.get("name") or "").strip() or Path(cwd).name or cli_id
         mode = body.get("mode")
         # Resuming a past conversation is the same code path as starting a new
@@ -1045,10 +1050,19 @@ class Panel:
 
         mux = tmux.mux_name(session_id)
         tmux.bootstrap()
+        launch = argv + self._hooks_argv(cli)
+        if setup_sh:
+            # `sh -c '<setup>; exec "$@"' sh <real argv...>` — the setup runs
+            # in the pane, as the first thing printed, and `exec` replaces the
+            # shell with the CLI once it is done, win or lose. `"$@"` carries
+            # `launch` through untouched: no element of it is ever interpolated
+            # into the script string, so a space or a quote in a session name
+            # or a path cannot reshape the command that runs.
+            launch = ["sh", "-c", f'{setup_sh}; exec "$@"', "sh", *launch]
         tmux.create(
             mux,
             cwd,
-            argv + self._hooks_argv(cli),
+            launch,
             env=self._pane_env(session_id),
         )
         session = self.store.add_session(

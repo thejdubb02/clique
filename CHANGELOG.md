@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.69.0 — 2026-09-19 09:47 PDT
+
+**A worktree stops failing its first command.** A fresh git worktree has no
+`.env`, no `node_modules`, no venv, and until now the first thing an agent saw
+in one was its own build breaking, which reads as CLIque having broken the
+repo rather than as a checkout nobody set up yet.
+
+Two files, both optional, both ordinary files in the repo rather than
+settings in CLIque: `.clique-setup`, run once in a new worktree before the
+CLI starts, output visible in the pane, a failure reported and never fatal;
+and `.clique-copy`, an explicit list of files to carry over from the primary
+checkout first — never a glob, so "copy the env file" cannot quietly become
+"copy every local file including last week's credentials dump." A path
+leaving the checkout is skipped, not followed. Because both are tracked
+files, a worktree made on any machine gets them for free; nothing to
+configure per box.
+
 ## 0.68.5 — 2026-09-19 09:41 PDT
 
 **Cleanup pass on the last two releases, from ponytail-review.** No behavior

@@ -190,8 +190,10 @@ def main() -> int:
     )
     check(
         "listed paths stay inside the folder",
-        all(row["path"].startswith(str(tmp / "sub")) or row["name"] == ".."
-            for row in listing.get("entries") or []),
+        all(
+            row["path"].startswith(str(tmp / "sub")) or row["name"] == ".."
+            for row in listing.get("entries") or []
+        ),
         listing.get("entries"),
     )
     top = files.inspect(str(tmp), ".")
@@ -352,7 +354,9 @@ def main() -> int:
     check(
         "the button stays a real visible control",
         "Sign in on this device" in paired and "display:none" not in paired,
-        paired[paired.find("<button") : paired.find("</button>") + 9] if "<button" in paired else "",
+        paired[paired.find("<button") : paired.find("</button>") + 9]
+        if "<button" in paired
+        else "",
     )
     check(
         "and a password fallback is offered",
@@ -446,25 +450,77 @@ def main() -> int:
     shutil.rmtree(plain, ignore_errors=True)
     shutil.rmtree(repo, ignore_errors=True)
 
+    print("worktree setup hook")
+    primary = Path(tempfile.mkdtemp(prefix="clique-wt-primary-"))
+    wt = Path(tempfile.mkdtemp(prefix="clique-wt-worktree-"))
+    check(
+        "no .clique-setup or .clique-copy means nothing to run",
+        gitinfo.worktree_setup(str(primary), str(wt)) is None,
+    )
+
+    (wt / ".clique-setup").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
+    check(
+        "a .clique-setup that is not executable is not run",
+        gitinfo.worktree_setup(str(primary), str(wt)) is None,
+    )
+    (wt / ".clique-setup").chmod(0o755)
+    sh = gitinfo.worktree_setup(str(primary), str(wt))
+    check(
+        "an executable .clique-setup is called and its failure does not stop the CLI",
+        sh is not None and "./.clique-setup" in sh and "continuing anyway" in sh,
+        sh,
+    )
+
+    (primary / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    (wt / ".clique-copy").write_text(
+        "# comment\n.env\nmissing.txt\n../../../etc/passwd\n/etc/passwd\n\n", encoding="utf-8"
+    )
+    sh = gitinfo.worktree_setup(str(primary), str(wt))
+    check(
+        "a real name in .clique-copy is carried over",
+        sh is not None and "cp -p" in sh and ".env" in sh,
+        sh,
+    )
+    check(
+        "a path leaving the checkout is reported, not copied",
+        sh is not None and "skipped ../../../etc/passwd" in sh and "skipped /etc/passwd" in sh,
+        sh,
+    )
+    passwd_clauses = [c for c in (sh or "").split("; ") if "passwd" in c]
+    check(
+        "and neither traversal line reaches a cp",
+        len(passwd_clauses) == 2 and all("cp" not in c for c in passwd_clauses),
+        passwd_clauses,
+    )
+    shutil.rmtree(primary, ignore_errors=True)
+    shutil.rmtree(wt, ignore_errors=True)
+
     print("working groups")
     from clique.store import Group, _clean_members
 
     # A member is a snapshot, not just an id. That is what lets a group whose
     # session was deleted offer it back instead of quietly being one short.
-    kept = _clean_members([
-        {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"},
-        {"session": "a", "cli": "grok", "cwd": "/srv/y", "name": "dupe"},
-        {"session": "", "cli": "grok"},
-        {"session": "b", "extra": "dropped", "cli": "grok", "cwd": "/srv/z", "name": "B"},
-        "not a dict",
-    ])
-    check("a member keeps what it takes to rebuild it",
-          kept[0] == {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"}, kept)
+    kept = _clean_members(
+        [
+            {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"},
+            {"session": "a", "cli": "grok", "cwd": "/srv/y", "name": "dupe"},
+            {"session": "", "cli": "grok"},
+            {"session": "b", "extra": "dropped", "cli": "grok", "cwd": "/srv/z", "name": "B"},
+            "not a dict",
+        ]
+    )
+    check(
+        "a member keeps what it takes to rebuild it",
+        kept[0] == {"session": "a", "cli": "claude", "cwd": "/srv/x", "name": "Dash"},
+        kept,
+    )
     check("the same session cannot be added twice", len(kept) == 2, kept)
-    check("a member with no session is dropped",
-          all(m["session"] for m in kept), kept)
-    check("and nothing else a caller sent is stored",
-          all(set(m) == {"session", "cli", "cwd", "name"} for m in kept), kept)
+    check("a member with no session is dropped", all(m["session"] for m in kept), kept)
+    check(
+        "and nothing else a caller sent is stored",
+        all(set(m) == {"session", "cli", "cwd", "name"} for m in kept),
+        kept,
+    )
     check("a member that is not even a dict is ignored", len(kept) == 2, kept)
     wide = _clean_members([{"session": f"s{i}"} for i in range(40)])
     check("a group you could not see at a glance is capped", len(wide) == 24, len(wide))
@@ -482,28 +538,30 @@ def main() -> int:
 
     _handheld.clear()
     _desktop_size.clear()
-    check("with no phone about, a desktop sizes the window",
-          _may_size_window("sm-test", False) is True)
+    check(
+        "with no phone about, a desktop sizes the window",
+        _may_size_window("sm-test", False) is True,
+    )
     check("a phone always may", _may_size_window("sm-test", True) is True)
-    check("and once it has, the desktop may not",
-          _may_size_window("sm-test", False) is False)
-    check("the phone still may, repeatedly",
-          _may_size_window("sm-test", True) and _may_size_window("sm-test", True))
-    check("another session is unaffected",
-          _may_size_window("sm-other", False) is True)
+    check("and once it has, the desktop may not", _may_size_window("sm-test", False) is False)
+    check(
+        "the phone still may, repeatedly",
+        _may_size_window("sm-test", True) and _may_size_window("sm-test", True),
+    )
+    check("another session is unaffected", _may_size_window("sm-other", False) is True)
 
     # Releasing is the ordinary way out: a phone going into a pocket should
     # not lock a desktop out until a timer expires.
     _handheld.pop("sm-test", None)
-    check("after the phone lets go, the desktop may again",
-          _may_size_window("sm-test", False) is True)
+    check(
+        "after the phone lets go, the desktop may again", _may_size_window("sm-test", False) is True
+    )
 
     # The backstop, for a phone that vanishes without saying so.
     _handheld.clear()
     _may_size_window("sm-test", True)
     _handheld["sm-test"] = time.time() - (app_mod.HANDHELD_HOLD + 1)
-    check("a claim older than the hold has expired",
-          _may_size_window("sm-test", False) is True)
+    check("a claim older than the hold has expired", _may_size_window("sm-test", False) is True)
     check("and the stale entry is pruned", "sm-test" not in _handheld, dict(_handheld))
     _handheld.clear()
 
@@ -526,24 +584,26 @@ def main() -> int:
             handler._control(session, bridge, payload, True)
 
         control(b'{"type":"resize","cols":53,"rows":20,"handheld":true}')
-        check("a phone resize is applied",
-              resizes[-1] == ("sm-restore", 53, 20), resizes)
+        check("a phone resize is applied", resizes[-1] == ("sm-restore", 53, 20), resizes)
 
         before = list(resizes)
         control(b'{"type":"resize","cols":235,"rows":60,"handheld":false}')
-        check("a desktop resize while held is not applied",
-              resizes == before, resizes)
+        check("a desktop resize while held is not applied", resizes == before, resizes)
         remembered = _desktop_size.get("sm-restore")
-        check("but that size is remembered",
-              remembered is not None and remembered[:2] == (235, 60),
-              dict(_desktop_size))
+        check(
+            "but that size is remembered",
+            remembered is not None and remembered[:2] == (235, 60),
+            dict(_desktop_size),
+        )
 
         resizes.clear()
         control(b'{"type":"release"}')
-        check("release restores the remembered desktop size",
-              resizes == [("sm-restore", 235, 60)], resizes)
-        check("and the phone's hold is gone",
-              "sm-restore" not in _handheld, dict(_handheld))
+        check(
+            "release restores the remembered desktop size",
+            resizes == [("sm-restore", 235, 60)],
+            resizes,
+        )
+        check("and the phone's hold is gone", "sm-restore" not in _handheld, dict(_handheld))
 
         _handheld.clear()
         _desktop_size.clear()
@@ -556,8 +616,7 @@ def main() -> int:
             detail = repr(exc)
         else:
             detail = ""
-        check("release with no remembered size does not crash",
-              not crashed, detail)
+        check("release with no remembered size does not crash", not crashed, detail)
         check("and does not resize", resizes == [], resizes)
 
         # Same prune as the hold: a stale remembered size goes, unless a
@@ -566,14 +625,20 @@ def main() -> int:
         _desktop_size.clear()
         _desktop_size["sm-restore"] = (235, 60, time.time() - (app_mod.HANDHELD_HOLD + 1))
         _may_size_window("sm-restore", False)
-        check("a stale remembered size is pruned",
-              "sm-restore" not in _desktop_size, dict(_desktop_size))
+        check(
+            "a stale remembered size is pruned",
+            "sm-restore" not in _desktop_size,
+            dict(_desktop_size),
+        )
 
         _may_size_window("sm-restore", True)
         _desktop_size["sm-restore"] = (235, 60, time.time() - (app_mod.HANDHELD_HOLD + 1))
         _may_size_window("sm-restore", False)
-        check("a remembered size is kept while the phone still holds",
-              "sm-restore" in _desktop_size, dict(_desktop_size))
+        check(
+            "a remembered size is kept while the phone still holds",
+            "sm-restore" in _desktop_size,
+            dict(_desktop_size),
+        )
     finally:
         app_mod.tmux.resize_window = real_resize
         _handheld.clear()
@@ -894,9 +959,8 @@ def main() -> int:
     )
     check(
         "content_lines keeps what was said and drops the frame around it",
-        attention.content_lines(
-            "\u2500" * 20 + "\n\u276f\xa0\nRan 1 shell command\n   \n"
-        ) == ["Ran 1 shell command"],
+        attention.content_lines("\u2500" * 20 + "\n\u276f\xa0\nRan 1 shell command\n   \n")
+        == ["Ran 1 shell command"],
     )
 
     check(
@@ -1055,8 +1119,16 @@ def main() -> int:
         # Things that are legitimately not ours: globals, and methods reached
         # through an object rather than by bare name.
         ambient = {
-            "alert", "confirm", "fetch", "close", "open", "print", "reload",
-            "Boolean", "Number", "String",       # builtins used as callbacks
+            "alert",
+            "confirm",
+            "fetch",
+            "close",
+            "open",
+            "print",
+            "reload",
+            "Boolean",
+            "Number",
+            "String",  # builtins used as callbacks
         }
         missing = sorted(called - declared - ambient)
         check("every menu handler app.js calls is defined in it", not missing, missing)

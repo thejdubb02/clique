@@ -283,6 +283,15 @@ repo at once without touching each other's files. The response then carries the
 `worktree` path. Deleting such a session removes the worktree, but only when it
 has no uncommitted changes; a dirty one is left alone so nothing is lost.
 
+If the repo has a `.clique-setup` file, tracked and executable, it runs once in
+the new worktree before the CLI starts, output visible in the pane. A
+`.clique-copy` file, one relative path per line, names files to carry over from
+the primary checkout first — the untracked ones a fresh worktree would
+otherwise lack, `.env` foremost. Never a glob, and a path leaving the checkout
+is skipped rather than followed. Both are ordinary files in the repo, so a
+worktree made on any machine gets them without CLIque being told anything.
+A setup script that fails is reported in the pane; the session starts anyway.
+
 A missing directory, an unknown CLI, or a CLI whose command is not installed is
 a `400` with the reason in `error`.
 
