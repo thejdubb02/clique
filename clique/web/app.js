@@ -4183,23 +4183,22 @@ function renderInputBar() {
   }
 
   // One-tap buttons for text this CLI is asked for often, declared in
-  // clis.toml under `quick_commands`. No modes list, no keyrow keys — the
-  // registry is the only place that knows what any CLI wants here.
+  // clis.toml under `quick_commands`. Carried on the session row the same
+  // way modes/mode_key/mode_label already are — one denormalization done
+  // once in sessions_view(), not a second state.clis lookup here.
   const qr = $("#quickRow");
-  const cli = s && (state.clis || []).find((c) => c.id === s.cli);
-  const commands = (cli && cli.quick_commands) || [];
+  const commands = (s && s.quick_commands) || [];
   if (qr) {
-    if (s && commands.length) {
-      qr.hidden = false;
-      qr.innerHTML = commands.map((cmd) =>
-        `<button type="button">${escapeHtml(cmd)}</button>`).join("");
-      [...qr.children].forEach((btn, i) => {
-        // Same path as the prompt box's Run button, destructive-command
-        // check included — a quick command is still text landing in a pane.
-        btn.onclick = () => run(commands[i]);
-      });
-    } else {
-      qr.hidden = true;
+    qr.hidden = !commands.length;
+    qr.innerHTML = "";
+    for (const cmd of commands) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = cmd;
+      // Same path as the prompt box's Run button, destructive-command check
+      // included — a quick command is still text landing in a pane.
+      btn.onclick = () => run(cmd);
+      qr.appendChild(btn);
     }
   }
 

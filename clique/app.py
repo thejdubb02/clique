@@ -504,6 +504,7 @@ class Panel:
                     "mode_key": cli.mode_key if cli else None,
                     "mode_seq": cli.mode_seq if cli else "",
                     "mode_label": cli.mode_label if cli else "",
+                    "quick_commands": list(cli.quick_commands) if cli else [],
                     "adopted": session.adopted,
                     "archived": session.archived,
                     "pinned": session.pinned,
@@ -598,22 +599,7 @@ class Panel:
                 lines = _peek_lines(session, BRIEFING_LINES) if session else []
             except (tmux.TmuxError, OSError):
                 lines = []
-            out.append(
-                {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "cli": row["cli"],
-                    "cwd": row["cwd"],
-                    "folder": row["folder"],
-                    "branch": row["branch"],
-                    "dirty": row["dirty"],
-                    "state": row["state"],
-                    "activity": row["activity"],
-                    "rss": row["rss"],
-                    "draft": row["draft"],
-                    "lines": lines,
-                }
-            )
+            out.append({**{k: row[k] for k in BRIEFING_KEYS}, "lines": lines})
         return out
 
     def _authoritative(self, session, pane) -> str:
@@ -1636,6 +1622,24 @@ def _peek_lines(session, lines: int) -> list[str]:
 #: already looking at, and a briefing row has no pane beside it to fall back
 #: on, so it gets closer to PEEK_MAX's worth of context instead.
 BRIEFING_LINES = 20
+
+#: Which of sessions_view()'s fields a briefing row keeps, straight through.
+#: One list rather than twelve `"x": row["x"]` lines: the JSON key and the
+#: lookup key are the same field named once, not the same word typed twice
+#: with a chance to drift between the two.
+BRIEFING_KEYS = (
+    "id",
+    "name",
+    "cli",
+    "cwd",
+    "folder",
+    "branch",
+    "dirty",
+    "state",
+    "activity",
+    "rss",
+    "draft",
+)
 
 
 #: How long a phone keeps the shared window after it last said anything.

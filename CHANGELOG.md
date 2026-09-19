@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.68.5 — 2026-09-19 09:41 PDT
+
+**Cleanup pass on the last two releases, from ponytail-review.** No behavior
+change, three simplifications:
+
+- `quick_commands` is now on the session row itself, the same way `modes` and
+  `mode_label` already are — the panel front end no longer scans `state.clis`
+  by id to find the active CLI's commands, it reads `s.quick_commands`
+  directly.
+- The quick-commands row builds its buttons in one pass with
+  `document.createElement`, not a `innerHTML` string-join followed by a second
+  pass over the DOM to attach handlers. Drops the `escapeHtml` call too —
+  `textContent` needs no escaping.
+- `GET /api/briefing`'s row builder was twelve lines of `"x": row["x"]`, each
+  field name typed twice. Now one tuple of field names, copied through with a
+  dict comprehension.
+
 ## 0.68.4 — 2026-09-19 09:09 PDT
 
 **GET /api/briefing: what needs you, in one call.** Every session actually
