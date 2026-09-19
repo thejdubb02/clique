@@ -570,6 +570,52 @@ class Panel:
             )
         return out
 
+    def briefing(self) -> list[dict]:
+        """The sessions actually asking for a person, reshaped for a glance.
+
+        `sessions_view()` already knows which state each session is in; this
+        just keeps the rows where that state is "waiting" or "error" and
+        drops the fields that only matter to the sidebar (icon, colour, mode,
+        …) down to the ones worth showing in a list of things to look at. No
+        new capture logic and no new idea of "waiting" — a second definition
+        of either is exactly how the two would drift.
+
+        `draft` is the half-typed, unsent box content, not a log of the last
+        prompt actually sent — CLIque does not keep one of those per session,
+        and this endpoint is not the place to start. It is named for what it
+        is so nobody reads more into it than that.
+
+        `lines` costs one capture per matching session, same as a `/peek` —
+        there is no cache to share across calls the way `/peek` has, because
+        nothing here is re-asking about a row someone is already hovering
+        over."""
+        out = []
+        for row in self.sessions_view():
+            if row["state"] not in ("waiting", "error"):
+                continue
+            session = self.store.session(row["id"])
+            try:
+                lines = _peek_lines(session, BRIEFING_LINES) if session else []
+            except (tmux.TmuxError, OSError):
+                lines = []
+            out.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "cli": row["cli"],
+                    "cwd": row["cwd"],
+                    "folder": row["folder"],
+                    "branch": row["branch"],
+                    "dirty": row["dirty"],
+                    "state": row["state"],
+                    "activity": row["activity"],
+                    "rss": row["rss"],
+                    "draft": row["draft"],
+                    "lines": lines,
+                }
+            )
+        return out
+
     def _authoritative(self, session, pane) -> str:
         """The session's own declared state — from a hook or the attention
         endpoint — when no output has arrived to supersede it, else "".
@@ -1561,6 +1607,37 @@ _PEEKED: dict[str, tuple[tuple, list[str]]] = {}
 _PEEK_LOCK = threading.Lock()
 
 
+def _peek_lines(session, lines: int) -> list[str]:
+    """Capture a pane and reduce it to the lines that actually said something.
+
+    The one implementation of that reduction, called by `/peek` and by
+    `Panel.briefing()`. It used to exist only inline in `_peek` below; pulled
+    out because this exact filter has already cost one subtle bug from being
+    reasoned about instead of read — the `\xa0` case in `attention.is_rule`'s
+    own docstring. A second inline copy is a second place for the next one of
+    those to hide.
+
+    `/peek`'s own cache against the pane's activity clock stays with it below
+    rather than moving in here: a caller like `briefing()` asks once per row
+    per request and has no "same pointer, same row, a moment later" to cache
+    against.
+
+    A capture failure is raised, not swallowed into `[]` here — `[]` also
+    means "captured fine, pane said nothing," and a caller that cannot tell
+    those apart caches a transient failure as if it were that legitimate
+    answer. `/peek` needs the distinction to skip its cache write on failure;
+    `briefing()` does not cache at all, so it catches this and moves on."""
+    text = tmux.capture(session.mux, session.socket, lines=PEEK_WINDOW, styled=False)
+    return attention.content_lines(text)[-lines:]
+
+
+#: How many lines of a pane's tail the briefing endpoint quotes. Not
+#: PEEK_DEFAULT: that six is sized for a tooltip next to a row you are
+#: already looking at, and a briefing row has no pane beside it to fall back
+#: on, so it gets closer to PEEK_MAX's worth of context instead.
+BRIEFING_LINES = 20
+
+
 #: How long a phone keeps the shared window after it last said anything.
 #: This is only the backstop for a phone that disappears without releasing -
 #: a killed tab, a dead battery, a tunnel. The ordinary case is an explicit
@@ -1947,6 +2024,11 @@ class Handler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     limit = 400
                 return self._json(self.panel.conversations.prompts(limit=limit))
+            if path == "/api/briefing":
+                # Which sessions actually need a person, so a script or an
+                # agent driving CLIque can ask that once instead of polling
+                # /api/state and reasoning about every row itself.
+                return self._json(self.panel.briefing())
             if path == "/api/changelog":
                 # Parsed from the same CHANGELOG.md the repo ships, so the
                 # release notes in the app cannot drift from the ones on disk.
@@ -2102,26 +2184,23 @@ class Handler(BaseHTTPRequestHandler):
             if hit and hit[0] == key:
                 return self._json({"lines": hit[1], "alive": True, "activity": activity})
 
+        # A generous window is captured, then filtered down to `lines`, and a
+        # modern CLI's pane is mostly frame — box rules, separators, an input
+        # box drawn around nothing — so the decoration is dropped before the
+        # trim rather than after: capturing only what is to be shown was
+        # wrong once that started, since on a pane that is mostly box drawing
+        # the last few raw lines can contain none of what it actually said.
+        # See `_peek_lines` for the capture and the filter, shared with
+        # `Panel.briefing()` so there is one place either can go wrong.
+        #
+        # A failed capture is not cached: it is not the same fact as "the pane
+        # is alive and said nothing," and caching it as one would freeze a
+        # transient failure in place until the pane's activity clock next
+        # ticks, retrying nothing in between.
         try:
-            # A generous window, then filtered down to `lines`. Capturing only
-            # what is to be shown was wrong once the frame started being
-            # dropped: on a pane that is mostly box drawing, eight captured
-            # lines can contain one that says anything.
-            text = tmux.capture(session.mux, session.socket, lines=PEEK_WINDOW, styled=False)
+            rows = _peek_lines(session, lines)
         except (tmux.TmuxError, OSError):
             return self._json({"lines": [], "alive": True, "activity": activity})
-
-        # What a peek is for is the last thing that *said* something, and a
-        # modern CLI's pane is mostly frame: box rules, separators, an input
-        # box drawn around nothing. Showing eight raw lines of that buries the
-        # one line that answers the question under seven that do not.
-        #
-        # So the decoration is dropped. Not by knowing anything about any CLI —
-        # a line is dropped when every character in it is a box-drawing glyph,
-        # a rule or whitespace, which is a property of the text and true of
-        # every tool that draws a frame.
-        rows = attention.content_lines(text)
-        rows = rows[-lines:]
         with _PEEK_LOCK:
             _PEEKED[session.mux] = (key, rows)
             # Bounded, because a panel that runs for weeks creates and destroys
@@ -3229,9 +3308,7 @@ class Handler(BaseHTTPRequestHandler):
                     _handheld.pop(session.mux, None)
                     remembered = _desktop_size.get(session.mux)
                 if remembered:
-                    tmux.resize_window(
-                        session.mux, remembered[0], remembered[1], session.socket
-                    )
+                    tmux.resize_window(session.mux, remembered[0], remembered[1], session.socket)
         elif kind == "refresh":
             # Repaint this browser's own view and nobody else's. The pane can
             # come back from a layout change the same size it went in at, and

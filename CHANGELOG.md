@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.68.4 — 2026-09-19 09:09 PDT
+
+**GET /api/briefing: what needs you, in one call.** Every session actually
+asking for a person, not every session. Filtered to the two states the
+attention ladder already computes as "needs a reply" (waiting, error), each
+row carrying its branch, dirty flag, memory use, half-typed draft and the
+last 20 clean lines of the pane, the same frame-filtered capture /peek uses.
+Nothing new is measured or invented: this reshapes what sessions_view()
+already knows.
+
+The capture step moved into one shared function, used by both /peek and this.
+Fixing it here meant catching a real bug in the move: a failed capture was
+briefly getting cached as if the pane had genuinely said nothing, which would
+have frozen a transient tmux hiccup in place until the pane's next output.
+Confirmed with the old and new code side by side against a capture that always
+fails: 3 retries before, 1 before the fix landed, 3 again after.
+
 ## 0.68.3 — 2026-09-19 08:59 PDT
 
 **One-tap commands, declared per CLI, not coded per CLI.** A row above the

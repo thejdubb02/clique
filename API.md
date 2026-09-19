@@ -175,6 +175,27 @@ CLI whole, a transcript CLI from a bounded tail — never logged a second time b
 CLIque. Each row carries `cli`, `cwd`, `project`, `text` (the full prompt, to
 reuse), `when`, and `cli_session_id`. `limit` is capped at 400.
 
+### `GET /api/briefing`
+
+Which sessions need a person, computed rather than generated: no LLM involved,
+just the same `state` the sidebar already shows, filtered to `waiting` and
+`error`. One call instead of opening every tab to find out.
+
+```json
+[{"id": "abc123", "name": "checkout-fix", "cli": "claude", "cwd": "/srv/app",
+  "folder": "clients", "branch": "main", "dirty": true, "state": "waiting",
+  "activity": 1787200000, "rss": 483183820, "draft": "",
+  "lines": ["Allow Codex to run `npm test`?"]}]
+```
+
+Each row: `id`, `name`, `cli`, `cwd`, `folder`, `branch`, `dirty`, `state`,
+`activity`, `rss` — straight from `/api/state`'s own fields, nothing recomputed
+a second way. `draft` is whatever is half-typed in that session's prompt box,
+unsent — the closest thing this codebase keeps to "what was I about to tell
+it", not a log of prompts actually sent. `lines` is the same frame-filtered
+tail a `/peek` returns, fixed at 20 lines since there is no hover to fall back
+on.
+
 ### `GET /api/adoptable`
 
 tmux sessions started by another tool that CLIque could take over, with the CLI
