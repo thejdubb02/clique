@@ -4182,6 +4182,27 @@ function renderInputBar() {
     pill.hidden = true;
   }
 
+  // One-tap buttons for text this CLI is asked for often, declared in
+  // clis.toml under `quick_commands`. No modes list, no keyrow keys — the
+  // registry is the only place that knows what any CLI wants here.
+  const qr = $("#quickRow");
+  const cli = s && (state.clis || []).find((c) => c.id === s.cli);
+  const commands = (cli && cli.quick_commands) || [];
+  if (qr) {
+    if (s && commands.length) {
+      qr.hidden = false;
+      qr.innerHTML = commands.map((cmd) =>
+        `<button type="button">${escapeHtml(cmd)}</button>`).join("");
+      [...qr.children].forEach((btn, i) => {
+        // Same path as the prompt box's Run button, destructive-command
+        // check included — a quick command is still text landing in a pane.
+        btn.onclick = () => run(commands[i]);
+      });
+    } else {
+      qr.hidden = true;
+    }
+  }
+
   /* The prompt box goes; the pill stays.
    *
    * Hiding the whole bar was the old behaviour and it was wrong: the pill is

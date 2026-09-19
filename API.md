@@ -118,7 +118,7 @@ The whole panel in one object, and what the browser polls every three seconds.
 | `home` | the home directory of whoever started the server — where a new session starts when nothing better is known |
 | `folders` | `id`, `name`, `color`, `collapsed`, `order` |
 | `sessions` | see below |
-| `clis` | every CLI the registry knows: `id`, `label`, `command`, `installed`, `modes`, `color`, `icon` |
+| `clis` | every CLI the registry knows: `id`, `label`, `command`, `installed`, `modes`, `quick_commands`, `color`, `icon` |
 | `settings` | the full settings object — see **Settings** |
 | `stats` | the same snapshot as `/api/stats` |
 

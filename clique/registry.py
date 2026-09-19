@@ -110,6 +110,11 @@ class CliType:
     modes: list[str] = field(default_factory=list)
     mode_key: str = "S-Tab"
     mode_label: str = "{mode} mode"
+    #: One-tap buttons for text this CLI is asked for often — `/clear`,
+    #: `/compact`, whatever the vendor's own slash commands are. Sent into the
+    #: pane exactly as typed, Enter included, the same path the prompt box's
+    #: Run button uses. Empty means no row, same as `modes` and the pill.
+    quick_commands: list[str] = field(default_factory=list)
     #: Filename in web/icons/. Drawn as a mask and tinted, so only the
     #: silhouette matters — a flat single-colour shape, not artwork.
     #: Whether this CLI draws its own input box at the bottom of the pane.
@@ -252,6 +257,7 @@ class CliType:
             "color": self.color,
             "modes": list(self.modes),
             "mode_key": self.mode_key,
+            "quick_commands": list(self.quick_commands),
             "installed": self.installed,
             # Empty means "no drawing for this one" — the UI falls back to a
             # letter badge, so a newly added CLI looks deliberate without
@@ -339,6 +345,7 @@ def parse(data: dict) -> dict[str, CliType]:
             "modes",
             "mode_key",
             "mode_label",
+            "quick_commands",
             "icon",
             "history",
             "attention",
@@ -359,6 +366,7 @@ def parse(data: dict) -> dict[str, CliType]:
             modes=list(raw.get("modes", [])),
             mode_key=raw.get("mode_key", "S-Tab"),
             mode_label=raw.get("mode_label", "{mode} mode"),
+            quick_commands=list(raw.get("quick_commands", [])),
             icon=raw.get("icon", ""),
             own_input=bool(raw.get("own_input", False)),
             hooks=bool(raw.get("hooks", False)),

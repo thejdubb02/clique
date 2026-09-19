@@ -34,6 +34,11 @@
 #               order wrong and the pill will confidently name the wrong mode,
 #               which is worse than having no pill.
 #   mode_label  text shown in the pill, {mode} substituted
+#   quick_commands  a list of strings, each sent into the pane as if typed and
+#               Enter pressed, when its button is tapped — one row, one button
+#               per entry. Presence of this key is what makes the row appear;
+#               omit it and no row shows for that CLI. There is no per-CLI
+#               branch in the code, same as `modes`.
 #   resume      argv used instead of `args` when reattaching to a known
 #               {cli_session_id}
 #   own_input   true if this CLI draws its own input box at the bottom of the
@@ -77,6 +82,7 @@ icon       = "claude.svg"
 modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
+quick_commands = ["/clear", "/compact"]
 
 # Extra regexes on top of the generic question marks every CLI already gets
 # (y/n, Do you want, a numbered choice). Match one and the session's ring

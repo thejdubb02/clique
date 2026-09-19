@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.68.3 — 2026-09-19 08:59 PDT
+
+**One-tap commands, declared per CLI, not coded per CLI.** A row above the
+prompt box for text a CLI is asked for often: Claude Code gets `/clear` and
+`/compact`. A `quick_commands` list in `clis.toml`, next to `modes`, is the
+whole feature. Add a CLI, list its commands, reload, done, same as adding a
+mode. A tap sends the command through the same path the prompt box's own Run
+button uses, so the destructive-command check still applies.
+
+No row shows for a CLI that lists none. Android is unchanged, since it does
+not yet read the mode pill either; both are the same follow-up.
+
 ## 0.68.2 — 2026-09-19 08:00 PDT
 
 **A phone that is switched off no longer holds the desktop at phone size.**

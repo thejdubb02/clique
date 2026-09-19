@@ -647,6 +647,24 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
   white-space: nowrap; flex: 0 0 auto;
 }
 
+/* One row of one-tap buttons per CLI, from `quick_commands` in clis.toml.
+ * Hidden by default like the pill — CSS never assumes it is there, JS says so. */
+#quickRow { display: none; }
+#quickRow:not([hidden]) {
+  display: flex; gap: 6px; padding: 6px 10px; overflow-x: auto;
+  background: var(--panel); border-top: 1px solid var(--line);
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+#quickRow::-webkit-scrollbar { display: none; }
+#quickRow button {
+  flex: 0 0 auto; border: 1px solid var(--line); background: var(--bg);
+  color: var(--fg); border-radius: 999px; padding: 4px 11px; font-size: 11px;
+  cursor: pointer; white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  #quickRow button:hover { border-color: var(--accent); }
+}
+
 #prompt {
   flex: 1; resize: none; max-height: 140px; font: inherit;
   background: var(--field); color: var(--fg); border: 1px solid transparent;
