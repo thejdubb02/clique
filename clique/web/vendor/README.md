@@ -21,11 +21,18 @@ uses Unicode 6 width tables, in which an emoji-presentation glyph such as
 painted over the top of it. Any status line with an emoji in it renders as
 overlapping letters.
 
+`qrcode.js` (qrcode-generator 1.4.4, MIT) draws the sign-in QR. A QR needs
+Reed-Solomon error correction, version selection and mask scoring, which is a
+few hundred lines of getting it exactly right for no gain, and there is nothing
+in the standard library for it. 20 KB, no dependencies of its own, and the
+upstream minified build with its jsDelivr banner replaced by where it came
+from. Its licence is `qrcode.LICENSE`.
+
 - No network dependency, so the panel works on a box with no egress and cannot
   be broken by someone else's CDN.
 - No build step and no `node_modules`, which is the point of the whole project.
 - Pinned by copy: upgrading is a deliberate act with a diff, not a silent
   version bump.
 
-MIT licensed (see `xterm.LICENSE`). Versions are recorded in the commit that
-added them.
+All MIT licensed (`xterm.LICENSE`, `qrcode.LICENSE`). Versions are recorded in
+the commit that added them.

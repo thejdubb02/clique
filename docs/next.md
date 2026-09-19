@@ -72,10 +72,10 @@ part of this that has never actually been used on a phone.
    with a thumb on real hardware, and until somebody has, the rest of the phone
    list is guesswork. Half an hour with the real thing is worth more than any
    amount of reasoning about it.
-2. **QR login.** Typing a long password on a phone is the single worst moment
-   in using this, and it happens before anything else can be judged. The token
-   store already exists, so this is a short-lived single-use code shown on the
-   desktop and nothing more.
+2. **(done, 0.68.0) QR login.** Typing a long password on a phone is the single worst moment
+   in using this, and it happens before anything else can be judged. The pairing
+   code was already here; the last step was a QR of `/?pair=<code>` and the
+   login form accepting that field.
 3. **Local echo.** Every keystroke over Tailscale waits a round trip, and it is
    the difference between the pane feeling like a terminal and feeling like a
    web page. Draw the character at once, send it in the background, drop the

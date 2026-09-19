@@ -1906,7 +1906,13 @@ class Handler(BaseHTTPRequestHandler):
             if _is_public_asset(path):
                 return self._static(path)
             nonce = secrets.token_urlsafe(16)
-            return self._send(200, login_page(nonce=nonce), "text/html; charset=utf-8", nonce=nonce)
+            # pairing already normalises dash and case, so the query value is
+            # passed through as-is. An already-signed-in request never reaches
+            # here: it gets the panel, not a login page.
+            pair = (query.get("pair") or "") if path == "/" else ""
+            return self._send(
+                200, login_page(nonce=nonce, pair=pair), "text/html; charset=utf-8", nonce=nonce
+            )
 
         try:
             if path == "/api/state":
@@ -2171,14 +2177,25 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(413, b"too large", "text/plain")
             form = urllib.parse.parse_qs(self.rfile.read(length).decode(errors="replace"))
             attempt = (form.get("password") or [""])[0]
+            pair_code = (form.get("pair") or [""])[0]
             who = self.client_address[0] if self.client_address else "?"
             throttled = self._throttled(who)
-            # Check the password even when throttled, so a correct one always
+            # Check even when throttled, so a correct password or code always
             # gets through. Behind a tunnel every request arrives from the same
             # loopback address, so a per-IP lockout would lock out the only
             # legitimate user along with the attacker — which is a denial of
             # service dressed as a protection.
-            if not self.panel.auth.check_password(attempt):
+            #
+            # Pairing is not new authority: the same code already buys a full
+            # bearer token through /api/pair/claim, so redeeming it for a
+            # browser cookie grants nothing it did not already grant.
+            if not attempt and pair_code:
+                accepted = self.panel.pairing.redeem(pair_code)
+                refused = "That code is no longer valid."
+            else:
+                accepted = self.panel.auth.check_password(attempt)
+                refused = "Wrong password."
+            if not accepted:
                 if throttled:
                     self._record_failure(who)
                     time.sleep(2.0)
@@ -2197,7 +2214,7 @@ class Handler(BaseHTTPRequestHandler):
                 nonce = secrets.token_urlsafe(16)
                 return self._send(
                     401,
-                    login_page("Wrong password.", nonce),
+                    login_page(refused, nonce),
                     "text/html; charset=utf-8",
                     nonce=nonce,
                 )

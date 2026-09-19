@@ -2605,3 +2605,17 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
   user-select: all;   /* one tap selects the lot, for reading or copying */
 }
 .pair-left { margin: 6px 0 0; text-align: center; }
+/* Black on white always, with a quiet zone drawn into the canvas. A QR
+ * needs that contrast to scan, and a dark theme would break it. Sized from
+ * the module count in JS so the modules stay square; pixelated so CSS
+ * shrinking on a narrow pane does not blur them. */
+#pairQr {
+  display: block;
+  margin: 12px auto 0;
+  background: #fff;
+  image-rendering: pixelated;
+  max-width: 100%;
+  height: auto;
+}
+#pairQr[hidden] { display: none; }
+.pair-qr-note { margin: 8px 0 0; text-align: center; }

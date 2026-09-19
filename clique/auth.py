@@ -21,6 +21,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import html
 import json
 import os
 import secrets
@@ -245,9 +246,42 @@ LOGIN_PAGE = """<!doctype html>
 """
 
 
-def login_page(error: str = "", nonce: str = "") -> bytes:
+#: The password form, matched exactly so a pair-login page can swap it
+#: without touching the rest of LOGIN_PAGE. With pair empty, login_page is
+#: byte-for-byte the original substitutions.
+_PASSWORD_BLOCK = (
+    '  <input type="password" name="password" placeholder="Password"\n'
+    '         autocomplete="current-password" autofocus required>\n'
+    '  <button type="submit">Sign in</button>\n'
+    '</form>'
+)
+
+#: Only injected when pair is set, so the password page stays unchanged.
+_PAIR_STYLE = (
+    "  form a { display:flex;align-items:center;justify-content:center;"
+    "min-height:44px;color:var(--accent);text-decoration:none; }\n"
+)
+
+
+def login_page(error: str = "", nonce: str = "", pair: str = "") -> bytes:
     marker = f'<p class="err">{error}</p>' if error else ""
-    return LOGIN_PAGE.replace("__ERROR__", marker).replace("__NONCE__", nonce).encode()
+    page = LOGIN_PAGE.replace("__ERROR__", marker).replace("__NONCE__", nonce)
+    if pair:
+        safe = html.escape(pair, quote=True)
+        page = page.replace(
+            _PASSWORD_BLOCK,
+            (
+                f'  <input type="hidden" name="pair" value="{safe}">\n'
+                '  <button type="submit">Sign in on this device</button>\n'
+                '  <p><a href="./">Sign in with a password</a></p>\n'
+                '</form>\n'
+                f'<script nonce="{html.escape(nonce, quote=True)}">'
+                "document.forms[0].submit();</script>"
+            ),
+            1,
+        )
+        page = page.replace("</style>", _PAIR_STYLE + "</style>", 1)
+    return page.encode()
 
 
 #: Served on a successful login instead of a 3xx.

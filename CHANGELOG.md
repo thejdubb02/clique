@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.68.0 — 2026-09-18 17:42 PDT
+
+**Sign in on a phone by scanning a QR code.** Pairing already minted a short
+code. The desktop now draws a QR of a sign-in URL next to it, and opening that
+URL on the phone signs the browser in without typing the panel password. The
+Android claim path is unchanged.
+
+A QR of localhost cannot work from a phone, so one is not drawn until the
+panel's public URL is set in Settings.
+
 ## 0.67.13 — 2026-09-18 16:52 PDT
 
 **A peek no longer comes back reading `❯`.** Peeking at a session, and the

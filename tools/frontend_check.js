@@ -487,6 +487,58 @@ console.log("what's new");
         !changelogHasNews("0.50.24", ""));
 }
 
+console.log("pairing QR sign-in URL");
+{
+  const code = region(
+    "function pairSignInTarget(base, code, origin)",
+    "/* ------------------------------------------------------------------- modal */"
+  );
+  const { pairSignInTarget } = new Function(
+    code + "; return { pairSignInTarget };"
+  )();
+  check(
+    "a public URL plus a code is the sign-in link",
+    pairSignInTarget("https://box.tail1234.ts.net/clique", "K7PM-3XQF", "")
+      === "https://box.tail1234.ts.net/clique/?pair=K7PM-3XQF"
+  );
+  check(
+    "a trailing slash is not doubled",
+    pairSignInTarget("https://box.example.ts.net/clique/", "ABCD-EFGH", "")
+      === "https://box.example.ts.net/clique/?pair=ABCD-EFGH"
+  );
+  check(
+    "localhost is not a QR",
+    pairSignInTarget("http://localhost:3200", "ABCD-EFGH", "") === ""
+  );
+  check(
+    "127.0.0.1 is not a QR",
+    pairSignInTarget("http://127.0.0.1:3200", "ABCD-EFGH", "https://ok.example") === ""
+  );
+  check(
+    "IPv6 loopback is not a QR either",
+    pairSignInTarget("http://[::1]:3200", "ABCD-EFGH", "") === ""
+  );
+  check(
+    "an empty setting falls back to the page origin",
+    pairSignInTarget("", "ABCD-EFGH", "https://box.example.ts.net")
+      === "https://box.example.ts.net/?pair=ABCD-EFGH"
+  );
+  check(
+    "and a loopback origin with no setting is still not a QR",
+    pairSignInTarget("", "ABCD-EFGH", "http://127.0.0.1:3200") === ""
+  );
+  check(
+    "a hostname that merely contains 127.0.0.1 is fine",
+    pairSignInTarget("https://127.0.0.1.example.com", "ABCD-EFGH", "")
+      === "https://127.0.0.1.example.com/?pair=ABCD-EFGH"
+  );
+  check(
+    "a scheme-less public host is accepted",
+    pairSignInTarget("box.example.ts.net/clique", "ABCD-EFGH", "")
+      === "https://box.example.ts.net/clique/?pair=ABCD-EFGH"
+  );
+}
+
 console.log("markdown in the file sheet");
 {
   const code = region(

@@ -1477,6 +1477,86 @@ def _run(panel) -> int:
         page.screenshot(path=str(SHOTS / "settings.png"))
         check("settings opens", page.locator("#settings").is_visible())
 
+        print("sign-in QR")
+        page.click('#setTabs button[data-pane="api"]')
+        page.wait_for_timeout(300)
+        page.click("#pairStart")
+        page.wait_for_timeout(400)
+        loopback_note = page.locator("#pairQrNote")
+        check(
+            "a loopback panel tells you to set the public URL",
+            loopback_note.is_visible() and "public URL" in (loopback_note.inner_text() or ""),
+            loopback_note.inner_text() if loopback_note.count() else "",
+        )
+        loopback_qr = page.locator("#pairQr")
+        check(
+            "and does not draw a localhost QR",
+            not loopback_qr.is_visible(),
+        )
+        if page.locator("#pairCancel").count():
+            page.click("#pairCancel")
+            page.wait_for_timeout(200)
+        page.evaluate(
+            """async () => {
+              await fetch('/api/settings', {method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({panel_url: 'https://clique.example.ts.net'})});
+              await refresh();
+            }"""
+        )
+        page.wait_for_timeout(200)
+        page.click("#pairStart")
+        page.wait_for_timeout(500)
+        pixels = page.evaluate(
+            """() => {
+              const c = document.querySelector('#pairQr');
+              if (!c || c.hidden || !c.width) {
+                return {dark: 0, modules: 0, w: 0, h: 0};
+              }
+              const ctx = c.getContext('2d');
+              const {data} = ctx.getImageData(0, 0, c.width, c.height);
+              let dark = 0;
+              for (let i = 0; i < data.length; i += 4) {
+                if (data[i] < 40 && data[i + 1] < 40 && data[i + 2] < 40 && data[i + 3] > 200) {
+                  dark++;
+                }
+              }
+              return {
+                dark,
+                modules: Number(c.dataset.modules || 0),
+                w: c.width,
+                h: c.height,
+              };
+            }"""
+        )
+        check("the QR canvas is drawn", pixels["dark"] > 0, pixels)
+        check(
+            "and the module count is a real QR",
+            21 <= pixels["modules"] <= 77,
+            pixels,
+        )
+        shown = page.locator(".pair-code").inner_text().strip()
+        page.locator("#pairBox").screenshot(path=str(SHOTS / "pair-qr.png"))
+        # The only assertion that proves the thing is scannable rather than
+        # merely drawn, and the only one that does not go back through the
+        # encoder that drew it. zbarimg is a system package, so it is used
+        # when it is there and skipped, out loud, when it is not.
+        if shutil.which("zbarimg"):
+            decoded = subprocess.run(
+                ["zbarimg", "--quiet", "--raw", str(SHOTS / "pair-qr.png")],
+                capture_output=True, text=True,
+            ).stdout.strip()
+            check(
+                "a real decoder reads the panel's URL and the code off the screen",
+                decoded == f"https://clique.example.ts.net/?pair={shown}",
+                decoded,
+            )
+        else:
+            print("  skip zbarimg is not installed, so the QR was not decoded")
+        if page.locator("#pairCancel").count():
+            page.click("#pairCancel")
+            page.wait_for_timeout(200)
+
         # The theme maker lives at the bottom of a scrolling pane, which is
         # exactly where the About tab once disappeared. Being in the DOM is
         # not the assertion; being on screen is. Run here, with the sheet

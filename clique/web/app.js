@@ -7299,6 +7299,31 @@ function escapeHtml(text) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+/* pairSignInTarget: URL encoded in the pairing QR, or "" if a phone cannot
+ * open it. A QR of localhost or 127.0.0.1 is a QR that cannot work from a
+ * phone, and silently drawing one is worse than not drawing it.
+ * `base` is the panel_url setting; `origin` is location.origin when that
+ * setting is empty. */
+function pairSignInTarget(base, code, origin) {
+  const raw = String(base || "").trim() || String(origin || "");
+  if (!raw || !code) return "";
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (err) {
+    try {
+      parsed = new URL("https://" + raw.replace(/^\/+/, ""));
+    } catch (err2) {
+      return "";
+    }
+  }
+  const host = (parsed.hostname || "").toLowerCase();
+  // Node spells IPv6 loopback as "[::1]"; browsers as "::1".
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") return "";
+  const path = parsed.pathname.replace(/\/+$/, "");
+  return parsed.origin + path + "/?pair=" + encodeURIComponent(code);
+}
+
 /* ------------------------------------------------------------------- modal */
 
 /* A sentence before you start, not a lock afterwards.
@@ -8691,17 +8716,89 @@ function wire() {
    * configure and nothing to get wrong. */
   let pairTimer = 0;
 
+  const pairQrReset = () => {
+    const canvas = $("#pairQr");
+    if (canvas) {
+      canvas.hidden = true;
+      canvas.width = 0;
+      canvas.height = 0;
+      delete canvas.dataset.modules;
+    }
+    const note = $("#pairQrNote");
+    if (note) {
+      note.hidden = true;
+      note.textContent = "";
+    }
+  };
+
+  const pairQrNote = () => {
+    let note = $("#pairQrNote");
+    if (note) return note;
+    note = document.createElement("p");
+    note.id = "pairQrNote";
+    note.className = "note pair-qr-note";
+    note.hidden = true;
+    $("#pairBox").appendChild(note);
+    return note;
+  };
+
+  const pairPaintQr = (code) => {
+    pairQrReset();
+    const canvas = $("#pairQr");
+    if (!canvas) return;
+    const url = pairSignInTarget(
+      (state.settings && state.settings.panel_url) || "",
+      code,
+      location.origin
+    );
+    if (!url) {
+      const note = pairQrNote();
+      note.hidden = false;
+      note.textContent = "Set the panel's public URL in Settings first.";
+      return;
+    }
+    if (typeof qrcode !== "function") return;
+    let q;
+    try {
+      q = qrcode(0, "M");
+      q.addData(url);
+      q.make();
+    } catch (err) {
+      return;
+    }
+    const modules = q.getModuleCount();
+    const quiet = 4;
+    const scale = 4;
+    const dim = (modules + quiet * 2) * scale;
+    canvas.width = dim;
+    canvas.height = dim;
+    canvas.hidden = false;
+    canvas.dataset.modules = String(modules);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, dim, dim);
+    ctx.fillStyle = "#000000";
+    for (let row = 0; row < modules; row++) {
+      for (let col = 0; col < modules; col++) {
+        if (q.isDark(row, col)) {
+          ctx.fillRect((col + quiet) * scale, (row + quiet) * scale, scale, scale);
+        }
+      }
+    }
+  };
+
   const pairIdle = () => {
     clearInterval(pairTimer);
     pairTimer = 0;
-    $("#pairBox").innerHTML =
+    $("#pairUi").innerHTML =
       '<button type="button" id="pairStart">Pair a device</button>';
     $("#pairStart").onclick = pairBegin;
+    pairQrReset();
   };
 
   const pairShow = (code, seconds) => {
     clearInterval(pairTimer);
-    $("#pairBox").innerHTML =
+    $("#pairUi").innerHTML =
       `<div class="pair-code">${escapeHtml(code)}</div>` +
       '<p class="note pair-left"><span id="pairLeft"></span> ' +
       '<button type="button" id="pairCancel" class="ghost">Cancel</button></p>';
@@ -8711,11 +8808,12 @@ function wire() {
       await api("api/pair", { method: "DELETE" }).catch(() => {});
       pairIdle();
     };
+    pairPaintQr(code);
     let left = seconds;
     const tick = () => {
       if (left <= 0) return pairIdle();
       $("#pairLeft").textContent =
-        `Type it into the device within ${left}s.`;
+        `Use it within ${left}s.`;
       left -= 1;
     };
     tick();

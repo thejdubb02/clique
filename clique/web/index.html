@@ -776,9 +776,10 @@
         <input type="url" id="setPanelUrl" placeholder="https://box.tail1234.ts.net/clique"
                autocomplete="off" spellcheck="false">
       </label>
-      <p class="note">Included in the notification so it can link back here.
-         Only you know this — behind a tunnel the server has no reliable idea
-         of its own public address.</p>
+      <p class="note">Included in the notification so it can link back here,
+         and in the sign-in QR so a phone opens this panel rather than
+         localhost. Only you know this — behind a tunnel the server has no
+         reliable idea of its own public address.</p>
       <button type="button" id="testHook">Send a test notification</button>
     </section>
 
@@ -900,13 +901,15 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
          tmux is reachable.</p>
       <h3>Pair a device</h3>
       <p class="note">A token is forty characters: fine to paste, miserable to
-         type. Pairing hands one to a phone or a tablet instead. A short code
-         appears here, you type it into the device, and the device gets its own
-         token named after itself, which shows up in <code>token list</code> and
-         revokes like any other. The code lasts two minutes, works once, and
-         never leaves this screen.</p>
+         type. Pairing hands one to a phone instead. A short code and a QR
+         appear here. Scan the QR to sign this panel in on the phone's browser;
+         type the code into the Android app to give that app its own token.
+         The code lasts two minutes, works once, and never leaves this screen.</p>
       <div id="pairBox">
-        <button type="button" id="pairStart">Pair a device</button>
+        <div id="pairUi">
+          <button type="button" id="pairStart">Pair a device</button>
+        </div>
+        <canvas id="pairQr" hidden></canvas>
       </div>
 
       <div id="tokenRows" class="token-rows"></div>
@@ -1010,5 +1013,6 @@ python3 -m clique token revoke tk_xxxxxxxx</pre>
 <script src="vendor/addon-unicode11.js"></script>
 <script src="vendor/addon-canvas.js"></script>
 <script src="vendor/addon-webgl.js"></script>
+<script src="vendor/qrcode.js"></script>
 <script src="app.js"></script>
 </html>

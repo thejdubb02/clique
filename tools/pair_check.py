@@ -33,6 +33,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -137,6 +138,60 @@ def main() -> int:
         res["cancelling_clears_it"] = call("/api/pair", token=admin)[0]["expires_in"] == 0
         _, status = call("/api/pair/claim", "POST", {"code": third})
         res["and_a_cancelled_code_no_longer_works"] = status == 403
+
+        # Browser sign-in: the same code, posted as a form field, issues a
+        # session cookie. The Android JSON claim above must keep working; this
+        # is the other redemption, not a replacement.
+        browser_code = str(call("/api/pair", "POST", token=admin)[0].get("code", ""))
+        form = urllib.parse.urlencode({"pair": browser_code}).encode()
+        req = urllib.request.Request(
+            BASE + "/", data=form, method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                signed = r.status, r.headers.get("Set-Cookie", ""), r.read()
+        except urllib.error.HTTPError as err:
+            signed = err.code, err.headers.get("Set-Cookie", ""), err.read()
+        status, cookie, body = signed
+        res["a_code_signs_a_browser_in"] = (
+            status == 200 and cookie.startswith("clique=") and b"Signed in" in body
+        )
+        again = urllib.request.Request(
+            BASE + "/",
+            data=urllib.parse.urlencode({"pair": browser_code}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        try:
+            with urllib.request.urlopen(again, timeout=15) as r:
+                reuse_status, reuse_body = r.status, r.read()
+        except urllib.error.HTTPError as err:
+            reuse_status, reuse_body = err.code, err.read()
+        res["and_not_a_second_time"] = (
+            reuse_status == 401 and b"That code is no longer valid." in reuse_body
+        )
+        missing = urllib.request.Request(
+            BASE + "/",
+            data=urllib.parse.urlencode({"pair": "ZZZZ-ZZZZ"}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        try:
+            with urllib.request.urlopen(missing, timeout=15) as r:
+                miss_status, miss_body = r.status, r.read()
+        except urllib.error.HTTPError as err:
+            miss_status, miss_body = err.code, err.read()
+        res["a_wrong_code_is_the_same_no"] = (
+            miss_status == 401 and b"That code is no longer valid." in miss_body
+        )
+
+        page_req = urllib.request.Request(BASE + "/?pair=" + browser_code)
+        with urllib.request.urlopen(page_req, timeout=15) as r:
+            page = r.read()
+        res["GET_pair_serves_the_sign_in_page"] = (
+            b'name="pair"' in page and b"Sign in on this device" in page
+        )
     finally:
         proc.terminate()
         subprocess.run(["tmux", "-L", SOCKET, "kill-server"],

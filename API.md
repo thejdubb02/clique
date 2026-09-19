@@ -87,6 +87,24 @@ reason: wrong, expired, already used, none outstanding, too many attempts.
 Saying which would tell a guesser where they are. Five wrong guesses burn the
 code, and twelve attempts a minute across all codes is the ceiling.
 
+The same code also signs a browser in, so a phone can scan a QR instead of
+typing the panel password. This is not new authority: the code already buys a
+full bearer token through `/api/pair/claim`, and a session cookie is nothing
+it did not already grant.
+
+#### `GET /?pair=<code>`
+
+Unauthenticated. Serves the sign-in page with the code filled in. The dash is
+cosmetic and case does not matter, same as claiming. An already signed-in
+request is unchanged: it gets the panel, not a login page.
+
+#### `POST /`
+
+The browser login form. `password` is the original field. `pair` is the
+alternative, accepted when `password` is absent: a correct outstanding code
+issues the same session cookie a correct password does. Anything else is
+`401` and `That code is no longer valid.`, one message for every kind of no.
+
 ## Reading
 
 ### `GET /api/state`

@@ -325,6 +325,90 @@ def main() -> int:
     )
     shutil.rmtree(tok_dir, ignore_errors=True)
 
+    print("pairing")
+    from clique.auth import LOGIN_PAGE, login_page
+    from clique.pairing import Desk, grouped
+
+    blank = login_page()
+    check(
+        "the password page is byte-for-byte what it was",
+        blank == LOGIN_PAGE.replace("__ERROR__", "").replace("__NONCE__", "").encode(),
+    )
+    errored = login_page("Wrong password.", "nonce-1")
+    check(
+        "an error still only fills the existing slots",
+        errored
+        == LOGIN_PAGE.replace("__ERROR__", '<p class="err">Wrong password.</p>')
+        .replace("__NONCE__", "nonce-1")
+        .encode(),
+    )
+    paired = login_page(pair="K7PM-3XQF", nonce="abc").decode()
+    check(
+        "a pair page posts the code, not a password",
+        'name="pair"' in paired
+        and 'value="K7PM-3XQF"' in paired
+        and 'name="password"' not in paired,
+    )
+    check(
+        "the button stays a real visible control",
+        "Sign in on this device" in paired and "display:none" not in paired,
+        paired[paired.find("<button") : paired.find("</button>") + 9] if "<button" in paired else "",
+    )
+    check(
+        "and a password fallback is offered",
+        'href="./"' in paired and "Sign in with a password" in paired,
+    )
+    check(
+        "the auto-submit script carries the page nonce",
+        'nonce="abc"' in paired and "document.forms[0].submit()" in paired,
+    )
+    injected = login_page(pair='"><script>alert(1)</script>', nonce="n").decode()
+    check(
+        "a pair from the query is escaped into the HTML",
+        "<script>alert(1)</script>" not in injected and "&quot;" in injected,
+    )
+
+    desk = Desk()
+    code, ttl = desk.start()
+    check("a minted code lasts two minutes", ttl == 120 and len(code) == 8, (ttl, code))
+    check("the login path redeems a grouped lowercase code", desk.redeem(grouped(code).lower()))
+    check("and the same code will not redeem twice", not desk.redeem(code))
+
+    desk.start()
+    check("a wrong code does not redeem", not desk.redeem("ZZZZZZZZ"))
+
+    expired, _ = desk.start()
+    desk._open.expires = time.time() - 1
+    check("an expired code does not redeem", not desk.redeem(expired))
+
+    # The Android claim path is Desk.redeem then tokens.create. Hitting the
+    # real method, not a copy of it, is what keeps a refactor from changing
+    # the contract this feature is required not to touch.
+    from clique.app import Panel
+
+    claim_dir = Path(tempfile.mkdtemp(prefix="clique-pair-claim-"))
+    claim_tokens = TokenStore(claim_dir / "tokens.json")
+
+    class _ClaimPanel:
+        def __init__(self) -> None:
+            self.pairing = Desk()
+            self.tokens = claim_tokens
+
+        pair_claim = Panel.pair_claim
+
+    phone = _ClaimPanel()
+    live, _ = phone.pairing.start()
+    claimed = phone.pair_claim({"code": grouped(live).lower(), "name": "Justin's Pixel"})
+    check(
+        "Android claim still returns a named token",
+        bool(claimed)
+        and str(claimed.get("token") or "").startswith("mxp_")
+        and claimed.get("name") == "Justin's Pixel",
+        claimed,
+    )
+    check("and a second claim is refused", phone.pair_claim({"code": live}) is None)
+    shutil.rmtree(claim_dir, ignore_errors=True)
+
     print("gitinfo")
     import tempfile
 
