@@ -1,7 +1,9 @@
 # The working order
 
-What to build next and in what order. Short-lived: shipped work moves to
-the CHANGELOG and drops off this page.
+Why the next work is ranked the way it is. The list itself is on the **CLIque**
+board in Kaneo, one card per job across the panel, the desktop and the phone;
+this page holds the reasoning, the measurements and the things that were tried
+and did not work.
 
 Ranked for Justin's actual use (many agents, two machines) against
 [ROADMAP.md](../ROADMAP.md). Not a commitment dump: [ideas-inbox.md](ideas-inbox.md).
@@ -29,77 +31,74 @@ Reordered 2026-08-29 after reading Codeman's feature list against ours
 ([ideas-inbox.md](ideas-inbox.md)). The phone moved up because it is the one
 part of this that has never actually been used on a phone.
 
-## Now — daily drive
+## The order lives on the board
 
-1. **The mobile pass, and it is no longer guesswork.**
-   `agent-infra/tools/mobile_view.py` renders iOS in WebKit and Android in
-   Chromium at real device sizes and pixel ratios, so these are measured rather
-   than suspected. In the order they hurt:
+Ranked work is tracked on the **CLIque** board in Kaneo, one card each, so the
+panel, the desktop and the phone sit in one list instead of three. This file
+keeps what does not fit on a card: why something is ranked where it is, what
+was measured, and what was tried and did not work.
 
-   - ~~34 inputs under 16px~~ done in 0.64.0. None left on any device.
-   - ~~29 tap targets under 44px~~ done in 0.64.0: 34 down to 9, and the nine
-     are the key row, which is the decision below rather than a defect.
-   - ~~The status bar hanging off the screen~~ done in 0.64.0. 460px of
-     controls in a 393px phone was what the clipped icons actually were.
-   - ~~The login page~~ done in 0.60.0, along with installing as an app.
+Next, in order, as of 2026-09-19:
 
-   Grok CLI read the whole mobile surface on 2026-09-02
-   ([mobile-review-grok.md](mobile-review-grok.md)). All five of its findings
-   are fixed, in 0.66.1 and 0.67.0, each checked against the code before it was
-   believed. Worth repeating as a method: a second model reading for one
-   question found more in an hour than the tool-driven passes had in a week,
-   and the two it found first were both things the suite was green through.
+| | Card |
+|---|---|
+| 13px of phantom horizontal scroll on a phone | CLQ-62 |
+| Local echo, so the pane stops feeling like a web page | CLQ-64 |
+| Session templates | CLQ-54 |
+| A setup hook when CLIque makes a worktree | CLQ-55 |
+| `GET /api/briefing`, computed not generated | CLQ-51 |
+| The key row keys are too narrow, and that is a decision | CLQ-63 |
+| CLI-declared quick commands | CLQ-66 |
+| Per-session CPU, and a reap advisor | CLQ-56 |
+| Auto-resume when a usage limit resets | CLQ-68 |
+| The rest of the phone pass | CLQ-65 |
+| An MCP server over API.md | CLQ-53 |
+| Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
+| Typography | CLQ-67 |
 
-   - **13px of phantom horizontal scroll on a phone.** What is left of the
-     clipping, after 0.64.0 fixed the status bar overflowing by 67px. Narrowed
-     but not solved: `#shell` measures 412 wide with a scrollWidth of 425 on a
-     Pixel, the same 13px on every width, and no visible unclipped element
-     accounts for it. `mobile_view.py` now ignores elements clipped by an
-     ancestor, so the terminal panes for background sessions (thousands of
-     pixels wide inside `overflow: hidden`) no longer mask it. Worth an hour
-     with the layout rather than another guess.
-   - **The key row keys are 41px wide on a Pixel and 28px on a 320px screen.**
-     Height is a correct 44. Seven keys will not fit at 44 wide on a phone, so
-     either it scrolls, it wraps, or it carries fewer keys. A decision, not a
-     bug.
+The phone and desktop cards live on the same board: CLQ-10 to CLQ-17 and
+CLQ-59, CLQ-60 for Android, CLQ-57 and CLQ-58 for the desktop.
 
-   The resize fight that made it unusable is fixed in 0.58.0, scrolling in
-   0.61.0; this is what is left. Still worth half an hour with a real handset afterwards, because the
-   tool cannot see the notch and does not run in standalone mode.
+**CLQ-61 is the refuse list** and is marked done on purpose, because the
+decision is the deliverable. Read it before building anything agentic.
 
-1. **(done, kept for the reasoning) Use it on a phone, then fix what is wrong.** Everything mobile has been
-   built against a 390px browser window and a screenshot. Nobody has driven it
-   with a thumb on real hardware, and until somebody has, the rest of the phone
-   list is guesswork. Half an hour with the real thing is worth more than any
-   amount of reasoning about it.
-2. **(done, 0.68.0) QR login.** Typing a long password on a phone is the single worst moment
-   in using this, and it happens before anything else can be judged. The pairing
-   code was already here; the last step was a QR of `/?pair=<code>` and the
-   login form accepting that field.
-3. **Local echo.** Every keystroke over Tailscale waits a round trip, and it is
-   the difference between the pane feeling like a terminal and feeling like a
-   web page. Draw the character at once, send it in the background, drop the
-   drawing when the real echo lands. Ours, in plain JS. The hard part is not
-   the drawing, it is knowing when to stop.
+## Why the mobile work is still at the top
 
-## Then — bigger slices
+`agent-infra/tools/mobile_view.py` renders iOS in WebKit and Android in
+Chromium at real device sizes and pixel ratios, so these were measured rather
+than suspected. Most of what it found is fixed:
 
-4. **The rest of the phone pass:** the tab bar, the input bar's spacing, and
-   swiping between sessions. Ranked under the three above because what needs
-   doing here should come out of item 1 rather than out of a guess.
-5. **CLI-declared quick commands.** A row of one-tap `/init`, `/clear`,
-   `/compact`. It belongs in `clis.toml` next to `modes`, so it is config
-   rather than code, and each CLI names its own.
-6. **Session templates:** CLI + directory + starter prompt + name pattern.
-7. **An agent-facing skill.** The API exists; nothing tells an agent so.
-8. **Typography.** Line height, letter spacing, and a ligature-capable stack.
-   Held back from 0.52.1 on purpose: these change how many rows fit in a pane,
-   which touches the whole sizing path, so it wants its own change and its own
-   run of `redraw_check.py`.
-9. **Per-session CPU/memory,** to catch one agent starving the box.
-10. **Auto-resume when a limit resets.** Nearly free now that the panel knows
-    when the window turns over, and it is the one piece of autonomy that needs
-    no model knowledge: a timestamp passed, so send a key.
+- ~~34 inputs under 16px~~ done in 0.64.0. None left on any device.
+- ~~29 tap targets under 44px~~ done in 0.64.0: 34 down to 9, and the nine are
+  the key row, which is CLQ-63 rather than a defect.
+- ~~The status bar hanging off the screen~~ done in 0.64.0. 460px of controls
+  in a 393px phone was what the clipped icons actually were.
+- ~~The login page~~ done in 0.60.0, along with installing as an app.
+
+Grok CLI read the whole mobile surface on 2026-09-02
+([mobile-review-grok.md](mobile-review-grok.md)). All five of its findings are
+fixed, in 0.66.1 and 0.67.0, each checked against the code before it was
+believed. Worth repeating as a method: a second model reading for one question
+found more in an hour than the tool-driven passes had in a week, and the two it
+found first were both things the suite was green through.
+
+What is left is CLQ-62 and CLQ-63. The resize fight that made the panel
+unusable on a phone is fixed in 0.58.0 and scrolling in 0.61.0. Still worth
+half an hour with a real handset afterwards, because the tool cannot see the
+notch and does not run in standalone mode.
+
+## Shipped off this list
+
+- **QR login**, 0.68.0. The pairing code was already here; what was missing was
+  the browser, because a scanned code had to become a session cookie rather
+  than an API token. CLQ-49.
+- **An agent-facing skill.** `skills/drive-clique` exists and covers state,
+  wait, peek, transcript, send, worktrees. CLQ-53 is the MCP version of the
+  same surface, so any client can drive it without loading a skill first.
+- **Use it on a phone, then fix what is wrong.** Done, and everything above
+  came out of it rather than out of a guess.
+- **Peek under a session row on the phone**, and **prompt history on the
+  phone**, both in Android 0.3.0. CLQ-5 and CLQ-9.
 
 ## Checked off this list, 2026-08-29
 
