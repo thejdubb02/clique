@@ -22,7 +22,18 @@ from typing import ClassVar
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from clique import app as app_mod
-from clique import attention, files, gitinfo, notify, services, sysinfo, termstrip, tmux, working
+from clique import (
+    attention,
+    files,
+    gitinfo,
+    notify,
+    services,
+    sysinfo,
+    termstrip,
+    tmux,
+    usage,
+    working,
+)
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
 
@@ -1590,6 +1601,55 @@ def main() -> int:
         len(tmpl_store.settings["session_templates"]) == 200,
         len(tmpl_store.settings["session_templates"]),
     )
+
+    print("usage: running-only by default, every installed CLI on an explicit ask")
+    # Panel.usage_now is a plain method on self.store/self.registry, so a
+    # duck-typed fake stands in rather than wiring up a real Panel (auth,
+    # tokens, tmux) for one filtering rule.
+    seen_cli_ids: list[str] = []
+
+    def fake_usage_read(cli_id, spec, guard, *, force=False):
+        seen_cli_ids.append(cli_id)
+        return {"cli": cli_id, "windows": [], "checked": 0}
+
+    usage._orig_read, usage.read = usage.read, fake_usage_read
+    try:
+        fake_store = SimpleNamespace(
+            settings={"usage_bar": True},
+            sessions=[SimpleNamespace(cli="claude")],
+        )
+        fake_registry = SimpleNamespace(
+            types=lambda: {
+                "claude": SimpleNamespace(usage={"url": "x"}, installed=True),
+                "codex": SimpleNamespace(usage={"url": "x"}, installed=True),
+                "gemini": SimpleNamespace(usage=None, installed=True),
+                "grok": SimpleNamespace(usage={"url": "x"}, installed=False),
+            }
+        )
+        fake_panel = SimpleNamespace(store=fake_store, registry=fake_registry)
+
+        seen_cli_ids.clear()
+        app_mod.Panel.usage_now(fake_panel)
+        check(
+            "by default, only a running CLI with a probe is asked",
+            seen_cli_ids == ["claude"],
+            seen_cli_ids,
+        )
+
+        seen_cli_ids.clear()
+        app_mod.Panel.usage_now(fake_panel, all_installed=True)
+        check(
+            "all_installed asks every installed CLI with a probe, running or not",
+            sorted(seen_cli_ids) == ["claude", "codex"],
+            seen_cli_ids,
+        )
+
+        seen_cli_ids.clear()
+        fake_store.settings["usage_bar"] = False
+        app_mod.Panel.usage_now(fake_panel, all_installed=True)
+        check("usage_bar off refuses even the explicit ask", seen_cli_ids == [], seen_cli_ids)
+    finally:
+        usage.read = usage._orig_read
 
     print("mounted under a path prefix")
     # CLIque is documented as running behind `tailscale serve` at /clique,

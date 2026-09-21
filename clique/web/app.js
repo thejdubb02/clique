@@ -1594,6 +1594,32 @@ function planLevel(percent) {
   return percent >= 90 ? "err" : percent >= 75 ? "wait" : "ok";
 }
 
+// Shared by the active session's status-bar meter and the sidebar's
+// all-installed panel, so both draw the identical bar.
+function planMeter(w, askedOf) {
+  const pct = Math.round(w.percent);
+  const when = untilReset(w.resets_at);
+  const meter = mk("span", "plan-w");
+  meter.dataset.level = planLevel(w.percent);
+
+  const key = mk("b", "plan-k");
+  key.textContent = w.label;
+  const track = mk("span", "plan-track");
+  const fill = mk("i", "plan-fill");
+  // scaleX rather than width: the bar sits beside a dozen PTYs, and a
+  // transform is the one thing that cannot make the browser lay out again.
+  fill.style.transform = `scaleX(${Math.max(w.percent, 0.5) / 100})`;
+  track.appendChild(fill);
+  const value = mk("span", "plan-v");
+  value.textContent = pct + "%";
+
+  meter.append(key, track, value);
+  meter.title = `${w.label}: ${pct}% used`
+    + (when ? `, resets ${when}` : "")
+    + `\nAsked of ${askedOf} directly, at most once every few minutes.`;
+  return meter;
+}
+
 function renderPlan() {
   const el = $("#plan");
   if (!el) return;
@@ -1601,33 +1627,79 @@ function renderPlan() {
   const found = s && planUsage.find((u) => u.cli === s.cli);
   const windows = (found && found.windows) || [];
   el.hidden = !windows.length;
-  if (!windows.length) { el.replaceChildren(); return; }
+  el.replaceChildren(...windows.map((w) => planMeter(w, s.cli_label || s.cli)));
+}
 
-  el.replaceChildren();
-  for (const w of windows) {
-    const pct = Math.round(w.percent);
-    const when = untilReset(w.resets_at);
-    const meter = mk("span", "plan-w");
-    meter.dataset.level = planLevel(w.percent);
+// Every installed CLI with a probe, not just the active session's — fetched
+// only while the panel is open (?all=1 is the explicit ask the backend
+// reserves this widening for; the routine loadUsage() poll never sets it).
+let allUsage = null;   // null = not fetched yet
+let usageTimer = null;
 
-    const key = mk("b", "plan-k");
-    key.textContent = w.label;
-    const track = mk("span", "plan-track");
-    const fill = mk("i", "plan-fill");
-    // scaleX rather than width: the bar sits in a bottom bar beside a dozen
-    // PTYs, and a transform is the one thing that cannot make the browser
-    // lay the row out again.
-    fill.style.transform = `scaleX(${Math.max(w.percent, 0.5) / 100})`;
-    track.appendChild(fill);
-    const value = mk("span", "plan-v");
-    value.textContent = pct + "%";
-
-    meter.append(key, track, value);
-    meter.title = `${w.label}: ${pct}% used`
-      + (when ? `, resets ${when}` : "")
-      + `\nAsked of ${s.cli_label || s.cli} directly, at most once every few minutes.`;
-    el.appendChild(meter);
+async function loadAllUsage() {
+  try {
+    const payload = await api("api/usage?all=1");
+    allUsage = payload.usage || [];
+  } catch (err) {
+    allUsage = [];
   }
+  renderUsagePanel();
+}
+
+function renderUsagePanel() {
+  const body = $("#usageBody");
+  const toggle = $("#usageToggle");
+  if (!body || !toggle) return;
+  const open = toggle.getAttribute("aria-expanded") === "true";
+  body.hidden = !open;
+  if (!open || allUsage === null) return;
+
+  if (!allUsage.length) {
+    const empty = mk("div", "usage-empty");
+    empty.textContent = "No CLI reports plan usage yet.";
+    body.replaceChildren(empty);
+    return;
+  }
+
+  const running = new Set(state.sessions.filter((s) => s.cli).map((s) => s.cli));
+  body.replaceChildren(...allUsage.map((u) => {
+    const cli = (state.clis || []).find((c) => c.id === u.cli);
+    const isRunning = running.has(u.cli);
+    const wrap = mk("div", "usage-cli" + (isRunning ? "" : " is-idle"));
+    const name = mk("div", "usage-cli-name");
+    name.textContent = cli?.label || u.cli;
+    if (!isRunning) {
+      const tag = mk("span", "usage-cli-idle-tag");
+      tag.textContent = "idle";
+      name.append(tag);
+    }
+    wrap.append(name, ...(u.windows || []).map((w) => planMeter(w, cli?.label || u.cli)));
+    return wrap;
+  }));
+}
+
+function wireUsagePanel() {
+  const toggle = $("#usageToggle");
+  if (!toggle) return;
+  const startOpen = localStorage.getItem("clique.usagePanel") === "1";
+  toggle.setAttribute("aria-expanded", String(startOpen));
+  if (startOpen) {
+    loadAllUsage();
+    usageTimer = setInterval(loadAllUsage, 5 * 60 * 1000);
+  }
+  toggle.addEventListener("click", () => {
+    const open = toggle.getAttribute("aria-expanded") !== "true";
+    toggle.setAttribute("aria-expanded", String(open));
+    localStorage.setItem("clique.usagePanel", open ? "1" : "0");
+    if (open) {
+      if (!usageTimer) usageTimer = setInterval(loadAllUsage, 5 * 60 * 1000);
+      loadAllUsage();
+    } else if (usageTimer) {
+      clearInterval(usageTimer);
+      usageTimer = null;
+    }
+    renderUsagePanel();
+  });
 }
 function renderStats() {
   const st = state.stats || {};
@@ -11669,6 +11741,7 @@ wireTouchMenus($("#groups"), (node) => node.closest(".group-row"));
 wireTermTouchMenus();
 wirePeekTooltips();
 wireKeyRow();
+wireUsagePanel();
 trackKeyboard();
 panelLoad();   // restore panel width + which pane, before the first render
 setSidebarWidth(storedSidebarWidth(), false);

@@ -444,6 +444,44 @@ def _run(panel) -> int:
             abs(gaps["between"] - gaps["normal"]) < 1,
             gaps,
         )
+
+        # Every installed CLI's usage, in the sidebar footer. Collapsed by
+        # default, and opening it is the explicit ask that fires the
+        # all-installed fetch — the routine poll never sends ?all=1.
+        toggle = page.locator("#usageToggle")
+        check(
+            "usage panel starts collapsed",
+            page.evaluate("() => document.querySelector('#usageBody').hidden") is True,
+        )
+        all_requests = []
+        page.on(
+            "request",
+            lambda r: (
+                all_requests.append(r.url) if "api/usage" in r.url and "all=1" in r.url else None
+            ),
+        )
+        toggle.click()
+        page.wait_for_timeout(400)
+        check("opening it fires the all-installed fetch", any(all_requests), all_requests)
+        check(
+            "and the body un-hides",
+            page.evaluate("() => document.querySelector('#usageBody').hidden") is False,
+        )
+        check("the toggle marks itself open", toggle.get_attribute("aria-expanded") == "true")
+        body_text = page.locator("#usageBody").inner_text().strip()
+        check(
+            "with nothing configured, it says so rather than sitting blank",
+            body_text != "",
+            body_text,
+        )
+        page.locator("#sidebar").screenshot(path=str(SHOTS / "usage-panel-open.png"))
+        toggle.click()
+        page.wait_for_timeout(200)
+        check(
+            "clicking again collapses it",
+            page.evaluate("() => document.querySelector('#usageBody').hidden") is True,
+        )
+
         shown = page.evaluate(
             """() => {
               const temp = document.querySelector('#temp');

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.77.0 — 2026-09-21 16:04 PDT
+
+**Plan usage for every installed CLI, not just the one running in front.**
+Bottom-left of the sidebar, above the version footer: a "Plan usage" row
+that opens into a bar per CLI, reusing the same meters the status bar
+already draws for the active session. Collapsed by default, and opening it
+is what triggers the wider fetch (`GET /api/usage?all=1`) — the routine
+poll still only asks about a CLI with a session open, so a panel nobody
+opens costs nothing extra. A CLI installed but not currently running still
+shows, dimmed and tagged "idle": a week's usage does not reset just because
+the session closed.
+
+Today that is Claude Code only — the only CLI with a working usage probe.
+Codex, Grok, Gemini and Antigravity are tracked (CLQ-75) but none has a
+probe yet, so they simply do not appear rather than showing a broken one.
+
 ## 0.76.0 — 2026-09-21 14:02 PDT
 
 **The desktop update button moved next to the version number, where it

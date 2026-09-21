@@ -123,6 +123,16 @@
     <div id="groups" class="groups" hidden></div>
     <div id="tree" class="tree"></div>
     <div id="orphans" class="orphans" hidden></div>
+    <!-- Every installed CLI's plan usage, not just the active session's —
+         collapsed by default, since opening it is what triggers the
+         all-installed fetch (see loadAllUsage). -->
+    <div id="usagePanel" class="usage-panel">
+      <button type="button" id="usageToggle" class="usage-toggle" aria-expanded="false" title="Plan usage for every installed CLI">
+        <svg class="ico" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+        <span>Plan usage</span>
+      </button>
+      <div id="usageBody" class="usage-body" hidden></div>
+    </div>
     <footer id="version"></footer>
   </aside>
 

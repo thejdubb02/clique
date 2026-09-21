@@ -727,8 +727,11 @@ Nothing in the panel knows whose API is being asked. A CLI's `usage` block in
 which URL to ask and which fields in the reply are the numbers; the panel runs
 that description. Teaching it about another vendor is a block of TOML.
 
-Only CLIs that declare a probe **and** have a session open are asked, so a
-panel with nothing running makes no outbound call. Readings are cached for five
+By default, only CLIs that declare a probe **and** have a session open are
+asked, so a panel with nothing running makes no outbound call. `?all=1` widens
+that to every *installed* CLI with a probe, session or not — an explicit ask
+(the usage sidebar panel makes it), not something the routine poll does on its
+own. `?refresh=1` bypasses the cache below. Readings are cached for five
 minutes and shared by every connected browser, and a failure is cached for the
 same five minutes so a machine with no credentials does not retry forever.
 

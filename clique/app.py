@@ -817,20 +817,29 @@ class Panel:
             return {"ok": False, "error": why}
         return llm.test(profile)
 
-    def usage_now(self, *, force: bool = False) -> dict:
-        """What is left of each running CLI's plan.
+    def usage_now(self, *, force: bool = False, all_installed: bool = False) -> dict:
+        """What is left of each CLI's plan.
 
-        Only CLIs that declare a probe *and* have a session open are asked. A
-        panel with nothing running makes no outbound call at all, which is the
-        behaviour anyone would want from a tool they just installed and have
-        not configured.
+        By default, only CLIs that declare a probe *and* have a session open
+        are asked. A panel with nothing running makes no outbound call at
+        all, which is the behaviour anyone would want from a tool they just
+        installed and have not configured.
+
+        `all_installed=True` widens that to every installed CLI with a
+        probe, session or not — an explicit ask (opening the usage panel),
+        not something the routine poll does on its own.
         """
         if not self.store.settings.get("usage_bar", True):
             return {"usage": []}
         running = {s.cli for s in self.store.sessions if s.cli}
         out = []
         for cli_id, cli in self.registry.types().items():
-            if cli_id not in running or not getattr(cli, "usage", None):
+            if not getattr(cli, "usage", None):
+                continue
+            if all_installed:
+                if not cli.installed:
+                    continue
+            elif cli_id not in running:
                 continue
             found = usage.read(cli_id, cli.usage, llm._guard_url, force=force)
             if found:
@@ -2069,7 +2078,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/themes":
                 return self._json(self.panel.themes_list())
             if path == "/api/usage":
-                return self._json(self.panel.usage_now())
+                return self._json(
+                    self.panel.usage_now(
+                        force=query.get("refresh") == "1",
+                        all_installed=query.get("all") == "1",
+                    )
+                )
             if path == "/api/storage":
                 usage = files.shares_usage(tuple(self._share_cwds()))
                 usage["cleanup_days"] = int(
