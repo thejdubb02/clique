@@ -32,7 +32,9 @@ curl -H "Authorization: Bearer $CLIQUE_TOKEN" http://127.0.0.1:3200/api/state
 ```
 
 Driving CLIque from an agent — start sessions, send prompts, wait for one to
-finish — is written up in `skills/drive-clique/SKILL.md`.
+finish — is written up in `skills/drive-clique/SKILL.md`. The same reads are
+also an MCP server, `python3 -m clique mcp`, read-only for now. See
+`skills/drive-clique/mcp.md`.
 
 A read-only token is refused on every write with `403 this API token is
 read-only`. Bearer tokens skip the same-origin check — they are not a browser

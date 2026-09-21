@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.75.0 — 2026-09-21 13:23 PDT
+
+**A read-only MCP server, so any AI agent can drive CLIque, not just Claude
+Code.** `skills/drive-clique/SKILL.md` already told Claude Code how; this
+puts the same five reads (session list, one session, wait for idle, peek
+the pane, read the conversation) behind a real MCP server any client can
+talk to. Deliberately read-only for now: nothing here can type into a pane,
+start, kill, or resume a session. That needs a policy model that does not
+exist yet, and shipping a way to type into someone's live agent session
+ahead of that policy would be the wrong order to build it in.
+
+Stdlib only, matching the rest of this repo: no `mcp` package, the JSON-RPC
+framing is hand-rolled. `CLIQUE_TOKEN=... python3 -m clique mcp` to start
+it. Docs: `skills/drive-clique/mcp.md`.
+
+Built with Grok CLI, reviewed for real before landing, not just tested:
+confirmed the token is never logged or echoed anywhere, confirmed the pane
+read cap actually clamps rather than just being documented, and checked the
+protocol shapes against the real MCP spec rather than trusting a test Grok
+wrote against its own implementation. Added one thing the review flagged as
+missing: a smoke check that fails if a future change ever adds a write call
+to this file, so read-only stays true on purpose, not by nobody touching it.
+
 ## 0.74.0 — 2026-09-21 13:06 PDT
 
 **Session templates.** A saved combo of CLI, working directory, folder, name

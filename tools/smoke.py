@@ -42,6 +42,304 @@ def check(label: str, cond: bool, detail: str = "") -> None:
         print(f"  FAIL {label} {detail}")
 
 
+def check_mcp() -> None:
+    """The read-only MCP server, against a throwaway panel.
+
+    Same shape as ``tools/smoke_http.py``: own port, own home, own tmux
+    socket, so this cannot see or kill a live session. Speaks JSON-RPC on
+    the server's stdin, which is what an MCP client actually does.
+    """
+    import contextlib
+    import select
+    import socket
+    import urllib.error
+    import urllib.request
+
+    print("mcp")
+    home = Path("/tmp/clique-mcp-smoke-home")
+    socket_name = "clique-mcp-smoke"
+    # Throwaway panel on loopback. Gone before this function returns.
+    password = "mcp-smoke-check"  # noqa: S105
+    env = dict(os.environ, CLIQUE_HOME=str(home), CLIQUE_TMUX_SOCKET=socket_name)
+    env.pop("CLIQUE_TOKEN", None)
+    env.pop("CLIQUE_URL", None)
+
+    try:
+        missing = subprocess.run(
+            [sys.executable, "-m", "clique", "mcp"],
+            cwd=str(ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        missing = None
+        check("mcp refuses to start without CLIQUE_TOKEN", False, "hung on stdin")
+    if missing is not None:
+        check(
+            "mcp refuses to start without CLIQUE_TOKEN",
+            missing.returncode == 1,
+            missing.returncode,
+        )
+        check(
+            "the error names how to create a token",
+            "python3 -m clique token create" in missing.stderr,
+            missing.stderr.strip()[:200],
+        )
+        check(
+            "and that error does not contain a token",
+            "mxp_" not in missing.stderr and "mxp_" not in missing.stdout,
+        )
+
+    # The panel clamps peek to 40, so a client asking for a megabyte would
+    # still look fine on the wire. The cap has to be checked here, or a
+    # regression in the wrapper cannot fail this test.
+    from clique.mcp_server import ToolError, _lines, _timeout
+
+    check("peek lines default to 8", _lines({}) == 8)
+    check("peek lines cap at 200", _lines({"lines": 10000}) == 200)
+    try:
+        _lines({"lines": 0})
+        rejected = False
+    except ToolError:
+        rejected = True
+    check("peek lines reject 0", rejected)
+    check("omitted timeout is left to the route", _timeout({}) is None)
+
+    # Read-only is true today by inspection, not by anything that would fail
+    # if it stopped being true. This is that check: one Client.get(), method
+    # always GET, no write verb anywhere in the file.
+    src = (ROOT / "clique" / "mcp_server.py").read_text()
+    check("exactly one call site makes an HTTP request", src.count("urllib.request.Request(") == 1)
+    check("that call is hardcoded GET", 'method="GET"' in src)
+    check(
+        "no write HTTP verb appears anywhere in the file",
+        not any(verb in src for verb in ('"POST"', '"PUT"', '"DELETE"', '"PATCH"')),
+    )
+    check("timeout caps at 300", _timeout({"timeout": 9000}) == 300)
+
+    shutil.rmtree(home, ignore_errors=True)
+    home.mkdir(parents=True)
+    tmux._run(["kill-server"], socket_name, check=False)
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    base = f"http://127.0.0.1:{port}"
+
+    panel = None
+    mcp = None
+    token = ""
+    err_fh = (home / "panel.err").open("w")
+    try:
+        panel = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "clique",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+                "--password",
+                password,
+                "--state",
+                str(home / "state.json"),
+            ],
+            cwd=str(ROOT),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=err_fh,
+        )
+        up = False
+        for _ in range(80):
+            if panel.poll() is not None:
+                break
+            try:
+                urllib.request.urlopen(base + "/healthz", timeout=2).read()
+                up = True
+                break
+            except (urllib.error.URLError, OSError):
+                time.sleep(0.25)
+        if not up:
+            err_fh.flush()
+            tail = (home / "panel.err").read_text(encoding="utf-8", errors="replace")[-200:]
+            check("throwaway panel is up", False, tail.strip())
+            return
+        check("throwaway panel is up", True)
+
+        minted = subprocess.run(
+            [sys.executable, "-m", "clique", "token", "create", "mcp-smoke", "--read-only"],
+            cwd=str(ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        for line in minted.stdout.splitlines():
+            if line.strip().startswith("mxp_"):
+                token = line.strip()
+        check(
+            "mcp smoke token minted",
+            token.startswith("mxp_"),
+            minted.stderr.strip()[:200],
+        )
+        if not token:
+            return
+
+        mcp = subprocess.Popen(
+            [sys.executable, "-m", "clique", "mcp"],
+            cwd=str(ROOT),
+            env={**env, "CLIQUE_URL": base, "CLIQUE_TOKEN": token, "PYTHONUNBUFFERED": "1"},
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        pending = bytearray()
+
+        def rpc(msg: dict, timeout: float = 10) -> dict:
+            assert mcp is not None and mcp.stdin is not None and mcp.stdout is not None
+            mcp.stdin.write((json.dumps(msg) + "\n").encode())
+            mcp.stdin.flush()
+            fd = mcp.stdout.fileno()
+            os.set_blocking(fd, False)
+            deadline = time.time() + timeout
+            while b"\n" not in pending:
+                if time.time() > deadline:
+                    raise TimeoutError("mcp server did not answer")
+                ready, _, _ = select.select([fd], [], [], 0.2)
+                if not ready:
+                    if mcp.poll() is not None:
+                        raise RuntimeError(f"mcp exited {mcp.returncode}")
+                    continue
+                try:
+                    chunk = os.read(fd, 65536)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    raise RuntimeError("mcp closed stdout")
+                pending.extend(chunk)
+            line, _, rest = bytes(pending).partition(b"\n")
+            pending.clear()
+            pending.extend(rest)
+            return json.loads(line)
+
+        init = rpc(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "smoke", "version": "0"},
+                },
+            }
+        )
+        agreed = (init.get("result") or {}).get("protocolVersion")
+        check(
+            "initialize answers", init.get("id") == 1 and agreed == "2025-11-25", init.get("error")
+        )
+
+        listed = rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        tools = (listed.get("result") or {}).get("tools") or []
+        names = [tool.get("name") for tool in tools]
+        check(
+            "tools/list has the five read-only tools",
+            names
+            == [
+                "list_sessions",
+                "get_session",
+                "wait",
+                "preview_pane",
+                "conversation",
+            ],
+            names,
+        )
+        check(
+            "each tool declares an object input schema",
+            all(
+                isinstance(tool.get("inputSchema"), dict)
+                and tool["inputSchema"].get("type") == "object"
+                for tool in tools
+            ),
+            names,
+        )
+
+        called = rpc(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "list_sessions", "arguments": {}},
+            }
+        )
+        result = called.get("result") or {}
+        content = result.get("content") or []
+        text = content[0].get("text") if content and isinstance(content[0], dict) else ""
+        try:
+            parsed = json.loads(text) if isinstance(text, str) else None
+        except json.JSONDecodeError:
+            parsed = None
+        check(
+            "list_sessions returns the session list",
+            result.get("isError") is False and isinstance(parsed, list),
+            (text or "")[:200],
+        )
+
+        missing_pane = rpc(
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "preview_pane",
+                    "arguments": {"id": "no-such-session", "lines": 8},
+                },
+            }
+        )
+        bad = missing_pane.get("result") or {}
+        bad_content = bad.get("content") or []
+        bad_text = bad_content[0].get("text") if bad_content else ""
+        check(
+            "a missing session is a tool error, not an empty pane",
+            bad.get("isError") is True and "404" in (bad_text or ""),
+            (bad_text or "")[:200],
+        )
+    except Exception as exc:  # noqa: BLE001 — a hung server must fail the check, not the file
+        check("mcp dialogue", False, f"{type(exc).__name__}: {exc}")
+    finally:
+        err_text = ""
+        if mcp is not None:
+            if mcp.stdin is not None:
+                with contextlib.suppress(OSError):
+                    mcp.stdin.close()
+            try:
+                mcp.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                mcp.terminate()
+                try:
+                    mcp.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    mcp.kill()
+                    mcp.wait(timeout=5)
+            if mcp.stderr is not None:
+                err_text = mcp.stderr.read().decode("utf-8", "replace")
+        if mcp is not None and token:
+            check("mcp stderr never echoes the token", token not in err_text)
+        if panel is not None and panel.poll() is None:
+            panel.terminate()
+            try:
+                panel.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                panel.kill()
+                panel.wait(timeout=5)
+        err_fh.close()
+        tmux._run(["kill-server"], socket_name, check=False)
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def main() -> int:
     if not tmux.available():
         print("tmux not installed — cannot run engine smoke test")
@@ -1383,6 +1681,8 @@ def main() -> int:
             burn.kill()
         burn.wait(timeout=5)
     sysinfo._proc_cache["at"] = 0.0
+
+    check_mcp()
 
     print("teardown")
     tmux.kill(mux, SOCKET)
