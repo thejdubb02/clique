@@ -45,7 +45,7 @@ Next, in order, as of 2026-09-21 (evening):
 | 13px of phantom horizontal scroll on a phone | CLQ-62 |
 | Local echo, so the pane stops feeling like a web page | CLQ-64 |
 | The key row keys are too narrow, and that is a decision — CSS already has `overflow-x: auto`; the card's own measured widths may be stale, needs a real phone check before it needs code | CLQ-63 |
-| Auto-resume when a usage limit resets — the probe already exists for Claude (see "Plan usage in the status bar" below); extending it to Codex/Grok/Gemini/Antigravity is researched, not yet built | CLQ-68 |
+| Auto-resume when a usage limit resets — the probe now exists for Claude and Codex (see "Codex usage probe" below); Grok/Gemini/Antigravity are checked and blocked, not just unresearched. The resume trigger itself is not built | CLQ-68 |
 | The rest of the phone pass | CLQ-65 |
 | MCP server, phase 2: write verbs, blocked on CLQ-52's policy model | CLQ-76 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
@@ -91,14 +91,22 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **Codex usage probe**, 0.78.0. `codex login`'s ChatGPT OAuth token reads
+  plan usage straight from `chatgpt.com/backend-api/wham/usage`, verified
+  against a real install. Its reset time is Unix seconds rather than
+  Claude's ISO string, so `usage.py` gained `_resets_at`, which accepts
+  either and always hands the browser ISO. Checked Grok, Gemini and
+  Antigravity too: Grok's stored credential is not a usable balance-check
+  key (the only real signal is an actual CLI invocation, which would spend
+  real usage to check), Gemini's credential file is encrypted at rest, and
+  Antigravity's token has no known usage endpoint. Part of CLQ-68.
 - **The sidebar usage panel**, 0.77.0. Collapsed "Plan usage" row above the
   version footer, opens into a bar per installed CLI with a probe, dimmed and
   tagged idle when it is not the active session's CLI. Reuses the status
   bar's own meter markup (`planMeter`, extracted out of `renderPlan`).
   Backend: `Panel.usage_now(all_installed=True)` and `GET
   /api/usage?all=1`, gated behind opening the panel rather than the routine
-  poll. Only Claude Code has a working probe today; the rest of CLQ-75
-  (extending probes to Codex, Grok, Gemini, Antigravity) is CLQ-68. CLQ-75.
+  poll. CLQ-75.
 - **Per-session CPU**, 0.73.0. Same process-tree walk that already gave `rss`
   now also reports CPU percent, cached on the same 8-second cycle. The reap
   advisor half of the card (idle time plus these two numbers deciding what to
