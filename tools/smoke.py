@@ -1602,6 +1602,37 @@ def main() -> int:
         len(tmpl_store.settings["session_templates"]),
     )
 
+    print("usage: a reset time in either shape a vendor sends it")
+    # Anthropic answers with ISO already; OpenAI answers with Unix seconds.
+    # _windows() is what has to paper over that, once, rather than every CLI's
+    # TOML block needing to say which kind it is.
+    epoch_windows = usage._windows(
+        {"window": [{"label": "PLAN", "percent": "p", "resets": "r"}]},
+        {"p": 12, "r": 1792625277},
+    )
+    check(
+        "a Unix-seconds reset becomes ISO",
+        epoch_windows and epoch_windows[0]["resets_at"] == "2026-10-21T23:27:57+00:00",
+        epoch_windows,
+    )
+    iso_windows = usage._windows(
+        {"window": [{"label": "PLAN", "percent": "p", "resets": "r"}]},
+        {"p": 12, "r": "2026-09-21T12:00:00Z"},
+    )
+    check(
+        "an ISO reset passes through unchanged",
+        iso_windows and iso_windows[0]["resets_at"] == "2026-09-21T12:00:00Z",
+        iso_windows,
+    )
+    missing_windows = usage._windows(
+        {"window": [{"label": "X", "percent": "p", "resets": "r"}]}, {"p": 12}
+    )
+    check(
+        "no reset at all is None, not a crash",
+        missing_windows and missing_windows[0]["resets_at"] is None,
+        missing_windows,
+    )
+
     print("usage: running-only by default, every installed CLI on an explicit ask")
     # Panel.usage_now is a plain method on self.store/self.registry, so a
     # duck-typed fake stands in rather than wiring up a real Panel (auth,

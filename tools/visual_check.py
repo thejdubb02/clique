@@ -461,16 +461,19 @@ def _run(panel) -> int:
             ),
         )
         toggle.click()
-        page.wait_for_timeout(400)
         check("opening it fires the all-installed fetch", any(all_requests), all_requests)
         check(
             "and the body un-hides",
             page.evaluate("() => document.querySelector('#usageBody').hidden") is False,
         )
         check("the toggle marks itself open", toggle.get_attribute("aria-expanded") == "true")
+        # A real box may have a working probe (network round trip) or none at
+        # all (the empty-state text) — either way the fetch resolving is what
+        # to wait on, not a guess at how long the request takes.
+        page.wait_for_function("() => document.querySelector('#usageBody').children.length > 0")
         body_text = page.locator("#usageBody").inner_text().strip()
         check(
-            "with nothing configured, it says so rather than sitting blank",
+            "once loaded, it never sits blank",
             body_text != "",
             body_text,
         )

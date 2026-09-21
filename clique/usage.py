@@ -31,6 +31,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 #: How long a reading stays good. The windows it reports move over hours, and
@@ -114,6 +115,21 @@ def _fetch(spec: dict, guard) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _resets_at(value: object) -> str | None:
+    """A reset time, in whatever shape a vendor answers with.
+
+    Anthropic sends ISO already. OpenAI sends Unix seconds. Both are "when
+    this window turns over" and the browser only ever wants ISO, so this is
+    the one place that difference gets absorbed rather than leaking a second
+    format down to `untilReset()`.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)) and value > 0:
+        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+    return None
+
+
 def _windows(spec: dict, payload: dict) -> list[dict]:
     """The declared windows, keeping only the ones that produced a number.
 
@@ -132,7 +148,7 @@ def _windows(spec: dict, payload: dict) -> list[dict]:
             {
                 "label": str(window.get("label") or "")[:8],
                 "percent": max(0.0, min(100.0, float(raw))),
-                "resets_at": resets if isinstance(resets, str) else None,
+                "resets_at": _resets_at(resets),
             }
         )
     return out

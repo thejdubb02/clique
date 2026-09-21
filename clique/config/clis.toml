@@ -247,6 +247,30 @@ status  = { url = "https://status.openai.com/api/v2/status.json", page = "https:
 
 own_input = true
 
+# Verified against a real install (2026-09-21), unlike the rest of this
+# section: `codex login` stores a ChatGPT OAuth token, and that same token
+# reads plan usage straight from ChatGPT's own backend. reset_at comes back
+# as Unix seconds rather than Claude's ISO string; usage.py's _resets_at
+# handles both. Checked on a free-plan account, which fills primary_window
+# only (a 30-day cap) and leaves secondary_window null — declared anyway on
+# the guess a paid plan adds a shorter one, since _windows already skips a
+# window whose fields do not resolve. Label is a placeholder ("LIMIT", not a
+# guessed duration) until an account with one confirms what it actually is.
+[cli.codex.usage]
+url         = "https://chatgpt.com/backend-api/wham/usage"
+token_file  = "~/.codex/auth.json"
+token_field = "tokens.access_token"
+
+  [[cli.codex.usage.window]]
+  label   = "PLAN"
+  percent = "rate_limit.primary_window.used_percent"
+  resets  = "rate_limit.primary_window.reset_at"
+
+  [[cli.codex.usage.window]]
+  label   = "LIMIT"
+  percent = "rate_limit.secondary_window.used_percent"
+  resets  = "rate_limit.secondary_window.reset_at"
+
 [cli.copilot]
 icon    = "copilot.svg"
 label   = "GitHub Copilot CLI"

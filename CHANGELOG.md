@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.78.0 — 2026-09-21 16:34 PDT
+
+**Codex CLI now reports plan usage too, the second CLI after Claude.**
+`codex login` stores a ChatGPT OAuth token, and that same token reads usage
+straight from ChatGPT's own backend
+(`chatgpt-com/backend-api/wham/usage`), verified against a real install.
+Its reset time comes back as Unix seconds rather than Claude's ISO string;
+`usage.py` now accepts either shape and always hands the browser ISO, so no
+CLI's probe has to know or care which one Claude happens to use.
+
+Checked Grok, Gemini and Antigravity too. Still nothing there: Grok's stored
+credential isn't a usable API key for a balance endpoint (only a real CLI
+invocation would show it, and that would spend real usage just to check
+it); Gemini's credential file is encrypted at rest, no readable token at
+all; Antigravity's token parses fine but no usage endpoint for it is known.
+None of the three block anything, they simply do not show a bar.
+
 ## 0.77.0 — 2026-09-21 16:04 PDT
 
 **Plan usage for every installed CLI, not just the one running in front.**
