@@ -1193,6 +1193,48 @@ def main() -> int:
         "no icon carries a colour of its own", painted <= {"none", "currentColor"}, sorted(painted)
     )
 
+    print("custom quick commands")
+    # Real Store, not a fake — this is a settings merge, and the thing worth
+    # catching is the merge silently clobbering a CLI nobody touched.
+    from clique import store as store_mod
+
+    qc_dir = Path(tempfile.mkdtemp(prefix="clique-quickcmd-"))
+    qc_store = store_mod.Store(qc_dir / "state.json")
+    qc_store.update_settings({"custom_quick_commands": {"claude": ["/cost", "/agents"]}})
+    check(
+        "a custom command is stored",
+        qc_store.settings["custom_quick_commands"].get("claude") == ["/cost", "/agents"],
+        qc_store.settings["custom_quick_commands"],
+    )
+    qc_store.update_settings({"custom_quick_commands": {"gemini": ["/help"]}})
+    check(
+        "adding one CLI's commands does not touch another's",
+        qc_store.settings["custom_quick_commands"].get("claude") == ["/cost", "/agents"],
+        qc_store.settings["custom_quick_commands"],
+    )
+    qc_store.update_settings({"custom_quick_commands": {"claude": []}})
+    check(
+        "an empty list removes that CLI's entry rather than storing one",
+        "claude" not in qc_store.settings["custom_quick_commands"],
+        qc_store.settings["custom_quick_commands"],
+    )
+    over_cap = [f"/cmd{i}" for i in range(30)]
+    qc_store.update_settings({"custom_quick_commands": {"claude": over_cap}})
+    check(
+        "the per-CLI count is capped",
+        len(qc_store.settings["custom_quick_commands"]["claude"])
+        == store_mod.MAX_QUICK_COMMANDS_PER_CLI,
+        len(qc_store.settings["custom_quick_commands"]["claude"]),
+    )
+    long_one = ["x" * 500]
+    qc_store.update_settings({"custom_quick_commands": {"gemini": long_one}})
+    check(
+        "one entry is capped in length, not dropped whole",
+        len(qc_store.settings["custom_quick_commands"]["gemini"][0])
+        == store_mod.MAX_QUICK_COMMAND_CHARS,
+        len(qc_store.settings["custom_quick_commands"]["gemini"][0]),
+    )
+
     print("mounted under a path prefix")
     # CLIque is documented as running behind `tailscale serve` at /clique,
     # which strips the prefix before the server sees it — so only the browser

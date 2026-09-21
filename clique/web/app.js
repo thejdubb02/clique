@@ -4185,6 +4185,50 @@ function promptWanted() {
   return !(s && s.own_input);
 }
 
+/* ------------------------------------------------------------ quick commands */
+
+function customQuickCommands(cliId) {
+  return (cliId && (state.settings.custom_quick_commands || {})[cliId]) || [];
+}
+
+// One pill. `onRemove` is only ever set for a custom command — a built-in
+// from clis.toml is config, not something a click here can delete.
+function quickCommandPill(cmd, onRemove) {
+  const wrap = document.createElement("span");
+  wrap.className = "quick-cmd";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = cmd;
+  // Same path as the prompt box's Run button, destructive-command check
+  // included — a quick command is still text landing in a pane.
+  btn.onclick = () => run(cmd);
+  wrap.appendChild(btn);
+  if (onRemove) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "quick-cmd-del";
+    del.textContent = "×";
+    del.title = "Remove this quick command";
+    del.onclick = (ev) => { ev.stopPropagation(); onRemove(); };
+    wrap.appendChild(del);
+  }
+  return wrap;
+}
+
+async function addQuickCommand(cliId) {
+  if (!cliId) return;
+  const text = (prompt("Quick command — sent into the pane as typed") || "").trim();
+  if (!text) return;
+  await saveSettings({ custom_quick_commands: { [cliId]: [...customQuickCommands(cliId), text] } });
+  renderInputBar();
+}
+
+async function removeQuickCommand(cliId, index) {
+  const next = customQuickCommands(cliId).filter((_, i) => i !== index);
+  await saveSettings({ custom_quick_commands: { [cliId]: next } });
+  renderInputBar();
+}
+
 function renderInputBar() {
   const s = session(activeId);
   const pill = $("#modePill");
@@ -4200,23 +4244,30 @@ function renderInputBar() {
     pill.hidden = true;
   }
 
-  // One-tap buttons for text this CLI is asked for often, declared in
-  // clis.toml under `quick_commands`. Carried on the session row the same
-  // way modes/mode_key/mode_label already are — one denormalization done
-  // once in sessions_view(), not a second state.clis lookup here.
+  // One-tap buttons for text this CLI is asked for often: clis.toml's own
+  // `quick_commands`, declared once and carried on the session row the same
+  // way modes/mode_key/mode_label already are, plus whatever the person
+  // added themselves for this CLI — same idea as a snippet, but a tap
+  // instead of a typed trigger. The custom ones live in settings, keyed by
+  // CLI id, same per-CLI-map shape as marker_by_cli.
   const qr = $("#quickRow");
-  const commands = (s && s.quick_commands) || [];
+  const builtIn = (s && s.quick_commands) || [];
+  const custom = customQuickCommands(s && s.cli);
   if (qr) {
-    qr.hidden = !commands.length;
+    qr.hidden = !s;
     qr.innerHTML = "";
-    for (const cmd of commands) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = cmd;
-      // Same path as the prompt box's Run button, destructive-command check
-      // included — a quick command is still text landing in a pane.
-      btn.onclick = () => run(cmd);
-      qr.appendChild(btn);
+    for (const cmd of builtIn) qr.appendChild(quickCommandPill(cmd));
+    custom.forEach((cmd, i) => {
+      qr.appendChild(quickCommandPill(cmd, () => removeQuickCommand(s.cli, i)));
+    });
+    if (s) {
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "quick-add";
+      add.textContent = "+";
+      add.title = "Add a quick command for " + s.cli_label;
+      add.onclick = () => addQuickCommand(s.cli);
+      qr.appendChild(add);
     }
   }
 

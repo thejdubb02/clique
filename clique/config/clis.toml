@@ -82,7 +82,7 @@ icon       = "claude.svg"
 modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
-quick_commands = ["/clear", "/compact"]
+quick_commands = ["/clear", "/compact", "/cost"]
 
 # Extra regexes on top of the generic question marks every CLI already gets
 # (y/n, Do you want, a numbered choice). Match one and the session's ring

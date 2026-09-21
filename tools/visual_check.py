@@ -944,8 +944,7 @@ def _run(panel) -> int:
             )
             check(
                 "and the rows the terminal drew fit inside the pane",
-                lap["screenBottom"] is not None
-                and lap["screenBottom"] <= lap["wrapBottom"] + 1,
+                lap["screenBottom"] is not None and lap["screenBottom"] <= lap["wrapBottom"] + 1,
                 lap,
             )
             page.locator("#inputbar").screenshot(path=str(SHOTS / "pill-only-bar.png"))
@@ -960,6 +959,30 @@ def _run(panel) -> int:
                   }
                 }"""
             )
+
+        print("adding and removing a custom quick command")
+        # `mine` is a plain shell, which clis.toml gives no quick_commands of
+        # its own — so the row showing at all here, with nothing but the "+",
+        # is itself proof custom commands do not depend on the CLI having any.
+        before_count = page.locator("#quickRow .quick-cmd").count()
+        check("starts with no custom commands", before_count == 0, before_count)
+        page.once("dialog", lambda d: d.accept("/smoke-test"))
+        page.click(".quick-add")
+        page.wait_for_function(
+            "() => document.querySelectorAll('#quickRow .quick-cmd').length === 1"
+        )
+        added_text = page.locator("#quickRow .quick-cmd button").first.inner_text()
+        check("the added command shows its own text", added_text == "/smoke-test", added_text)
+        del_visible = page.locator("#quickRow .quick-cmd-del").first.is_visible()
+        check("a custom command has a delete control", del_visible)
+        page.click("#quickRow .quick-cmd-del")
+        page.wait_for_function(
+            "() => document.querySelectorAll('#quickRow .quick-cmd').length === 0"
+        )
+        check(
+            "removing it leaves the row empty again",
+            page.locator("#quickRow .quick-cmd").count() == 0,
+        )
 
         print("a link with no https:// in front of it")
         # node runs these out of the file. This runs the shipped file as the
@@ -983,7 +1006,8 @@ def _run(panel) -> int:
         want = ["https://fdroid.useclique.dev/repo"]
         check(
             "the browser turns a bare host into a link",
-            isinstance(linked, dict) and linked.get("first") == want
+            isinstance(linked, dict)
+            and linked.get("first") == want
             and linked.get("second") == want,
             linked,
         )
@@ -1575,7 +1599,8 @@ def _run(panel) -> int:
         if shutil.which("zbarimg"):
             decoded = subprocess.run(
                 ["zbarimg", "--quiet", "--raw", str(SHOTS / "pair-qr.png")],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             ).stdout.strip()
             check(
                 "a real decoder reads the panel's URL and the code off the screen",

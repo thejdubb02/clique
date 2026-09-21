@@ -211,6 +211,11 @@ DEFAULT_SETTINGS = {
     "css_terminal": "",
     #: Text expanders: [{"trigger": ";rev", "label": "...", "text": "..."}]
     "snippets": [],
+    #: Extra one-tap buttons on top of a CLI's own `quick_commands` from
+    #: clis.toml, keyed by CLI id: {"claude": ["/cost", "/agents"]}. Same
+    #: per-CLI-map shape as marker_by_cli, for the same reason — a change
+    #: from the browser only ever names the one CLI it touched.
+    "custom_quick_commands": {},
     #: A tab that finished while you were looking elsewhere should say so.
     #: Flash is silent and always safe; sound is opt-in because a room with
     #: twenty agents in it would otherwise be unbearable.
@@ -316,6 +321,11 @@ DEFAULT_SETTINGS = {
 #: A snippet body over this is a document, not an expander, and storing one
 #: would bloat every /api/state response the sidebar polls.
 MAX_SNIPPET_CHARS = 8000
+
+#: A quick command is a button label as well as text sent into a pane —
+#: capped well under a snippet, so one long entry cannot blow out the row.
+MAX_QUICK_COMMAND_CHARS = 200
+MAX_QUICK_COMMANDS_PER_CLI = 20
 
 #: A draft is text you are about to send and a name is a label — neither is a
 #: file, and /api/state replays every one on every three-second poll.
@@ -439,13 +449,15 @@ def _clean_members(raw: list[dict] | None) -> list[dict]:
         if not sid or sid in seen:
             continue
         seen.add(sid)
-        out.append({
-            "session": sid,
-            "cli": str(item.get("cli") or "").strip()[:64],
-            "cwd": str(item.get("cwd") or "").strip()[:4096],
-            "name": str(item.get("name") or "").strip()[:120],
-        })
-        if len(out) >= 24:      # a group you cannot see at a glance is a folder
+        out.append(
+            {
+                "session": sid,
+                "cli": str(item.get("cli") or "").strip()[:64],
+                "cwd": str(item.get("cwd") or "").strip()[:4096],
+                "name": str(item.get("name") or "").strip()[:120],
+            }
+        )
+        if len(out) >= 24:  # a group you cannot see at a glance is a folder
             break
     return out
 
@@ -504,7 +516,7 @@ ROTATE_POOL_LIMIT = 64
 
 
 def clock_time(text: str) -> tuple[int, int] | None:
-    """"HH:MM" as (hour, minute), or None if it is not one.
+    """ "HH:MM" as (hour, minute), or None if it is not one.
 
     Written here rather than with `datetime.strptime` because this is asked
     on every settings write and has to say no to "7", "25:00" and "" without
@@ -564,6 +576,22 @@ def _clean_snippets(value) -> list[dict]:
                 "text": text,
             }
         )
+    return out
+
+
+def _clean_quick_commands(value) -> list[str]:
+    """Normalise one CLI's custom quick commands from the browser.
+
+    A malformed entry is dropped here, the same as a snippet — this is
+    stored, shown as a button, and sent into a pane exactly as typed.
+    """
+    if not isinstance(value, list):
+        return []
+    out = []
+    for raw in value[:MAX_QUICK_COMMANDS_PER_CLI]:
+        text = str(raw or "").strip()[:MAX_QUICK_COMMAND_CHARS]
+        if text:
+            out.append(text)
     return out
 
 
@@ -811,6 +839,17 @@ class Store:
                         elif mode is None:
                             merged.pop(cli_id, None)
                     self.settings["marker_by_cli"] = merged
+                elif key == "custom_quick_commands" and isinstance(value, dict):
+                    # Same per-CLI merge as marker_by_cli: the browser sends
+                    # only the CLI whose row it just edited.
+                    merged = dict(self.settings.get("custom_quick_commands") or {})
+                    for cli_id, cmds in value.items():
+                        cleaned = _clean_quick_commands(cmds)
+                        if cleaned:
+                            merged[str(cli_id)[:64]] = cleaned
+                        else:
+                            merged.pop(cli_id, None)
+                    self.settings["custom_quick_commands"] = merged
                 elif key == "marker_default":
                     if value in MARKER_MODES:
                         self.settings[key] = value
@@ -1027,8 +1066,9 @@ class Store:
     def group(self, group_id: str) -> Group | None:
         return next((g for g in self.groups if g.id == group_id), None)
 
-    def add_group(self, name: str, color: str | None = None,
-                  members: list[dict] | None = None) -> Group | None:
+    def add_group(
+        self, name: str, color: str | None = None, members: list[dict] | None = None
+    ) -> Group | None:
         with self._lock:
             if len(self.groups) >= GROUP_LIMIT:
                 return None
@@ -1083,10 +1123,14 @@ class Store:
             if not group or not found:
                 return None
             group.members = [m for m in group.members if m.get("session") != session_id]
-            group.members.append({
-                "session": found.id, "cli": found.cli,
-                "cwd": found.cwd, "name": found.name,
-            })
+            group.members.append(
+                {
+                    "session": found.id,
+                    "cli": found.cli,
+                    "cwd": found.cwd,
+                    "name": found.name,
+                }
+            )
             self._write()
             return group
 

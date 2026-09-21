@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.71.0 — 2026-09-21
+
+**Your own quick commands, not just clis.toml's.** The one-tap row above the
+prompt box was config-only: whatever `quick_commands` a CLI declared, and
+nothing else, editable only by hand-editing clis.toml on the server. A `+`
+at the end of the row now adds one of your own, per CLI, the same idea as a
+snippet but a tap instead of a typed trigger — and it works for any CLI, not
+only the ones clis.toml already gave a row to, since a shell with nothing
+built in still gets the `+`. Each carries its own small delete control, so
+removing one is a tap, not an edit to a config file. Claude Code's own row
+also picked up `/cost`.
+
 ## 0.70.1 — 2026-09-21 11:25 PDT
 
 **Scrollback goes back 2.5x further.** tmux's own history limit and xterm's

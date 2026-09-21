@@ -659,13 +659,31 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
 }
 #quickRow::-webkit-scrollbar { display: none; }
-#quickRow button {
+#quickRow > button, .quick-cmd {
   flex: 0 0 auto; border: 1px solid var(--line); background: var(--bg);
-  color: var(--fg); border-radius: 999px; padding: 4px 11px; font-size: 11px;
-  cursor: pointer; white-space: nowrap;
+  color: var(--fg); border-radius: 999px; font-size: 11px; white-space: nowrap;
+}
+#quickRow > button { cursor: pointer; padding: 4px 11px; }
+/* A custom command's pill is a wrapper, not a button: the command and its
+ * delete "x" are two separate controls, so a tap on one cannot also be a tap
+ * on the other. */
+.quick-cmd { display: flex; align-items: stretch; padding: 0; }
+.quick-cmd button {
+  border: none; background: transparent; color: inherit; font: inherit;
+  cursor: pointer; padding: 4px 4px 4px 11px;
+}
+.quick-cmd-del {
+  padding: 4px 9px 4px 4px; color: var(--dim); font-size: 13px; line-height: 1;
+}
+.quick-add {
+  flex: 0 0 auto; cursor: pointer; padding: 4px 10px; font-size: 12px;
+  line-height: 1; border: 1px dashed var(--line); background: transparent;
+  color: var(--dim); border-radius: 999px;
 }
 @media (hover: hover) and (pointer: fine) {
-  #quickRow button:hover { border-color: var(--accent); }
+  #quickRow > button:hover, .quick-cmd:hover { border-color: var(--accent); }
+  .quick-cmd-del:hover { color: #f85149; }
+  .quick-add:hover { border-color: var(--accent); color: var(--accent); }
 }
 
 #prompt {
