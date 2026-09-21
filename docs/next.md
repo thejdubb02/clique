@@ -46,16 +46,17 @@ Next, in order, as of 2026-09-21 (evening):
 | Local echo, so the pane stops feeling like a web page | CLQ-64 |
 | The key row keys are too narrow, and that is a decision — CSS already has `overflow-x: auto`; the card's own measured widths may be stale, needs a real phone check before it needs code | CLQ-63 |
 | Auto-resume when a usage limit resets — the probe already exists for Claude (see "Plan usage in the status bar" below); extending it to Codex/Grok/Gemini/Antigravity is researched, not yet built | CLQ-68 |
-| A sidebar mini-panel of every installed CLI's usage/cooldown, same data as CLQ-68 — build the probe once, show it twice | CLQ-75 |
 | The rest of the phone pass | CLQ-65 |
 | MCP server, phase 2: write verbs, blocked on CLQ-52's policy model | CLQ-76 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
 | Typography | CLQ-67 |
 
-Three shipped 2026-09-21, all built with Grok CLI and reviewed before landing
-— see **Shipped off this list** below: per-session CPU (CLQ-56, 0.73.0),
-session templates (CLQ-54, 0.74.0), and an MCP server, read-only phase
-(CLQ-53, 0.75.0).
+Four shipped 2026-09-21, see **Shipped off this list** below: per-session CPU
+(CLQ-56, 0.73.0), session templates (CLQ-54, 0.74.0), an MCP server, read-only
+phase (CLQ-53, 0.75.0), and the sidebar usage panel (CLQ-75, 0.77.0), built
+directly rather than with Grok, since the design decisions (placement, the
+idle/running distinction, reusing the status bar's own meter markup) were the
+bulk of the work.
 
 The phone and desktop cards live on the same board: CLQ-10 to CLQ-17 and
 CLQ-59, CLQ-60 for Android, CLQ-57 and CLQ-58 for the desktop.
@@ -90,6 +91,14 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **The sidebar usage panel**, 0.77.0. Collapsed "Plan usage" row above the
+  version footer, opens into a bar per installed CLI with a probe, dimmed and
+  tagged idle when it is not the active session's CLI. Reuses the status
+  bar's own meter markup (`planMeter`, extracted out of `renderPlan`).
+  Backend: `Panel.usage_now(all_installed=True)` and `GET
+  /api/usage?all=1`, gated behind opening the panel rather than the routine
+  poll. Only Claude Code has a working probe today; the rest of CLQ-75
+  (extending probes to Codex, Grok, Gemini, Antigravity) is CLQ-68. CLQ-75.
 - **Per-session CPU**, 0.73.0. Same process-tree walk that already gave `rss`
   now also reports CPU percent, cached on the same 8-second cycle. The reap
   advisor half of the card (idle time plus these two numbers deciding what to
