@@ -465,6 +465,7 @@ class Panel:
     def sessions_view(self, panes: dict | None = None) -> list[dict]:
         panes = self.live() if panes is None else panes
         rss_map = sysinfo.rss_by_root([p.pid for p in panes.values()])
+        cpu_map = sysinfo.cpu_percent_by_root([p.pid for p in panes.values()])
         now = time.time()
         # Sessions that have gone stop being remembered by the busy check.
         working.forget(set(panes))
@@ -521,6 +522,10 @@ class Panel:
                     # Resident memory of the whole process tree, so you can see
                     # which tab is expensive before deciding what to do with it.
                     "rss": (rss_map.get(pane.pid, 0) * 1024) if pane else 0,
+                    # CPU percent of that same tree since the previous sample.
+                    # 0.0 until a second sample exists. Can pass 100 when the
+                    # session is on more than one core.
+                    "cpu": cpu_map.get(pane.pid, 0.0) if pane else 0.0,
                     "activity": pane.activity if pane else 0,
                     # The pane's real size, so a browser can notice when it has
                     # drifted from what it is drawing. A tmux window has one size
@@ -1285,6 +1290,7 @@ class Panel:
         if not loose:
             return []
         rss_map = sysinfo.rss_by_root([p.pid for p in loose])
+        cpu_map = sysinfo.cpu_percent_by_root([p.pid for p in loose])
         return [
             {
                 "mux": p.mux,
@@ -1292,6 +1298,7 @@ class Panel:
                 "pid": p.pid,
                 "idle": round(now - p.activity),
                 "rss": rss_map.get(p.pid, 0) * 1024,
+                "cpu": cpu_map.get(p.pid, 0.0),
             }
             for p in sorted(loose, key=lambda p: -rss_map.get(p.pid, 0))
         ]
@@ -1652,6 +1659,7 @@ BRIEFING_KEYS = (
     "state",
     "activity",
     "rss",
+    "cpu",
     "draft",
 )
 

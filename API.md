@@ -138,7 +138,7 @@ client that finds these differ from its own terminal should say so; that is how
 a pane recovers from being resized by somebody else instead of sitting in
 tmux's dot-fill until something happens to jog it.
 
-Each session also carries `created`, `last_seen`, `order`, `rss` (process-tree resident bytes), plus the live facts: `alive`, `attached`,
+Each session also carries `created`, `last_seen`, `order`, `rss` (process-tree resident bytes), `cpu` (CPU percent of that same process tree since the last poll; `0.0` on the first sample, because a rate needs two readings; can pass 100 when the session is using more than one core), plus the live facts: `alive`, `attached`,
 `command`, `activity` (tmux's own clock) and `busy`.
 
 `branch` and `dirty` come from git in that session's working directory —
@@ -184,12 +184,12 @@ just the same `state` the sidebar already shows, filtered to `waiting` and
 ```json
 [{"id": "abc123", "name": "checkout-fix", "cli": "claude", "cwd": "/srv/app",
   "folder": "clients", "branch": "main", "dirty": true, "state": "waiting",
-  "activity": 1787200000, "rss": 483183820, "draft": "",
+  "activity": 1787200000, "rss": 483183820, "cpu": 12.5, "draft": "",
   "lines": ["Allow Codex to run `npm test`?"]}]
 ```
 
 Each row: `id`, `name`, `cli`, `cwd`, `folder`, `branch`, `dirty`, `state`,
-`activity`, `rss` — straight from `/api/state`'s own fields, nothing recomputed
+`activity`, `rss`, `cpu` — straight from `/api/state`'s own fields, nothing recomputed
 a second way. `draft` is whatever is half-typed in that session's prompt box,
 unsent — the closest thing this codebase keeps to "what was I about to tell
 it", not a log of prompts actually sent. `lines` is the same frame-filtered
@@ -243,8 +243,9 @@ instead of polling the whole panel. See `skills/drive-clique/SKILL.md`.
 
 Leaked sessions: live tmux on our own socket, past a short grace window, that no
 record points to — the process keeps running and holds its memory, but nothing
-in the panel can see or stop it. `mux`, `command`, `pid`, `idle` seconds and
-`rss` bytes, heaviest first. A record removed without killing its tmux is how
+in the panel can see or stop it. `mux`, `command`, `pid`, `idle` seconds,
+`rss` bytes and `cpu` percent (the same process-tree reading a session
+carries, `0.0` on the first sample), heaviest by memory first. A record removed without killing its tmux is how
 they arise. Reclaim them with the route below.
 
 ### `GET /api/changelog`

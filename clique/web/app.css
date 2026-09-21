@@ -1976,10 +1976,17 @@ button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
   #keyrow button:active { background: rgba(127, 127, 127, 0.34); }
 }
 
-/* Per-session memory in the sidebar row — small and dim, but there when you
- * want to know which tab is heavy. */
-.session .rss { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums;
-                flex: 0 0 auto; margin-left: auto; padding-left: 6px; }
+/* Per-session memory and CPU in the sidebar row. Small and dim, but there
+   when you want to know which tab is heavy. Same face as each other: nothing
+   here changes colour with the number. */
+.session .rss, .session .cpu {
+  font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums;
+  flex: 0 0 auto; padding-left: 6px;
+}
+/* One auto margin, on whichever badge comes first, so the pair sits together
+   on the right instead of splitting the row between them. */
+.session .rss,
+.session .meta + .cpu { margin-left: auto; }
 .session .age { flex: 0 0 auto; }
 
 

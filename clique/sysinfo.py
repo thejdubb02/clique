@@ -184,14 +184,21 @@ def temperature() -> dict:
 
 
 _RSS_TTL = 8.0
-_proc_cache: dict = {"at": 0.0, "rss": {}, "kids": {}}
+_proc_cache: dict = {"at": 0.0, "rss": {}, "kids": {}, "ticks": {}}
 _PAGE_KB = os.sysconf("SC_PAGE_SIZE") // 1024
+# Same clock /proc uses for utime/stime. cpu_percent() never needs this: its
+# busy and total both come from /proc/stat, so the tick rate cancels out.
+_CLK_TCK = os.sysconf("SC_CLK_TCK")
+# root pid -> (tree utime+stime, sample time, last percent). Same idea as
+# cpu_percent()'s _previous: a rate needs the sample before this one.
+_cpu_previous: dict[int, tuple[int, float, float]] = {}
 
 
-def _walk_proc() -> tuple[dict, dict]:
-    """(rss_kb_by_pid, children_by_ppid) from one pass over /proc."""
+def _walk_proc() -> tuple[dict, dict, dict]:
+    """(rss_kb_by_pid, children_by_ppid, cpu_ticks_by_pid) from one /proc pass."""
     rss: dict = {}
     kids: dict = {}
+    ticks: dict = {}
     for entry in os.scandir("/proc"):
         if not entry.name.isdigit():
             continue
@@ -208,32 +215,87 @@ def _walk_proc() -> tuple[dict, dict]:
         try:
             ppid = int(fields[1])  # stat field 4, minus the two before comm
             rss[pid] = int(fields[21]) * _PAGE_KB  # stat field 24 (rss, in pages)
+            # utime + stime (stat fields 14 and 15), in clock ticks. Child
+            # time (cutime/cstime) stays out: the tree walk adds each live
+            # child itself, and adding both would count those twice.
+            ticks[pid] = int(fields[11]) + int(fields[12])
         except (IndexError, ValueError):
             continue
         kids.setdefault(ppid, []).append(pid)
-    return rss, kids
+    return rss, kids, ticks
+
+
+def _proc_snapshot() -> dict:
+    """One /proc walk, shared by RSS and CPU, refreshed on the RSS TTL.
+
+    CPU is a rate and RSS is a level, but they read the same line of the
+    same files. A second walk per poll would pay that cost twice for a
+    number that does not move faster than memory does."""
+    now = time.time()
+    if now - _proc_cache["at"] >= _RSS_TTL:
+        rss, kids, ticks = _walk_proc()
+        _proc_cache.update(at=now, rss=rss, kids=kids, ticks=ticks)
+    return _proc_cache
+
+
+def _sum_tree(root, values: dict, kids: dict) -> int:
+    """Sum `values` over root and every descendant. A cycle is skipped."""
+    total, stack, seen = 0, [root], set()
+    while stack:
+        pid = stack.pop()
+        if pid in seen:
+            continue
+        seen.add(pid)
+        total += values.get(pid, 0)
+        stack.extend(kids.get(pid, ()))
+    return total
 
 
 def rss_by_root(roots) -> dict:
     """Resident memory (KiB) of each root pid's whole tree — the CLI plus
     everything it spawned. Cached briefly: RSS does not move fast enough to
     reread on every three-second poll, and one /proc walk covers every tab."""
-    now = time.time()
-    if now - _proc_cache["at"] >= _RSS_TTL:
-        rss, kids = _walk_proc()
-        _proc_cache.update(at=now, rss=rss, kids=kids)
-    rss, kids = _proc_cache["rss"], _proc_cache["kids"]
+    cache = _proc_snapshot()
+    rss, kids = cache["rss"], cache["kids"]
+    return {root: _sum_tree(root, rss, kids) for root in set(roots)}
+
+
+def cpu_percent_by_root(roots) -> dict:
+    """CPU percent (0-100+, can exceed 100 with multiple threads/cores) of
+    each root pid's whole tree, since the last call. First call for a root
+    reports 0.0 — there is no prior sample to diff against."""
+    cache = _proc_snapshot()
+    ticks_by_pid, kids, sampled_at = cache["ticks"], cache["kids"], cache["at"]
     out: dict = {}
-    for root in set(roots):
-        total, stack, seen = 0, [root], set()
-        while stack:
-            pid = stack.pop()
-            if pid in seen:
-                continue
-            seen.add(pid)
-            total += rss.get(pid, 0)
-            stack.extend(kids.get(pid, []))
-        out[root] = total
+    # Same lock cpu_percent() uses for its previous sample. The /proc walk
+    # stays outside it: that is the slow part, and RSS already shares it.
+    with _lock:
+        for root in set(roots):
+            ticks = _sum_tree(root, ticks_by_pid, kids)
+            prev = _cpu_previous.get(root)
+            if prev is None:
+                # No earlier sample. 0.0, not a percent-since-boot.
+                pct = 0.0
+            elif prev[1] == sampled_at:
+                # Still the walk we already turned into a percent. Diffing
+                # it again would be a zero over a few milliseconds and the
+                # badge would flicker to idle between real samples.
+                pct = prev[2]
+            else:
+                dt = sampled_at - prev[1]
+                dticks = ticks - prev[0]
+                # A backwards counter means the pid was reused, or it exited
+                # and this root is gone. Treat that as a fresh baseline.
+                pct = (
+                    round(100.0 * dticks / (dt * _CLK_TCK), 1)
+                    if dt > 0 and dticks > 0 and _CLK_TCK
+                    else 0.0
+                )
+            _cpu_previous[root] = (ticks, sampled_at, pct)
+            out[root] = pct
+        gone = [pid for pid in _cpu_previous if pid not in ticks_by_pid and pid not in out]
+        for pid in gone:
+            _cpu_previous.pop(pid, None)
     return out
 
 

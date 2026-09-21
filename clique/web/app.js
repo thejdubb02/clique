@@ -2243,6 +2243,7 @@ function sessionRow(s) {
     `<span class="${pathClass}">${pathHtml}</span>` +
     `</span>` +
     (s.rss ? `<span class="rss" title="Memory — the CLI and everything it spawned">${humanBytes(s.rss)}</span>` : "") +
+    (s.cpu > 0 ? `<span class="cpu" title="CPU: the CLI and everything it spawned">${s.cpu.toFixed(0)}%</span>` : "") +
     `<span class="age">${ago(s.created)}</span>`;
   // The directory is still one hover away, rather than gone — and so is the
   // branch, when the line is showing a question instead.
@@ -3543,6 +3544,7 @@ function renderInfoPane(body, s) {
   kv.append(kvRow("CLI", s.cli_label || s.cli || "—"));
   if (s.pid) kv.append(kvRow("PID", String(s.pid), "mono"));
   if (typeof s.rss === "number" && s.rss > 0) kv.append(kvRow("Memory", humanBytes(s.rss)));
+  if (typeof s.cpu === "number" && s.cpu > 0) kv.append(kvRow("CPU", `${s.cpu.toFixed(0)}%`));
   if (s.created) kv.append(kvRow("Up", ago(s.created) || "just now"));
   if (s.activity) kv.append(kvRow("Quiet for", ago(s.activity) || "just now"));
   const tools = mk("div", "pane-tools");

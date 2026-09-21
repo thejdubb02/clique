@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.73.0 — 2026-09-21 12:50 PDT
+
+**CPU per session, next to the memory number that was already there.** Which
+session is eating the box was previously a guess: `/api/state` carried
+`rss` (resident memory) per session but nothing about which one was actually
+busy. Same process-tree walk now also reports CPU percent, cached on the
+same 8-second cycle so nothing new gets read from `/proc`. Shows on the
+session row and in the detail panel, next to memory. A reap advisor (idle
+time plus these two numbers deciding what to clean up) is the natural next
+step, not built here.
+
 ## 0.72.0 — 2026-09-21 12:23 PDT
 
 **A custom quick command is now a snippet, not its own separate thing.**

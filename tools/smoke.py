@@ -22,7 +22,7 @@ from typing import ClassVar
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from clique import app as app_mod
-from clique import attention, files, gitinfo, notify, services, termstrip, tmux, working
+from clique import attention, files, gitinfo, notify, services, sysinfo, termstrip, tmux, working
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
 
@@ -1260,6 +1260,86 @@ def main() -> int:
     script = (ROOT / "clique" / "web" / "app.js").read_text()
     absolute = re.findall(r"""(?:api|fetch)\(\s*['"`]/[^'"`]*""", script)
     check("no API call escapes the mount point", not absolute, absolute[:3])
+
+    print("per-session cpu")
+    # Same shape as the memory read: one number per root, over the whole
+    # tree, from the shared /proc walk. A rate needs two samples, so the
+    # first look is zero and a pid that dies between them must not raise.
+    sysinfo._cpu_previous.clear()
+    sysinfo._proc_cache["at"] = 0.0
+    walks = {"n": 0}
+    real_walk = sysinfo._walk_proc
+
+    def _counting_walk():
+        walks["n"] += 1
+        return real_walk()
+
+    sysinfo._walk_proc = _counting_walk
+    try:
+        own = os.getpid()
+        rss_own = sysinfo.rss_by_root([own])
+        cpu_own = sysinfo.cpu_percent_by_root([own])
+        check("rss still counts this process", rss_own.get(own, 0) > 0, rss_own)
+        check("the first cpu sample is zero", cpu_own == {own: 0.0}, cpu_own)
+        check("memory and cpu share one /proc walk", walks["n"] == 1, walks["n"])
+    finally:
+        sysinfo._walk_proc = real_walk
+
+    missing = [1 << 22, (1 << 22) + 1]
+    cold = sysinfo.cpu_percent_by_root(missing)
+    check(
+        "every asked-for pid is a key",
+        set(cold) == set(missing) and all(v == 0.0 for v in cold.values()),
+        cold,
+    )
+
+    ghost = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        sysinfo._cpu_previous.pop(ghost.pid, None)
+        sysinfo._proc_cache["at"] = 0.0
+        before = sysinfo.cpu_percent_by_root([ghost.pid])
+        check("a new pid starts at zero", before.get(ghost.pid) == 0.0, before)
+        ghost.kill()
+        ghost.wait(timeout=5)
+        sysinfo._proc_cache["at"] = 0.0
+        try:
+            after = sysinfo.cpu_percent_by_root([ghost.pid])
+            raised = False
+        except Exception as exc:  # noqa: BLE001 — the check is that nothing escapes
+            after = exc
+            raised = True
+        check("a pid that exits between samples does not raise", not raised, after)
+        check(
+            "a gone pid comes back as a float",
+            isinstance(after, dict) and isinstance(after.get(ghost.pid), float),
+            after,
+        )
+    finally:
+        if ghost.poll() is None:
+            ghost.kill()
+            ghost.wait(timeout=5)
+
+    burn = subprocess.Popen([sys.executable, "-c", "while True:\n    pass"])
+    try:
+        sysinfo._cpu_previous.pop(burn.pid, None)
+        sysinfo._proc_cache["at"] = 0.0
+        idle = sysinfo.cpu_percent_by_root([burn.pid])
+        check("a busy child starts at zero", idle.get(burn.pid) == 0.0, idle)
+        time.sleep(0.5)
+        sysinfo._proc_cache["at"] = 0.0
+        hot = sysinfo.cpu_percent_by_root([burn.pid])
+        check("a busy child shows cpu on the next sample", hot.get(burn.pid, 0) > 0, hot)
+        held = sysinfo.cpu_percent_by_root([burn.pid])
+        check(
+            "a second read inside the cache window keeps that rate",
+            held.get(burn.pid) == hot.get(burn.pid),
+            held,
+        )
+    finally:
+        if burn.poll() is None:
+            burn.kill()
+        burn.wait(timeout=5)
+    sysinfo._proc_cache["at"] = 0.0
 
     print("teardown")
     tmux.kill(mux, SOCKET)
