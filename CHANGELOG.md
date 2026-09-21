@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.70.1 — 2026-09-21
+
+**Scrollback goes back 2.5x further.** tmux's own history limit and xterm's
+buffer were both 20,000 lines; both now hold 50,000. Raised together on
+purpose — tmux keeping more than a client can render, or a client asking for
+more than tmux kept, are each scrollback nobody actually sees.
+
 ## 0.70.0 — 2026-09-21 11:07 PDT
 
 **A drag past the pane's edge keeps going.** Selecting more than fits on

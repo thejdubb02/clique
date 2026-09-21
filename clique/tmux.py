@@ -37,8 +37,11 @@ PREFIX = "sm-"
 #: Per-viewer sessions. Never the thing a user opened — always a window onto it.
 VIEW_PREFIX = f"{PREFIX}view-"
 
-#: Scrollback tmux keeps per pane. Reattach can only show what tmux still has.
-HISTORY_LIMIT = 20000
+#: Scrollback tmux keeps per pane. Reattach can only show what tmux still has,
+#: and a client only ever renders what it asked xterm to hold — keep this in
+#: step with `scrollback:` in web/app.js's Terminal options, or raising one
+#: without the other buys nothing.
+HISTORY_LIMIT = 50000
 
 #: tmux is fast; a call that blocks this long is wedged, not slow.
 TIMEOUT = 10

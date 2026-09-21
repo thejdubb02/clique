@@ -6882,7 +6882,10 @@ async function attachNow(id) {
     fontSize: state.settings.font_terminal || 13,
     fontFamily: termFontStack(),
     theme: termTheme(currentTheme()),
-    scrollback: 20000,
+    // Kept in step with tmux.py's HISTORY_LIMIT: xterm cannot show scrollback
+    // tmux never kept, and tmux keeping more than a client can render is
+    // scrollback nobody sees.
+    scrollback: 50000,
     cursorBlink: true,
     // A hollow cursor in the pane you are not typing into. With several panes
     // open, two solid blocks both look like the live one.
