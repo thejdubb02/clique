@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.76.0 — 2026-09-21 14:02 PDT
+
+**The desktop update button moved next to the version number, where it
+should have been from the start.** The icon redesign in 0.3.16 put it in a
+floating circle bottom-right of the whole window — not what was asked for,
+and not tied to anything. It's now drawn by the panel itself, right beside
+"v0.76.0", the same place the desktop shell already announces itself
+("desktop 0.3.16"). Same click-to-install-and-restart behavior, no second
+confirmation. The desktop side (`clique-desktop/update.js`) shrank from a
+self-built floating card to just setting state and asking the panel to
+redraw — the panel already knew how to draw things next to its own version.
+
 ## 0.75.0 — 2026-09-21 13:23 PDT
 
 **A read-only MCP server, so any AI agent can drive CLIque, not just Claude

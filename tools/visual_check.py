@@ -984,7 +984,9 @@ def _run(panel) -> int:
         page.wait_for_timeout(300)
         page.locator("#snippetRows").screenshot(path=str(SHOTS / "snippet-bar-toggle.png"))
         page.click("#settingsDone")
-        page.wait_for_timeout(200)
+        page.wait_for_function(
+            "() => document.querySelectorAll('#quickRow .quick-cmd').length === 1"
+        )
 
         pills = page.locator("#quickRow .quick-cmd")
         check("the new bar snippet shows as a pill", pills.count() == 1, pills.count())

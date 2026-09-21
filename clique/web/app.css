@@ -1873,6 +1873,34 @@ a.give-value { color: var(--accent); }
   flex: 0 0 6px;
 }
 
+/* The desktop shell's own update-ready button, drawn beside the version it
+ * updates. Non-intrusive at rest — text no louder than the shell label next
+ * to it — with just the dot pulsing so it is found without nagging. Reuses
+ * .version-new rather than a second near-identical dot class; scoped here to
+ * currentColor (so it tints with .failed) and to animate, without changing
+ * the plain dot's own default elsewhere. */
+.version-update {
+  background: none; border: 0; padding: 0; margin-left: 6px; font: inherit;
+  color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+}
+.version-update:disabled { color: var(--dim); cursor: default; }
+.version-update.failed { color: var(--err); }
+.version-update .version-new {
+  background: currentColor; animation: version-update-pulse 2.2s ease-out infinite;
+}
+.version-update:disabled .version-new { animation: none; }
+@keyframes version-update-pulse {
+  0% { box-shadow: 0 0 0 0 currentColor; }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .version-update .version-new { animation: none; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .version-update:not(:disabled):hover { text-decoration: underline; }
+}
+
 /* The star button. Loud enough to be found once, quiet enough not to nag on
    every visit to a settings pane. */
 .star-btn {

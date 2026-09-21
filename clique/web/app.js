@@ -1452,12 +1452,54 @@ function renderVersion() {
  * the shell version has nothing to open. */
 function appendShell(el) {
   const text = shellLabel(window.cliqueShell);
-  if (!text) return;
-  const tag = document.createElement("span");
-  tag.className = "version-shell";
-  tag.textContent = " \u00b7 " + text;
-  tag.title = "The app this panel is running inside";
-  el.append(tag);
+  if (text) {
+    const tag = document.createElement("span");
+    tag.className = "version-shell";
+    tag.textContent = " \u00b7 " + text;
+    tag.title = "The app this panel is running inside";
+    el.append(tag);
+  }
+  appendUpdateBadge(el);
+}
+
+/* A desktop shell with an update staged sets window.cliqueUpdateBadge and
+ * calls renderVersion() again \u2014 drawn here, next to the version it updates,
+ * so it survives every poll's repaint instead of being an overlay that has
+ * to reposition itself independently of this footer. A browser or the PWA
+ * never sets this, so nothing draws for them. */
+function appendUpdateBadge(el) {
+  const badge = window.cliqueUpdateBadge;
+  if (!badge || !badge.version) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "version-update" + (badge.state === "failed" ? " failed" : "");
+  btn.disabled = badge.state === "busy";
+  const label = badge.state === "busy" ? "Installing..."
+    : badge.state === "failed" ? "Update failed, retry"
+    : "Update ready";
+  btn.title = badge.state === "failed"
+    ? "Update failed: " + (badge.message || "unknown error") + ", click to retry"
+    : "CLIque " + badge.version + " is ready, click to install and restart";
+  btn.setAttribute("aria-label", btn.title);
+  const dot = document.createElement("span");
+  dot.className = "version-new";
+  btn.append(dot, " " + label);
+  btn.onclick = async () => {
+    if (typeof window.cliqueRestart !== "function" || badge.state === "busy") return;
+    badge.state = "busy";
+    renderVersion();
+    try {
+      const msg = await window.cliqueRestart();
+      // No message means the app is already on its way down to relaunch \u2014
+      // nothing left here should still be running to repaint.
+      if (msg) { badge.state = "failed"; badge.message = msg; renderVersion(); }
+    } catch (e) {
+      badge.state = "failed";
+      badge.message = e && e.message ? e.message : String(e);
+      renderVersion();
+    }
+  };
+  el.append(btn);
 }
 
 function paintWhatsNew() {
