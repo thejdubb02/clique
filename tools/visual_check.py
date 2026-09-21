@@ -1582,7 +1582,37 @@ def _run(panel) -> int:
             shell_text,
         )
         page.locator("#version").screenshot(path=str(SHOTS / "version-shell.png"))
-        page.evaluate("() => { delete window.cliqueShell; renderVersion(); }")
+
+        # The desktop update badge, drawn beside the version it updates —
+        # same path the desktop shell drives through window.cliqueUpdateBadge.
+        page.evaluate(
+            """() => {
+              window.cliqueUpdateBadge = { version: "0.76.1", state: "ready" };
+              renderVersion();
+            }"""
+        )
+        page.wait_for_timeout(150)
+        update_btn = page.locator("#version .version-update")
+        check("the update badge draws beside the version", update_btn.count() == 1)
+        check(
+            "it names the version that is ready",
+            "0.76.1" in (update_btn.get_attribute("title") or ""),
+        )
+        page.locator("#version").screenshot(path=str(SHOTS / "version-update-ready.png"))
+
+        page.evaluate(
+            "() => { window.cliqueUpdateBadge.state = 'failed'; window.cliqueUpdateBadge.message = 'network error'; renderVersion(); }"
+        )
+        page.wait_for_timeout(150)
+        check(
+            "a failed update is tinted differently, not just relabelled",
+            "failed" in (page.locator("#version .version-update").get_attribute("class") or ""),
+        )
+        page.locator("#version").screenshot(path=str(SHOTS / "version-update-failed.png"))
+
+        page.evaluate(
+            "() => { delete window.cliqueUpdateBadge; delete window.cliqueShell; renderVersion(); }"
+        )
         page.wait_for_timeout(150)
 
         print("sign-in QR")
