@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.70.1 — 2026-09-21
+## 0.70.1 — 2026-09-21 11:25 PDT
 
 **Scrollback goes back 2.5x further.** tmux's own history limit and xterm's
 buffer were both 20,000 lines; both now hold 50,000. Raised together on
