@@ -213,6 +213,12 @@ DEFAULT_SETTINGS = {
     #: [{"trigger": ";rev", "label": "...", "text": "...", "bar": False}].
     #: A bar-shown one needs no trigger — it is tapped, never typed.
     "snippets": [],
+    #: A saved new-session form. Picking one fills the dialog and, once the
+    #: session is up, sends `prompt` once. `cli` and `cwd` are required — a
+    #: template with neither cannot start anything. `name`, `prompt` and
+    #: `folder` may be blank. `worktree` defaults off.
+    #: [{"name", "cli", "cwd", "prompt", "folder", "worktree"}].
+    "session_templates": [],
     #: A tab that finished while you were looking elsewhere should say so.
     #: Flash is silent and always safe; sound is opt-in because a room with
     #: twenty agents in it would otherwise be unbearable.
@@ -574,6 +580,37 @@ def _clean_snippets(value) -> list[dict]:
     return out
 
 
+def _clean_session_templates(value) -> list[dict]:
+    """Normalise a session-template list from the browser.
+
+    Same bargain as snippets: these are stored and then replayed into a
+    new session, so a malformed one is dropped here rather than becoming a
+    broken launch later. A template with no CLI or no directory cannot
+    start anything, so those two are required. The rest may be blank.
+    """
+    if not isinstance(value, list):
+        return []
+    out = []
+    for raw in value[:200]:
+        if not isinstance(raw, dict):
+            continue
+        cli = str(raw.get("cli") or "").strip()
+        cwd = str(raw.get("cwd") or "").strip()
+        if not cli or not cwd:
+            continue
+        out.append(
+            {
+                "name": str(raw.get("name") or "").strip()[:80],
+                "cli": cli[:64],
+                "cwd": cwd[:1024],
+                "prompt": str(raw.get("prompt") or "")[:MAX_SNIPPET_CHARS],
+                "folder": str(raw.get("folder") or "").strip()[:64],
+                "worktree": bool(raw.get("worktree")),
+            }
+        )
+    return out
+
+
 class Store:
     """Thread-safe reader/writer for state.json.
 
@@ -843,6 +880,8 @@ class Store:
                     self.settings[key] = str(value or "")[:64]
                 elif key == "snippets":
                     self.settings[key] = _clean_snippets(value)
+                elif key == "session_templates":
+                    self.settings[key] = _clean_session_templates(value)
                 elif key == "destructive_patterns":
                     self.settings[key] = _clean_patterns(value)
                 elif key.startswith("css_"):

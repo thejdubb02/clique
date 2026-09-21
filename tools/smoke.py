@@ -1250,6 +1250,49 @@ def main() -> int:
         migrated_store.settings["snippets"],
     )
 
+    print("session templates")
+    tmpl_dir = Path(tempfile.mkdtemp(prefix="clique-tmpl-"))
+    tmpl_store = store_mod.Store(tmpl_dir / "state.json")
+    tmpl_store.update_settings(
+        {
+            "session_templates": [
+                {
+                    "name": "bugfix",
+                    "cli": "grok",
+                    "cwd": "/src",
+                    "prompt": "look",
+                    "folder": "f",
+                    "worktree": 1,
+                },
+                {"name": "no cli", "cli": "", "cwd": "/src"},
+                {"name": "no cwd", "cli": "grok", "cwd": "  "},
+            ]
+        }
+    )
+    kept = tmpl_store.settings["session_templates"]
+    check(
+        "a template with a cli and a directory is kept",
+        len(kept) == 1
+        and kept[0]["cli"] == "grok"
+        and kept[0]["cwd"] == "/src"
+        and kept[0]["prompt"] == "look"
+        and kept[0]["worktree"] is True,
+        kept,
+    )
+    check(
+        "a template missing cli or cwd is dropped",
+        all(t["name"] != "no cli" and t["name"] != "no cwd" for t in kept),
+        kept,
+    )
+    tmpl_store.update_settings(
+        {"session_templates": [{"cli": "grok", "cwd": f"/p/{i}"} for i in range(205)]}
+    )
+    check(
+        "session templates cap at 200",
+        len(tmpl_store.settings["session_templates"]) == 200,
+        len(tmpl_store.settings["session_templates"]),
+    )
+
     print("mounted under a path prefix")
     # CLIque is documented as running behind `tailscale serve` at /clique,
     # which strips the prefix before the server sees it — so only the browser

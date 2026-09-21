@@ -7228,6 +7228,8 @@ function control(message) {
 
 function snippets() { return state.settings.snippets || []; }
 
+function sessionTemplates() { return state.settings.session_templates || []; }
+
 function expandText(text, forTerminal) {
   const s = session(activeId);
   const filled = text
@@ -7728,26 +7730,41 @@ function browseFrom(text) {
   }, 180);
 }
 
-function openModal() {
-  const form = $("#newForm");
-  const cliSelect = form.cli;
-  cliSelect.innerHTML = "";
-  // Auto-detected: only CLIs whose binary is actually present are offered.
-  // Listing the rest as disabled options was just noise once the catalogue
-  // grew past a handful.
+/* Installed CLIs only, same list the new-session form offers. Shared so a
+ * template row cannot drift onto a hardcoded catalogue of its own. */
+// `keepId` is a CLI id that must be selectable even if it is not installed
+// here — a template saved on another box, or one that got uninstalled since.
+function fillCliSelect(select, keepId) {
+  select.innerHTML = "";
   const available = state.clis.filter((c) => c.installed);
   for (const cli of available) {
     const option = document.createElement("option");
     option.value = cli.id;
     option.textContent = cli.label;
-    cliSelect.appendChild(option);
+    select.appendChild(option);
   }
   if (!available.length) {
     const option = document.createElement("option");
     option.textContent = "No CLIs detected on this box";
     option.disabled = true;
-    cliSelect.appendChild(option);
+    select.appendChild(option);
   }
+  if (keepId && !available.some((c) => c.id === keepId)) {
+    const extra = document.createElement("option");
+    extra.value = keepId;
+    extra.textContent = keepId;
+    select.appendChild(extra);
+  }
+}
+
+function openModal() {
+  const form = $("#newForm");
+  const cliSelect = form.cli;
+  // Auto-detected: only CLIs whose binary is actually present are offered.
+  // Listing the rest as disabled options was just noise once the catalogue
+  // grew past a handful.
+  fillCliSelect(cliSelect);
+  syncTemplatePicker(form);
   const folderSelect = form.folder;
   folderSelect.innerHTML = '<option value="">Auto (by directory)</option>';
   for (const folder of state.folders) {
@@ -7779,6 +7796,58 @@ function openModal() {
   showCeilingHint();
   $("#modal").hidden = false;
   form.name.focus();
+}
+
+/* The template picker is transient: the chosen prompt and worktree live on
+ * the form until this submit, not in settings. Rebuilt every open because
+ * the list changes in Settings. The CLI select has no change listener of
+ * its own, so filling it does not need a synthetic change event. The
+ * directory field does — checkWorkspace listens on input. */
+function syncTemplatePicker(form) {
+  let pick = document.getElementById("tmplPick");
+  if (!pick) {
+    const label = document.createElement("label");
+    label.id = "tmplPickLabel";
+    label.append("Template ");
+    pick = document.createElement("select");
+    pick.id = "tmplPick";
+    label.append(pick);
+    const title = form.querySelector("h2");
+    if (title) title.after(label);
+    else form.prepend(label);
+  }
+  pick.innerHTML = "";
+  const scratch = document.createElement("option");
+  scratch.value = "";
+  scratch.textContent = "Start from scratch";
+  pick.appendChild(scratch);
+  sessionTemplates().forEach((tmpl, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = tmpl.name || tmpl.cli;
+    pick.appendChild(option);
+  });
+  pick.value = "";
+  delete form.dataset.tmplPrompt;
+  delete form.dataset.tmplWorktree;
+  pick.parentElement.hidden = sessionTemplates().length === 0;
+  pick.onchange = () => {
+    if (pick.value === "") {
+      delete form.dataset.tmplPrompt;
+      delete form.dataset.tmplWorktree;
+      return;
+    }
+    const tmpl = sessionTemplates()[Number(pick.value)];
+    if (!tmpl) return;
+    if (tmpl.name) form.name.value = tmpl.name;
+    fillCliSelect(form.cli, tmpl.cli);
+    form.cli.value = tmpl.cli;
+    form.cwd.value = tmpl.cwd;
+    form.folder.value = tmpl.folder || "";
+    form.dataset.tmplPrompt = tmpl.prompt || "";
+    form.dataset.tmplWorktree = tmpl.worktree ? "1" : "";
+    form.cwd.dispatchEvent(new Event("input"));
+  };
 }
 
 /* The soft ceiling, shown in the New-Session form only when we are near it.
@@ -8666,6 +8735,7 @@ function openSettings() {
 
   renderCliRows();
   renderSnippetRows();
+  renderTemplateRows();
   $("#settings").hidden = false;
 }
 
@@ -8801,6 +8871,72 @@ function renderSnippetRows() {
     for (const field of [trigger, label, text, bar]) field.onchange = commit;
 
     row.append(trigger, label, text, barLabel, remove);
+    rows.appendChild(row);
+  });
+}
+
+function renderTemplateRows() {
+  const rows = $("#templateRows");
+  rows.innerHTML = "";
+  const list = sessionTemplates();
+
+  if (!list.length) {
+    rows.innerHTML = '<p class="note">None yet. The session you start the same way every time.</p>';
+  }
+
+  list.forEach((tmpl, index) => {
+    const row = document.createElement("div");
+    row.className = "snippet-row template-row";
+
+    const name = document.createElement("input");
+    name.value = tmpl.name || "";
+    name.placeholder = "What it's for";
+
+    const cli = document.createElement("select");
+    fillCliSelect(cli, tmpl.cli);
+    cli.value = tmpl.cli;
+
+    const cwd = document.createElement("input");
+    cwd.value = tmpl.cwd || "";
+    cwd.placeholder = "/path/to/project";
+
+    const prompt = document.createElement("textarea");
+    prompt.rows = 2;
+    prompt.value = tmpl.prompt || "";
+    prompt.placeholder = "Starter prompt, sent once the session opens";
+
+    const worktree = document.createElement("input");
+    worktree.type = "checkbox";
+    worktree.checked = !!tmpl.worktree;
+    const workLabel = document.createElement("label");
+    workLabel.className = "snip-bar";
+    workLabel.title = "Start this session in a new git worktree";
+    workLabel.append(worktree, document.createTextNode(" Worktree"));
+
+    const remove = document.createElement("button");
+    remove.className = "danger";
+    remove.textContent = "Delete";
+    remove.onclick = async () => {
+      const next = sessionTemplates().filter((_, i) => i !== index);
+      await saveSettings({ session_templates: next });
+      renderTemplateRows();
+    };
+
+    const commit = async () => {
+      const next = sessionTemplates().map((existing, i) => i === index
+        ? {
+            name: name.value.trim(), cli: cli.value, cwd: cwd.value.trim(),
+            prompt: prompt.value, folder: existing.folder || "",
+            worktree: worktree.checked,
+          }
+        : existing);
+      // No cli or no directory is dropped by the server, same as a snippet
+      // with nothing to expand. An abandoned blank row does not persist.
+      await saveSettings({ session_templates: next });
+    };
+    for (const field of [name, cli, cwd, prompt, worktree]) field.onchange = commit;
+
+    row.append(name, cli, cwd, prompt, workLabel, remove);
     rows.appendChild(row);
   });
 }
@@ -9191,6 +9327,24 @@ function wire() {
     renderSnippetRows();
   };
 
+  $("#addTemplate").onclick = async () => {
+    const available = state.clis.filter((c) => c.installed);
+    // A template with no cli or no cwd is dropped on save, so a fully blank
+    // row would vanish. Seed the two required fields the way Add a snippet
+    // seeds a trigger and a body.
+    await saveSettings({
+      session_templates: [...sessionTemplates(), {
+        name: "",
+        cli: available.length ? available[0].id : "shell",
+        cwd: (session(activeId) || {}).cwd || (knownDirs()[0] || {}).cwd || "/",
+        prompt: "",
+        folder: "",
+        worktree: false,
+      }],
+    });
+    renderTemplateRows();
+  };
+
   $("#fontMinus").onclick = () => bumpTermFont(-1);
   $("#fontPlus").onclick = () => bumpTermFont(1);
   $("#stats").onclick = showHistory;
@@ -9242,6 +9396,9 @@ function wire() {
 
   $("#wtToggle").onchange = () => {
     const on = $("#wtToggle").checked;
+    // Once they touch the checkbox, it decides. A template's worktree flag
+    // only applies when this was left alone.
+    delete $("#newForm").dataset.tmplWorktree;
     $("#wtBranch").hidden = !on;
     if (on) {
       if (!$("#wtBranch").value) {
@@ -9257,14 +9414,27 @@ function wire() {
   $("#newForm").onsubmit = async (ev) => {
     ev.preventDefault();
     const form = ev.target;
-    const wtOn = $("#wtToggle").checked && !$("#wtRow").hidden;
-    const branch = $("#wtBranch").value.trim();
+    const toggleOn = $("#wtToggle").checked && !$("#wtRow").hidden;
+    let branch = $("#wtBranch").value.trim();
+    // A template can ask for a worktree without the person also flipping the
+    // checkbox. Their own toggle wins when they did flip it.
+    const tmplWorktree = form.dataset.tmplWorktree === "1" && !toggleOn;
+    const wtOn = toggleOn || tmplWorktree;
+    if (tmplWorktree && !branch) {
+      // Spawn numbers a fleet `${base}-N` so the branches do not collide.
+      // One session has no N, and a bare name collides the second time the
+      // same template is used, so the suffix is the time instead.
+      const base = (form.name.value.trim() || "template")
+        .toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "template";
+      branch = `${base}-${Date.now()}`;
+    }
     if (wtOn && !branch) {
       const box = $("#modalErr");
       box.textContent = "Give the worktree a branch name.";
       box.hidden = false;
       return;
     }
+    const starter = form.dataset.tmplPrompt || "";
     try {
       const payload = {
         name: form.name.value, cli: form.cli.value,
@@ -9274,12 +9444,16 @@ function wire() {
       const count = Math.max(1, Math.min(20, parseInt(form.count.value, 10) || 1));
       if (count > 1) {
         // A fleet: one request, N sessions, each with its own worktree when one
-        // is on. Open the first; say if any did not start.
+        // is on. Open the first; say if any did not start. A starter prompt is
+        // one session's first message, not a broadcast, so a fleet does not
+        // get it.
         const r = await api("api/sessions/spawn", {
           method: "POST", body: JSON.stringify({ ...payload, count }),
         });
         $("#modal").hidden = true;
         form.reset();
+        delete form.dataset.tmplPrompt;
+        delete form.dataset.tmplWorktree;
         await refresh();
         if (r.created && r.created[0]) openSession(r.created[0]);
         if (r.errors && r.errors.length) {
@@ -9292,8 +9466,21 @@ function wire() {
       });
       $("#modal").hidden = true;
       form.reset();
+      delete form.dataset.tmplPrompt;
+      delete form.dataset.tmplWorktree;
       await refresh();
       openSession(created.id);
+      if (starter) {
+        // ponytail: fixed delay, no real readiness check — revisit if a slow-starting CLI eats its own prompt
+        await new Promise((r) => setTimeout(r, 1800));
+        try {
+          await api(`api/sessions/${created.id}/send`, {
+            method: "POST", body: JSON.stringify({ text: starter, enter: true }),
+          });
+        } catch (err) {
+          toast("Session started, but the starter prompt did not send: " + err.message, true);
+        }
+      }
     } catch (err) {
       const box = $("#modalErr");
       box.textContent = err.message;

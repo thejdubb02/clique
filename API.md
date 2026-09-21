@@ -941,6 +941,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it — except on a touch device, which always gets the box, because typing into the terminal goes through the phone keyboard's input method and Android duplicates the line. `terminal` still overrides it. The mode pill is never hidden by this |
 | `css_both`, `css_panel`, `css_terminal` | string | Custom CSS, applied in that order |
 | `snippets` | list | `{"trigger", "label", "text", "bar"}`; malformed entries are dropped here rather than becoming a render error later. `bar: true` also shows it as a one-tap button on the shortcuts bar, on every CLI, and then `trigger` may be empty — a bar-only snippet is never typed |
+| `session_templates` | list | `{"name", "cli", "cwd", "prompt", "folder", "worktree"}`. A saved new-session form. `cli` and `cwd` are required — a template with either empty is dropped. `name` (80 chars), `cwd` (1024), `prompt` (same cap as a snippet), `cli` and `folder` (64 each) are length-capped. `name`, `prompt` and `folder` may be blank. `worktree` is a bool, default false |
 | `notify_flash` | bool | Flash a tab whose session finished |
 | `notify_sound` | bool | Off by default: a room with twenty agents would be unbearable |
 | `notify_idle_seconds` | 2–120 | Quiet before a session counts as finished |

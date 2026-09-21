@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.74.0 — 2026-09-21 13:06 PDT
+
+**Session templates.** A saved combo of CLI, working directory, folder, name
+and a starter prompt. Settings has a Templates tab, same shape as Snippets.
+Pick one in New Session and it fills the form; the starter prompt gets typed
+in and sent a couple seconds after the session opens, once the CLI is
+actually up. Asking for a worktree still works even if you never touch the
+worktree checkbox yourself, a branch name gets made up from the session name
+plus the moment it was created so using the same template twice never
+collides.
+
+No folder picker in the Templates row yet, so a template made through
+Settings always lands Ungrouped like any other new session. Worth adding if
+it turns out to matter.
+
 ## 0.73.0 — 2026-09-21 12:50 PDT
 
 **CPU per session, next to the memory number that was already there.** Which

@@ -506,6 +506,7 @@
       <button data-pane="appearance" class="on">Appearance</button>
       <button data-pane="markers">CLI markers</button>
       <button data-pane="snippets">Snippets</button>
+      <button data-pane="templates">Templates</button>
       <button data-pane="notify">Notifications</button>
       <button data-pane="images">Images</button>
       <button data-pane="css">Custom CSS</button>
@@ -700,6 +701,13 @@
          <code>{cursor}</code> for where the caret ends up.</p>
       <div id="snippetRows" class="snippet-rows"></div>
       <button type="button" id="addSnippet">Add a snippet</button>
+    </section>
+
+    <section class="pane" data-pane="templates" hidden>
+      <p class="note">A saved combo of CLI, folder and starter prompt. Picking one
+         in "New session" fills the form and sends the prompt once it opens.</p>
+      <div id="templateRows" class="snippet-rows"></div>
+      <button type="button" id="addTemplate">Add a template</button>
     </section>
 
     <section class="pane" data-pane="notify" hidden>
