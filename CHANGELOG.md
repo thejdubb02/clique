@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.70.0
+## 0.70.0 — 2026-09-21 11:07 PDT
 
 **A drag past the pane's edge keeps going.** Selecting more than fits on
 screen meant letting go, scrolling by hand, and starting a new selection to
