@@ -8,6 +8,7 @@ tmux is actually running.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -1193,46 +1194,60 @@ def main() -> int:
         "no icon carries a colour of its own", painted <= {"none", "currentColor"}, sorted(painted)
     )
 
-    print("custom quick commands")
-    # Real Store, not a fake — this is a settings merge, and the thing worth
-    # catching is the merge silently clobbering a CLI nobody touched.
+    print("snippets on the bar")
+    # Real Store, not a fake — the thing worth catching here is the old
+    # custom_quick_commands shape surviving the merge into snippets.
     from clique import store as store_mod
 
     qc_dir = Path(tempfile.mkdtemp(prefix="clique-quickcmd-"))
     qc_store = store_mod.Store(qc_dir / "state.json")
-    qc_store.update_settings({"custom_quick_commands": {"claude": ["/cost", "/agents"]}})
-    check(
-        "a custom command is stored",
-        qc_store.settings["custom_quick_commands"].get("claude") == ["/cost", "/agents"],
-        qc_store.settings["custom_quick_commands"],
+    qc_store.update_settings(
+        {"snippets": [{"trigger": "", "label": "cost", "text": "/cost", "bar": True}]}
     )
-    qc_store.update_settings({"custom_quick_commands": {"gemini": ["/help"]}})
     check(
-        "adding one CLI's commands does not touch another's",
-        qc_store.settings["custom_quick_commands"].get("claude") == ["/cost", "/agents"],
-        qc_store.settings["custom_quick_commands"],
+        "a bar snippet needs no trigger",
+        qc_store.settings["snippets"][0]["bar"]
+        and qc_store.settings["snippets"][0]["text"] == "/cost",
+        qc_store.settings["snippets"],
     )
-    qc_store.update_settings({"custom_quick_commands": {"claude": []}})
+    qc_store.update_settings({"snippets": []})
     check(
-        "an empty list removes that CLI's entry rather than storing one",
-        "claude" not in qc_store.settings["custom_quick_commands"],
-        qc_store.settings["custom_quick_commands"],
+        "clearing snippets clears the bar with it",
+        qc_store.settings["snippets"] == [],
+        qc_store.settings["snippets"],
     )
-    over_cap = [f"/cmd{i}" for i in range(30)]
-    qc_store.update_settings({"custom_quick_commands": {"claude": over_cap}})
-    check(
-        "the per-CLI count is capped",
-        len(qc_store.settings["custom_quick_commands"]["claude"])
-        == store_mod.MAX_QUICK_COMMANDS_PER_CLI,
-        len(qc_store.settings["custom_quick_commands"]["claude"]),
+
+    # A pre-0.72.0 state.json with the old per-CLI shape still on disk should
+    # come back up as bar-shown snippets, not vanish.
+    (qc_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "settings": {
+                    "custom_quick_commands": {
+                        "claude": ["/cost", "Grok CLI can we use grok-4.7-build-fast"]
+                    },
+                    "snippets": [{"trigger": ";rev", "label": "", "text": "review this"}],
+                }
+            }
+        ),
+        encoding="utf-8",
     )
-    long_one = ["x" * 500]
-    qc_store.update_settings({"custom_quick_commands": {"gemini": long_one}})
+    migrated_store = store_mod.Store(qc_dir / "state.json")
     check(
-        "one entry is capped in length, not dropped whole",
-        len(qc_store.settings["custom_quick_commands"]["gemini"][0])
-        == store_mod.MAX_QUICK_COMMAND_CHARS,
-        len(qc_store.settings["custom_quick_commands"]["gemini"][0]),
+        "custom_quick_commands is gone after load",
+        "custom_quick_commands" not in migrated_store.settings,
+        list(migrated_store.settings),
+    )
+    bar_texts = {s["text"] for s in migrated_store.settings["snippets"] if s["bar"]}
+    check(
+        "both legacy commands became bar snippets",
+        bar_texts == {"/cost", "Grok CLI can we use grok-4.7-build-fast"},
+        migrated_store.settings["snippets"],
+    )
+    check(
+        "the pre-existing typed snippet survives the migration untouched",
+        any(s["trigger"] == ";rev" and not s["bar"] for s in migrated_store.settings["snippets"]),
+        migrated_store.settings["snippets"],
     )
 
     print("mounted under a path prefix")

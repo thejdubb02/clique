@@ -960,29 +960,80 @@ def _run(panel) -> int:
                 }"""
             )
 
-        print("adding and removing a custom quick command")
+        print("a bar snippet: add through Settings, tint, confirm before removing")
         # `mine` is a plain shell, which clis.toml gives no quick_commands of
         # its own — so the row showing at all here, with nothing but the "+",
-        # is itself proof custom commands do not depend on the CLI having any.
+        # is itself proof a bar snippet does not depend on the CLI having any.
         before_count = page.locator("#quickRow .quick-cmd").count()
-        check("starts with no custom commands", before_count == 0, before_count)
-        page.once("dialog", lambda d: d.accept("/smoke-test"))
+        check("starts with no bar snippets", before_count == 0, before_count)
+
         page.click(".quick-add")
-        page.wait_for_function(
-            "() => document.querySelectorAll('#quickRow .quick-cmd').length === 1"
+        page.wait_for_timeout(200)
+        check(
+            "the + opens the same settings sheet snippets already use",
+            page.locator("#settings").is_visible()
+            and page.locator('.pane[data-pane="snippets"]:not([hidden])').count() > 0,
         )
-        added_text = page.locator("#quickRow .quick-cmd button").first.inner_text()
-        check("the added command shows its own text", added_text == "/smoke-test", added_text)
-        del_visible = page.locator("#quickRow .quick-cmd-del").first.is_visible()
-        check("a custom command has a delete control", del_visible)
+        page.click("#addSnippet")
+        row = page.locator("#snippetRows .snippet-row").last
+        row.locator(".snip-label").fill("Smoke test")
+        row.locator(".snip-label").dispatch_event("change")
+        row.locator("textarea").fill("/smoke-test")
+        row.locator("textarea").dispatch_event("change")
+        row.locator(".snip-bar input").check()
+        page.wait_for_timeout(300)
+        page.locator("#snippetRows").screenshot(path=str(SHOTS / "snippet-bar-toggle.png"))
+        page.click("#settingsDone")
+        page.wait_for_timeout(200)
+
+        pills = page.locator("#quickRow .quick-cmd")
+        check("the new bar snippet shows as a pill", pills.count() == 1, pills.count())
+        pill_text = pills.first.locator("button").first.inner_text()
+        check("using its label, not the full sent text", pill_text == "Smoke test", pill_text)
+        pill_class = pills.first.get_attribute("class") or ""
+        check(
+            "and it is tinted differently from a built-in",
+            "quick-cmd-custom" in pill_class,
+            pill_class,
+        )
+        page.locator("#quickRow").screenshot(path=str(SHOTS / "quick-row-bar-pill.png"))
+
+        print("removing a bar snippet needs a real confirmation, not a bare click")
         page.click("#quickRow .quick-cmd-del")
+        page.wait_for_timeout(200)
+        check(
+            "the click alone does not remove it",
+            page.locator("#quickRow .quick-cmd").count() == 1,
+        )
+        check(
+            "it opens the same confirm sheet every destructive action uses",
+            page.locator("#confirmSheet").is_visible(),
+        )
+        page.click("#confirmNo")
+        page.wait_for_timeout(200)
+        check("cancelling leaves it on the bar", page.locator("#quickRow .quick-cmd").count() == 1)
+
+        page.click("#quickRow .quick-cmd-del")
+        page.wait_for_timeout(200)
+        page.click("#confirmOk")
         page.wait_for_function(
             "() => document.querySelectorAll('#quickRow .quick-cmd').length === 0"
         )
+        check("confirming takes it off the bar", page.locator("#quickRow .quick-cmd").count() == 0)
+
+        page.click("#settingsBtn")
+        page.click('#setTabs button[data-pane="snippets"]')
+        page.wait_for_timeout(200)
+        rows_left = page.locator("#snippetRows .snippet-row").count()
         check(
-            "removing it leaves the row empty again",
-            page.locator("#quickRow .quick-cmd").count() == 0,
+            "the snippet itself survives, only its bar flag came off",
+            rows_left == 1,
+            rows_left,
         )
+        page.click("#snippetRows .snippet-row .danger")  # clean up after ourselves
+        page.wait_for_timeout(200)
+        page.click("#settingsDone")
+        page.wait_for_timeout(200)
 
         print("a link with no https:// in front of it")
         # node runs these out of the file. This runs the shipped file as the

@@ -209,13 +209,10 @@ DEFAULT_SETTINGS = {
     "css_both": "",
     "css_panel": "",
     "css_terminal": "",
-    #: Text expanders: [{"trigger": ";rev", "label": "...", "text": "..."}]
+    #: Text expanders, and optionally a bar button too:
+    #: [{"trigger": ";rev", "label": "...", "text": "...", "bar": False}].
+    #: A bar-shown one needs no trigger — it is tapped, never typed.
     "snippets": [],
-    #: Extra one-tap buttons on top of a CLI's own `quick_commands` from
-    #: clis.toml, keyed by CLI id: {"claude": ["/cost", "/agents"]}. Same
-    #: per-CLI-map shape as marker_by_cli, for the same reason — a change
-    #: from the browser only ever names the one CLI it touched.
-    "custom_quick_commands": {},
     #: A tab that finished while you were looking elsewhere should say so.
     #: Flash is silent and always safe; sound is opt-in because a room with
     #: twenty agents in it would otherwise be unbearable.
@@ -321,11 +318,6 @@ DEFAULT_SETTINGS = {
 #: A snippet body over this is a document, not an expander, and storing one
 #: would bloat every /api/state response the sidebar polls.
 MAX_SNIPPET_CHARS = 8000
-
-#: A quick command is a button label as well as text sent into a pane —
-#: capped well under a snippet, so one long entry cannot blow out the row.
-MAX_QUICK_COMMAND_CHARS = 200
-MAX_QUICK_COMMANDS_PER_CLI = 20
 
 #: A draft is text you are about to send and a name is a label — neither is a
 #: file, and /api/state replays every one on every three-second poll.
@@ -557,7 +549,8 @@ def _clean_snippets(value) -> list[dict]:
 
     Kept strict because these are stored, replayed into a terminal, and shown
     in a menu: a malformed one should be dropped here rather than becoming a
-    render error later.
+    render error later. `bar` is tap-only, so it needs no trigger — the
+    trigger is only required for a snippet meant to be typed and expanded.
     """
     if not isinstance(value, list):
         return []
@@ -567,31 +560,17 @@ def _clean_snippets(value) -> list[dict]:
             continue
         trigger = str(raw.get("trigger") or "").strip()
         text = str(raw.get("text") or "")[:MAX_SNIPPET_CHARS]
-        if not trigger or not text:
+        bar = bool(raw.get("bar"))
+        if not text or (not trigger and not bar):
             continue
         out.append(
             {
                 "trigger": trigger[:40],
                 "label": str(raw.get("label") or "").strip()[:80],
                 "text": text,
+                "bar": bar,
             }
         )
-    return out
-
-
-def _clean_quick_commands(value) -> list[str]:
-    """Normalise one CLI's custom quick commands from the browser.
-
-    A malformed entry is dropped here, the same as a snippet — this is
-    stored, shown as a button, and sent into a pane exactly as typed.
-    """
-    if not isinstance(value, list):
-        return []
-    out = []
-    for raw in value[:MAX_QUICK_COMMANDS_PER_CLI]:
-        text = str(raw or "").strip()[:MAX_QUICK_COMMAND_CHARS]
-        if text:
-            out.append(text)
     return out
 
 
@@ -651,6 +630,20 @@ class Store:
         # Merge rather than replace, so a setting added in a later version
         # appears with its default instead of being missing.
         self.settings = {**DEFAULT_SETTINGS, **(raw.get("settings") or {})}
+        # custom_quick_commands (0.71.0) is folded into snippets' own `bar`
+        # flag one release later — a bar-shown snippet with no trigger is
+        # exactly what it was. Runs once: after this, the old key is gone.
+        legacy_quick = self.settings.pop("custom_quick_commands", None)
+        if isinstance(legacy_quick, dict) and legacy_quick:
+            migrated = list(self.settings.get("snippets") or [])
+            for cmds in legacy_quick.values():
+                for text in cmds if isinstance(cmds, list) else []:
+                    text = str(text or "").strip()
+                    if text:
+                        migrated.append(
+                            {"trigger": "", "label": text[:80], "text": text, "bar": True}
+                        )
+            self.settings["snippets"] = _clean_snippets(migrated)
         # Bring-your-own-key LLM providers. Kept out of `settings` on purpose:
         # each carries an encrypted key, and settings is echoed to every read
         # client — providers are fetched only on demand, keys never in the poll.
@@ -839,17 +832,6 @@ class Store:
                         elif mode is None:
                             merged.pop(cli_id, None)
                     self.settings["marker_by_cli"] = merged
-                elif key == "custom_quick_commands" and isinstance(value, dict):
-                    # Same per-CLI merge as marker_by_cli: the browser sends
-                    # only the CLI whose row it just edited.
-                    merged = dict(self.settings.get("custom_quick_commands") or {})
-                    for cli_id, cmds in value.items():
-                        cleaned = _clean_quick_commands(cmds)
-                        if cleaned:
-                            merged[str(cli_id)[:64]] = cleaned
-                        else:
-                            merged.pop(cli_id, None)
-                    self.settings["custom_quick_commands"] = merged
                 elif key == "marker_default":
                     if value in MARKER_MODES:
                         self.settings[key] = value

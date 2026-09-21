@@ -4187,47 +4187,56 @@ function promptWanted() {
 
 /* ------------------------------------------------------------ quick commands */
 
-function customQuickCommands(cliId) {
-  return (cliId && (state.settings.custom_quick_commands || {})[cliId]) || [];
+// A snippet with `bar: true` is a one-tap button, on every CLI's bar — same
+// list as the text-expander snippets, just also shown here. Global rather
+// than per-CLI, like snippets already are.
+function barSnippets() {
+  return snippets().filter((sn) => sn.bar);
 }
 
-// One pill. `onRemove` is only ever set for a custom command — a built-in
-// from clis.toml is config, not something a click here can delete.
-function quickCommandPill(cmd, onRemove) {
+// One pill. `onRemove` is only ever set for a bar-shown snippet — a
+// built-in from clis.toml is config, not something a click here can delete.
+function quickCommandPill(display, sendText, onRemove) {
   const wrap = document.createElement("span");
-  wrap.className = "quick-cmd";
+  wrap.className = onRemove ? "quick-cmd quick-cmd-custom" : "quick-cmd";
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.textContent = cmd;
+  btn.textContent = display;
   // Same path as the prompt box's Run button, destructive-command check
   // included — a quick command is still text landing in a pane.
-  btn.onclick = () => run(cmd);
+  btn.onclick = () => run(sendText);
   wrap.appendChild(btn);
   if (onRemove) {
     const del = document.createElement("button");
     del.type = "button";
     del.className = "quick-cmd-del";
     del.textContent = "×";
-    del.title = "Remove this quick command";
+    del.title = "Remove this from the bar";
     del.onclick = (ev) => { ev.stopPropagation(); onRemove(); };
     wrap.appendChild(del);
   }
   return wrap;
 }
 
-async function addQuickCommand(cliId) {
-  if (!cliId) return;
-  const text = (prompt("Quick command — sent into the pane as typed") || "").trim();
-  if (!text) return;
-  await saveSettings({ custom_quick_commands: { [cliId]: [...customQuickCommands(cliId), text] } });
+// The snippet stays — a bar button can also be a text expander — only its
+// bar visibility comes off, and only after a real confirmation: this is the
+// one delete a stray tap could trigger with no room to undo it.
+async function removeFromBar(snippet) {
+  const ok = await confirmAction({
+    title: "Remove from the bar?",
+    message: `Take "${snippet.label || snippet.text}" off the shortcuts bar?`,
+    detail: "The snippet itself stays in Settings, this only removes the button.",
+    okLabel: "Remove",
+    danger: true,
+  });
+  if (!ok) return;
+  const index = snippets().indexOf(snippet);
+  if (index === -1) return;
+  const next = snippets().map((existing, i) => (i === index ? { ...existing, bar: false } : existing));
+  await saveSettings({ snippets: next });
   renderInputBar();
 }
 
-async function removeQuickCommand(cliId, index) {
-  const next = customQuickCommands(cliId).filter((_, i) => i !== index);
-  await saveSettings({ custom_quick_commands: { [cliId]: next } });
-  renderInputBar();
-}
 
 function renderInputBar() {
   const s = session(activeId);
@@ -4246,27 +4255,31 @@ function renderInputBar() {
 
   // One-tap buttons for text this CLI is asked for often: clis.toml's own
   // `quick_commands`, declared once and carried on the session row the same
-  // way modes/mode_key/mode_label already are, plus whatever the person
-  // added themselves for this CLI — same idea as a snippet, but a tap
-  // instead of a typed trigger. The custom ones live in settings, keyed by
-  // CLI id, same per-CLI-map shape as marker_by_cli.
+  // way modes/mode_key/mode_label already are, plus any snippet flagged to
+  // show on the bar — same list as the text-expander snippets, global
+  // across CLIs, not just this one.
   const qr = $("#quickRow");
   const builtIn = (s && s.quick_commands) || [];
-  const custom = customQuickCommands(s && s.cli);
   if (qr) {
     qr.hidden = !s;
     qr.innerHTML = "";
-    for (const cmd of builtIn) qr.appendChild(quickCommandPill(cmd));
-    custom.forEach((cmd, i) => {
-      qr.appendChild(quickCommandPill(cmd, () => removeQuickCommand(s.cli, i)));
-    });
+    for (const cmd of builtIn) qr.appendChild(quickCommandPill(cmd, cmd));
+    for (const sn of barSnippets()) {
+      qr.appendChild(quickCommandPill(sn.label || sn.text, sn.text, () => removeFromBar(sn)));
+    }
     if (s) {
       const add = document.createElement("button");
       add.type = "button";
       add.className = "quick-add";
       add.textContent = "+";
-      add.title = "Add a quick command for " + s.cli_label;
-      add.onclick = () => addQuickCommand(s.cli);
+      add.title = "Add a snippet to the bar";
+      // Same editor as any other snippet — Settings > Snippets, not a
+      // separate one-off prompt.
+      add.onclick = () => {
+        openSettings();
+        const tab = document.querySelector('#setTabs button[data-pane="snippets"]');
+        if (tab) tab.click();
+      };
       qr.appendChild(add);
     }
   }
@@ -8755,6 +8768,14 @@ function renderSnippetRows() {
     text.value = snippet.text;
     text.placeholder = "The text this expands to";
 
+    const bar = document.createElement("input");
+    bar.type = "checkbox";
+    bar.checked = !!snippet.bar;
+    const barLabel = document.createElement("label");
+    barLabel.className = "snip-bar";
+    barLabel.title = "Show as a one-tap button on the shortcuts bar, on every CLI";
+    barLabel.append(bar, document.createTextNode(" Bar"));
+
     const remove = document.createElement("button");
     remove.className = "danger";
     remove.textContent = "Delete";
@@ -8762,19 +8783,22 @@ function renderSnippetRows() {
       const next = snippets().filter((_, i) => i !== index);
       await saveSettings({ snippets: next });
       renderSnippetRows();
+      renderInputBar();
     };
 
     const commit = async () => {
       const next = snippets().map((existing, i) => i === index
-        ? { trigger: trigger.value.trim(), label: label.value.trim(), text: text.value }
+        ? { trigger: trigger.value.trim(), label: label.value.trim(), text: text.value, bar: bar.checked }
         : existing);
       // A row with no trigger or no text is dropped by the server, so an empty
-      // one the user abandoned does not persist as a broken snippet.
+      // one the user abandoned does not persist as a broken snippet. A bar
+      // snippet is the one exception — it needs no trigger, it is tapped.
       await saveSettings({ snippets: next });
+      renderInputBar();
     };
-    for (const field of [trigger, label, text]) field.onchange = commit;
+    for (const field of [trigger, label, text, bar]) field.onchange = commit;
 
-    row.append(trigger, label, text, remove);
+    row.append(trigger, label, text, barLabel, remove);
     rows.appendChild(row);
   });
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.72.0 — 2026-09-21 12:23 PDT
+
+**A custom quick command is now a snippet, not its own separate thing.**
+0.71.0 shipped one string that had to be both the button's label and the
+text it sent, which reads fine for `/cost` and terribly for a real saved
+instruction. Snippets already had the label-vs-text split; now a snippet
+just carries a `bar` switch that also shows it as a one-tap button, so the
+same list handles both a typed expander and a bar button, or one snippet
+doing both. Adding one from the bar's `+` opens the same Settings > Snippets
+editor a typed snippet uses, not a separate prompt. A bar button is tinted
+so it reads as yours at a glance, and its `×` asks first, the same confirm
+sheet every other delete in the app uses, rather than removing on the tap.
+Anyone's already-saved custom commands come back as bar-shown snippets
+automatically, once, on the next load.
+
 ## 0.71.0 — 2026-09-21 11:34 PDT
 
 **Your own quick commands, not just clis.toml's.** The one-tap row above the

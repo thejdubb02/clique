@@ -675,6 +675,10 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
 .quick-cmd-del {
   padding: 4px 9px 4px 4px; color: var(--dim); font-size: 13px; line-height: 1;
 }
+/* A bar-shown snippet vs. a clis.toml built-in: same pill, tinted so it
+ * reads as "yours" at a glance. */
+.quick-cmd-custom { background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+                     border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .quick-add {
   flex: 0 0 auto; cursor: pointer; padding: 4px 10px; font-size: 12px;
   line-height: 1; border: 1px dashed var(--line); background: transparent;
@@ -1284,8 +1288,8 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 .about-name { font-size: 15px; font-weight: 600; }
 
 .snippet-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-.snippet-row { display: grid; grid-template-columns: 90px 1fr auto; gap: 6px;
-               align-items: start; padding: 8px; background: var(--bg);
+.snippet-row { display: grid; grid-template-columns: 90px 1fr auto auto; gap: 6px;
+               align-items: center; padding: 8px; background: var(--bg);
                border: 1px solid var(--line); border-radius: 4px; }
 .snippet-row input, .snippet-row textarea {
   width: 100%; padding: 5px 7px; font: inherit; background: var(--field);
@@ -1296,6 +1300,9 @@ button.primary { background: var(--accent); color: var(--on-accent); }
                         font-size: 12px; resize: vertical; }
 .snippet-row .danger { background: none; border: 0; color: var(--err);
                        cursor: pointer; font: inherit; padding: 5px 6px; }
+.snip-bar { display: flex; align-items: center; gap: 3px; font-size: 11px;
+            color: var(--dim); white-space: nowrap; cursor: pointer; }
+.snip-bar input { width: auto; }
 
 
 /* Describe a theme, get a theme. One row: the box takes the space, the button

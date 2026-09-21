@@ -939,7 +939,7 @@ front of you (sidebar width, sidebar shown or hidden).
 | `drop_cleanup_days` | int | Auto-delete dropped/pasted files older than this many days from the scratch folders (`.clique-drops`, `.claude-images`); nothing else on disk is touched. **Off by default (`0`)** — a share is your file. Clamped to 365. The manual purge and the storage readout work whether this is on or off |
 | `input_mode` | `"auto"` \| `"panel"` \| `"terminal"` | Whether the panel draws a prompt box. `auto` (default) asks the CLI — one that draws its own box gets no second one under it — except on a touch device, which always gets the box, because typing into the terminal goes through the phone keyboard's input method and Android duplicates the line. `terminal` still overrides it. The mode pill is never hidden by this |
 | `css_both`, `css_panel`, `css_terminal` | string | Custom CSS, applied in that order |
-| `snippets` | list | `{"trigger", "label", "text"}`; malformed entries are dropped here rather than becoming a render error later |
+| `snippets` | list | `{"trigger", "label", "text", "bar"}`; malformed entries are dropped here rather than becoming a render error later. `bar: true` also shows it as a one-tap button on the shortcuts bar, on every CLI, and then `trigger` may be empty — a bar-only snippet is never typed |
 | `notify_flash` | bool | Flash a tab whose session finished |
 | `notify_sound` | bool | Off by default: a room with twenty agents would be unbearable |
 | `notify_idle_seconds` | 2–120 | Quiet before a session counts as finished |
@@ -953,7 +953,6 @@ front of you (sidebar width, sidebar shown or hidden).
 | `cli_watermark` | bool | Draw the active CLI's logo faintly in the top-right of the pane, opposite the theme character. A single-colour glyph is masked and tinted with the CLI's own colour; a logo carrying its own colours is drawn as the image. A CLI with no icon draws nothing. Hidden on a pane under 720px or a window under 460px tall. On by default |
 | `theme_art` | bool | Draw the theme's hand-drawn character in the bottom-right of the pane, behind the text. Only the seven character themes (`plumber`, `triforce`, `fellowship`, `drizzt`, `chompy`, `bricks`, `aincrad`) carry one; elsewhere it does nothing. Composited with `lighten`/`darken` so a glyph over it stays exactly as readable, and hidden on a pane under 720px or a window under 460px tall. On by default |
 | `cli_colors` | map | Per-CLI colour overrides, `{"claude": "#d97757"}`. Merged one level deep like `marker_by_cli`; a `null` value restores the shipped colour. Must be a 3- or 6-digit hex, anything else is dropped |
-| `custom_quick_commands` | map | Extra one-tap buttons on top of a CLI's own `quick_commands` from `clis.toml`, `{"claude": ["/cost", "/agents"]}`. Merged one level deep like `marker_by_cli`; an empty list for a CLI removes its entry. Each entry capped at 200 characters, 20 per CLI |
 | `changelog_seen` | version | Newest release whose notes have been read. Seeded on first load so a fresh install does not badge itself |
 | `service_status` | bool | Ask the provider behind a running CLI whether it is having a bad day. The only outbound requests CLIque makes without being told to — see **Service status** below. On by default |
 | `clock_24h` | bool | 24-hour clock. Not derived from the locale — people read one format at work and another at home |
