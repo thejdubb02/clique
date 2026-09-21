@@ -1681,19 +1681,19 @@ function renderUsagePanel() {
 function wireUsagePanel() {
   const toggle = $("#usageToggle");
   if (!toggle) return;
+  const startPolling = () => {
+    if (!usageTimer) usageTimer = setInterval(loadAllUsage, 5 * 60 * 1000);
+    loadAllUsage();
+  };
   const startOpen = localStorage.getItem("clique.usagePanel") === "1";
   toggle.setAttribute("aria-expanded", String(startOpen));
-  if (startOpen) {
-    loadAllUsage();
-    usageTimer = setInterval(loadAllUsage, 5 * 60 * 1000);
-  }
+  if (startOpen) startPolling();
   toggle.addEventListener("click", () => {
     const open = toggle.getAttribute("aria-expanded") !== "true";
     toggle.setAttribute("aria-expanded", String(open));
     localStorage.setItem("clique.usagePanel", open ? "1" : "0");
     if (open) {
-      if (!usageTimer) usageTimer = setInterval(loadAllUsage, 5 * 60 * 1000);
-      loadAllUsage();
+      startPolling();
     } else if (usageTimer) {
       clearInterval(usageTimer);
       usageTimer = null;
