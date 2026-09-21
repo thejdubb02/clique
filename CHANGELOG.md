@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.71.0 — 2026-09-21
+## 0.71.0 — 2026-09-21 11:34 PDT
 
 **Your own quick commands, not just clis.toml's.** The one-tap row above the
 prompt box was config-only: whatever `quick_commands` a CLI declared, and
