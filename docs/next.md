@@ -38,25 +38,24 @@ panel, the desktop and the phone sit in one list instead of three. This file
 keeps what does not fit on a card: why something is ranked where it is, what
 was measured, and what was tried and did not work.
 
-Next, in order, as of 2026-09-19 (evening):
+Next, in order, as of 2026-09-21 (evening):
 
 | | Card |
 |---|---|
 | 13px of phantom horizontal scroll on a phone | CLQ-62 |
 | Local echo, so the pane stops feeling like a web page | CLQ-64 |
-| Session templates | CLQ-54 |
-| The key row keys are too narrow, and that is a decision | CLQ-63 |
-| Per-session CPU, and a reap advisor | CLQ-56 |
-| Auto-resume when a usage limit resets | CLQ-68 |
+| The key row keys are too narrow, and that is a decision — CSS already has `overflow-x: auto`; the card's own measured widths may be stale, needs a real phone check before it needs code | CLQ-63 |
+| Auto-resume when a usage limit resets — the probe already exists for Claude (see "Plan usage in the status bar" below); extending it to Codex/Grok/Gemini/Antigravity is researched, not yet built | CLQ-68 |
+| A sidebar mini-panel of every installed CLI's usage/cooldown, same data as CLQ-68 — build the probe once, show it twice | CLQ-75 |
 | The rest of the phone pass | CLQ-65 |
-| An MCP server over API.md | CLQ-53 |
+| MCP server, phase 2: write verbs, blocked on CLQ-52's policy model | CLQ-76 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
 | Typography | CLQ-67 |
 
-Session templates (CLQ-54) can now actually deliver what it promises: the
-worktree half used to be the failure it warned about (a template that makes a
-worktree and leaves you with no `node_modules`), and that half shipped as
-CLQ-55 below.
+Three shipped 2026-09-21, all built with Grok CLI and reviewed before landing
+— see **Shipped off this list** below: per-session CPU (CLQ-56, 0.73.0),
+session templates (CLQ-54, 0.74.0), and an MCP server, read-only phase
+(CLQ-53, 0.75.0).
 
 The phone and desktop cards live on the same board: CLQ-10 to CLQ-17 and
 CLQ-59, CLQ-60 for Android, CLQ-57 and CLQ-58 for the desktop.
@@ -91,6 +90,19 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **Per-session CPU**, 0.73.0. Same process-tree walk that already gave `rss`
+  now also reports CPU percent, cached on the same 8-second cycle. The reap
+  advisor half of the card (idle time plus these two numbers deciding what to
+  clean up) was not built — a natural next step, not this pass. CLQ-56.
+- **Session templates**, 0.74.0. A saved CLI + directory + folder + name +
+  starter prompt. Settings > Templates mirrors Settings > Snippets exactly.
+  No folder field in the Settings row yet, so a template made through the UI
+  always lands Ungrouped. CLQ-54.
+- **An MCP server, read-only phase**, 0.75.0. `clique/mcp_server.py`, stdlib
+  only, hand-rolled JSON-RPC — list_sessions, get_session, wait,
+  preview_pane, conversation. Deliberately stops there: anything that can
+  send keys into a pane needs the policy model CLQ-52 owns, split off as
+  CLQ-76 rather than built ahead of that policy. CLQ-53.
 - **The worktree setup hook**, 0.69.0. `.clique-setup` and `.clique-copy`,
   both ordinary tracked files in the repo rather than CLIque settings, so a
   worktree made on any machine gets them for free — no more failing on the
@@ -106,8 +118,9 @@ notch and does not run in standalone mode.
   the browser, because a scanned code had to become a session cookie rather
   than an API token. CLQ-49.
 - **An agent-facing skill.** `skills/drive-clique` exists and covers state,
-  wait, peek, transcript, send, worktrees. CLQ-53 is the MCP version of the
-  same surface, so any client can drive it without loading a skill first.
+  wait, peek, transcript, send, worktrees. Its read-only surface now has an
+  MCP version too, so any client can drive those reads without loading a
+  skill first — see CLQ-53 above.
 - **Use it on a phone, then fix what is wrong.** Done, and everything above
   came out of it rather than out of a guess.
 - **Peek under a session row on the phone**, and **prompt history on the
