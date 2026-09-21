@@ -202,6 +202,9 @@ html.kb-open #shell { height: 100%; }   /* fills body, so its safe-area padding 
 .folder-head.has-active .name { color: var(--fg); font-weight: 600; }
 .folder-head.has-active { box-shadow: inset 3px 0 0 var(--active-edge, var(--accent)); }
 .session.dragging { opacity: .4; }
+/* Arrow-key selection in the search box. An outline rather than a background
+   so it stacks with .active's edge instead of fighting it for the same row. */
+.session.qsel { outline: 1px solid var(--accent); outline-offset: -1px; }
 .session .meta { flex: 1; min-width: 0; }
 .session .name {
   display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

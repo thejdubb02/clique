@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.70.0
+
+**A drag past the pane's edge keeps going.** Selecting more than fits on
+screen meant letting go, scrolling by hand, and starting a new selection to
+join to the old one. A drag that reaches the top or bottom edge now scrolls
+that direction on its own, the way it does in any text editor, and keeps
+stretching the selection into what it reveals.
+
+**Arrow keys move through a search.** Typing in the sidebar's search box
+narrowed the list but left you reaching for the mouse to open a row. Up and
+down now step through the results, Enter opens the highlighted one, and the
+highlight tracks a position in the list rather than a session id, since a
+keystroke can re-run the whole query out from under it.
+
 ## 0.69.0 — 2026-09-19 09:47 PDT
 
 **A worktree stops failing its first command.** A fresh git worktree has no

@@ -386,9 +386,9 @@ console.log("copy from a pane that is eating the mouse");
 
   const code = region("const PANE_DRAG_PX", "function wirePaneClipboard");
   const {
-    paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse,
+    paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse, paneEdgeScrollDir,
   } = new Function(code +
-    "; return { paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse };")();
+    "; return { paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse, paneEdgeScrollDir };")();
   const click = { button: 0, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false };
   check("a Mac uses Option, not Shift, to force a select",
         paneForceSelectMods("MacIntel").altKey && !paneForceSelectMods("MacIntel").shiftKey);
@@ -402,6 +402,11 @@ console.log("copy from a pane that is eating the mouse");
         !paneShouldStealMouse({ ...click, shiftKey: true }, true, true));
   check("and so is Ctrl-click, which drops a path",
         !paneShouldStealMouse({ ...click, ctrlKey: true }, true, true));
+  check("past the top edge scrolls up", paneEdgeScrollDir(5, 10, 110, 24) === -1);
+  check("past the bottom edge scrolls down", paneEdgeScrollDir(95, 10, 110, 24) === 1);
+  check("mid-pane does not scroll", paneEdgeScrollDir(50, 10, 110, 24) === 0);
+  check("exactly on the threshold does not scroll yet",
+        paneEdgeScrollDir(34, 10, 110, 24) === 0 && paneEdgeScrollDir(86, 10, 110, 24) === 0);
   check("a phone is not stolen from — the Copy chip is the way",
         !paneShouldStealMouse(click, true, false));
   check("and a shell with no mouse tracking selects on its own",

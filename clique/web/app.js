@@ -1880,6 +1880,23 @@ function syncQClear() {
   if (btn && q) btn.hidden = q.value === "";
 }
 
+/* Arrow-key selection in the search box: which row of #tree is highlighted,
+ * by position rather than session id, since a query re-runs the whole list. */
+let qSel = 0;
+
+function qRows() {
+  return Array.from($("#tree").querySelectorAll(".session"));
+}
+
+function applyQSel() {
+  const rows = qRows();
+  for (const row of rows) row.classList.remove("qsel");
+  if (!rows.length) return;
+  qSel = Math.max(0, Math.min(qSel, rows.length - 1));
+  rows[qSel].classList.add("qsel");
+  rows[qSel].scrollIntoView({ block: "nearest" });
+}
+
 function renderTree() {
   const tree = $("#tree");
 
@@ -2042,6 +2059,7 @@ function renderTree() {
     dots.appendChild(button);
   }
   tree.scrollTop = scroll;
+  if (document.activeElement === $("#q")) applyQSel();
 }
 
 /* Recent enough to be worth a row.
@@ -8710,7 +8728,18 @@ function renderSnippetRows() {
 /* ------------------------------------------------------------------- wiring */
 
 function wire() {
-  $("#q").oninput = () => { syncQClear(); renderTree(); };
+  $("#q").oninput = () => { qSel = 0; syncQClear(); renderTree(); };
+  $("#q").onkeydown = (ev) => {
+    if (!["ArrowDown", "ArrowUp", "Enter"].includes(ev.key)) return;
+    const rows = qRows();
+    if (!rows.length) return;
+    ev.preventDefault();
+    if (ev.key === "Enter") { rows[Math.min(qSel, rows.length - 1)].click(); return; }
+    const already = rows.some((row) => row.classList.contains("qsel"));
+    qSel = already ? qSel + (ev.key === "ArrowDown" ? 1 : -1) : 0;
+    qSel = (qSel + rows.length) % rows.length;
+    applyQSel();
+  };
   const clearSearch = () => {
     const q = $("#q");
     if (q.value === "") return;
@@ -10344,6 +10373,13 @@ function sessionOwnsInput(id) {
  * A phone is untouched: there is no hover, and the Copy chip is the way. */
 const PANE_DRAG_PX = 5;
 
+/* How close to the pane's top or bottom edge a drag has to get before it
+ * starts pulling more history into view, and how often it pulls a line while
+ * it stays there. Selecting something longer than the window has to mean
+ * dragging past the edge, the way it does in any text editor. */
+const PANE_EDGE_SCROLL_PX = 24;
+const PANE_EDGE_SCROLL_MS = 50;
+
 /* Zoom a boxed CLI instead of shrinking its grid. Below this, the text would
  * be smaller than a readable font, so a phone still resizes for real. */
 const PANE_ZOOM_MIN = 0.45;
@@ -10439,6 +10475,15 @@ function paneDragFarEnough(x0, y0, x1, y1) {
   return dx * dx + dy * dy >= PANE_DRAG_PX * PANE_DRAG_PX;
 }
 
+// -1 past the top edge, 1 past the bottom, 0 still inside. Plain numbers
+// rather than a rect object, so this is the same call with a real
+// getBoundingClientRect() or a made-up one in a test.
+function paneEdgeScrollDir(y, top, bottom, edge) {
+  if (y < top + edge) return -1;
+  if (y > bottom - edge) return 1;
+  return 0;
+}
+
 function paneShouldStealMouse(ev, mouseEventsOn, finePointer) {
   if (!finePointer || !mouseEventsOn) return false;
   if (!ev || ev.button !== 0) return false;
@@ -10509,6 +10554,34 @@ function wirePaneClipboard(term, host, sessionId) {
     };
     const paint = (x, y) => paneSelectRange(term, paneCellAt(term, startX, startY),
                                             paneCellAt(term, x, y));
+    // A drag that reaches past the top or bottom edge keeps scrolling that
+    // direction — using the last known pointer position, so each tick both
+    // reveals another line and stretches the selection to include it, the
+    // same as it would if the pointer had actually moved that far.
+    let lastX = startX, lastY = startY;
+    let edgeTimer = null;
+    const stopEdgeScroll = () => {
+      if (edgeTimer) { clearInterval(edgeTimer); edgeTimer = null; }
+    };
+    const edgeDir = (y) => {
+      const r = host.getBoundingClientRect();
+      return paneEdgeScrollDir(y, r.top, r.bottom, PANE_EDGE_SCROLL_PX);
+    };
+    // Nothing to reveal past an edge that is already the top or bottom of
+    // what the pane holds — a boxed CLI with no scrollback yet is stuck at
+    // both, and scrolling it anyway blanked the one line it had.
+    const canScroll = (dir) => {
+      const buf = term.buffer.active;
+      return dir < 0 ? buf.viewportY > 0 : buf.viewportY < buf.baseY;
+    };
+    const startEdgeScroll = (dir) => {
+      if (edgeTimer) return;
+      edgeTimer = setInterval(() => {
+        if (!canScroll(dir)) { stopEdgeScroll(); return; }
+        term.scrollLines(dir);
+        paint(lastX, lastY);
+      }, PANE_EDGE_SCROLL_MS);
+    };
     if (e.detail >= 2) {
       const at = paneCellAt(term, e.clientX, e.clientY);
       try { term.selectLines(at.y, at.y); } catch (err) { /* disposed */ }
@@ -10527,11 +10600,16 @@ function wirePaneClipboard(term, host, sessionId) {
       }
       ev.stopImmediatePropagation();
       ev.preventDefault();
-      paint(ev.clientX, ev.clientY);
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      paint(lastX, lastY);
+      const dir = edgeDir(lastY);
+      if (dir && canScroll(dir)) startEdgeScroll(dir); else stopEdgeScroll();
     };
     const onUp = (ev) => {
       document.removeEventListener("mousemove", onMove, true);
       document.removeEventListener("mouseup", onUp, true);
+      stopEdgeScroll();
       if (mode === "pending") {
         document.removeEventListener("click", swallowClick, true);
         play(e, "mousedown");
