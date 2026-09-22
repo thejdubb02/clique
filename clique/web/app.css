@@ -702,9 +702,10 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
   padding: 4px 9px 4px 4px; color: var(--dim); font-size: 13px; line-height: 1;
 }
 /* A bar-shown snippet vs. a clis.toml built-in: same pill, tinted so it
- * reads as "yours" at a glance. */
-.quick-cmd-custom { background: color-mix(in srgb, var(--accent) 12%, var(--bg));
-                     border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+ * reads as "yours" at a glance — the accent by default, or the snippet's
+ * own colour (CLQ-78) when app.js sets --tint-bg/--tint-border inline. */
+.quick-cmd-custom { background: var(--tint-bg, color-mix(in srgb, var(--accent) 12%, var(--bg)));
+                     border-color: var(--tint-border, color-mix(in srgb, var(--accent) 40%, var(--line))); }
 .quick-add {
   flex: 0 0 auto; cursor: pointer; padding: 4px 10px; font-size: 12px;
   line-height: 1; border: 1px dashed var(--line); background: transparent;
@@ -1327,7 +1328,7 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 .about-name { font-size: 15px; font-weight: 600; }
 
 .snippet-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-.snippet-row { display: grid; grid-template-columns: 90px 1fr auto auto; gap: 6px;
+.snippet-row { display: grid; grid-template-columns: 90px 1fr auto auto auto; gap: 6px;
                align-items: center; padding: 8px; background: var(--bg);
                border: 1px solid var(--line); border-radius: 4px; }
 .snippet-row input, .snippet-row textarea, .snippet-row select {
@@ -1342,6 +1343,10 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 .snip-bar { display: flex; align-items: center; gap: 3px; font-size: 11px;
             color: var(--dim); white-space: nowrap; cursor: pointer; }
 .snip-bar input { width: auto; }
+.snip-color { display: flex; align-items: center; gap: 2px; }
+/* `.snippet-row input` forces width:100% on every field in the row; the
+   swatch needs its own fixed size the same way a CLI row's does. */
+.snip-color .cli-swatch { width: 30px; height: 26px; }
 /* One more field than a snippet (a CLI select), so the shared row class
    does not fit. Text still spans the full width, same as a snippet body. */
 .snippet-row.template-row {

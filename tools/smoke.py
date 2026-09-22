@@ -1533,6 +1533,20 @@ def main() -> int:
         and qc_store.settings["snippets"][0]["text"] == "/cost",
         qc_store.settings["snippets"],
     )
+    qc_store.update_settings(
+        {
+            "snippets": [
+                {"trigger": "", "text": "/cost", "bar": True, "color": "#4A9EFF"},
+                {"trigger": "", "text": "/x", "bar": True, "color": "javascript:alert(1)"},
+            ]
+        }
+    )
+    colors = [s["color"] for s in qc_store.settings["snippets"]]
+    check(
+        "a snippet's pill colour is kept only if it is a real hex",
+        colors == ["#4A9EFF", ""],
+        colors,
+    )
     qc_store.update_settings({"snippets": []})
     check(
         "clearing snippets clears the bar with it",

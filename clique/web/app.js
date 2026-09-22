@@ -4375,9 +4375,15 @@ function barSnippets() {
 
 // One pill. `onRemove` is only ever set for a bar-shown snippet — a
 // built-in from clis.toml is config, not something a click here can delete.
-function quickCommandPill(display, sendText, onRemove) {
+// `color`, same, is the snippet's own pick from Settings — CLQ-78 — a hex
+// string or "" for the default accent tint.
+function quickCommandPill(display, sendText, onRemove, color) {
   const wrap = document.createElement("span");
   wrap.className = onRemove ? "quick-cmd quick-cmd-custom" : "quick-cmd";
+  if (color) {
+    wrap.style.setProperty("--tint-bg", `color-mix(in srgb, ${color} 12%, var(--bg))`);
+    wrap.style.setProperty("--tint-border", `color-mix(in srgb, ${color} 40%, var(--line))`);
+  }
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = display;
@@ -4444,7 +4450,7 @@ function renderInputBar() {
     qr.innerHTML = "";
     for (const cmd of builtIn) qr.appendChild(quickCommandPill(cmd, cmd));
     for (const sn of barSnippets()) {
-      qr.appendChild(quickCommandPill(sn.label || sn.text, sn.text, () => removeFromBar(sn)));
+      qr.appendChild(quickCommandPill(sn.label || sn.text, sn.text, () => removeFromBar(sn), sn.color));
     }
     if (s) {
       const add = document.createElement("button");
@@ -9025,6 +9031,28 @@ function renderSnippetRows() {
     barLabel.title = "Show as a one-tap button on the shortcuts bar, on every CLI";
     barLabel.append(bar, document.createTextNode(" Bar"));
 
+    // The pill's own colour (CLQ-78), only visible once it is a bar button —
+    // same swatch-plus-reset control the CLI rows already use. Stored empty
+    // means "the default accent tint", so the picker itself carries a display
+    // default and only writes when someone actually touches it.
+    let color = snippet.color || "";
+    const fallbackColor =
+      getComputedStyle(document.body).getPropertyValue("--accent").trim() || "#4a9eff";
+    const swatchWrap = document.createElement("span");
+    swatchWrap.className = "snip-color";
+    const swatch = document.createElement("input");
+    swatch.type = "color";
+    swatch.className = "cli-swatch";
+    swatch.value = color || fallbackColor;
+    swatch.title = "Pill colour on the shortcuts bar";
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "cli-reset";
+    reset.textContent = "↺";
+    reset.title = "Back to the default tint";
+    reset.hidden = !color;
+    swatchWrap.append(swatch, reset);
+
     const remove = document.createElement("button");
     remove.className = "danger";
     remove.textContent = "Delete";
@@ -9037,7 +9065,8 @@ function renderSnippetRows() {
 
     const commit = async () => {
       const next = snippets().map((existing, i) => i === index
-        ? { trigger: trigger.value.trim(), label: label.value.trim(), text: text.value, bar: bar.checked }
+        ? { trigger: trigger.value.trim(), label: label.value.trim(), text: text.value,
+            bar: bar.checked, color }
         : existing);
       // A row with no trigger or no text is dropped by the server, so an empty
       // one the user abandoned does not persist as a broken snippet. A bar
@@ -9046,8 +9075,11 @@ function renderSnippetRows() {
       renderInputBar();
     };
     for (const field of [trigger, label, text, bar]) field.onchange = commit;
+    // On change, not input: a colour picker fires continuously while dragging.
+    swatch.onchange = () => { color = swatch.value; reset.hidden = false; commit(); };
+    reset.onclick = () => { color = ""; swatch.value = fallbackColor; reset.hidden = true; commit(); };
 
-    row.append(trigger, label, text, barLabel, remove);
+    row.append(trigger, label, text, barLabel, swatchWrap, remove);
     rows.appendChild(row);
   });
 }

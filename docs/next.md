@@ -91,6 +91,13 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **A snippet's own pill colour**, 0.81.0. Settings → Snippets gets the same
+  swatch-plus-reset control the CLI rows already use; picked, it tints that
+  snippet's one-tap bar pill instead of the flat accent every custom pill
+  shared before, cleared it goes back to that default. Same `colour()`
+  validator folders and CLI overrides already use, so it is one hex field on
+  the existing snippet object, not a new mechanism. CLQ-78, asked in chat
+  rather than off this list.
 - **Grok usage probe**, 0.80.0. 0.78.0 called Grok's stored credential
   unusable for a balance check; it turns out `~/.grok/auth.json` holds an
   OAuth token, just keyed by the issuer and client id rather than a fixed

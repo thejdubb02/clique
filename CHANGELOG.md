@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.81.0 — 2026-09-22 12:25 PDT
+
+**A bar snippet can carry its own colour.** Settings → Snippets gets the same
+swatch-plus-reset control the CLI rows already use — pick a colour and the
+one-tap pill on the shortcuts bar tints to it instead of the flat accent
+colour every custom pill shared before. Cleared, it goes back to that
+default. Stored as a plain hex string, validated the same way a folder's or
+a CLI's colour already is, so an XSS-shaped value is dropped rather than
+landing in a `style` attribute. CLQ-78.
+
 ## 0.80.0 — 2026-09-22 11:58 PDT
 
 **Grok CLI reports plan usage too, the third after Claude and Codex.**

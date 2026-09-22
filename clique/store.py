@@ -575,6 +575,9 @@ def _clean_snippets(value) -> list[dict]:
                 "label": str(raw.get("label") or "").strip()[:80],
                 "text": text,
                 "bar": bar,
+                # Only meaningful for a bar pill — empty means "the default
+                # tint", not "invisible", so an unset one is fine to keep.
+                "color": colour(raw.get("color"), ""),
             }
         )
     return out
