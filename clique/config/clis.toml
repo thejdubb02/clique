@@ -212,6 +212,24 @@ error = [
   "Traceback \\(most recent call last\\)",
 ]
 
+# xAI has no documented usage API (CLQ-68's 0.78.0 pass found the same for
+# Gemini and Antigravity). What the real Grok CLI's own usage screen calls
+# turned out to be reachable anyway: `auth.json` holds an OIDC access token
+# under a key named after the issuer and client id, not a fixed field, hence
+# `*` to take whatever that key is. That token reads the same weekly-credit
+# endpoint the CLI's TUI does. Verified against a live account, 2026-09-22.
+# Undocumented, so xAI can change or lock it without notice; failure here is
+# silence (usage.py), same as any other probe.
+[cli.grok.usage]
+url         = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
+token_file  = "~/.grok/auth.json"
+token_field = "*.key"
+
+  [[cli.grok.usage.window]]
+  label   = "Wk"
+  percent = "config.creditUsagePercent"
+  resets  = "config.currentPeriod.end"
+
 [cli.antigravity]
 label   = "Antigravity"
 command = "agy"

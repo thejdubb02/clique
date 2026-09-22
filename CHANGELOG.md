@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.80.0 — 2026-09-22 11:58 PDT
+
+**Grok CLI reports plan usage too, the third after Claude and Codex.**
+0.78.0 called it closed: Grok's stored credential looked like it was not a
+usable API key for a balance endpoint. It turns out `~/.grok/auth.json`
+does hold an OAuth token, just keyed by the issuer and client id rather
+than a fixed field name, and that token reads the same weekly-credit
+endpoint (`cli-chat-proxy.grok.com`) the CLI's own usage screen calls.
+`usage.py` gained one generic step for it: a `*` path segment takes a
+dict's one value regardless of its key, so a probe can name a
+credential-cache shape it does not otherwise know. Verified against a
+live account. Undocumented on xAI's side, same as it was for Claude, so
+this can go quiet if they change it: same silent-failure rule as any
+other probe.
+
 ## 0.79.0 — 2026-09-21 16:54 PDT
 
 **A session compacting its context gets its own mark, instead of looking like

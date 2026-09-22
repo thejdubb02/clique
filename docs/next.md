@@ -45,7 +45,7 @@ Next, in order, as of 2026-09-21 (evening):
 | 13px of phantom horizontal scroll on a phone | CLQ-62 |
 | Local echo, so the pane stops feeling like a web page | CLQ-64 |
 | The key row keys are too narrow, and that is a decision — CSS already has `overflow-x: auto`; the card's own measured widths may be stale, needs a real phone check before it needs code | CLQ-63 |
-| Auto-resume when a usage limit resets — the probe now exists for Claude and Codex (see "Codex usage probe" below); Grok/Gemini/Antigravity are checked and blocked, not just unresearched. The resume trigger itself is not built | CLQ-68 |
+| Auto-resume when a usage limit resets — the probe now exists for Claude, Codex and Grok (see "Grok usage probe" below); Gemini/Antigravity are checked and blocked, not just unresearched. The resume trigger itself is not built | CLQ-68 |
 | The rest of the phone pass | CLQ-65 |
 | MCP server, phase 2: write verbs, blocked on CLQ-52's policy model | CLQ-76 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
@@ -91,6 +91,15 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **Grok usage probe**, 0.80.0. 0.78.0 called Grok's stored credential
+  unusable for a balance check; it turns out `~/.grok/auth.json` holds an
+  OAuth token, just keyed by the issuer and client id rather than a fixed
+  field, and that token reads the same weekly-credit endpoint
+  (`cli-chat-proxy.grok.com`) the CLI's own usage screen calls. `usage.py`
+  gained a `*` path step, a dict's one value regardless of its key, so the
+  probe can still be one declarative block instead of a Grok-shaped code
+  path. Verified against a live account. Part of CLQ-68; Gemini and
+  Antigravity remain blocked as they were.
 - **A "compacting" ring state, plus a spinning favicon**, 0.79.0. Detected the
   same way waiting/error already are: a regex against the pane's own text,
   declared per-CLI in `clis.toml`, generic default (`"(?i)compacting"`) so

@@ -54,6 +54,11 @@ _cache: dict[str, tuple[float, dict]] = {}
 def _dig(data: object, path: str) -> object:
     """`a.b.c` out of nested dicts, or None the moment the path stops matching.
 
+    A `*` step takes the first value of a dict regardless of its key, for a
+    credential file keyed by something opaque and account-specific (Grok's
+    `auth.json` is `{"<issuer>::<client-id>": {...token fields...}}`) — still
+    one declarative path, not a vendor branch.
+
     Deliberately forgiving: a probe describes somebody else's API, and that API
     changing shape should cost a missing number rather than a traceback in a
     poll every browser is waiting on.
@@ -61,7 +66,7 @@ def _dig(data: object, path: str) -> object:
     for step in str(path).split("."):
         if not isinstance(data, dict):
             return None
-        data = data.get(step)
+        data = next(iter(data.values()), None) if step == "*" else data.get(step)
     return data
 
 

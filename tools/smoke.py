@@ -1647,6 +1647,19 @@ def main() -> int:
         missing_windows,
     )
 
+    print("usage: a `*` path step takes a dict's one value, key unknown")
+    # Grok's auth.json is keyed by "<issuer>::<client-id>", not a fixed field.
+    grok_auth = {"https://auth.x.ai::b1a0": {"key": "tok_abc", "email": "j@x.com"}}
+    check(
+        "the wildcard reaches the token regardless of the outer key",
+        usage._dig(grok_auth, "*.key") == "tok_abc",
+        usage._dig(grok_auth, "*.key"),
+    )
+    check(
+        "a wildcard against an empty dict is None, not a crash",
+        usage._dig({}, "*.key") is None,
+    )
+
     print("usage: running-only by default, every installed CLI on an explicit ask")
     # Panel.usage_now is a plain method on self.store/self.registry, so a
     # duck-typed fake stands in rather than wiring up a real Panel (auth,
