@@ -1560,16 +1560,24 @@ function appendUpdateBadge(el) {
   btn.type = "button";
   btn.className = "version-update" + (badge.state === "failed" ? " failed" : "");
   btn.disabled = badge.state === "busy";
-  const label = badge.state === "busy" ? "Installing..."
+  const label = badge.state === "busy" ? "Installing…"
     : badge.state === "failed" ? "Update failed, retry"
     : "Update ready";
   btn.title = badge.state === "failed"
     ? "Update failed: " + (badge.message || "unknown error") + ", click to retry"
     : "CLIque " + badge.version + " is ready, click to install and restart";
   btn.setAttribute("aria-label", btn.title);
-  const dot = document.createElement("span");
-  dot.className = "version-new";
-  btn.append(dot, " " + label);
+  // The pulsing dot says "something is waiting on you"; once you have
+  // clicked and it is actually installing, that is a different fact and
+  // wants the house loader instead, not a dot that has simply gone still.
+  if (badge.state === "busy") {
+    btn.insertAdjacentHTML("beforeend", loaderCells());
+  } else {
+    const dot = document.createElement("span");
+    dot.className = "version-new";
+    btn.append(dot);
+  }
+  btn.append(" " + label);
   btn.onclick = async () => {
     if (typeof window.cliqueRestart !== "function" || badge.state === "busy") return;
     badge.state = "busy";
@@ -3268,6 +3276,11 @@ function mk(tag, cls, text) {
   if (cls) e.className = cls;
   if (text != null) e.textContent = text;
   return e;
+}
+// The house loader, as an HTML string so it drops straight into a template
+// literal or a button's textContent-replacing innerHTML alongside a label.
+function loaderCells() {
+  return '<span class="loader-cells" aria-hidden="true"><i></i><i></i><i></i><i></i></span>';
 }
 function paneEmpty(text) { return mk("p", "pane-empty", text); }
 function paneP(text) { return mk("p", "pane-hint", text); }
@@ -5306,7 +5319,8 @@ async function openTranscript(s) {
   $("#fileTitle").textContent = s.name || "Conversation";
   $("#filePath").textContent = "conversation";
   resetFileBody();
-  $("#fileNote").hidden = false; $("#fileNote").textContent = "Reading...";
+  $("#fileNote").hidden = false;
+  $("#fileNote").innerHTML = loaderCells() + " Reading…";
   $("#file").hidden = false;
   let data;
   try {
@@ -5360,7 +5374,7 @@ async function openFileSheet(sessionId, path) {
   $("#filePath").textContent = asked;
   resetFileBody();
   $("#fileNote").hidden = false;
-  $("#fileNote").textContent = "Looking...";
+  $("#fileNote").innerHTML = loaderCells() + " Looking…";
   $("#file").hidden = false;
   try {
     const info = await api(
@@ -8838,7 +8852,7 @@ async function generateTheme() {
   if (!wanted) return box.focus();
   gen.disabled = true;
   const was = gen.textContent;
-  gen.textContent = "Making it\u2026";
+  gen.innerHTML = loaderCells() + " Making it\u2026";
   try {
     const made = await api("api/themes/generate", {
       method: "POST", body: JSON.stringify({ prompt: wanted }),

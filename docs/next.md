@@ -91,6 +91,17 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **One house loader, everywhere the panel makes you wait**, 0.86.0. CLQ-46.
+  Four small cells walking, `currentColor`-tinted so one shape drops into a
+  note, a button, or a badge with no per-site styling. Wired into the
+  transcript sheet, the file sheet, the theme generator button, and the
+  update badge's busy state — the only four ellipsis-text waits the panel
+  actually had. No reference implementation survived to copy from (the
+  "0.3.10 desktop update card" the original ask pointed at appears to have
+  been removed in the desktop repo's 2026-09-20 installer rework, confirmed
+  by grepping that repo for it and finding nothing), so this is a fresh,
+  small design built to the same constraints (write our own, theme
+  variables only, respects reduced motion) rather than an extension of one.
 - **The font picker says which font you actually got**, 0.85.0. CLQ-47.
   "Using: Consolas" under the picker, the first face in the chosen stack the
   browser can actually draw. `document.fonts.check()` was the obvious tool

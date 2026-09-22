@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.86.0 — 2026-09-22 16:00 PDT
+
+**One house loader, everywhere the panel makes you wait.** CLQ-46. Four
+small cells walking, `currentColor` so it tints with whatever text or button
+it sits inside — the transcript sheet ("Reading…"), the file sheet
+("Looking…"), the theme generator button ("Making it…"), and the update
+badge's busy state ("Installing…") all draw the same one now instead of
+sitting there as plain text. CSS only, no dependency, a slower fade under
+`prefers-reduced-motion` rather than nothing. The update badge's dot used to
+just stop pulsing while installing — a wait with no motion reads as hung,
+which is the whole reason this card existed — so busy now swaps it for the
+loader instead of a still dot; the CSS rule that only ever applied to that
+now-impossible combination is gone with it.
+
 ## 0.85.0 — 2026-09-22 15:50 PDT
 
 **The font picker says which font you actually got.** Settings → Font now

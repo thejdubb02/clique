@@ -993,6 +993,26 @@ button.primary { background: var(--accent); color: var(--on-accent); }
 @keyframes cli-compact { 0%, 100% { transform: scale(1); } 50% { transform: scale(.72); } }
 @keyframes cli-nudge { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
+/* The house loader: four small cells, walking. One shape for every wait in
+   the panel — the transcript sheet, the file sheet, the theme generator, the
+   update badge — instead of each writing its own. currentColor, so it takes
+   the tint of whatever text or button it sits inside rather than carrying a
+   colour of its own. */
+.loader-cells { display: inline-flex; gap: 3px; align-items: center; }
+.loader-cells i {
+  width: 4px; height: 4px; border-radius: 1px; flex: none;
+  background: currentColor; display: inline-block;
+  animation: loader-walk 1s ease-in-out infinite;
+}
+.loader-cells i:nth-child(2) { animation-delay: .15s; }
+.loader-cells i:nth-child(3) { animation-delay: .3s; }
+.loader-cells i:nth-child(4) { animation-delay: .45s; }
+@keyframes loader-walk { 0%, 100% { opacity: .3; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .loader-cells i { animation: loader-fade 1.8s ease-in-out infinite; }
+  @keyframes loader-fade { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+}
+
 /* The fill of a dot is colour, not motion. The ring around it (when this
    dot is wrapped in .cli-status) is what spins or pulses. */
 .dot[data-work="working"]    { background: var(--accent); }
@@ -1923,7 +1943,6 @@ a.give-value { color: var(--accent); }
 .version-update .version-new {
   background: currentColor; animation: version-update-pulse 2.2s ease-out infinite;
 }
-.version-update:disabled .version-new { animation: none; }
 @keyframes version-update-pulse {
   0% { box-shadow: 0 0 0 0 currentColor; }
   70% { box-shadow: 0 0 0 6px transparent; }
