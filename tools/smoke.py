@@ -1926,6 +1926,50 @@ def main() -> int:
         burn.wait(timeout=5)
     sysinfo._proc_cache["at"] = 0.0
 
+    print("descendant CLIs")
+    # The row already names the session's own process. A match has to be
+    # something it spawned, or every session would flag itself.
+    sysinfo._proc_cache["at"] = 0.0
+    walked = sysinfo._walk_proc()
+    own = os.getpid()
+    own_comm = walked[3].get(own, "") if len(walked) == 4 else ""
+    check("the proc walk returns a comm map", len(walked) == 4, len(walked))
+    check("this process has a comm name", isinstance(own_comm, str) and own_comm != "", own_comm)
+    snap = sysinfo._proc_snapshot()
+    snap_comm = snap["comm"].get(own, "")
+    check(
+        "the shared snapshot carries that name",
+        isinstance(snap_comm, str) and snap_comm != "",
+        snap_comm,
+    )
+
+    child = subprocess.Popen(["sleep", "5"])
+    try:
+        sysinfo._proc_cache["at"] = 0.0
+        found = sysinfo.sub_clis_by_root([own], {"sleep"})
+        check(
+            "a spawned sleep is listed under its parent",
+            found.get(own) == ["sleep"],
+            found,
+        )
+        itself = sysinfo.sub_clis_by_root([child.pid], {"sleep"})
+        check(
+            "a root is not flagged as its own sub-CLI",
+            child.pid not in itself,
+            itself,
+        )
+        none = sysinfo.sub_clis_by_root([own], {"not-a-cli"})
+        check(
+            "a root with no matching descendant is omitted",
+            none == {},
+            none,
+        )
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.wait(timeout=5)
+    sysinfo._proc_cache["at"] = 0.0
+
     check_mcp()
 
     print("teardown")

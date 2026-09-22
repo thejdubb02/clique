@@ -466,6 +466,9 @@ class Panel:
         panes = self.live() if panes is None else panes
         rss_map = sysinfo.rss_by_root([p.pid for p in panes.values()])
         cpu_map = sysinfo.cpu_percent_by_root([p.pid for p in panes.values()])
+        # shell's command is bash, which is not an agent CLI and would be pure noise.
+        known_sub_commands = {c.command for cid, c in self.registry.types().items() if cid != "shell" and c.command}
+        sub_map = sysinfo.sub_clis_by_root([p.pid for p in panes.values()], known_sub_commands)
         now = time.time()
         # Sessions that have gone stop being remembered by the busy check.
         working.forget(set(panes))
@@ -526,6 +529,12 @@ class Panel:
                     # 0.0 until a second sample exists. Can pass 100 when the
                     # session is on more than one core.
                     "cpu": cpu_map.get(pane.pid, 0.0) if pane else 0.0,
+                    # Another known CLI running as a descendant right now — a
+                    # Claude Code session that shelled out to Grok or Codex to
+                    # do sub-work. A process-tree fact, not a guess about
+                    # intent. comm is the kernel's task name, truncated to 15
+                    # bytes, so this is a heuristic name match, not a certainty.
+                    "sub_clis": sub_map.get(pane.pid, []) if pane else [],
                     "activity": pane.activity if pane else 0,
                     # The pane's real size, so a browser can notice when it has
                     # drifted from what it is drawing. A tmux window has one size

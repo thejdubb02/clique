@@ -590,6 +590,28 @@ function sessionMarker(s, where) {
          ` aria-label="${WORK_WORDS[work]}" title="${WORK_WORDS[work]}">${drawn}</span>`;
 }
 
+/* A CLI this session has shelled out to, drawn smaller beside its own mark.
+ *
+ * The names come from the process tree. The kernel keeps 15 bytes of the
+ * executable, so a hit is a name match rather than a sure identification. */
+function subCliBadge(s) {
+  const ids = Array.isArray(s.sub_clis) ? s.sub_clis : [];
+  if (!ids.length) return "";
+  const clis = ids.map((id) => (state.clis || []).find((c) => c.id === id));
+  const shown = ids.slice(0, 3);
+  const rest = ids.length - shown.length;
+  const icons = clis.slice(0, 3).map((cli, i) => markerFor(
+    { color: cliColor(shown[i], cli?.color), icon: cli?.icon,
+      icon_full_color: cli?.icon_full_color, label: cli?.label, cli: shown[i] },
+    "both"
+  )).join("");
+  const more = rest > 0 ? `<span class="sub-cli-more">+${rest}</span>` : "";
+  const title = escapeHtml(
+    "Also running: " + ids.map((id, i) => clis[i]?.label || id).join(", ")
+  );
+  return `<span class="sub-clis"><span class="sub-cli-stack" title="${title}">${icons}${more}</span></span>`;
+}
+
 /* Whether this session's marker is standing in for the status dot.
  *
  * Only when there is actually a marker to carry it. With the marker turned
@@ -2005,6 +2027,7 @@ function treeFingerprint() {
     x.signal || "", x.saying || "", x.cli || "", x.cwd || "",
     x.branch || "", x.dirty || 0,
     ago(x.created), x.cli_session_id || "",
+    (x.sub_clis || []).join(","),
   ].join("\x1f")).join("\x1e");
   const folders = (state.folders || []).map((f) =>
     [f.id, f.name, f.color, f.emoji || "", f.collapsed ? 1 : 0].join("\x1f")).join("\x1e");
@@ -2409,6 +2432,7 @@ function sessionRow(s) {
   row.innerHTML =
     statusDot(s, "sidebar") +
     sessionMarker(s, "sidebar") +
+    subCliBadge(s) +
     `<span class="meta"><span class="name">${s.pinned ? '<span class="pin" title="Pinned">\u2605</span>' : ''}${escapeHtml(s.name)}</span>` +
     `<span class="${pathClass}">${pathHtml}</span>` +
     `</span>` +
@@ -3967,6 +3991,7 @@ function tabsFingerprint() {
       reviewLockedOf(id) ? 1 : 0,
       s.cwd || "", s.signal || "", s.cli || "",
       (groupOf(id) || {}).id || "", (groupOf(id) || {}).color || "",
+      (s.sub_clis || []).join(","),
     ].join("\x1f");
   }).join("\x1e") + "\x1d" + (activeId || "");
 }
@@ -4039,6 +4064,7 @@ function renderTabs() {
       `<span class="num">${index + 1}</span>` +
       statusDot(s, "tabs") +
       sessionMarker(s, "tabs") +
+      subCliBadge(s) +
       `<span class="label">${escapeHtml(s.name)}</span>` +
       `<button class="gear" title="Session settings">${icon("settings")}</button>` +
       `<button class="x" title="Close tab (session keeps running)">${icon("x")}</button>`;

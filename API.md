@@ -141,7 +141,7 @@ client that finds these differ from its own terminal should say so; that is how
 a pane recovers from being resized by somebody else instead of sitting in
 tmux's dot-fill until something happens to jog it.
 
-Each session also carries `created`, `last_seen`, `order`, `rss` (process-tree resident bytes), `cpu` (CPU percent of that same process tree since the last poll; `0.0` on the first sample, because a rate needs two readings; can pass 100 when the session is using more than one core), plus the live facts: `alive`, `attached`,
+Each session also carries `created`, `last_seen`, `order`, `rss` (process-tree resident bytes), `cpu` (CPU percent of that same process tree since the last poll; `0.0` on the first sample, because a rate needs two readings; can pass 100 when the session is using more than one core), `sub_clis` (CLI ids currently running as descendant processes of this session, e.g. `["grok", "codex"]`; empty when none), plus the live facts: `alive`, `attached`,
 `command`, `activity` (tmux's own clock) and `busy`.
 
 `branch` and `dirty` come from git in that session's working directory —

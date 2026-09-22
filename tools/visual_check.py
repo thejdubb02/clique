@@ -271,6 +271,44 @@ def _run(panel) -> int:
         check("and it says the folder is dirty", "changed" in shown, shown)
         page.locator("#sidebar").screenshot(path=str(SHOTS / "sidebar.png"))
 
+        # Same mutation the rest of this file uses: poke `state`, then the
+        # render the poll would have called. Cleared before we return so a
+        # later check is not looking at a badge the server never sent.
+        badge = page.evaluate(
+            """(id) => {
+              const s = (state.sessions || []).find((x) => x.id === id);
+              if (!s) return {row: false, tab: false, why: "missing"};
+              const prevTabs = openTabs.slice();
+              const prev = s.sub_clis;
+              const had = openTabs.includes(id);
+              s.sub_clis = ["grok"];
+              if (!had) openTabs = openTabs.concat([id]);
+              renderTree();
+              renderTabs();
+              const vis = (sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return false;
+                const r = el.getBoundingClientRect();
+                const st = getComputedStyle(el);
+                return r.width > 0 && r.height > 0
+                  && st.display !== "none" && st.visibility !== "hidden";
+              };
+              const row = vis('.session[data-id="' + id + '"] .sub-clis');
+              const tab = vis('.tab[data-id="' + id + '"] .sub-clis');
+              s.sub_clis = prev || [];
+              openTabs = prevTabs;
+              renderTree();
+              renderTabs();
+              return {row, tab};
+            }""",
+            mine,
+        )
+        check(
+            "a descendant CLI shows on the row and the tab",
+            bool(badge) and badge.get("row") and badge.get("tab"),
+            badge,
+        )
+
         print("controls are actually visible")
         # Icon-only buttons are the ones that fail silently: an icon that did
         # not load leaves a button that is present, clickable and empty.

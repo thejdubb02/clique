@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.84.0 — 2026-09-22 15:29 PDT
+
+**A session shows when its CLI has shelled out to another one.** A Claude
+Code window that runs Grok or Codex headless to do sub-work now says so: a
+small stacked badge of the sub-CLI's own logo, beside the session's own mark
+in the sidebar row and on the tab, with a tooltip naming which ones. Built
+entirely from process state already being read for per-session CPU and
+memory — `sysinfo.py`'s existing `/proc` walk kept the executable name it was
+already parsing and throwing away, so this is one more thing read off a pass
+that already happens, not a new one. A match is a descendant only, so a
+session's own top-level process never flags itself, and a bare `bash` shell
+is excluded on purpose since it would light up almost everything. Comm names
+are a kernel-truncated 15 bytes, so this is a heuristic name match like the
+attention regexes, not a certainty, and shares the same up-to-8-second cache
+lag as the CPU/RSS numbers it rides alongside — a very short-lived headless
+call can finish between two samples. Verified against a real, running
+session with a real spawned process, through the live API. Built with Grok
+CLI from a full spec, reviewed and verified before shipping.
+
 ## 0.83.0 — 2026-09-22 14:51 PDT
 
 **Antigravity reports plan usage too.** No plain REST endpoint exists for it:

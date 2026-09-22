@@ -1009,6 +1009,23 @@ button.primary { background: var(--accent); color: var(--on-accent); }
   line-height: 1; text-transform: uppercase;
 }
 
+/* Smaller than the session's own mark, and overlapped: a fact about the
+   row, not the row's name. */
+.sub-clis, .sub-cli-stack {
+  display: inline-flex; flex: none; align-items: center;
+}
+.sub-cli-stack > :not(:first-child) { margin-left: -4px; }
+.sub-cli-stack .cli-icon,
+.sub-cli-stack .cli-img,
+.sub-cli-stack .cli-chip,
+.sub-cli-stack .cli-letter {
+  width: 10px; height: 10px; flex: 0 0 10px;
+}
+.sub-cli-stack .cli-letter { font-size: 7px; }
+.sub-cli-stack > .sub-cli-more {
+  margin-left: 3px; font-size: 9px; line-height: 1; color: var(--dim);
+}
+
 /* ------------------------------------------------------------------ settings */
 
 #settings { position: fixed; inset: 0; background: var(--scrim); display: grid;

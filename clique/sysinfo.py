@@ -184,7 +184,7 @@ def temperature() -> dict:
 
 
 _RSS_TTL = 8.0
-_proc_cache: dict = {"at": 0.0, "rss": {}, "kids": {}, "ticks": {}}
+_proc_cache: dict = {"at": 0.0, "rss": {}, "kids": {}, "ticks": {}, "comm": {}}
 _PAGE_KB = os.sysconf("SC_PAGE_SIZE") // 1024
 # Same clock /proc uses for utime/stime. cpu_percent() never needs this: its
 # busy and total both come from /proc/stat, so the tick rate cancels out.
@@ -194,11 +194,12 @@ _CLK_TCK = os.sysconf("SC_CLK_TCK")
 _cpu_previous: dict[int, tuple[int, float, float]] = {}
 
 
-def _walk_proc() -> tuple[dict, dict, dict]:
-    """(rss_kb_by_pid, children_by_ppid, cpu_ticks_by_pid) from one /proc pass."""
+def _walk_proc() -> tuple[dict, dict, dict, dict]:
+    """(rss_kb_by_pid, children_by_ppid, cpu_ticks_by_pid, comm_by_pid) from one /proc pass."""
     rss: dict = {}
     kids: dict = {}
     ticks: dict = {}
+    comm: dict[int, str] = {}
     for entry in os.scandir("/proc"):
         if not entry.name.isdigit():
             continue
@@ -219,10 +220,13 @@ def _walk_proc() -> tuple[dict, dict, dict]:
             # time (cutime/cstime) stays out: the tree walk adds each live
             # child itself, and adding both would count those twice.
             ticks[pid] = int(fields[11]) + int(fields[12])
+            # Between the first "(" and that closing ")". A naive split
+            # breaks when the name itself holds spaces or parens.
+            comm[pid] = data[data.index(b"(") + 1:close].decode("utf-8", "replace")
         except (IndexError, ValueError):
             continue
         kids.setdefault(ppid, []).append(pid)
-    return rss, kids, ticks
+    return rss, kids, ticks, comm
 
 
 def _proc_snapshot() -> dict:
@@ -233,8 +237,8 @@ def _proc_snapshot() -> dict:
     number that does not move faster than memory does."""
     now = time.time()
     if now - _proc_cache["at"] >= _RSS_TTL:
-        rss, kids, ticks = _walk_proc()
-        _proc_cache.update(at=now, rss=rss, kids=kids, ticks=ticks)
+        rss, kids, ticks, comm = _walk_proc()
+        _proc_cache.update(at=now, rss=rss, kids=kids, ticks=ticks, comm=comm)
     return _proc_cache
 
 
@@ -258,6 +262,32 @@ def rss_by_root(roots) -> dict:
     cache = _proc_snapshot()
     rss, kids = cache["rss"], cache["kids"]
     return {root: _sum_tree(root, rss, kids) for root in set(roots)}
+
+
+def sub_clis_by_root(roots, commands: set[str]) -> dict[int, list[str]]:
+    """The row already names the session's own CLI. This is another one it
+    shelled out to — only a descendant counts, or every session would flag
+    itself."""
+    cache = _proc_snapshot()
+    kids, comm = cache["kids"], cache["comm"]
+    out: dict[int, list[str]] = {}
+    for root in set(roots):
+        found: set[str] = set()
+        # Start below the root, and remember the root so a cycle cannot
+        # walk back up and count the session as its own sub-CLI.
+        stack, seen = list(kids.get(root, ())), {root}
+        while stack:
+            pid = stack.pop()
+            if pid in seen:
+                continue
+            seen.add(pid)
+            name = comm.get(pid, "")
+            if name in commands:
+                found.add(name)
+            stack.extend(kids.get(pid, ()))
+        if found:
+            out[root] = sorted(found)
+    return out
 
 
 def cpu_percent_by_root(roots) -> dict:

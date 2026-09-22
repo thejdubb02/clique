@@ -91,6 +91,18 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **A session shows when its CLI has shelled out to another one**, 0.84.0.
+  Asked in chat, not off this list. A small logo badge beside the session's
+  own mark, in the sidebar row and on the tab, when a known CLI (grok, codex,
+  agy, ...) is running as a descendant process — a Claude Code session doing
+  headless sub-work through another CLI now says so. Built entirely off the
+  `/proc` walk `sysinfo.py` already does for per-session CPU/RSS, which was
+  parsing and discarding the executable name; matches a descendant only, so
+  a session never flags its own top-level process, and `bash` is excluded on
+  purpose (pure noise otherwise). Shares that walk's ~8s cache lag, so a very
+  short headless call can land between samples. Built with Grok CLI from a
+  full spec, reviewed and verified live against a real running session
+  before shipping.
 - **Antigravity reports plan usage too**, 0.83.0. Asked in chat, not off this
   list. No REST endpoint exists — its real quota call is a protobuf
   Connect-RPC through the OS keyring, found by reading strings out of the
