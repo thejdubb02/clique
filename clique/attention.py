@@ -204,6 +204,22 @@ def _patterns(raw: list[str]) -> list[re.Pattern]:
     return got
 
 
+def _tail(text: str, n: int) -> str:
+    """The last `n` lines that actually hold something, blank pane padding
+    stripped first.
+
+    `capture-pane` returns the pane's full row count, not the height of what
+    is actually drawn — a short conversation in a tall terminal pads out with
+    genuinely blank rows below it. Slicing the raw last `n` lines would eat
+    that padding and push real content, possibly all of it, out of the
+    window it was supposed to be searched in.
+    """
+    lines = text.splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines[-n:])
+
+
 def verdict_text(
     text: str, waiting: list[str], errors: list[str], compacting: list[str] | None = None
 ) -> str:
@@ -218,7 +234,7 @@ def verdict_text(
     waiting = [*DEFAULT_WAITING, *(str(x) for x in (waiting or []))]
     errors = [*DEFAULT_ERROR, *(str(x) for x in (errors or []))]
     compacting = [*DEFAULT_COMPACTING, *(str(x) for x in (compacting or []))]
-    tail = "\n".join(text.splitlines()[-LINES:])
+    tail = _tail(text, LINES)
     if any(p.search(tail) for p in _patterns(errors)):
         return "error"
     if any(p.search(tail) for p in _patterns(compacting)):
@@ -265,7 +281,45 @@ def detect(
     return verdict
 
 
+#: (mux) -> (activity, verdict). Same bargain as `_seen`, kept separate
+#: because it is checked on a different schedule — see detect_compacting.
+_compacting_seen: dict[str, tuple[int, bool]] = {}
+
+
+def detect_compacting(
+    mux: str, activity: int, patterns: list[str], socket: str | None = tmux.SOCKET
+) -> bool:
+    """Whether the pane's *current* text says "compacting" — no settle delay.
+
+    Waiting and error wait out a short burst of ordinary output before
+    trusting what the pane says, because a burst can transiently look like
+    either. There is no such burst to confuse "compacting" with: the word
+    means what it says the moment it is drawn. A real compaction is also
+    often faster than that delay, so gating it the same way means the event
+    is over before this is ever allowed to look. Called only while the pane
+    is busy, so a quiet session still costs nothing.
+    """
+    with _lock:
+        cached = _compacting_seen.get(mux)
+        if cached and cached[0] == activity:
+            return cached[1]
+    try:
+        text = tmux.capture(mux, socket, lines=LINES, styled=False)
+    except tmux.TmuxError:
+        return False
+    tail = _tail(text, LINES)
+    all_patterns = [*DEFAULT_COMPACTING, *(str(x) for x in (patterns or []))]
+    verdict = any(p.search(tail) for p in _patterns(all_patterns))
+    with _lock:
+        _compacting_seen[mux] = (activity, verdict)
+        if len(_compacting_seen) > 512:
+            for stale in list(_compacting_seen)[:256]:
+                _compacting_seen.pop(stale, None)
+    return verdict
+
+
 def forget(mux: str) -> None:
     """Drop a session's cached verdict — called when it is killed or adopted."""
     with _lock:
         _seen.pop(mux, None)
+        _compacting_seen.pop(mux, None)

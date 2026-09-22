@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.81.1 — 2026-09-22 13:26 PDT
+
+**Fixed: the 0.79.0 "compacting" indicator never actually fired.** Two bugs,
+both real, found only by forcing a live compaction and watching `/api/state`
+rather than trusting the code read. First: detection was gated behind the
+same 8-second settle delay waiting/error use to rule out an ordinary output
+burst — but a real compaction is often faster than that, so most of the time
+the event was over before detection was ever allowed to look. Compacting now
+gets checked the moment the pane goes busy; there is nothing to debounce it
+against, unlike a burst that might transiently look like a question.
+Second: the pane-text search took the last 40 lines of the *captured pane*,
+not the last 40 lines that actually had anything on them — a terminal taller
+than what is currently drawn (ordinary, not an edge case) pads out with
+genuinely blank rows, which pushed the status text out of the search window
+entirely. Both were latent since 0.79.0 shipped; error detection shared the
+same blank-padding bug. Verified against a real, running session this time,
+not a forced client-side value.
+
 ## 0.81.0 — 2026-09-22 12:25 PDT
 
 **A bar snippet can carry its own colour.** Settings → Snippets gets the same

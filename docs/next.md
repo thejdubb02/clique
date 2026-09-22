@@ -91,6 +91,19 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **Fixed: the 0.79.0 compacting indicator never fired**, 0.81.1. Two real
+  bugs, found by forcing a live compaction rather than trusting the earlier
+  code read. Detection was gated behind the same 8-second settle delay
+  waiting/error use to rule out a burst, but compaction is often faster than
+  that, so the event was usually over before detection was ever allowed to
+  run — now checked the moment the pane goes busy, since there is no burst
+  to debounce a literal on-screen word against. Separately, the pane-text
+  search took the last 40 lines of the captured *pane*, not the last 40
+  lines that actually had anything on them, so a terminal taller than what
+  is currently drawn (ordinary, not an edge case) padded the status text
+  straight out of the search window. The second bug also silently affected
+  error detection, live since 0.79.0. Justin reported it not working twice
+  before this was found — asked in chat, not off this list.
 - **A snippet's own pill colour**, 0.81.0. Settings → Snippets gets the same
   swatch-plus-reset control the CLI rows already use; picked, it tints that
   snippet's one-tap bar pill instead of the flat accent every custom pill

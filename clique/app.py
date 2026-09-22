@@ -681,20 +681,32 @@ class Panel:
            quiet. A guess, and a good one, and only as good as the config.
         3. Nothing. Most sessions, most of the time.
 
-        A pane in a real output burst never reaches tier 2: capturing it
-        would cost a subprocess per poll to learn it is not waiting. A pane
-        that has been "busy" past SETTLE is the other case — an animated
-        prompt ticks the clock forever, and that *is* a question.
+        A pane in a real output burst never reaches tier 2 for waiting/error:
+        capturing it would cost a subprocess per poll to learn it is not
+        waiting. A pane that has been "busy" past SETTLE is the other case —
+        an animated prompt ticks the clock forever, and that *is* a question.
+
+        Compacting is tier 2 as well, but checked the moment the pane is
+        busy rather than past SETTLE — see attention.detect_compacting for
+        why it cannot wait that long.
         """
         if not pane:
             return ""
         if session.signal and pane.activity <= session.signal_at:
             return session.signal
+        compacting = cli.compacting_patterns if cli else []
+        # Checked the instant the pane is busy, not gated behind settled()
+        # below: a real compaction is often faster than that delay, and
+        # there is nothing to debounce it against the way waiting/error
+        # need to rule out a burst. See attention.detect_compacting.
+        if working.busy(pane, session.socket) and attention.detect_compacting(
+            session.mux, pane.activity, compacting, session.socket
+        ):
+            return "compacting"
         if not working.settled(pane):
             return ""
         waiting = cli.waiting_patterns if cli else []
         errors = cli.error_patterns if cli else []
-        compacting = cli.compacting_patterns if cli else []
         return attention.detect(
             session.mux, pane.activity, waiting, errors, session.socket, compacting
         )

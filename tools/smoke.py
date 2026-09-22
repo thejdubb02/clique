@@ -1209,6 +1209,37 @@ def main() -> int:
     for name in ("sm-still", "sm-moving"):
         tmux.kill(name, SOCKET)
 
+    print("compacting is caught before the waiting/error settle delay")
+    # A real compaction is often faster than SETTLE (8s): this pane keeps
+    # redrawing a changing "Compacting..." line the whole time, the same
+    # shape a real CLI's spinner draws, so busy() never settles during it.
+    # Filled with real lines first so the pane is genuinely full, the same
+    # as an ordinary session's scrollback — a fresh, mostly-blank pane would
+    # (correctly) trip the padding check below instead of this one.
+    tmux.create(
+        "sm-compact",
+        "/tmp",
+        [
+            "bash",
+            "-c",
+            "yes filler | head -100; "
+            "i=0; while [ $i -lt 40 ]; do i=$((i+1)); "
+            "printf 'Compacting conversation... %s\\n' $i; sleep 0.3; done",
+        ],
+        socket=SOCKET,
+    )
+    time.sleep(1.5)
+    compact_pane = next(p for p in tmux.list_sessions(SOCKET) if p.mux == "sm-compact")
+    check(
+        "the pane is busy, well short of SETTLE",
+        working.busy(compact_pane, SOCKET) and not working.settled(compact_pane),
+    )
+    check(
+        "compacting is detected anyway — settled() would still refuse it",
+        attention.detect_compacting("sm-compact", compact_pane.activity, [], SOCKET),
+    )
+    tmux.kill("sm-compact", SOCKET)
+
     print("generic question prompts")
     # These have to fire for a CLI with no [attention] table — that is how
     # Codex, Cursor, Gemini and the rest surface a permission prompt without
@@ -1290,6 +1321,14 @@ def main() -> int:
     check(
         "an error during compaction still wins",
         attention.verdict_text("Compacting…\nError: ran out of memory", [], []) == "error",
+    )
+    # A short-lived TUI in a tall pane leaves genuinely blank rows below it —
+    # capture-pane returns the pane's full row count, not the height of what
+    # is drawn. Slicing the raw last LINES would eat that padding and could
+    # push the status line out of the window it is supposed to be found in.
+    check(
+        "trailing blank pane rows do not push the status line out of the tail",
+        attention.verdict_text("Compacting conversation…\n" + "\n" * 60, [], []) == "compacting",
     )
     # False positives are the failure mode that erodes trust in the inbox, so
     # the finished-turn shapes that actually caused one must stay silent.
