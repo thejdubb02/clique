@@ -34,6 +34,11 @@
 #               order wrong and the pill will confidently name the wrong mode,
 #               which is worse than having no pill.
 #   mode_label  text shown in the pill, {mode} substituted
+#   quick_commands  a list of strings, each sent into the pane as if typed and
+#               Enter pressed, when its button is tapped — one row, one button
+#               per entry. Presence of this key is what makes the row appear;
+#               omit it and no row shows for that CLI. There is no per-CLI
+#               branch in the code, same as `modes`.
 #   resume      argv used instead of `args` when reattaching to a known
 #               {cli_session_id}
 #   own_input   true if this CLI draws its own input box at the bottom of the
@@ -77,6 +82,7 @@ icon       = "claude.svg"
 modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
+quick_commands = ["/clear", "/compact", "/cost"]
 
 # Extra regexes on top of the generic question marks every CLI already gets
 # (y/n, Do you want, a numbered choice). Match one and the session's ring
@@ -125,6 +131,30 @@ error = [
 dir     = "~/.claude/projects"
 layout  = "dashed-dir"
 pattern = "*.jsonl"
+
+# How much of the plan is spent, for the status bar. Read by `clique/usage.py`,
+# which does exactly what this says and knows nothing else: take the token out
+# of that file at that path, ask that URL, and pull those fields out of the
+# reply. The token is spent on the request and never reaches the browser, and
+# any failure is silence rather than an error.
+#
+# Delete this block and the bar simply stops showing it. Another CLI that
+# publishes the same kind of endpoint is another block, not a code change.
+[cli.claude.usage]
+url         = "https://api.anthropic.com/api/oauth/usage"
+token_file  = "~/.claude/.credentials.json"
+token_field = "claudeAiOauth.accessToken"
+headers     = { "anthropic-beta" = "oauth-2025-04-20" }
+
+  [[cli.claude.usage.window]]
+  label   = "5H"
+  percent = "five_hour.utilization"
+  resets  = "five_hour.resets_at"
+
+  [[cli.claude.usage.window]]
+  label   = "7D"
+  percent = "seven_day.utilization"
+  resets  = "seven_day.resets_at"
 
 [cli.gemini]
 label      = "Gemini CLI"
@@ -182,6 +212,24 @@ error = [
   "Traceback \\(most recent call last\\)",
 ]
 
+# xAI has no documented usage API (CLQ-68's 0.78.0 pass found the same for
+# Gemini and Antigravity). What the real Grok CLI's own usage screen calls
+# turned out to be reachable anyway: `auth.json` holds an OIDC access token
+# under a key named after the issuer and client id, not a fixed field, hence
+# `*` to take whatever that key is. That token reads the same weekly-credit
+# endpoint the CLI's TUI does. Verified against a live account, 2026-09-22.
+# Undocumented, so xAI can change or lock it without notice; failure here is
+# silence (usage.py), same as any other probe.
+[cli.grok.usage]
+url         = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
+token_file  = "~/.grok/auth.json"
+token_field = "*.key"
+
+  [[cli.grok.usage.window]]
+  label   = "Wk"
+  percent = "config.creditUsagePercent"
+  resets  = "config.currentPeriod.end"
+
 [cli.antigravity]
 label   = "Antigravity"
 command = "agy"
@@ -196,6 +244,28 @@ icon    = "antigravity.svg"
 # plan), like Grok's approval toggle. The pill stays hidden with the key absent.
 
 own_input = true
+
+# No plain REST endpoint: the real RPC (found by reading strings out of the
+# agy binary, 2026-09-22) is a protobuf Connect-RPC call to
+# google.internal.cloud.code.v1internal.PredictionService/RetrieveUserQuota
+# on cloudcode-pa.googleapis.com, authenticated via the OS keyring rather
+# than a token file — out of reach of the url+token_file probe above. `agy`
+# already knows how to ask and print the answer, so `cmd` runs it instead of
+# reimplementing an undocumented internal RPC. Verified against a live
+# account, 2026-09-22; the reply reports what is *left* (`remaining_fraction`,
+# 0..1) rather than what is spent, hence `remaining` instead of `percent`.
+[cli.antigravity.usage]
+cmd = ["agy", "-p", "/usage", "--output-format", "json"]
+
+  [[cli.antigravity.usage.window]]
+  label     = "GEM"
+  remaining = "command.data.groups.name=Gemini Models.buckets.id=gemini-weekly.remaining_fraction"
+  resets    = "command.data.groups.name=Gemini Models.buckets.id=gemini-weekly.reset_time"
+
+  [[cli.antigravity.usage.window]]
+  label     = "3RD"
+  remaining = "command.data.groups.name=Claude and GPT models.buckets.id=3p-weekly.remaining_fraction"
+  resets    = "command.data.groups.name=Claude and GPT models.buckets.id=3p-weekly.reset_time"
 
 [cli.shell]
 label   = "Shell"
@@ -216,6 +286,30 @@ color   = "#10A37F"
 status  = { url = "https://status.openai.com/api/v2/status.json", page = "https://status.openai.com" }
 
 own_input = true
+
+# Verified against a real install (2026-09-21), unlike the rest of this
+# section: `codex login` stores a ChatGPT OAuth token, and that same token
+# reads plan usage straight from ChatGPT's own backend. reset_at comes back
+# as Unix seconds rather than Claude's ISO string; usage.py's _resets_at
+# handles both. Checked on a free-plan account, which fills primary_window
+# only (a 30-day cap) and leaves secondary_window null — declared anyway on
+# the guess a paid plan adds a shorter one, since _windows already skips a
+# window whose fields do not resolve. Label is a placeholder ("LIMIT", not a
+# guessed duration) until an account with one confirms what it actually is.
+[cli.codex.usage]
+url         = "https://chatgpt.com/backend-api/wham/usage"
+token_file  = "~/.codex/auth.json"
+token_field = "tokens.access_token"
+
+  [[cli.codex.usage.window]]
+  label   = "PLAN"
+  percent = "rate_limit.primary_window.used_percent"
+  resets  = "rate_limit.primary_window.reset_at"
+
+  [[cli.codex.usage.window]]
+  label   = "LIMIT"
+  percent = "rate_limit.secondary_window.used_percent"
+  resets  = "rate_limit.secondary_window.reset_at"
 
 [cli.copilot]
 icon    = "copilot.svg"

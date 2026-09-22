@@ -24,6 +24,25 @@ def boxed_stream() -> StreamFilter:
     return StreamFilter(drop_dec=_DROP_DEC, drop_scrollback_erase=True)
 
 
+def plain_stream() -> StreamFilter:
+    """The filter everything else sits behind. Alternate screen only.
+
+    Every session needs this, not just the boxed ones. tmux is configured to
+    ignore the alternate screen so it keeps history, but it still passes the
+    switch downstream, and a browser that takes it parks xterm in the alternate
+    buffer. That buffer holds one screenful and no scrollback by definition, so
+    the history tmux sends on attach lands in the *normal* buffer and is never
+    shown: measured a browser with 360 lines in `buffer.normal` and 45 in the
+    alternate one it was actually displaying, which reads as "scrolling is
+    broken" when there is simply nothing under the finger.
+
+    Mouse reporting is deliberately left alone here. A boxed CLI has it
+    stripped so drag-select works; a plain shell should keep it, because a
+    program run inside one may want the mouse.
+    """
+    return StreamFilter(drop_dec=_ALT, drop_scrollback_erase=True)
+
+
 class StreamFilter:
     def __init__(
         self,

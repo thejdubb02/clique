@@ -9,8 +9,9 @@ Docs, each with one job — read the one that matches the question:
 
 | Question | File |
 |---|---|
-| What is being built next, in order | `docs/next.md` (short-lived; shipped work drops off it) |
-| Why it is ranked that way, what is refused | `ROADMAP.md` |
+| What is being built next, in order | the **CLIque** board in Kaneo, one card per job |
+| Why it is ranked that way, what was measured | `docs/next.md` |
+| The argument, and what is refused | `ROADMAP.md` |
 | Raised but not committed to | `docs/ideas-inbox.md` |
 | What shipped | `CHANGELOG.md` |
 
@@ -75,6 +76,35 @@ Skipping it leaves an entry the app renders without a time, and on a day with
 ten releases the date alone distinguishes nothing. It is idempotent; run it
 whenever.
 
+## Before calling a session done
+
+```bash
+python3 tools/shipped_check.py
+```
+
+Four surfaces have to agree: the panel's version, the README badge, what
+useclique.dev tells people to install, and what PyPI actually serves. They
+drift apart quietly and each one embarrasses differently, and none of it is
+visible from inside the panel. Ten seconds, so it is a command rather than a
+habit.
+
+Being ahead of PyPI is normal while work is in flight and stops being normal
+the moment the site tells a stranger to `pip install`, which it does. Cutting
+the release is: bump, changelog, tag `vX.Y.Z`, `gh release create`. Publishing
+fires on the release, uses Trusted Publishing, and needs no token.
+
+## It has to work on a stranger's machine
+
+Every feature is designed for someone who installs the package, opens the
+panel, and is off. Not for this box. If a feature only works because of
+something in `/root/platform`, a cron job we run, a file another tool of ours
+writes, or a key in our vault, it is not finished, and it is a trap: it will
+look complete here and be dead on arrival everywhere else.
+
+Where a feature genuinely needs a fact from somewhere else, ship the thing that
+fetches it and declare the vendor-shaped parts in `clis.toml`, which is where
+they already belong.
+
 ## The three rules
 
 1. **Filesystem, tmux, and process state only** — optional git detection. If a
@@ -90,6 +120,26 @@ whenever.
    lighter and more powerful, and a lifted implementation forfeits all four.
    The same applies to any other tool we borrow ideas from, including the
    VS Code Claude Code extension.
+
+## Three surfaces, and only one of them costs anything
+
+The panel is the product. Two clients wrap it, and a new feature does not reach
+them on the same terms:
+
+| | What it is | What a new panel feature costs it |
+|---|---|---|
+| **PWA** | the panel, installed | nothing, it is the same page |
+| **Desktop** (`clique-desktop`) | a Windows window around the panel | nothing, it is a webview of the same page |
+| **Android** (`clique-android`) | a native app with its own terminal | a port, every time |
+
+So the question at the end of a feature is only ever about the phone, and it
+gets asked out loud rather than assumed: **does Android need this, and if not,
+why not?** A yes becomes a tiered row in `clique-android/docs/port-plan.md`, a
+no goes in that file's Tier 3, which exists so leaving something out is a
+decision on the record instead of an oversight.
+
+Three releases, none implied by another: PyPI for the panel, our own F-Droid
+repo for the phone, a GitHub release for the desktop exe.
 
 ## It has to work on a phone
 

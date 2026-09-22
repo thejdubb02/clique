@@ -110,6 +110,11 @@ class CliType:
     modes: list[str] = field(default_factory=list)
     mode_key: str = "S-Tab"
     mode_label: str = "{mode} mode"
+    #: One-tap buttons for text this CLI is asked for often — `/clear`,
+    #: `/compact`, whatever the vendor's own slash commands are. Sent into the
+    #: pane exactly as typed, Enter included, the same path the prompt box's
+    #: Run button uses. Empty means no row, same as `modes` and the pill.
+    quick_commands: list[str] = field(default_factory=list)
     #: Filename in web/icons/. Drawn as a mask and tinted, so only the
     #: silhouette matters — a flat single-colour shape, not artwork.
     #: Whether this CLI draws its own input box at the bottom of the pane.
@@ -124,6 +129,10 @@ class CliType:
     #: Read only when `input_mode` is "auto", which is the default. The two
     #: explicit settings still win.
     own_input: bool = False
+    #: How to ask this CLI's vendor what is left of the plan, if it offers a
+    #: way. A whole block of TOML rather than a line of Python on purpose: the
+    #: panel runs the description and never learns whose API it is talking to.
+    usage: dict = field(default_factory=dict)
 
     #: Whether this CLI speaks Claude Code's hook protocol, so CLIque can wire
     #: it to report its own state (working / waiting / done) authoritatively
@@ -161,14 +170,16 @@ class CliType:
     #: last lines of the pane once it goes quiet:
     #:
     #:   [cli.claude.attention]
-    #:   waiting = ["Do you want to proceed\\?"]
-    #:   error   = ["^Error:"]
+    #:   waiting    = ["Do you want to proceed\\?"]
+    #:   error      = ["^Error:"]
+    #:   compacting = ["Shrinking context history"]
     #:
     #: Config, not code — which is the whole point. CLIque never learns what a
     #: vendor's prompt looks like; someone writes it down here, and can fix it
     #: the day the vendor changes it without waiting for a release. Omit the
     #: table and the session still gets the generic prompts (y/n, Do you want,
-    #: a numbered choice) that every CLI tends to draw.
+    #: a numbered choice) that every CLI tends to draw, plus the generic
+    #: "compacting" word every agentic CLI seems to use for the same thing.
     attention: dict = field(default_factory=dict)
 
     @property
@@ -178,6 +189,10 @@ class CliType:
     @property
     def error_patterns(self) -> list[str]:
         return [str(x) for x in (self.attention.get("error") or [])]
+
+    @property
+    def compacting_patterns(self) -> list[str]:
+        return [str(x) for x in (self.attention.get("compacting") or [])]
 
     @property
     def mode_seq(self) -> str:
@@ -248,6 +263,7 @@ class CliType:
             "color": self.color,
             "modes": list(self.modes),
             "mode_key": self.mode_key,
+            "quick_commands": list(self.quick_commands),
             "installed": self.installed,
             # Empty means "no drawing for this one" — the UI falls back to a
             # letter badge, so a newly added CLI looks deliberate without
@@ -335,12 +351,14 @@ def parse(data: dict) -> dict[str, CliType]:
             "modes",
             "mode_key",
             "mode_label",
+            "quick_commands",
             "icon",
             "history",
             "attention",
             "status",
             "own_input",
             "hooks",
+            "usage",
         }
         if unknown_keys:
             raise RegistryError(f"cli.{cli_id}: unknown key(s) {', '.join(sorted(unknown_keys))}")
@@ -354,9 +372,11 @@ def parse(data: dict) -> dict[str, CliType]:
             modes=list(raw.get("modes", [])),
             mode_key=raw.get("mode_key", "S-Tab"),
             mode_label=raw.get("mode_label", "{mode} mode"),
+            quick_commands=list(raw.get("quick_commands", [])),
             icon=raw.get("icon", ""),
             own_input=bool(raw.get("own_input", False)),
             hooks=bool(raw.get("hooks", False)),
+            usage=dict(raw.get("usage") or {}),
             status=dict(raw.get("status") or {}),
             history=dict(raw.get("history") or {}),
             attention=dict(raw.get("attention") or {}),

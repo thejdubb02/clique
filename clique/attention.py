@@ -78,6 +78,15 @@ DEFAULT_ERROR = [
     r"Traceback \(most recent call last\)",
 ]
 
+#: Context compaction is not a question — nobody needs to answer anything —
+#: but it is the one "working" moment worth a distinct mark, since it is easy
+#: to mistake for the session being stuck. "Compacting" is common enough
+#: wording across agentic CLIs to ship as a default; a CLI that says it
+#: differently gets its own line in clis.toml, same as waiting/error.
+DEFAULT_COMPACTING = [
+    r"(?i)compacting",
+]
+
 #: Compiled patterns, keyed by the strings they came from, so a hot-reloaded
 #: clis.toml does not mean recompiling on every poll.
 _compiled: dict[tuple[str, ...], list[re.Pattern]] = {}
@@ -102,14 +111,20 @@ _RULE_CHARS = frozenset(
 
 
 def is_rule(line: str) -> bool:
-    """Whether this line is frame rather than content."""
-    return not (set(line) - _RULE_CHARS)
+    """Whether this line is frame rather than content.
+
+    Whitespace is asked of the character rather than listed, because a CLI pads
+    its frame with more than a space. Claude Code ends a bare prompt row with a
+    non-breaking space, and against a literal set that one invisible character
+    made the row content: it survived the filter, then `rstrip` took it off
+    again, and a peek came back reading `\u276f`.
+    """
+    return all(ch.isspace() or ch in _RULE_CHARS for ch in line)
 
 
 def content_lines(text: str) -> list[str]:
     """The lines that said something, in order."""
-    return [row.rstrip() for row in text.splitlines()
-            if row.strip() and not is_rule(row)]
+    return [row.rstrip() for row in text.splitlines() if row.strip() and not is_rule(row)]
 
 
 #: How much scrollback to search for a line worth quoting. A pane can be almost
@@ -189,27 +204,56 @@ def _patterns(raw: list[str]) -> list[re.Pattern]:
     return got
 
 
-def verdict_text(text: str, waiting: list[str], errors: list[str]) -> str:
-    """"waiting", "error" or "" from pane text. Errors win.
+def _tail(text: str, n: int) -> str:
+    """The last `n` lines that actually hold something, blank pane padding
+    stripped first.
+
+    `capture-pane` returns the pane's full row count, not the height of what
+    is actually drawn — a short conversation in a tall terminal pads out with
+    genuinely blank rows below it. Slicing the raw last `n` lines would eat
+    that padding and push real content, possibly all of it, out of the
+    window it was supposed to be searched in.
+    """
+    lines = text.splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines[-n:])
+
+
+def verdict_text(
+    text: str, waiting: list[str], errors: list[str], compacting: list[str] | None = None
+) -> str:
+    """ "waiting", "error", "compacting" or "" from pane text. Errors win.
 
     Waiting is matched only against the last few content lines — a question
     is the last thing on the pane, and scanning further finds the previous
     one. Errors may sit higher (a traceback), so they search the whole tail.
+    Compacting is checked over the same tail as errors: unlike a question, it
+    is not necessarily the very last line drawn.
     """
     waiting = [*DEFAULT_WAITING, *(str(x) for x in (waiting or []))]
     errors = [*DEFAULT_ERROR, *(str(x) for x in (errors or []))]
-    tail = "\n".join(text.splitlines()[-LINES:])
+    compacting = [*DEFAULT_COMPACTING, *(str(x) for x in (compacting or []))]
+    tail = _tail(text, LINES)
     if any(p.search(tail) for p in _patterns(errors)):
         return "error"
+    if any(p.search(tail) for p in _patterns(compacting)):
+        return "compacting"
     recent = "\n".join(content_lines(tail)[-WAITING_TAIL:])
     if any(p.search(recent) for p in _patterns(waiting)):
         return "waiting"
     return ""
 
 
-def detect(mux: str, activity: int, waiting: list[str], errors: list[str],
-           socket: str | None = tmux.SOCKET) -> str:
-    """"waiting", "error" or "" for a quiet pane. Cached against `activity`.
+def detect(
+    mux: str,
+    activity: int,
+    waiting: list[str],
+    errors: list[str],
+    socket: str | None = tmux.SOCKET,
+    compacting: list[str] | None = None,
+) -> str:
+    """ "waiting", "error", "compacting" or "" for a quiet pane. Cached against `activity`.
 
     Errors win over waiting: a CLI that failed and then offered a prompt is
     reporting the failure, and that is the more useful of the two to surface.
@@ -227,7 +271,7 @@ def detect(mux: str, activity: int, waiting: list[str], errors: list[str],
         text = tmux.capture(mux, socket, lines=LINES, styled=False)
     except tmux.TmuxError:
         return ""
-    verdict = verdict_text(text, waiting, errors)
+    verdict = verdict_text(text, waiting, errors, compacting)
     with _lock:
         _seen[mux] = (activity, verdict)
         # Unbounded growth would be a leak in a process that runs for weeks.
@@ -237,7 +281,45 @@ def detect(mux: str, activity: int, waiting: list[str], errors: list[str],
     return verdict
 
 
+#: (mux) -> (activity, verdict). Same bargain as `_seen`, kept separate
+#: because it is checked on a different schedule — see detect_compacting.
+_compacting_seen: dict[str, tuple[int, bool]] = {}
+
+
+def detect_compacting(
+    mux: str, activity: int, patterns: list[str], socket: str | None = tmux.SOCKET
+) -> bool:
+    """Whether the pane's *current* text says "compacting" — no settle delay.
+
+    Waiting and error wait out a short burst of ordinary output before
+    trusting what the pane says, because a burst can transiently look like
+    either. There is no such burst to confuse "compacting" with: the word
+    means what it says the moment it is drawn. A real compaction is also
+    often faster than that delay, so gating it the same way means the event
+    is over before this is ever allowed to look. Called only while the pane
+    is busy, so a quiet session still costs nothing.
+    """
+    with _lock:
+        cached = _compacting_seen.get(mux)
+        if cached and cached[0] == activity:
+            return cached[1]
+    try:
+        text = tmux.capture(mux, socket, lines=LINES, styled=False)
+    except tmux.TmuxError:
+        return False
+    tail = _tail(text, LINES)
+    all_patterns = [*DEFAULT_COMPACTING, *(str(x) for x in (patterns or []))]
+    verdict = any(p.search(tail) for p in _patterns(all_patterns))
+    with _lock:
+        _compacting_seen[mux] = (activity, verdict)
+        if len(_compacting_seen) > 512:
+            for stale in list(_compacting_seen)[:256]:
+                _compacting_seen.pop(stale, None)
+    return verdict
+
+
 def forget(mux: str) -> None:
     """Drop a session's cached verdict — called when it is killed or adopted."""
     with _lock:
         _seen.pop(mux, None)
+        _compacting_seen.pop(mux, None)
