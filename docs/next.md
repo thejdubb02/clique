@@ -91,6 +91,18 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **Plan usage panel redesign**, 0.82.0. Asked in chat, not off this list: a
+  card per CLI with its real logo, a bar per window, and the reset time drawn
+  as visible text rather than only a hover tooltip (a phone has no hover). A
+  window past 90% pulses. Removed the decorative sidebar watermark, which sat
+  right behind this panel and cluttered through it with a few CLIs open, and
+  the compact copy that used to live in the top status bar — the sidebar
+  panel already covers every installed CLI, so a second copy of the same
+  number said nothing the first didn't. Also fixed while rebuilding it: the
+  panel could get stuck on a CLI's raw id and a "?" badge if it auto-reopened
+  (from a saved preference) before the CLI list had loaded, since nothing
+  redrew it once that data actually arrived — caught from Justin's own
+  screenshot of his live panel showing exactly that.
 - **Fixed: the 0.79.0 compacting indicator never fired**, 0.81.1. Two real
   bugs, found by forcing a live compaction rather than trusting the earlier
   code read. Detection was gated behind the same 8-second settle delay

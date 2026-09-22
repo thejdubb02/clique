@@ -81,25 +81,6 @@ html.kb-open #shell { height: 100%; }   /* fills body, so its safe-area padding 
   isolation: isolate;
 }
 
-/* A faint large mark at the foot of the list. Decorative — the header already
-   names the app. Behind the tree so names stay readable, and pointer-events
-   none so it never takes a click. The list scrolls over it. */
-.sidebar-mark {
-  position: absolute;
-  left: 50%;
-  bottom: 2.4em;
-  width: 70%;
-  max-width: 11.25rem;
-  aspect-ratio: 1;
-  transform: translateX(-50%);
-  z-index: -1;
-  pointer-events: none;
-  background-color: var(--fg);
-  opacity: .07;
-  -webkit-mask: url("brand/mark-mono.svg") center / contain no-repeat;
-          mask: url("brand/mark-mono.svg") center / contain no-repeat;
-}
-
 #sidebar header {
   display: flex;
   align-items: center;
@@ -448,22 +429,15 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
    sensor and no swap in use, so the bar carried two blank columns forever.
    Gone, not invisible — the row closes up. */
 #stats .stat.is-off { display: none; }
-/* What is left of the plan. Its own block, sitting between the machine's
-   numbers and the buttons with a hairline either side, because it is a
-   different kind of fact: CPU is what the box is doing, this is what you have
-   left to spend. A short bar reads from across the desk in a way "52%" does
-   not, and the figure stays for anyone who wants it. */
-#plan {
-  display: flex; align-items: center; gap: 10px; flex: none;
-  margin: 0 2px; padding: 0 10px;
-  border-left: 1px solid var(--line); border-right: 1px solid var(--line);
-}
-#plan[hidden] { display: none; }
-.plan-w { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
-.plan-k { font-size: 10px; letter-spacing: .04em; color: var(--dim); font-weight: 600; }
+/* Shared by the sidebar's plan-usage meters (renderUsagePanel/planMeter) —
+   this used to also draw a compact copy in the status bar, retired now that
+   the sidebar panel covers every CLI, not just the active session's. */
+.plan-w { display: flex; align-items: center; gap: 6px; }
+.plan-k { font-size: 10px; letter-spacing: .04em; color: var(--dim); font-weight: 600;
+          width: 2.2em; flex: none; }
 .plan-track {
-  width: 46px; height: 5px; border-radius: 3px; overflow: hidden;
-  background: var(--row); flex: none;
+  flex: 1; height: 5px; border-radius: 3px; overflow: hidden;
+  background: var(--row);
 }
 .plan-fill {
   display: block; width: 100%; height: 100%; border-radius: 3px;
@@ -471,20 +445,22 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
   /* It moves once every few minutes, so it is allowed to move properly. */
   transition: transform 420ms var(--ease-out), background 420ms linear;
 }
-.plan-v { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 4ch;
-          color: var(--dim); }
+.plan-v { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 3.2ch;
+          text-align: right; color: var(--dim); flex: none; }
+.plan-r { font-size: 10px; color: var(--dim); flex: none; white-space: nowrap; }
 .plan-w[data-level="wait"] .plan-fill { background: var(--warn); }
 .plan-w[data-level="wait"] .plan-v { color: var(--warn); }
 .plan-w[data-level="err"] .plan-fill { background: var(--err); }
 .plan-w[data-level="err"] .plan-v { color: var(--err); font-weight: 600; }
+/* Close to the limit is the one state worth a glance without reading the
+   number — a slow pulse on the fill, nothing else moves. */
+@keyframes plan-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.plan-w[data-level="err"] .plan-fill { animation: plan-pulse 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .plan-fill { transition: background 420ms linear; }
+  .plan-w[data-level="err"] .plan-fill { animation: none; }
 }
-/* The plan block costs the row about two hundred pixels, and the row did not
-   have them: the first attempt cut VIEWS to "VIEW", which is the clipped-word
-   failure this file warns about elsewhere.
-
-   Asked against the *row*, not the window. A viewport query gets this wrong by
+/* Asked against the *row*, not the window. A viewport query gets this wrong by
    exactly the width of the sidebar, which is why the first attempt at it fired
    at the wrong moment: 1280px of window is barely a thousand of status bar
    with the sidebar open, and collapsing it open and shut has to change the
@@ -495,13 +471,6 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 @container statusbar (max-width: 1100px) { #stats #clients { display: none; } }
 @container statusbar (max-width: 900px)  { #stats #load { display: none; } }
 @container statusbar (max-width: 760px)  { #stats #disk { display: none; } }
-/* A phone keeps the bars and drops the digits: the colour and the fill are
-   the part you read at a glance, and the row has no width to spare. */
-@media (max-width: 640px) {
-  #plan { gap: 8px; padding: 0 8px; }
-  .plan-v { display: none; }
-  .plan-track { width: 32px; }
-}
 
 /* Every installed CLI, not just the one running in front. Sidebar
    bottom-left, above the version footer, collapsed by default: opening it
@@ -517,17 +486,25 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height:
 .usage-toggle:hover { color: var(--fg); }
 .usage-toggle .ico { width: 12px; height: 12px; transition: transform 160ms var(--ease-out); }
 .usage-toggle[aria-expanded="true"] .ico { transform: rotate(90deg); }
-.usage-body { padding: 2px 10px 8px; display: flex; flex-direction: column; gap: 8px; }
+.usage-body { padding: 2px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
 .usage-empty { font-size: 11px; color: var(--dim); padding: 2px 0 4px; }
-.usage-cli { display: flex; flex-direction: column; gap: 3px; }
+/* One card per CLI, so a row is a self-contained fact rather than another
+   line in a list — the boundary is what makes five CLIs read as five things
+   instead of one blur. */
+.usage-cli {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 7px 8px; border-radius: 7px;
+  background: var(--row); border: 1px solid var(--line);
+}
 /* Installed but not the CLI running right now — still worth showing (a
    week's usage does not reset just because the session closed), dimmed so
    the running one reads first. */
-.usage-cli.is-idle { opacity: .55; }
-.usage-cli-name { font-size: 11px; font-weight: 600; color: var(--fg);
-  display: flex; align-items: center; gap: 6px; }
+.usage-cli.is-idle { opacity: .6; }
+.usage-cli-head { display: flex; align-items: center; gap: 6px; }
+.usage-cli-name { font-size: 11px; font-weight: 600; color: var(--fg); flex: 1;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .usage-cli-idle-tag { font-size: 9px; font-weight: 600; letter-spacing: .04em;
-  color: var(--dim); text-transform: uppercase; }
+  color: var(--dim); text-transform: uppercase; flex: none; }
 
 /* Each stat carries its own dot, coloured by that stat's own pressure and set
    inline from renderStats. No default background here: an unset dot would show

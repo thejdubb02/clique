@@ -252,23 +252,6 @@ def _run(panel) -> int:
         check("it is the panel, not the login form", page.locator("#tabbar").is_visible())
         check("nothing threw on the way up", not problems, problems[:2])
         check("the sidebar drew", page.locator("#tree").is_visible())
-        mark = page.locator(".sidebar-mark")
-        check("the sidebar mark is in the panel", mark.count() == 1)
-        mark_box = mark.bounding_box()
-        check(
-            "and it is large",
-            bool(mark_box) and mark_box["width"] >= 100 and mark_box["height"] >= 100,
-            mark_box,
-        )
-        if mark_box:
-            hit = page.evaluate(
-                """([x, y]) => {
-                  const e = document.elementFromPoint(x, y);
-                  return !!(e && e.closest('.sidebar-mark'));
-                }""",
-                [mark_box["x"] + mark_box["width"] / 2, mark_box["y"] + mark_box["height"] / 2],
-            )
-            check("the mark does not steal a click", hit is False, hit)
 
         print("git on the row")
         row = page.locator(f'.session[data-id="{mine}"]')
@@ -392,15 +375,7 @@ def _run(panel) -> int:
               const swap = q('#swap'), temp = q('#temp');
               swap.classList.add('is-off');
               temp.classList.add('is-off');
-              const load = q('#load').getBoundingClientRect();
-              const up = q('#uptime').getBoundingClientRect();
-              const cpu = q('#cpu').getBoundingClientRect();
-              const mem = q('#mem').getBoundingClientRect();
-              return {
-                off: temp.getBoundingClientRect().width + swap.getBoundingClientRect().width,
-                between: up.left - load.right,
-                normal: mem.left - cpu.right,
-              };
+              return { off: temp.getBoundingClientRect().width + swap.getBoundingClientRect().width };
             }"""
         )
         check("a stat with no reading takes no width", gaps["off"] < 1, gaps)
@@ -433,16 +408,12 @@ def _run(panel) -> int:
         page.evaluate("() => setSidebar(true)")
         page.set_viewport_size({"width": 1280, "height": 860})
         page.wait_for_timeout(350)
-        # No CLI in this check declares a usage probe, so the block stays away
-        # rather than sitting there empty.
+        # Retired: plan usage used to also draw a compact copy in the status
+        # bar; the sidebar panel now covers every CLI, so #plan is gone from
+        # the page entirely rather than merely hidden.
         check(
-            "the plan block is absent for a CLI that cannot report it",
-            page.evaluate("() => document.querySelector('#plan').hidden") is True,
-        )
-        check(
-            "and leaves no gap where it was",
-            abs(gaps["between"] - gaps["normal"]) < 1,
-            gaps,
+            "the status bar carries no plan block any more",
+            page.evaluate("() => document.querySelector('#plan')") is None,
         )
 
         # Every installed CLI's usage, in the sidebar footer. Collapsed by

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.82.0 — 2026-09-22 14:34 PDT
+
+**The plan usage panel is a real panel now, not a debug dump.** Each CLI gets
+its own card: its real logo, its label, a bar per window, and — visibly, not
+only in a tooltip — when it resets, since a phone has no hover to reveal that
+from. A window at 90% or past pulses instead of just sitting red, so the one
+state worth a glance without reading the number reads as one. The decorative
+watermark behind the sidebar's empty space is gone; it sat right behind this
+panel and, with a few CLIs open, cluttered straight through it. The compact
+copy that used to sit in the top status bar is retired too, since the sidebar
+panel already covers every installed CLI and having the number in two places
+said nothing the one place didn't. Fixed alongside it: the panel could get
+stuck showing a CLI's raw id and a "?" badge instead of its real name and
+logo if it auto-reopened (from a saved preference) before the CLI list had
+loaded — it never redrew once that arrived, only on the next open or five-
+minute poll. It now redraws on every state poll, a no-op while closed.
+
 ## 0.81.1 — 2026-09-22 13:26 PDT
 
 **Fixed: the 0.79.0 "compacting" indicator never actually fired.** Two bugs,

@@ -1320,7 +1320,11 @@ async function refresh() {
   renderGroups();
   renderTabs();
   renderStats();
-  renderPlan();
+  // Cheap when the panel is closed (renderUsagePanel's own early return) and
+  // needed when it is open: the panel can auto-reopen from localStorage
+  // before state.clis has loaded on the first poll, and nothing else redraws
+  // it once that data actually arrives.
+  renderUsagePanel();
   renderInbox();
   renderBoard();   // no-op unless the board is open
   updateTitle();
@@ -1619,17 +1623,6 @@ function paintStat(id, percent, value, title) {
  * Shown only for a CLI that declares a probe, which today is the ones whose
  * vendor publishes one. Everything else gets no column at all rather than a
  * row of dashes, the same way the status bar treats a missing sensor. */
-let planUsage = [];
-
-async function loadUsage() {
-  try {
-    const payload = await api("api/usage");
-    planUsage = payload.usage || [];
-  } catch (err) {
-    planUsage = [];      // offline, or the setting is off; say nothing
-  }
-  renderPlan();
-}
 
 /* "in 2h" / "in 40m" / "now". A reset an hour out is the number that decides
  * whether to keep going or stop, so it is worth more than the timestamp. */
@@ -1654,8 +1647,9 @@ function planLevel(percent) {
   return percent >= 90 ? "err" : percent >= 75 ? "wait" : "ok";
 }
 
-// Shared by the active session's status-bar meter and the sidebar's
-// all-installed panel, so both draw the identical bar.
+// The sidebar usage panel's one meter row: bar, percent, and — the reset
+// time is a visible span rather than only a tooltip, because a phone has no
+// hover to reveal it from.
 function planMeter(w, askedOf) {
   const pct = Math.round(w.percent);
   const when = untilReset(w.resets_at);
@@ -1674,25 +1668,20 @@ function planMeter(w, askedOf) {
   value.textContent = pct + "%";
 
   meter.append(key, track, value);
+  if (when) {
+    const reset = mk("span", "plan-r");
+    reset.textContent = when === "now" ? "resets now" : `resets ${when}`;
+    meter.append(reset);
+  }
   meter.title = `${w.label}: ${pct}% used`
     + (when ? `, resets ${when}` : "")
     + `\nAsked of ${askedOf} directly, at most once every few minutes.`;
   return meter;
 }
 
-function renderPlan() {
-  const el = $("#plan");
-  if (!el) return;
-  const s = activeId ? session(activeId) : null;
-  const found = s && planUsage.find((u) => u.cli === s.cli);
-  const windows = (found && found.windows) || [];
-  el.hidden = !windows.length;
-  el.replaceChildren(...windows.map((w) => planMeter(w, s.cli_label || s.cli)));
-}
-
-// Every installed CLI with a probe, not just the active session's — fetched
-// only while the panel is open (?all=1 is the explicit ask the backend
-// reserves this widening for; the routine loadUsage() poll never sets it).
+// Every installed CLI with a probe, not just a running one — fetched only
+// while the panel is open (?all=1 is the explicit ask that widens usage_now()
+// past sessions actually running; a panel nobody opens makes no outbound call).
 let allUsage = null;   // null = not fetched yet
 let usageTimer = null;
 
@@ -1726,14 +1715,21 @@ function renderUsagePanel() {
     const cli = (state.clis || []).find((c) => c.id === u.cli);
     const isRunning = running.has(u.cli);
     const wrap = mk("div", "usage-cli" + (isRunning ? "" : " is-idle"));
-    const name = mk("div", "usage-cli-name");
+    const head = mk("div", "usage-cli-head");
+    head.innerHTML = markerFor(
+      { color: cliColor(u.cli, cli?.color), icon: cli?.icon,
+        icon_full_color: cli?.icon_full_color, label: cli?.label, cli: u.cli },
+      "both"
+    );
+    const name = mk("span", "usage-cli-name");
     name.textContent = cli?.label || u.cli;
+    head.append(name);
     if (!isRunning) {
       const tag = mk("span", "usage-cli-idle-tag");
       tag.textContent = "idle";
-      name.append(tag);
+      head.append(tag);
     }
-    wrap.append(name, ...(u.windows || []).map((w) => planMeter(w, cli?.label || u.cli)));
+    wrap.append(head, ...(u.windows || []).map((w) => planMeter(w, cli?.label || u.cli)));
     return wrap;
   }));
 }
@@ -11849,10 +11845,6 @@ bootWorkspace();
 // and they change about twice a year, so this is a boot fetch rather than
 // weight on every poll.
 loadThemes();
-loadUsage();
-// Its own cadence: plan windows move over hours and this is somebody else's
-// API. The server caches on top of this, so extra tabs cost nothing.
-setInterval(loadUsage, 5 * 60 * 1000);
 setInterval(refresh, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and
 // nobody is waiting on a screenshot to the second.
