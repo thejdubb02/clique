@@ -1277,6 +1277,20 @@ def main() -> int:
         "a traceback is an error, not a question",
         attention.verdict_text("Traceback (most recent call last):\n  File", [], []) == "error",
     )
+    check(
+        "a compacting status line is compacting, not a question",
+        attention.verdict_text("✻ Compacting conversation… (esc to interrupt)", [], [])
+        == "compacting",
+    )
+    check(
+        "a per-CLI compacting word from clis.toml is honoured",
+        attention.verdict_text("Shrinking context history", [], [], ["(?i)shrinking context"])
+        == "compacting",
+    )
+    check(
+        "an error during compaction still wins",
+        attention.verdict_text("Compacting…\nError: ran out of memory", [], []) == "error",
+    )
     # False positives are the failure mode that erodes trust in the inbox, so
     # the finished-turn shapes that actually caused one must stay silent.
     check(

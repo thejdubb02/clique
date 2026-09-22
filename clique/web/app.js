@@ -176,17 +176,21 @@ function ago(epoch) {
  * running, which is not a trade anyone asked for. */
 /* What a session is *doing*, which is not the same as whether it is attached.
  *
- * Six states, and only four of them draw anything:
+ * Seven states, and only five of them draw anything:
  *
- *   error    — it said so, or its pane matched an error pattern
- *   asking   — work is paused on a question. A permission prompt, a y/n,
- *              a numbered choice. Not working: nothing moves until you answer.
- *   working  — output is arriving. The only state that spins.
- *   unseen   — it finished, and this tab has not been opened since
- *   idle     — alive and quiet and read. Draws nothing, because most sessions
- *              are in this state most of the time and a sidebar of twenty
- *              indicators saying "fine" is a sidebar of noise.
- *   stopped  — the process is gone
+ *   error      — it said so, or its pane matched an error pattern
+ *   asking     — work is paused on a question. A permission prompt, a y/n,
+ *                a numbered choice. Not working: nothing moves until you answer.
+ *   compacting — busy, but on a specific and nameless-otherwise task: shrinking
+ *                its own context. Not a question, so it does not need you —
+ *                but it looks exactly like any other spinner, which was the
+ *                whole reason it needed a mark of its own.
+ *   working    — output is arriving. The only other state that spins.
+ *   unseen     — it finished, and this tab has not been opened since
+ *   idle       — alive and quiet and read. Draws nothing, because most sessions
+ *                are in this state most of the time and a sidebar of twenty
+ *                indicators saying "fine" is a sidebar of noise.
+ *   stopped    — the process is gone
  *
  * Asking and unseen must not share a motion. One is blocked on you; the
  * other is a thing that happened while you were elsewhere.
@@ -221,6 +225,10 @@ function workState(s) {
   // activity clock, and that is work *paused*, not work happening.
   if (s.signal === "error") return "error";
   if (s.signal === "waiting") return "asking";
+  // Compacting beats plain "working" the same way a question does: it is the
+  // one busy moment worth naming, since otherwise it looks identical to any
+  // other spinner and the whole point was to stop that guessing.
+  if (s.signal === "compacting") return "compacting";
   if (s.busy || (busyUntil.get(s.id) || 0) > Date.now()) return "working";
   if (attention.has(s.id)) return "unseen";
   // Unread deliberately does *not* appear here. It already has a mark of its
@@ -613,6 +621,7 @@ function statusDot(s, where) {
 const WORK_WORDS = {
   working: "working",
   asking: "needs an answer",
+  compacting: "compacting its context",
   unseen: "finished — not opened yet",
   waiting: "needs an answer",
   error: "stopped on an error",
@@ -882,7 +891,7 @@ if (winBus) {
  * instant a session's state does — while the board is open, the poll re-renders
  * it. A scannable whole-fleet view the one-per-line sidebar is not. */
 const BOARD_COLUMNS = [
-  { key: "working", label: "Working", states: ["working"] },
+  { key: "working", label: "Working", states: ["working", "compacting"] },
   { key: "waiting", label: "Needs you", states: ["asking", "error", "unseen"] },
   { key: "idle", label: "Idle", states: ["idle"] },
   { key: "stopped", label: "Stopped", states: ["stopped"] },
@@ -1105,6 +1114,56 @@ function updateTitle() {
   document.title = n ? `(${n}) CLIque` : "CLIque";
 }
 
+/* Compacting is not "needs you" — updateTitle() above stays silent about it on
+ * purpose — but it is exactly the state you want to catch from a backgrounded
+ * tab: short, automatic, easy to miss. A spinning favicon is the one signal a
+ * browser renders outside the page itself. Drawn on a canvas, one small arc in
+ * the page's own accent colour, rather than shipped as a set of image files. */
+const FAVICON_LINK = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
+const FAVICON_DEFAULT = FAVICON_LINK ? FAVICON_LINK.getAttribute("href") : "";
+const FAVICON_FRAMES = 8;
+let faviconTimer = null;
+let faviconFrame = 0;
+
+function faviconArc(step, reduced) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 32;
+  const ctx = c.getContext("2d");
+  if (!ctx) return "";
+  const color = getComputedStyle(document.body).getPropertyValue("--accent").trim() || "#4a9eff";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  if (reduced) {
+    ctx.globalAlpha = step % 2 ? 1 : 0.25;   // a blink, not a spin
+    ctx.arc(16, 16, 12, 0, Math.PI * 2);
+  } else {
+    const angle = (step / FAVICON_FRAMES) * Math.PI * 2;
+    ctx.arc(16, 16, 12, angle, angle + Math.PI * 1.3);
+  }
+  ctx.stroke();
+  return c.toDataURL("image/png");
+}
+
+function paintFavicon() {
+  if (!FAVICON_LINK) return;
+  const compacting = state.sessions.some((s) => workState(s) === "compacting");
+  if (!compacting) {
+    if (faviconTimer) { clearInterval(faviconTimer); faviconTimer = null; }
+    if (FAVICON_LINK.getAttribute("href") !== FAVICON_DEFAULT) FAVICON_LINK.href = FAVICON_DEFAULT;
+    return;
+  }
+  if (faviconTimer) return;   // already spinning
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const step = () => {
+    faviconFrame++;
+    FAVICON_LINK.href = faviconArc(faviconFrame, reduced);
+  };
+  step();
+  faviconTimer = setInterval(step, reduced ? 600 : 120);
+}
+
 function renderInbox() {
   const items = inboxItems();
   const badge = $("#inboxCount");
@@ -1265,6 +1324,7 @@ async function refresh() {
   renderInbox();
   renderBoard();   // no-op unless the board is open
   updateTitle();
+  paintFavicon();
   renderServices();
   renderGuard();
   renderVersion();
@@ -3974,6 +4034,7 @@ function renderTabs() {
     if (!s.alive) says.push("stopped");
     else if (s.signal === "error") says.push("stopped on an error");
     else if (s.signal === "waiting") says.push("needs an answer");
+    else if (s.signal === "compacting") says.push("compacting its context");
     else if (workState(s) === "working") says.push("working");
     else if (workState(s) === "unseen") says.push("finished — not opened yet");
     if (unread(s)) says.push("new output since you last looked");
@@ -4186,6 +4247,7 @@ function paintOverflowButton(ids) {
   if (states.includes("error")) work = "error";
   else if (states.includes("asking")) work = "asking";
   else if (states.includes("unseen") || rows.some((s) => attention.has(s.id))) work = "unseen";
+  else if (states.includes("compacting")) work = "compacting";
   else if (states.includes("working")) work = "working";
   btn.dataset.work = work;
   const ring = btn.querySelector(".cli-status");
@@ -4199,9 +4261,10 @@ function overflowRank(s) {
   if (work === "error") return 0;
   if (work === "asking") return 1;
   if (work === "unseen" || attention.has(s.id)) return 2;
-  if (work === "working") return 3;
-  if (unread(s)) return 4;
-  return 5;
+  if (work === "compacting") return 3;
+  if (work === "working") return 4;
+  if (unread(s)) return 5;
+  return 6;
 }
 
 function openOverflowMenu(ev) {

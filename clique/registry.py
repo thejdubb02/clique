@@ -170,14 +170,16 @@ class CliType:
     #: last lines of the pane once it goes quiet:
     #:
     #:   [cli.claude.attention]
-    #:   waiting = ["Do you want to proceed\\?"]
-    #:   error   = ["^Error:"]
+    #:   waiting    = ["Do you want to proceed\\?"]
+    #:   error      = ["^Error:"]
+    #:   compacting = ["Shrinking context history"]
     #:
     #: Config, not code — which is the whole point. CLIque never learns what a
     #: vendor's prompt looks like; someone writes it down here, and can fix it
     #: the day the vendor changes it without waiting for a release. Omit the
     #: table and the session still gets the generic prompts (y/n, Do you want,
-    #: a numbered choice) that every CLI tends to draw.
+    #: a numbered choice) that every CLI tends to draw, plus the generic
+    #: "compacting" word every agentic CLI seems to use for the same thing.
     attention: dict = field(default_factory=dict)
 
     @property
@@ -187,6 +189,10 @@ class CliType:
     @property
     def error_patterns(self) -> list[str]:
         return [str(x) for x in (self.attention.get("error") or [])]
+
+    @property
+    def compacting_patterns(self) -> list[str]:
+        return [str(x) for x in (self.attention.get("compacting") or [])]
 
     @property
     def mode_seq(self) -> str:

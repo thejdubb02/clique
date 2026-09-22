@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.79.0 — 2026-09-21 16:54 PDT
+
+**A session compacting its context gets its own mark, instead of looking like
+any other spinner.** A new ring state, `compacting` — its own ring animation,
+its own tab tooltip, its own row in the tab-overflow menu — sits between
+"asking" and "working" in priority: not a question, so it does not need you,
+but worth naming rather than folding into a generic "working" that tells you
+nothing. Detected the same way "waiting" and "error" already are: a regex
+against the pane's own visible text, declared per-CLI in `clis.toml`, with a
+generic default (`"(?i)compacting"`) that needs no per-CLI config since most
+agentic CLIs use the word. Compaction also spins the browser tab's favicon —
+the one signal a browser renders outside the page itself, and the point of
+the whole feature: catching it from a backgrounded tab without opening the
+session to check.
+
 ## 0.78.0 — 2026-09-21 16:34 PDT
 
 **Codex CLI now reports plan usage too, the second CLI after Claude.**

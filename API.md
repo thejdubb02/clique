@@ -127,11 +127,12 @@ The whole panel in one object, and what the browser polls every three seconds.
 Each session carries `own_input` — whether this CLI draws its own input box,
 which is what `input_mode: "auto"` reads — plus `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
 `folder`, `mode` (and `modes`, `mode_label`, `quick_commands`), `adopted`, `archived`, `pinned`, `draft`, `state`,
-`saying` — the last line a session actually printed, and only for one that is
-waiting or has errored. It is what the sidebar shows in place of the working
-directory when something is asking for you: the ring says a session is blocked,
-this says what on. Empty for every other session, and captured only for the
-handful that are not, cached against the pane's own activity clock.
+`saying` — the last line a session actually printed, captured for anything
+carrying a `signal` (waiting, errored, or compacting). It is what the sidebar
+shows in place of the working directory when something is asking for you: the
+ring says a session is blocked, this says what on. Empty for every other
+session, and captured only for the handful that are not, cached against the
+pane's own activity clock.
 
 `cols` and `rows` are the **shared tmux window's** size, which is not
 necessarily what any one client is drawing at — every client attached to a
@@ -491,9 +492,13 @@ the moment output arrives after it — a session that carried on is no longer
 waiting, and a stuck "waiting" would teach you to ignore the mark. Returns the
 resulting `signal`.
 
-Sessions in `/api/state` carry `signal`: `"waiting"`, `"error"` or `""`, from
-whichever tier could answer — this endpoint first, then the per-CLI patterns in
-`clis.toml` matched against a pane that has gone quiet, then nothing.
+Sessions in `/api/state` carry `signal`: `"waiting"`, `"error"`, `"compacting"`
+or `""`, from whichever tier could answer — this endpoint first, then the
+per-CLI patterns in `clis.toml` matched against a pane that has gone quiet,
+then nothing. `"compacting"` is pattern-only: it is not stuck, so it is not
+something this endpoint asserts — a pane whose visible text matches a
+`compacting` pattern (`"(?i)compacting"` by default, every CLI) is the only
+way to get it.
 
 ### `GET /api/workspace?cwd=/srv/app`
 

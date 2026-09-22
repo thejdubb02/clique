@@ -694,7 +694,10 @@ class Panel:
             return ""
         waiting = cli.waiting_patterns if cli else []
         errors = cli.error_patterns if cli else []
-        return attention.detect(session.mux, pane.activity, waiting, errors, session.socket)
+        compacting = cli.compacting_patterns if cli else []
+        return attention.detect(
+            session.mux, pane.activity, waiting, errors, session.socket, compacting
+        )
 
     # ------------------------------------------------------------ llm providers
     #

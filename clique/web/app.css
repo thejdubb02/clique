@@ -973,10 +973,13 @@ button.primary { background: var(--accent); color: var(--on-accent); }
   border: 1.5px solid transparent; pointer-events: none;
 }
 
-/* Three motions, three facts, never shared:
-   working — the arc turns
-   unseen  — it finished, you have not opened it: a slow pulse
-   asking  — work is paused on a question: two knocks, then a rest */
+/* Four motions, four facts, never shared:
+   working    — the arc turns
+   unseen     — it finished, you have not opened it: a slow pulse
+   asking     — work is paused on a question: two knocks, then a rest
+   compacting — busy on a specific task, not a question: the ring itself
+                breathes in and out, distinct from working's spin and
+                unseen's opacity pulse so it never reads as either */
 .cli-status[data-work="working"]::after {
   border-top-color: var(--accent); border-right-color: var(--accent);
   animation: cli-spin 1s linear infinite;
@@ -989,6 +992,11 @@ button.primary { background: var(--accent); color: var(--on-accent); }
   border-color: var(--warn);
   transform-origin: center;
   animation: cli-ask 1.6s var(--ease-out) infinite;
+}
+.cli-status[data-work="compacting"]::after {
+  border-color: var(--accent);
+  transform-origin: center;
+  animation: cli-compact 1.4s ease-in-out infinite;
 }
 .cli-status[data-work="error"]::after {
   border-color: var(--critical); animation: cli-pulse 1.4s ease-in-out infinite;
@@ -1004,17 +1012,19 @@ button.primary { background: var(--accent); color: var(--on-accent); }
   34% { transform: scale(1.16); opacity: 1; }
   46% { transform: scale(1); opacity: 1; }
 }
+@keyframes cli-compact { 0%, 100% { transform: scale(1); } 50% { transform: scale(.72); } }
 @keyframes cli-nudge { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* The fill of a dot is colour, not motion. The ring around it (when this
    dot is wrapped in .cli-status) is what spins or pulses. */
-.dot[data-work="working"] { background: var(--accent); }
-.dot[data-work="asking"]  { background: var(--warn); }
-.dot[data-work="unseen"]  { background: var(--accent); }
-.dot[data-work="waiting"] { background: var(--warn); }
-.dot[data-work="idle"]    { background: var(--dim); opacity: .5; }
-.dot[data-work="stopped"] { background: var(--dead); }
-.dot[data-work="error"]   { background: var(--critical); }
+.dot[data-work="working"]    { background: var(--accent); }
+.dot[data-work="asking"]     { background: var(--warn); }
+.dot[data-work="unseen"]     { background: var(--accent); }
+.dot[data-work="waiting"]    { background: var(--warn); }
+.dot[data-work="compacting"] { background: var(--accent); }
+.dot[data-work="idle"]       { background: var(--dim); opacity: .5; }
+.dot[data-work="stopped"]    { background: var(--dead); }
+.dot[data-work="error"]      { background: var(--critical); }
 .cli-letter {
   width: 13px; height: 13px; flex: 0 0 13px; display: inline-grid; place-items: center;
   border: 1px solid; border-radius: 3px; font-size: 9px; font-weight: 600;
