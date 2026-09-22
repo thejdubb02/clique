@@ -8431,6 +8431,32 @@ function termFontStack() {
   return (row || FONT_FAMILIES[0]).stack;
 }
 
+/* The label is a stack. Name the first face the browser will actually draw,
+ * so a missing install shows the substitute instead of the choice clicked.
+ *
+ * document.fonts.check() is true for a name that is not installed, because a
+ * fallback can always draw the string, and the first entry would always win.
+ * A face that is really there has one width over both serif and sans. */
+function resolveFontFamily() {
+  const names = termFontStack().split(",").map((part) =>
+    part.trim().replace(/^"|"$/g, ""));
+  const last = names[names.length - 1] || "monospace";
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return last;
+  const sample = "mmmllliiiwwww@@@";
+  const width = (stack) => {
+    ctx.font = "72px " + stack;
+    return ctx.measureText(sample).width;
+  };
+  const serif = width("serif");
+  for (const name of names) {
+    if (!name) continue;
+    const onSerif = width('"' + name + '", serif');
+    if (onSerif === width('"' + name + '", sans-serif') && onSerif !== serif) return name;
+  }
+  return last;
+}
+
 function paintFontChrome() {
   const size = Number((state.settings || {}).font_terminal) || 13;
   const val = $("#fontSizeVal");
@@ -8449,6 +8475,8 @@ function paintFontChrome() {
   if (pick && document.activeElement !== pick) {
     pick.value = (state.settings && state.settings.font_family) || "system";
   }
+  const resolved = $("#fontResolved");
+  if (resolved) resolved.textContent = "Using: " + resolveFontFamily();
 }
 
 function bumpTermFont(delta) {
@@ -9228,7 +9256,9 @@ function wire() {
   $("#themePrompt").onkeydown = (ev) => {
     if (ev.key === "Enter") { ev.preventDefault(); generateTheme(); }
   };
-  $("#setFontFamily").onchange = (ev) => saveSettings({ font_family: ev.target.value });
+  $("#setFontFamily").onchange = (ev) => {
+    saveSettings({ font_family: ev.target.value }).then(paintFontChrome);
+  };
   $("#setAppearance").onchange = (ev) => saveSettings({ appearance: ev.target.value });
   $("#setInputMode").onchange = (ev) => saveSettings({ input_mode: ev.target.value });
   // Per device, so it never goes through saveSettings (which is server-side).

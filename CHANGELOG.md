@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.85.0 — 2026-09-22 15:50 PDT
+
+**The font picker says which font you actually got.** Settings → Font now
+shows "Using: Consolas" under the picker — the first face in the chosen
+stack the browser can actually draw, not just the one clicked. A font that
+is installed but missing its regular weight (the bug this traces back to: a
+machine with Ubuntu Mono's italic face but no regular one, drawing every
+line slanted with no visible cause) used to substitute silently; now the
+substitution is a fact on screen. Resolved with a canvas text-width
+comparison rather than `document.fonts.check()` — that API reports a bare
+system font name as available even when nothing by that name is installed,
+since a generic fallback can always draw the string, which would have made
+this feature always name the first stack entry and never catch the actual
+bug. Verified against the real running panel: the stored setting ("menlo",
+not installed on this Linux box) resolves to the true fallback, DejaVu Sans
+Mono, not to "Menlo". Built with Grok CLI from a full spec; reviewed line by
+line, including catching and verifying that deliberate deviation from the
+spec before trusting it.
+
 ## 0.84.0 — 2026-09-22 15:29 PDT
 
 **A session shows when its CLI has shelled out to another one.** A Claude

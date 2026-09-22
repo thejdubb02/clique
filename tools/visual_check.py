@@ -1775,6 +1775,15 @@ def _run(panel) -> int:
             "the button is off until a provider is set up",
             page.evaluate("() => document.querySelector('#themeGen').disabled") is True,
         )
+        # A picked stack can miss its first face and the browser draws a later
+        # one. The line under the menu has to name whichever family resolved
+        # on this machine, so the name itself is not asserted.
+        resolved = (page.locator("#fontResolved").text_content() or "").strip()
+        check(
+            "the typeface line names the family that resolved",
+            resolved.startswith("Using: ") and bool(resolved[len("Using: "):].strip()),
+            resolved,
+        )
 
         # Which themes come with a character, said in the picker itself. A
         # marker glyph would have needed a legend; a group says it in words.

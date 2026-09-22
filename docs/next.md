@@ -91,6 +91,17 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **The font picker says which font you actually got**, 0.85.0. CLQ-47.
+  "Using: Consolas" under the picker, the first face in the chosen stack the
+  browser can actually draw. `document.fonts.check()` was the obvious tool
+  and the wrong one — it reports a bare system font name as available even
+  when nothing by that name is installed, so it would have made this feature
+  always name the first stack entry and never catch the substitution bug it
+  exists for. Resolved with a canvas text-width comparison instead. Verified
+  against the real running panel: "menlo" (not installed here) correctly
+  resolves to DejaVu Sans Mono, not to itself. Built with Grok CLI from a
+  full spec; caught and verified its deliberate spec deviation before
+  trusting it.
 - **A session shows when its CLI has shelled out to another one**, 0.84.0.
   Asked in chat, not off this list. A small logo badge beside the session's
   own mark, in the sidebar row and on the tab, when a known CLI (grok, codex,
