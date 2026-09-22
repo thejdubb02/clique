@@ -27,6 +27,7 @@ an API it does not need is worse than one that says nothing.
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import time
 import urllib.error
@@ -59,14 +60,34 @@ def _dig(data: object, path: str) -> object:
     `auth.json` is `{"<issuer>::<client-id>": {...token fields...}}`) — still
     one declarative path, not a vendor branch.
 
+    A `key=value` step (anything else containing `=`) searches a *list* of
+    dicts for the first one where `key` equals `value`, for an API that
+    answers with an array of named buckets rather than a fixed field per
+    number — Antigravity's usage reply is `groups: [{name, buckets: [{id,
+    remaining_fraction, ...}]}]`, and the id is the only stable handle into
+    it. Still one declarative path, not a second traversal mechanism.
+
     Deliberately forgiving: a probe describes somebody else's API, and that API
     changing shape should cost a missing number rather than a traceback in a
     poll every browser is waiting on.
     """
     for step in str(path).split("."):
-        if not isinstance(data, dict):
-            return None
-        data = next(iter(data.values()), None) if step == "*" else data.get(step)
+        if "=" in step:
+            key, _, value = step.partition("=")
+            if not isinstance(data, list):
+                return None
+            data = next(
+                (item for item in data if isinstance(item, dict) and str(item.get(key)) == value),
+                None,
+            )
+        elif step == "*":
+            if not isinstance(data, dict):
+                return None
+            data = next(iter(data.values()), None)
+        else:
+            if not isinstance(data, dict):
+                return None
+            data = data.get(step)
     return data
 
 
@@ -87,7 +108,37 @@ def _token(spec: dict) -> str | None:
     return found if isinstance(found, str) and found else None
 
 
+def _fetch_cmd(spec: dict) -> dict | None:
+    """The declared argv, run and its stdout read as JSON.
+
+    For a probe with no plain REST endpoint: Antigravity's quota lives behind
+    an internal protobuf RPC and an OS-keyring token, both out of reach of the
+    url+token_file model above, but `agy` itself already knows how to ask and
+    print the answer as JSON. One more declared way to get a payload, still
+    config rather than a vendor branch — `cmd` says what to run, the rest of
+    this module does not care that it was a subprocess and not a socket.
+    """
+    argv = spec.get("cmd")
+    if not isinstance(argv, list) or not argv:
+        return None
+    try:
+        result = subprocess.run(  # noqa: S603 — argv comes from clis.toml, not a request
+            [str(a) for a in argv], capture_output=True, timeout=TIMEOUT, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0 or len(result.stdout) > MAX_BYTES:
+        return None
+    try:
+        parsed = json.loads(result.stdout)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _fetch(spec: dict, guard) -> dict | None:
+    if spec.get("cmd"):
+        return _fetch_cmd(spec)
     url = str(spec.get("url") or "")
     if not url:
         return None
@@ -140,19 +191,29 @@ def _windows(spec: dict, payload: dict) -> list[dict]:
 
     A percentage is clamped rather than trusted. It is going into a bar as a
     width, and an API that answers 140 should not paint past the end of it.
+
+    `remaining` is the other direction: a vendor that answers "how much is
+    left" (a 0..1 fraction) rather than "how much is used" — Antigravity's
+    `remaining_fraction` — declares that key instead of `percent`, and this
+    is the one place the flip happens.
     """
     out = []
     for window in spec.get("window") or []:
         if not isinstance(window, dict):
             continue
         raw = _dig(payload, window.get("percent") or "")
-        if not isinstance(raw, (int, float)):
-            continue
+        if isinstance(raw, (int, float)):
+            pct = float(raw)
+        else:
+            left = _dig(payload, window.get("remaining") or "")
+            if not isinstance(left, (int, float)):
+                continue
+            pct = (1.0 - float(left)) * 100.0
         resets = _dig(payload, window.get("resets") or "")
         out.append(
             {
                 "label": str(window.get("label") or "")[:8],
-                "percent": max(0.0, min(100.0, float(raw))),
+                "percent": max(0.0, min(100.0, pct)),
                 "resets_at": _resets_at(resets),
             }
         )
@@ -165,7 +226,7 @@ def read(cli_id: str, spec: dict, guard, *, force: bool = False) -> dict | None:
     Every browser attached to this panel shares the cache, so twenty open tabs
     are still one request every few minutes.
     """
-    if not spec or not spec.get("url"):
+    if not spec or not (spec.get("url") or spec.get("cmd")):
         return None
     now = time.time()
     with _lock:

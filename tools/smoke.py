@@ -1713,6 +1713,79 @@ def main() -> int:
         usage._dig({}, "*.key") is None,
     )
 
+    print("usage: a `key=value` path step finds a list item by a stable id")
+    # Antigravity's usage reply nests buckets inside named groups rather than
+    # a fixed field per number: groups: [{name, buckets: [{id, ...}]}].
+    quota = {
+        "groups": [
+            {
+                "name": "Gemini Models",
+                "buckets": [{"id": "gemini-weekly", "remaining_fraction": 0.99}],
+            },
+            {
+                "name": "Claude and GPT models",
+                "buckets": [{"id": "3p-weekly", "remaining_fraction": 1.0}],
+            },
+        ]
+    }
+    check(
+        "a two-level id search reaches the right bucket",
+        usage._dig(
+            quota, "groups.name=Claude and GPT models.buckets.id=3p-weekly.remaining_fraction"
+        )
+        == 1.0,
+        usage._dig(
+            quota, "groups.name=Claude and GPT models.buckets.id=3p-weekly.remaining_fraction"
+        ),
+    )
+    check(
+        "an id that is not in the list is None, not a crash",
+        usage._dig(quota, "groups.name=Nope.buckets.id=x.remaining_fraction") is None,
+    )
+    check(
+        "a `key=value` step against a dict (not a list) is None, not a crash",
+        usage._dig({"groups": {}}, "groups.name=x.y") is None,
+    )
+
+    print(
+        "usage: `remaining` is the inverse of `percent`, for a vendor that answers with what is left"
+    )
+    remaining_windows = usage._windows(
+        {"window": [{"label": "GEM", "remaining": "left"}]}, {"left": 0.75}
+    )
+    check(
+        "a 0.75 remaining fraction becomes 25% used",
+        remaining_windows and abs(remaining_windows[0]["percent"] - 25.0) < 1e-9,
+        remaining_windows,
+    )
+    check(
+        "percent wins over remaining when a probe somehow declares both",
+        usage._windows(
+            {"window": [{"label": "X", "percent": "p", "remaining": "r"}]}, {"p": 40, "r": 0.1}
+        )[0]["percent"]
+        == 40.0,
+    )
+
+    print("usage: a `cmd` probe runs argv and reads its stdout as JSON")
+    # No live agy dependency here — a stand-in argv the real python3 can run,
+    # same shape as [cli.antigravity.usage].cmd in clis.toml.
+    cmd_payload = usage._fetch_cmd(
+        {"cmd": [sys.executable, "-c", 'print(\'{"ok": true, "n": 7}\')']}
+    )
+    check(
+        "its stdout parses as the payload",
+        cmd_payload == {"ok": True, "n": 7},
+        cmd_payload,
+    )
+    check(
+        "a nonzero exit is no usage, not a crash",
+        usage._fetch_cmd({"cmd": [sys.executable, "-c", "import sys; sys.exit(1)"]}) is None,
+    )
+    check(
+        "a spec with neither cmd nor url is None",
+        usage._fetch_cmd({}) is None,
+    )
+
     print("usage: running-only by default, every installed CLI on an explicit ask")
     # Panel.usage_now is a plain method on self.store/self.registry, so a
     # duck-typed fake stands in rather than wiring up a real Panel (auth,

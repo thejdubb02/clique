@@ -91,6 +91,15 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **Antigravity reports plan usage too**, 0.83.0. Asked in chat, not off this
+  list. No REST endpoint exists — its real quota call is a protobuf
+  Connect-RPC through the OS keyring, found by reading strings out of the
+  `agy` binary — so `usage.py` gained a second probe kind (`cmd`: run this
+  argv, read its stdout as JSON) alongside the existing URL+token_file one,
+  plus a `key=value` `_dig()` step (find a list item by its stable id) and a
+  `remaining` window key (the inverse of `percent`, for a vendor that answers
+  with what is left). Verified against a live account. Gemini CLI still has
+  no viable path, confirmed again — its pool moved to Antigravity.
 - **Plan usage panel redesign**, 0.82.0. Asked in chat, not off this list: a
   card per CLI with its real logo, a bar per window, and the reset time drawn
   as visible text rather than only a hover tooltip (a phone has no hover). A

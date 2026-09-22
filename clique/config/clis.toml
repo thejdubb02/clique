@@ -245,6 +245,28 @@ icon    = "antigravity.svg"
 
 own_input = true
 
+# No plain REST endpoint: the real RPC (found by reading strings out of the
+# agy binary, 2026-09-22) is a protobuf Connect-RPC call to
+# google.internal.cloud.code.v1internal.PredictionService/RetrieveUserQuota
+# on cloudcode-pa.googleapis.com, authenticated via the OS keyring rather
+# than a token file — out of reach of the url+token_file probe above. `agy`
+# already knows how to ask and print the answer, so `cmd` runs it instead of
+# reimplementing an undocumented internal RPC. Verified against a live
+# account, 2026-09-22; the reply reports what is *left* (`remaining_fraction`,
+# 0..1) rather than what is spent, hence `remaining` instead of `percent`.
+[cli.antigravity.usage]
+cmd = ["agy", "-p", "/usage", "--output-format", "json"]
+
+  [[cli.antigravity.usage.window]]
+  label     = "GEM"
+  remaining = "command.data.groups.name=Gemini Models.buckets.id=gemini-weekly.remaining_fraction"
+  resets    = "command.data.groups.name=Gemini Models.buckets.id=gemini-weekly.reset_time"
+
+  [[cli.antigravity.usage.window]]
+  label     = "3RD"
+  remaining = "command.data.groups.name=Claude and GPT models.buckets.id=3p-weekly.remaining_fraction"
+  resets    = "command.data.groups.name=Claude and GPT models.buckets.id=3p-weekly.reset_time"
+
 [cli.shell]
 label   = "Shell"
 command = "bash"

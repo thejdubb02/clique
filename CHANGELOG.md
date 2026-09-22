@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.83.0 — 2026-09-22 14:51 PDT
+
+**Antigravity reports plan usage too.** No plain REST endpoint exists for it:
+the real quota call (found by reading strings out of the `agy` binary) is a
+protobuf Connect-RPC to Google's internal Code Assist service, authenticated
+through the OS keyring rather than a token file — out of reach of the
+url+token_file probe Claude, Grok and Codex already use. `agy` itself already
+knows how to ask and print the answer as JSON, so `usage.py` gained a second,
+equally declarative probe kind: a `cmd` in a CLI's `.usage` block runs that
+argv and reads its stdout, same TTL and same silence-on-failure as a URL
+probe. Its reply also reports what is *left* rather than what is spent, so
+`_dig()` picked up two small, generic (not Antigravity-specific) abilities
+alongside the `*` wildcard from 0.80.0: a `key=value` step to find one item
+in a list of named buckets by its id, and a `remaining` window key as the
+other side of `percent`. Verified against a live account. Gemini CLI still
+has no viable path — its pool moved to Antigravity for consumer accounts,
+confirmed again this pass — so it stays out.
+
 ## 0.82.0 — 2026-09-22 14:34 PDT
 
 **The plan usage panel is a real panel now, not a debug dump.** Each CLI gets
