@@ -1123,7 +1123,6 @@ const FAVICON_LINK = document.querySelector('link[rel="icon"][type="image/svg+xm
 const FAVICON_DEFAULT = FAVICON_LINK ? FAVICON_LINK.getAttribute("href") : "";
 const FAVICON_FRAMES = 8;
 let faviconTimer = null;
-let faviconFrame = 0;
 
 function faviconArc(step, reduced) {
   const c = document.createElement("canvas");
@@ -1156,9 +1155,10 @@ function paintFavicon() {
   }
   if (faviconTimer) return;   // already spinning
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let frame = 0;
   const step = () => {
-    faviconFrame++;
-    FAVICON_LINK.href = faviconArc(faviconFrame, reduced);
+    frame++;
+    FAVICON_LINK.href = faviconArc(frame, reduced);
   };
   step();
   faviconTimer = setInterval(step, reduced ? 600 : 120);

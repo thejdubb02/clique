@@ -91,6 +91,13 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **A "compacting" ring state, plus a spinning favicon**, 0.79.0. Detected the
+  same way waiting/error already are: a regex against the pane's own text,
+  declared per-CLI in `clis.toml`, generic default (`"(?i)compacting"`) so
+  most CLIs need no config. Not "needs you", so it stays out of the inbox and
+  the tab-title count — but it spins the browser tab's favicon, the one
+  signal a browser renders outside the page itself, for catching it from a
+  backgrounded tab. CLQ-77, asked in chat rather than off this list.
 - **Codex usage probe**, 0.78.0. `codex login`'s ChatGPT OAuth token reads
   plan usage straight from `chatgpt.com/backend-api/wham/usage`, verified
   against a real install. Its reset time is Unix seconds rather than
