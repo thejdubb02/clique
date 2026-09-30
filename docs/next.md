@@ -42,9 +42,7 @@ Next, in order, as of 2026-09-21 (evening):
 
 | | Card |
 |---|---|
-| Local echo, so the pane stops feeling like a web page | CLQ-64 |
 | The key row keys are too narrow, and that is a decision — CSS already has `overflow-x: auto`; the card's own measured widths may be stale, needs a real phone check before it needs code | CLQ-63 |
-| Auto-resume when a usage limit resets — the probe now exists for Claude, Codex and Grok (see "Grok usage probe" below); Gemini/Antigravity are checked and blocked, not just unresearched. The resume trigger itself is not built | CLQ-68 |
 | The rest of the phone pass | CLQ-65 |
 | MCP server, phase 2: write verbs, blocked on CLQ-52's policy model | CLQ-76 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
@@ -90,6 +88,16 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **A folder can resume its sessions after a usage limit resets**, 0.88.0.
+  CLQ-68. Opt in per folder from the folder menu. A session qualifies only when
+  it is idle and its last lines match the CLI's `attention.limited` patterns in
+  `clis.toml`, so a permission prompt never matches. The reset time comes from
+  the CLI's usage probe; a minute after it, the panel types `after_limit`
+  (default `continue`) once. A CLI with no usage probe never auto-resumes: no
+  guessing at reset times. A reset already past when first seen is ignored, so
+  a stale limit message cannot trigger a resend loop.
+- **Typed letters show at once**, 0.87.0. CLQ-64. Local echo draws each key
+  in the pane before the server echoes it back.
 - **A phone can no longer drag the panel sideways**, 0.86.4. CLQ-62. The 13px
   was the enlarged touch hit area (`inset: -16px` under `pointer: coarse`) on
   the right rail's buttons, reaching past the screen edge. `mobile_view.py`
