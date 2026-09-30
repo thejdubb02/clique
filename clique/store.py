@@ -275,6 +275,10 @@ DEFAULT_SETTINGS = {
     #: colours; this answers it for everyone else, and across a screen of
     #: panes rather than by reading a tab.
     "cli_watermark": True,
+    #: Draw a typed letter at once instead of waiting for the round trip to
+    #: tmux, and drop it when the real echo lands. Only a display: nothing is
+    #: sent differently.
+    "local_echo": True,
     #: Per-CLI overrides of the colour shipped in clis.toml, because one
     #: person's palette is another person's invisible-on-their-theme.
     #: {"claude": "#d97757"}. An empty entry means "use the shipped one".

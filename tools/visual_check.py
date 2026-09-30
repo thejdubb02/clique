@@ -2217,6 +2217,68 @@ def _run(panel) -> int:
         page.goto(BASE, wait_until="networkidle")
         check("and the panel returns once it can be reached", page.locator("#tabbar").is_visible())
 
+        # Local echo (CLQ-64). The link is made slow by holding every keystroke
+        # back 600ms, so the only way a letter can be on screen early is the
+        # guess. Then the two places it must never guess: a password prompt,
+        # and with the setting off.
+        print("\na typed letter shows before the server echoes it")
+        echo_id = _api("/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "echo"})[
+            "id"
+        ]
+        page.wait_for_timeout(600)
+        echo = page.evaluate(
+            """async (id) => {
+              const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+              await refresh();
+              await openSession(id);
+              await wait(1200);
+              const entry = terms.get(id);
+              const real = entry.ws.send.bind(entry.ws);
+              entry.ws.send = (b) => setTimeout(() => real(b), 600);
+              const shown = () => (entry.echoEl && entry.echoEl.textContent) || "";
+              const row = () => { const b = entry.term.buffer.active;
+                return b.getLine(b.baseY + b.cursorY).translateToString(true); };
+              const out = {};
+              for (const ch of "echo hi") entry.term.input(ch);   // keystrokes, not a paste
+              await wait(100);
+              out.early = shown();
+              out.rowEarly = row();
+              await wait(1200);
+              out.after = shown();
+              out.rowAfter = row();
+              entry.term.input("\\r");
+              await wait(900);
+              entry.term.input("read -s -p 'Password: ' x\\r");
+              await wait(1500);
+              for (const ch of "abc") entry.term.input(ch);
+              await wait(100);
+              out.secret = shown();
+              entry.term.input("\\r");
+              await wait(900);
+              await saveSettings({ local_echo: false });
+              for (const ch of "xyz") entry.term.input(ch);
+              await wait(100);
+              out.off = shown();
+              await saveSettings({ local_echo: true });
+              return out;
+            }""",
+            echo_id,
+        )
+        check("the letters are drawn before the echo", echo["early"] == "echo hi", echo)
+        check(
+            "while the terminal itself has not got them yet",
+            "echo hi" not in echo["rowEarly"],
+            echo,
+        )
+        check(
+            "and the guess goes once the real ones land",
+            echo["after"] == "" and "echo hi" in echo["rowAfter"],
+            echo,
+        )
+        check("nothing is guessed on a password line", echo["secret"] == "", echo)
+        check("nor with the setting off", echo["off"] == "", echo)
+        _api(f"/api/sessions/{echo_id}", "DELETE")
+
         # A real phone, not a narrow desktop window: only a touch context
         # matches `pointer: coarse`, which is where the enlarged tap targets
         # live. Those on the right rail reached 13px past the screen edge,

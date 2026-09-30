@@ -6748,8 +6748,9 @@ function flushWrites(entry, id) {
   if (!q || !q.length) return;
   entry.wq = [];
   const data = q.length === 1 ? q[0] : coalesceChunks(q);
-  if (entry.follow !== false) return entry.term.write(data);
+  if (entry.follow !== false) return entry.term.write(data, () => echoSettle(entry));
   entry.term.write(data, () => {
+    echoSettle(entry);
     const buf = entry.term.buffer.active;
     entry.behind = Math.max(0, buf.baseY - entry.baseline);
     if (buf.viewportY !== entry.pinned) {
@@ -7412,9 +7413,11 @@ async function attachNow(id) {
     else if (data >= " " && data.length === 1) entry.typed += data;
     else if (data.length > 1) entry.typed = "";   // paste or escape sequence
 
+    echoKey(entry, data);
     send(data);
   });
   term.onResize(() => {
+    echoClear(entry);                // a guess drawn for the old grid is in the wrong cell
     if (entry.kicking) return;     // paintPane's one-column nudge is not a resize
     if (entry.relaying) return;    // our own fit; it reports once it settles
 
@@ -8941,6 +8944,7 @@ function openSettings() {
   $("#setThemeRotateAt").value = s.theme_rotate_at || "07:00";
   syncThemeRotate();
   $("#setCliWatermark").checked = s.cli_watermark !== false;
+  $("#setLocalEcho").checked = s.local_echo !== false;
   $("#setArtShow").checked = s.artifacts_show !== false;
   // Not repainted while it has focus: this is a textarea someone types a list
   // into, and a poll landing mid-edit would move their cursor.
@@ -9485,6 +9489,7 @@ function wire() {
     }
   };
   $("#setCliWatermark").onchange = (ev) => saveSettings({ cli_watermark: ev.target.checked });
+  $("#setLocalEcho").onchange = (ev) => saveSettings({ local_echo: ev.target.checked });
 
   /* Reloading an installed app.
    *
@@ -11003,6 +11008,94 @@ function paneSend(entry, text) {
     return;
   }
   entry.outbox = paneQueueOut(entry.outbox, text, PANE_OUTBOX_CAP);
+}
+
+/* Local echo. A keystroke goes to tmux and comes back as output before it is
+ * drawn, so on a slow link every letter waits a round trip and the pane feels
+ * like a web page. Draw the letter now, in a layer above the terminal, and
+ * take it away as the real echo lands. Nothing is written into xterm's buffer:
+ * a CLI that repaints its line would fight a guess put there.
+ *
+ * It only guesses where a guess is safe: plain ASCII typed on the main screen
+ * with a visible cursor, on a line that is not asking for a password. Anything
+ * else (Enter, arrows, a paste, a cursor that went somewhere unexpected) drops
+ * the guess. A guess that nothing confirms within ECHO_WAIT_MS means the CLI is
+ * not echoing there, so it stops guessing until the next Enter. */
+const ECHO_WAIT_MS = 1000;
+const ECHO_SECRET = /pass(word|phrase|code)|\bPIN\b/i;
+
+function echoClear(entry) {
+  clearTimeout(entry.echoTimer);
+  entry.echo = null;
+  if (entry.echoEl) entry.echoEl.textContent = "";
+}
+
+function echoGuessable(term) {
+  const buf = term.buffer.active;
+  if (buf.type !== "normal") return false;
+  try { if (term._core.coreService.isCursorHidden) return false; } catch (err) { /* xterm internals moved */ }
+  const line = buf.getLine(buf.baseY + buf.cursorY);
+  return !(line && ECHO_SECRET.test(line.translateToString(true)));
+}
+
+function echoKey(entry, data) {
+  if (state.settings.local_echo === false || !entry.term) return;
+  if (data === "\r" || data === "\n") { entry.echoOff = false; return echoClear(entry); }
+  const e = entry.echo;
+  if (data === "\u007f" && e && e.text) { e.text = e.text.slice(0, -1); return echoDraw(entry); }
+  if (!/^[ -~]$/.test(data) || entry.echoOff) return echoClear(entry);
+  const term = entry.term, buf = term.buffer.active;
+  if (!e) {
+    if (!echoGuessable(term)) return;
+    entry.echo = { text: "", x: buf.cursorX, y: buf.baseY + buf.cursorY };
+  }
+  if (entry.echo.x + entry.echo.text.length + 1 >= term.cols) return echoClear(entry);
+  entry.echo.text += data;
+  echoDraw(entry);
+}
+
+/* After each write: whatever the cursor advanced past has really been echoed,
+ * so that much of the guess goes. A cursor on another row, or behind where
+ * the guess started, means the CLI did something else; the guess is dropped. */
+function echoSettle(entry) {
+  const e = entry.echo;
+  if (!e || !entry.term) return;
+  const buf = entry.term.buffer.active;
+  const moved = buf.cursorX - e.x;
+  if (buf.type !== "normal" || buf.baseY + buf.cursorY !== e.y || moved < 0) return echoClear(entry);
+  e.text = e.text.slice(moved);
+  e.x = buf.cursorX;
+  if (!e.text) return echoClear(entry);
+  echoDraw(entry);
+}
+
+function echoDraw(entry) {
+  const e = entry.echo, term = entry.term;
+  if (!e || !e.text) return echoClear(entry);
+  let el = entry.echoEl;
+  const screen = term.element && term.element.querySelector(".xterm-screen");
+  if (!screen) return;
+  if (!el || el.parentNode !== screen) {
+    el = entry.echoEl = document.createElement("div");
+    el.className = "local-echo";
+    screen.appendChild(el);
+  }
+  const cell = paneCellPx(term), theme = term.options.theme || {};
+  el.style.left = e.x * cell.w + "px";
+  el.style.top = (e.y - term.buffer.active.viewportY) * cell.h + "px";
+  el.style.font = `${term.options.fontSize}px/${cell.h}px ${term.options.fontFamily}`;
+  el.style.color = theme.foreground || "";
+  el.style.background = theme.background || "";
+  el.replaceChildren(...[...e.text].map((ch) => {
+    const c = document.createElement("span");
+    c.style.width = cell.w + "px";
+    c.textContent = ch;
+    return c;
+  }));
+  clearTimeout(entry.echoTimer);
+  entry.echoTimer = setTimeout(() => {
+    if (entry.echo && entry.echo.text) { entry.echoOff = true; echoClear(entry); }
+  }, ECHO_WAIT_MS);
 }
 
 function paneFlushOut(entry) {

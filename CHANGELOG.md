@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.87.0 — 2026-09-30 11:21 PDT
+
+**Typing feels instant on a slow link.** Every letter used to wait a full
+round trip to the server before it appeared, so on a phone or a distant box
+the pane lagged behind the keyboard. Now a typed letter is drawn at once, in a
+layer above the terminal, and is replaced by the real one when it arrives. It
+only guesses where that is safe: plain letters on the normal screen with a
+visible cursor. It never guesses on a line asking for a password or PIN, in a
+full-screen program, or after Enter, arrows or a paste. If the program is not
+echoing at all, it stops guessing until the next Enter. Settings, Keyboard,
+"Show what you type at once" turns it off; `local_echo` in the settings API.
+
 ## 0.86.4 — 2026-09-30 10:57 PDT
 
 **A phone can no longer drag the panel sideways.** On a touch screen the

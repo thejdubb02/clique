@@ -2780,3 +2780,9 @@ body.zen #zenExit:hover { opacity: 1; color: var(--fg); }
 }
 #pairQr[hidden] { display: none; }
 .pair-qr-note { margin: 8px 0 0; text-align: center; }
+
+/* Local echo: a typed letter drawn above the terminal until the real echo
+   lands (see echoKey in app.js). One span per cell, so it sits on xterm's grid
+   whatever the font's own advance width is. */
+.local-echo { position: absolute; z-index: 5; pointer-events: none; white-space: pre; }
+.local-echo span { display: inline-block; text-align: center; }

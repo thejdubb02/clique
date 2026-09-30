@@ -628,6 +628,13 @@
          this off to hand it back; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>
          still opens the palette either way.</p>
 
+      <label class="check"><input type="checkbox" id="setLocalEcho">
+        Show what you type at once, before the server echoes it</label>
+      <p class="note">On a slow connection each letter otherwise waits a round
+         trip. The early letter is only drawn on top of the pane and goes away
+         when the real one arrives. It is never shown on a password line, on a
+         full-screen program, or where the program is not echoing.</p>
+
       <h3>Prompt box</h3>
       <label class="field">Where you type
         <select id="setInputMode">
