@@ -29,6 +29,60 @@ four of the five lists, usually while flagging the same trap.
 
 ---
 
+## Native clients — decided 2026-09-17
+
+Justin asked for desktop apps and a dedicated Android client on F-Droid, and
+for it to be official rather than a someday. Here is the shape, the order, and
+what is deliberately not being done.
+
+**Clients are API consumers, in their own repos. The core does not change
+shape.** `clique` stays Python, standard library, no build step, 24 MB. That
+is the argument for the whole tool and a native client is not a reason to
+spend it. This is not a new principle: "the API is the whole surface" already
+says there is nothing the panel can do that a script cannot, and a native
+client is just a script with a window. A client that needs something the API
+cannot do is a gap in the API, and the fix goes in the API.
+
+**Android first, and not because it is easier.** It is where the product is
+weakest. Every input bug this tool has had has been an Android keyboard fight
+inside a web view: the duplication that survived two fixes and needed a third
+on 2026-09-17 was a browser text field and an IME disagreeing about who owned
+the text. A native input cannot have that argument. Nothing on the desktop is
+broken in that way, so nothing on the desktop is as valuable.
+
+**F-Droid, not Play.** No Google account, no Play Services, no review theatre,
+and it matches a self-hosted tool's audience. The cost is real and should be
+stated: inclusion is a queue measured in weeks, builds happen on their
+infrastructure from source, and the app has to be free software with no
+proprietary dependencies. None of that is a problem here; all of it is a
+reason to start the clock early rather than late.
+
+**Desktop is third, and smaller than it sounds.** The panel already installs
+as an app on Windows, macOS and Linux: a real window, no tab strip, no address
+bar. A native desktop client adds an installer, a dock icon that does not
+belong to a browser, and starting the server for you. Worth having, and worth
+being honest that it is convenience rather than capability. When it is built
+it will be a thin native shell, not Electron: shipping a 100 MB runtime to
+front a 24 MB server would forfeit the only claim this tool makes.
+
+The order, and why each one waits for the one before it:
+
+1. **Pairing** — shipped 0.67.7. A token is forty-odd characters and no one
+   types that into a phone. Every native client needs a way in that a thumb
+   can manage, so this came first and is the only part of this that touches
+   the core.
+2. **`clique-android`** — its own repo, F-Droid. Native shell around the
+   session list and the prompt, with the terminal itself still rendered by the
+   same web view, because reimplementing a terminal emulator is exactly the
+   "driver, not an IDE" trap and xterm.js is already the thing that does the
+   job well.
+3. **`clique-desktop`** — its own repo, thin native shell, three platforms.
+
+**Refused, so it does not get proposed again.** A native terminal emulator per
+platform. Rewriting the panel per platform. Electron. A Play Store listing
+alongside F-Droid, which doubles the release work to reach an audience that
+can already install a PWA.
+
 ## Shipped
 
 **Command palette + fuzzy session jump `[5/5]` — 0.4.0.** Every list ranked it
@@ -224,6 +278,49 @@ and it is the only reason to build this rather than skip it.
 5. **Browser-side split panes / nested tmux visualisation** `[1/5]`. Demos
    well; plain JS plus resource limits make a good implementation expensive
    and fragile. Tabs are already the right abstraction.
+
+### Replacing tmux: asked and answered, 2026-08-28
+
+Raised after a run of pane-sizing bugs: tmux feels rigid, is there a better
+engine? Two outside models were asked independently, given the architecture and
+the four non-negotiables, and told to name what would break before recommending
+anything. They agreed with each other, and the answer is no.
+
+**The constraint is the kernel, not tmux.** A Unix PTY has one `winsize`. Every
+process on that terminal sees one COLUMNS by LINES. Nothing layered on top,
+tmux or otherwise, can hand two interactive clients honest independent grids of
+the *same* process. One of them is always being lied to: cropped, padded,
+scaled or reflowed. Every option is a choice of which lie.
+
+- **abduco / dtach** have no terminal emulation at all, so no server-side
+  buffer and no redraw on reattach. That trades a sizing annoyance for a blank
+  screen every time a browser reconnects, and loses grouping, per-browser
+  current window and copy-mode. Same shared size regardless.
+- **screen** is the same one-size-per-window model. Its `fit` force-resizes to
+  the current display and leaves the larger one padded, which is our dot-fill
+  problem in a different hat.
+- **zellij** needs a Rust runtime, which fails the stdlib rule on its own. The
+  tell is that 0.45, shipped this month, added per-*tab* sizing rather than
+  per-client, because per-client is the part that cannot be done. That is
+  roughly what our session groups already give us.
+- **Our own Python supervisor** gets you abduco in a few hundred lines, and
+  then the real bill: per-client rendering needs a real VT server-side. CSI and
+  OSC parsing, DEC private modes, scroll regions, truecolor, CJK widths,
+  bracketed paste, mouse modes. Several thousand lines to be merely adequate,
+  subtly wrong in exactly the box drawing these CLIs use, CPU-hot in pure
+  Python, and it still does not produce two honest widths. SSH attach also
+  stops being a real terminal on a live session and becomes a custom client,
+  which breaks the third non-negotiable outright.
+
+**Keep tmux.** One shared window size is a fair price for a C multiplexer that
+survives weeks, attaches from plain SSH, and costs nothing to ship. The tell is
+that of the bugs actually hit on 2026-08-28, every one was in our own layout
+layer. The multiplexer was doing the only thing the kernel allows.
+
+**What came out of it that is worth doing** is in [docs/next.md](docs/next.md):
+`aggressive-resize`, attaching background viewers with `ignore-size`, and
+saying the shared size out loud in the pane header instead of leaving people to
+guess why their pane looks wrong.
 
 ### The one genuine disagreement
 

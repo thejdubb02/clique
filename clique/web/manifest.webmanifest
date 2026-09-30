@@ -1,5 +1,5 @@
 {
-  "name": "CLIque — Your private clique of CLIs",
+  "name": "CLIque: your private clique of CLIs",
   "short_name": "CLIque",
   "description": "Folder-organised, CLI-agnostic coding sessions in a browser, kept alive in tmux.",
   "id": ".",

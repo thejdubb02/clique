@@ -10,6 +10,8 @@ has nothing extra to say. Optional by design, and never asked of a CLI.
 
 from __future__ import annotations
 
+import os
+import shlex
 import subprocess
 import threading
 import time
@@ -176,6 +178,70 @@ def add_worktree(repo: str, branch: str) -> tuple[str | None, str]:
     if made is None:
         return None, f"git could not create a worktree for {branch!r}"
     return str(path), ""
+
+
+#: Names in `.clique-copy` are filenames, not shell. Reject anything that
+#: would leave the worktree or the primary checkout when joined onto either
+#: root — a typo should be silently skipped, never a path traversal.
+def _copy_target_ok(line: str) -> bool:
+    return bool(line) and not line.startswith("/") and ".." not in Path(line).parts
+
+
+def worktree_setup(repo: str, worktree: str) -> str | None:
+    """Shell text to run once in a freshly made worktree, before the CLI
+    starts — or None if the repo declares neither half of it.
+
+    Both halves are ordinary files *in the repo*, tracked on whatever branch
+    the worktree checks out, so `git worktree add` hands them to the new
+    worktree for free on any machine — nothing for CLIque to store, nothing
+    to configure per box. Rule 1 holds: this is a command on the filesystem,
+    not knowledge of any vendor.
+
+    `.clique-copy` is the answer to the obvious hazard: a fresh worktree has
+    none of the primary checkout's `.gitignore`d files, `.env` first among
+    them, and the fix for that is explicit filenames, one per line, never a
+    glob — a glob is how "copy the local env file" quietly becomes "copy
+    every *.local file including last week's credentials dump". A name is
+    copied only if it exists in the primary checkout; nothing is copied by
+    default, because there is no default list that is right for every repo.
+
+    `.clique-setup`, if present in the worktree and executable, runs after
+    the copy. Its output lands in the pane because it runs in the pane, not
+    the request thread — worktree creation is not the place to make an HTTP
+    caller wait out someone's `npm install`. A script that exits non-zero is
+    reported and nothing more: deleting the worktree out from under a session
+    that has not even started yet would turn a bad `npm i` into a bad first
+    impression the ticket exists to avoid.
+    """
+    wt = Path(worktree)
+    parts: list[str] = []
+
+    copy_list = wt / ".clique-copy"
+    if copy_list.is_file():
+        for raw in copy_list.read_text(errors="replace").splitlines():
+            name = raw.split("#", 1)[0].strip()
+            if not name:
+                continue
+            if not _copy_target_ok(name):
+                parts.append(
+                    f"echo {shlex.quote('skipped ' + name + ': not a plain relative path')}"
+                )
+                continue
+            src = shlex.quote(str(Path(repo) / name))
+            dst = shlex.quote(name)
+            parts.append(
+                f'if [ -f {src} ]; then mkdir -p "$(dirname {dst})" && '
+                f"cp -p {src} {dst} && echo {shlex.quote('copied ' + name)}; fi"
+            )
+
+    setup = wt / ".clique-setup"
+    if setup.is_file() and os.access(setup, os.X_OK):
+        parts.append(
+            "./.clique-setup; s=$?; "
+            'if [ "$s" -ne 0 ]; then echo "[.clique-setup exited $s — continuing anyway]"; fi'
+        )
+
+    return "; ".join(parts) if parts else None
 
 
 def worktree_clean(path: str) -> bool:

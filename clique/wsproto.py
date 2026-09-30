@@ -73,6 +73,9 @@ class WebSocket:
         self.sock = sock
         self._send_lock = threading.Lock()
         self._closed = False
+        #: When the peer last proved it was there. A pong counts, so a healthy
+        #: connection refreshes this every ping interval even while idle.
+        self.last_recv = time.monotonic()
 
     # ------------------------------------------------------------------ send
 
@@ -113,6 +116,20 @@ class WebSocket:
                 with contextlib.suppress(OSError):
                     self.sock.shutdown(socket.SHUT_RDWR)
 
+    def drop(self) -> None:
+        """Tear the socket down without waiting for the send lock.
+
+        `close` is the polite path: it writes a close frame first, so it needs
+        the lock, and a `sendall` parked on a peer that stopped reading holds
+        that lock for as long as the peer stays gone. This one is for a peer
+        already judged dead, where the point is to unpark every thread on the
+        socket rather than to say goodbye. The shutdown does both: a blocked
+        `recv` returns empty and a blocked `sendall` raises.
+        """
+        self._closed = True
+        with contextlib.suppress(OSError):
+            self.sock.shutdown(socket.SHUT_RDWR)
+
     @property
     def closed(self) -> bool:
         return self._closed
@@ -145,6 +162,7 @@ class WebSocket:
             if not chunk:
                 raise WebSocketError("connection closed mid-frame")
             chunks += chunk
+            self.last_recv = time.monotonic()
             if deadline is None and len(chunks) < count:
                 deadline = time.monotonic() + FRAME_TIMEOUT
         return bytes(chunks)

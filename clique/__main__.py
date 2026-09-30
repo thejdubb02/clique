@@ -13,6 +13,7 @@ from pathlib import Path
 from . import tmux, version_string
 from .app import Panel, serve
 from .auth import Auth, AuthDisabled, hash_password
+from .mcp_server import main as mcp_main
 from .registry import Registry, RegistryError
 from .store import Store
 from .tokens import TokenStore
@@ -191,6 +192,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="copy the CLI catalogue to $CLIQUE_HOME so it can be edited")
     pw = sub.add_parser("password", help="set the login password (stored hashed)")
     pw.add_argument("value", nargs="?", help="omit to be prompted")
+    # Reads CLIQUE_URL and CLIQUE_TOKEN. No flags: a client launches this as
+    # a stdio child and has nowhere to put arguments except the environment.
+    sub.add_parser("mcp", help="read-only MCP server over the panel API (stdio)")
 
     args = parser.parse_args(argv)
 
@@ -200,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:
         return set_password(args)
     if args.command == "config":
         return init_config()
+    if args.command == "mcp":
+        return mcp_main()
 
     if not tmux.available():
         print("tmux not found. Install: sudo apt install tmux", file=sys.stderr)

@@ -310,6 +310,95 @@ def _run() -> int:
     else:
         print("  --   login form not covered (set CLIQUE_TEST_PASSWORD)")
 
+    print("working groups")
+    status, made = call("/api/groups", "POST", {"name": "Morning", "color": "#7aa2f7"})
+    check("a group is created", status == 201 and made.get("id", "").startswith("g-"), made)
+    gid = made.get("id", "")
+    status, state_now = call("/api/state")
+    check("and arrives whole in state, not by id",
+          any(g["id"] == gid and "members" in g for g in state_now.get("groups", [])),
+          state_now.get("groups"))
+
+    # Membership needs a real session, so make one.
+    status, sess = call("/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp",
+                                                  "name": "group member"})
+    sid = sess.get("id", "")
+    if sid:
+        status, got = call(f"/api/groups/{gid}/add", "POST", {"session": sid})
+        member = (got.get("members") or [{}])[0]
+        check("adding a session stores a snapshot",
+              member.get("session") == sid and member.get("cli") == "shell"
+              and member.get("cwd") == "/tmp", member)
+
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {})
+        check("opening reports what is now running", sid in (opened.get("sessions") or []),
+              opened)
+        check("and separates missing from failed",
+              isinstance(opened.get("missing"), list)
+              and isinstance(opened.get("failed"), list), opened)
+
+        # A member whose session is gone is reported, never silently dropped,
+        # and never recreated unless asked.
+        call(f"/api/sessions/{sid}", "DELETE")
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {})
+        check("a deleted member is reported as missing",
+              len(opened.get("missing") or []) == 1, opened)
+        check("and is not recreated behind your back",
+              opened.get("sessions") == [], opened)
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {"recreate": True})
+        check("recreate brings it back when asked",
+              len(opened.get("sessions") or []) == 1, opened)
+        check("and the group now points at the new session",
+              (opened.get("missing") or []) == [], opened)
+        for made_id in opened.get("sessions") or []:
+            call(f"/api/sessions/{made_id}", "DELETE")
+
+    status, _ = call(f"/api/groups/{gid}/delete", "POST")
+    check("a group can be deleted", status == 200, status)
+    status, _ = call(f"/api/groups/{gid}/open", "POST", {})
+    check("and is gone afterwards", status == 404, status)
+
+    print("what a stranger may fetch")
+    # PUBLIC_ASSETS is an allow-list, and it went dead once already: closing a
+    # traversal hole replaced the whole check with a "is it inside brand/"
+    # test, which silently un-published the manifest and the favicon. Nothing
+    # noticed for months, because the only symptom was that a phone would not
+    # offer to install the app, and nobody tests that from a logged-out page.
+    import urllib.error
+    import urllib.request
+
+    def anon_fetch(path: str) -> tuple[int, str, bytes]:
+        try:
+            with urllib.request.urlopen(BASE + path, timeout=5) as r:
+                return r.status, r.headers.get("Content-Type", ""), r.read(400)
+        except urllib.error.HTTPError as exc:
+            return exc.code, "", b""
+
+    for path, kind in (
+        ("/manifest.webmanifest", "manifest"),
+        ("/favicon.ico", "icon"),
+        ("/sw.js", "javascript"),
+        ("/brand/apple-touch-icon.png", "png"),
+    ):
+        status, ctype, _ = anon_fetch(path)
+        check(f"{path} is served before login", status == 200 and kind in ctype,
+              f"{status} {ctype}")
+
+    # The other half: the shell stays behind the password. A gated asset is
+    # answered with the login page rather than a 403, so "is it HTML" is the
+    # test, not the status code.
+    for path in ("/app.js", "/index.html", "/app.css", "/themes.js"):
+        _, _, body = anon_fetch(path)
+        check(f"{path} is not", b"<!doctype html>" in body.lower(), body[:40])
+
+    # And the traversal that made the allow-list get rewritten in the first
+    # place. Resolved-path comparison is what keeps this closed; a prefix
+    # check would let every one of these through.
+    for path in ("/brand/../app.js", "/brand/../index.html",
+                 "/brand/../../etc/passwd", "/brand/../app.css"):
+        _, _, body = anon_fetch(path)
+        check(f"{path} climbs nowhere", b"<!doctype html>" in body.lower(), body[:40])
+
     print("api")
     status, state = call("/api/state")
     check("state loads", status == 200 and "folders" in state, status)
@@ -832,6 +921,7 @@ def _run() -> int:
     (file_dir / "readme.md").write_text("# hi\n", encoding="utf-8")
     (file_dir / "shot.png").write_bytes(png)
     (file_dir / "sub").mkdir()
+    (file_dir / "sub" / "child.md").write_text("nested\n", encoding="utf-8")
     status, file_session = call("/api/sessions", "POST",
                                 {"cli": "shell", "cwd": str(file_dir),
                                  "name": "smoke-file"})
@@ -857,14 +947,18 @@ def _run() -> int:
     check("missing is missing, not an error",
           status == 200 and info.get("kind") == "missing", info)
     status, info = call(f"/api/sessions/{file_id}/file?path=sub")
+    names = [row.get("name") for row in (info.get("entries") or [])]
     check("a directory is a directory",
           status == 200 and info.get("kind") == "dir", info)
+    check("and it names what is inside",
+          "child.md" in names and ".." in names, names)
     status, info = call("/api/sessions/no-such/file?path=x")
     check("unknown session is 404", status == 404, info)
     call(f"/api/sessions/{file_id}", "DELETE")
     with contextlib.suppress(OSError):
         (file_dir / "readme.md").unlink()
         (file_dir / "shot.png").unlink()
+        (file_dir / "sub" / "child.md").unlink()
         (file_dir / "sub").rmdir()
         file_dir.rmdir()
 

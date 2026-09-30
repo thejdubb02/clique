@@ -22,6 +22,10 @@ from pathlib import Path
 #: we just will not dump it into the browser.
 TEXT_CAP = 256 * 1024
 
+#: How many children a directory listing will name. The rest are still there
+#: on disk; the sheet is a glance, not a file manager.
+DIR_CAP = 200
+
 #: File-preview reads are fenced by default: a read may not escape the session's
 #: working directory. A trusted-local deployment can opt out with
 #: CLIQUE_FENCE_READS=0, which makes any absolute path an agent prints clickable
@@ -123,6 +127,9 @@ def clean(raw: str) -> str:
     """The path a click meant, minus the line number a CLI stuck on the end."""
     text = str(raw or "").strip().replace("\x00", "")[:1024]
     text = _LINECOL.sub("", text)
+    # "." and ".." are this folder and its parent, not trailing punctuation.
+    if text in {".", ".."}:
+        return text
     return text.rstrip(".,;:!?)\"'")
 
 
@@ -184,6 +191,60 @@ def write(cwd: str, raw: str, text: str) -> int:
     return len(data)
 
 
+def _entry_kind(entry: os.DirEntry) -> str:
+    """``dir`` or ``file`` for a listing row, without leaving this folder.
+
+    A symlink is classified by what it points at so a linked folder still
+    looks like one, but the path we hand back is the name *in this folder*.
+    The click still goes through ``resolve``, which follows and fences.
+    """
+    try:
+        if entry.is_dir(follow_symlinks=False):
+            return "dir"
+        if entry.is_symlink() and entry.is_dir(follow_symlinks=True):
+            return "dir"
+        if entry.is_file(follow_symlinks=False) or entry.is_symlink():
+            return "file"
+    except OSError:
+        return ""
+    return ""
+
+
+def _dir_entries(cwd: str, target: Path) -> tuple[list[dict], bool]:
+    """Children of a directory already proven inside the fence.
+
+    Paths are the child as named here, not the symlink target: putting a
+    resolved outside path in the listing would leak it. ``..`` is included
+    only when the parent is still inside the session directory.
+    """
+    rows: list[dict] = []
+    try:
+        base = Path(cwd).resolve()
+    except OSError:
+        base = Path(cwd)
+    if target != base and (base == target.parent or base in target.parents):
+        rows.append({"name": "..", "kind": "dir", "path": str(target.parent)})
+    try:
+        kids = list(os.scandir(target))
+    except OSError:
+        return rows, False
+    kids.sort(key=lambda e: (_entry_kind(e) != "dir", e.name.lower()))
+    truncated = False
+    n = 0
+    for entry in kids:
+        if n >= DIR_CAP:
+            truncated = True
+            break
+        kind = _entry_kind(entry)
+        if not kind:
+            continue
+        # Lexical join, never resolved: a symlink that climbs out stays a
+        # name in this folder until a click asks inspect to follow it.
+        rows.append({"name": entry.name, "kind": kind, "path": str(target / entry.name)})
+        n += 1
+    return rows, truncated
+
+
 def inspect(cwd: str, raw: str) -> dict:
     """What the sheet needs: kind, size, and text when it is safe to show."""
     asked = clean(raw)
@@ -208,6 +269,9 @@ def inspect(cwd: str, raw: str) -> dict:
         if target.is_dir():
             out["kind"] = "dir"
             out["size"] = 0
+            entries, truncated = _dir_entries(cwd, target)
+            out["entries"] = entries
+            out["truncated"] = truncated
             return out
         if not target.is_file():
             return out
