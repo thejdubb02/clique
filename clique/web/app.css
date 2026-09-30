@@ -1928,28 +1928,33 @@ a.give-value { color: var(--accent); }
   flex: 0 0 6px;
 }
 
-/* The desktop shell's own update-ready button, drawn beside the version it
- * updates. Non-intrusive at rest — text no louder than the shell label next
- * to it — with just the dot pulsing so it is found without nagging. Reuses
- * .version-new rather than a second near-identical dot class; scoped here to
- * currentColor (so it tints with .failed) and to animate, without changing
- * the plain dot's own default elsewhere. */
+/* The desktop shell's update button, beside the version it updates. Two
+ * seconds of motion when it first appears, then a steady tinted pill: it
+ * stays until clicked, so it must be findable without moving forever. */
 .version-update {
-  background: none; border: 0; padding: 0; margin-left: 6px; font: inherit;
-  color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); border: 0; border-radius: 999px;
+  padding: 1px 8px; margin-left: 6px; font: inherit; color: var(--accent); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
 }
-.version-update:disabled { color: var(--dim); cursor: default; }
-.version-update.failed { color: var(--err); }
-.version-update .version-new {
-  background: currentColor; animation: version-update-pulse 2.2s ease-out infinite;
+.version-update:disabled { color: var(--dim); background: none; cursor: default; }
+.version-update.failed { color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
+.version-update .version-new { background: currentColor; }
+.version-update.arrive { animation: version-update-arrive 2s ease-out; }
+.version-update.arrive .version-new { animation: version-update-pulse 1s ease-out 2; }
+@keyframes version-update-arrive {
+  0% { opacity: 0; transform: translateY(4px) scale(.9); }
+  15%, 50%, 100% { opacity: 1; transform: none; }
+  30%, 70% { transform: scale(1.06); }
 }
 @keyframes version-update-pulse {
   0% { box-shadow: 0 0 0 0 currentColor; }
   70% { box-shadow: 0 0 0 6px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
+@keyframes version-update-fade { 0% { opacity: 0; } 25%, 75%, 100% { opacity: 1; } 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) {
-  .version-update .version-new { animation: none; }
+  .version-update.arrive { animation: version-update-fade 2s ease-out; }
+  .version-update.arrive .version-new { animation: none; }
 }
 @media (hover: hover) and (pointer: fine) {
   .version-update:not(:disabled):hover { text-decoration: underline; }

@@ -1559,15 +1559,18 @@ function appendUpdateBadge(el) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "version-update" + (badge.state === "failed" ? " failed" : "");
+  // Two seconds of motion the first time it appears, then a steady highlight:
+  // renderVersion repaints often, and each repaint must not replay it.
+  if (badge.state === "ready" && !badge.animated) { badge.animated = true; btn.classList.add("arrive"); }
   btn.disabled = badge.state === "busy";
   const label = badge.state === "busy" ? "Installing…"
     : badge.state === "failed" ? "Update failed, retry"
-    : "Update ready";
+    : "Update to " + badge.version;
   btn.title = badge.state === "failed"
     ? "Update failed: " + (badge.message || "unknown error") + ", click to retry"
     : "CLIque " + badge.version + " is ready, click to install and restart";
   btn.setAttribute("aria-label", btn.title);
-  // The pulsing dot says "something is waiting on you"; once you have
+  // The dot says "something is waiting on you"; once you have
   // clicked and it is actually installing, that is a different fact and
   // wants the house loader instead, not a dot that has simply gone still.
   if (badge.state === "busy") {

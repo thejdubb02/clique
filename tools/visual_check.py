@@ -1648,6 +1648,20 @@ def _run(panel) -> int:
             "it names the version that is ready",
             "0.76.1" in (update_btn.get_attribute("title") or ""),
         )
+        check(
+            "its label says which version, on the control itself",
+            (update_btn.inner_text() or "").strip() == "Update to 0.76.1",
+            update_btn.inner_text(),
+        )
+        check("it arrives with motion the first time", "arrive" in (update_btn.get_attribute("class") or ""))
+        page.evaluate("() => renderVersion()")
+        page.wait_for_timeout(50)
+        check(
+            "a repaint does not replay the motion, it holds a steady highlight",
+            "arrive" not in (page.locator("#version .version-update").get_attribute("class") or "")
+            and page.locator("#version .version-update").evaluate("b => getComputedStyle(b).backgroundColor")
+            not in ("rgba(0, 0, 0, 0)", "transparent"),
+        )
         page.locator("#version").screenshot(path=str(SHOTS / "version-update-ready.png"))
 
         page.evaluate(

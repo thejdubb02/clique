@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.86.2
+## 0.86.3 — 2026-09-30 10:33 PDT
+
+**The desktop update control says what it will do, and is hard to miss.** When
+a new desktop build is downloaded and verified, the version line now shows a
+highlighted "Update to <version>" pill instead of a small link. It moves once,
+for two seconds, when it first appears, then stays highlighted; a repaint does
+not replay it, and reduced-motion settings get a plain fade. Clicking it still
+installs and relaunches straight away, and a failed install leaves the old
+version running with a retry.
+
+## 0.86.2 — 2026-09-30 10:32 PDT
 
 **A usage probe that fails now says why.** Before, a CLI whose plan-usage
 probe failed showed exactly the same blank as a CLI with no probe at all, so
