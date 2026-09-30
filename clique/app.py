@@ -214,6 +214,9 @@ class Panel:
         #: it only asks about CLIs that have a session open right now.
         self.services = services.Services(self)
         self.services.ensure()
+        #: Session id -> when to send `after_limit` (0 once sent). See
+        #: auto_resume_tick; the loop starts in serve().
+        self._limit_at: dict[str, float] = {}
         self.clients = 0
         self.allowed_hosts = {
             h.strip().lower()
@@ -467,7 +470,9 @@ class Panel:
         rss_map = sysinfo.rss_by_root([p.pid for p in panes.values()])
         cpu_map = sysinfo.cpu_percent_by_root([p.pid for p in panes.values()])
         # shell's command is bash, which is not an agent CLI and would be pure noise.
-        known_sub_commands = {c.command for cid, c in self.registry.types().items() if cid != "shell" and c.command}
+        known_sub_commands = {
+            c.command for cid, c in self.registry.types().items() if cid != "shell" and c.command
+        }
         sub_map = sysinfo.sub_clis_by_root([p.pid for p in panes.values()], known_sub_commands)
         now = time.time()
         # Sessions that have gone stop being remembered by the busy check.
@@ -646,6 +651,55 @@ class Panel:
             return "working"
         cli = self.registry.types().get(session.cli)
         return self._signal(session, pane, cli) or "idle"
+
+    def auto_resume_tick(self, now: float | None = None) -> list[str]:
+        """Type `after_limit` into sessions that stopped on a usage limit
+        which has now reset. Only in folders that opted in, and only for a
+        CLI with a usage probe: the reset time comes from that probe, and a
+        guessed time would send keys into a session that cannot use them.
+
+        A session is due when it sits idle with a limit message on screen and
+        the probe's latest full window reset has passed (plus a minute). A
+        reset already in the past when first seen is not recorded, so a stale
+        reading cannot fire straight away and then again. Returns the ids sent
+        to, for the check."""
+        now = time.time() if now is None else now
+        on = {f.id for f in self.store.folders if f.auto_resume}
+        types = self.registry.types()
+        seen = set()
+        fired = []
+        for session in list(self.store.sessions):
+            cli = types.get(session.cli)
+            if session.folder not in on or not cli or not getattr(cli, "usage", None):
+                continue
+            if self.session_state(session) != "idle" or not attention.limited_text(
+                tmux.capture(session.mux, session.socket), cli.limited_patterns
+            ):
+                continue
+            seen.add(session.id)
+            due = self._limit_at.get(session.id)
+            if due is None:
+                reading = usage.read(session.cli, cli.usage, llm._guard_url) or {}
+                resets = [
+                    datetime.datetime.fromisoformat(w["resets_at"]).timestamp()
+                    for w in reading.get("windows", [])
+                    if w.get("percent", 0) >= 100 and w.get("resets_at")
+                ]
+                if resets and max(resets) > now:
+                    self._limit_at[session.id] = max(resets) + 60
+            elif due and now >= due:
+                tmux.send_text(session.mux, cli.after_limit, session.socket)
+                self._limit_at[session.id] = 0  # sent; cleared once it moves
+                fired.append(session.id)
+        for gone in set(self._limit_at) - seen:
+            del self._limit_at[gone]
+        return fired
+
+    def _auto_resume_loop(self) -> None:
+        while True:
+            time.sleep(60)
+            with contextlib.suppress(Exception):
+                self.auto_resume_tick()
 
     def wait_for_state(self, session_id: str, wanted: set, timeout: float) -> dict:
         """Block until a session reaches one of ``wanted`` states, or timeout.
@@ -954,6 +1008,7 @@ class Panel:
                     "color": f.color,
                     "emoji": f.emoji,
                     "collapsed": f.collapsed,
+                    "auto_resume": f.auto_resume,
                     "order": f.order,
                 }
                 for f in sorted(self.store.folders, key=lambda f: f.order)
@@ -3091,6 +3146,9 @@ class Handler(BaseHTTPRequestHandler):
                     color=body.get("color"),
                     emoji=body.get("emoji"),
                     collapsed=body.get("collapsed"),
+                    auto_resume=None
+                    if body.get("auto_resume") is None
+                    else bool(body["auto_resume"]),
                 )
                 # The record, for the same reason POST returns it: a colour
                 # that failed validation is kept, and `{"ok": true}` is not a
@@ -3421,6 +3479,7 @@ def serve(host: str, port: int, panel: Panel) -> None:
     # So a session's pane can be told where to report its state back to.
     panel.host, panel.port = host, port
     panel.history.start()
+    threading.Thread(target=panel._auto_resume_loop, daemon=True, name="auto-resume").start()
     tmux.bootstrap()
     # A crash leaves viewer sessions behind. They hold no work, so clearing
     # them at startup is free and keeps `tmux ls` honest.

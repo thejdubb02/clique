@@ -348,6 +348,9 @@ class Folder:
     match: list[str] = field(default_factory=list)
     collapsed: bool = False
     order: int = 0
+    #: Type "continue" into a session here once its usage limit resets. Per
+    #: folder, not global: overnight work opts in, a folder you watch does not.
+    auto_resume: bool = False
 
 
 #: How many working groups one panel will hold. Not a technical limit: a

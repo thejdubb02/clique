@@ -2973,6 +2973,15 @@ function folderMenu(ev, folder) {
         refresh();
       }
     }],
+    // Overnight work: once the plan's limit resets, the server types
+    // "continue" into sessions here that stopped on it. Never a permission
+    // prompt, and only for a CLI whose usage probe gives a reset time.
+    [(folder.auto_resume ? "✓ " : "") + "Resume after usage limit", async () => {
+      await api("api/folders/" + folder.id, {
+        method: "PATCH", body: JSON.stringify({ auto_resume: !folder.auto_resume }),
+      });
+      refresh();
+    }],
     ["Delete folder", async () => {
       // Sessions survive: the server unfiles them rather than deleting.
       if (!confirm(`Delete folder "${folder.name}"? Its sessions move to Ungrouped.`)) return;

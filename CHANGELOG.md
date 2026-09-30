@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.88.0 — 2026-09-30 11:58 PDT
+
+**Overnight work picks itself back up.** When a session runs out of plan
+(Claude's "limit reached, resets 3pm"), it used to sit there until someone
+typed "continue" after the reset. A folder can now do that itself: open the
+folder's menu and turn on "Resume after usage limit". Once the usage probe
+says the limit has reset, plus a minute, the panel types "continue" into each
+session in that folder that stopped on the limit. It fires once per stop, never
+on a session waiting for a permission answer, and only for a CLI that has a
+usage probe, because without one there is no honest reset time to wait for.
+Off by default, per folder. What counts as "stopped on a limit" and what gets
+typed are `limited` and `after_limit` under a CLI's `attention` block in
+`clis.toml`.
+
 ## 0.87.0 — 2026-09-30 11:21 PDT
 
 **Typing feels instant on a slow link.** Every letter used to wait a full

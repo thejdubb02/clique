@@ -866,7 +866,7 @@ Removes the group. The sessions are untouched.
 ## Folders
 
 - `POST /api/folders` → `201` with the whole folder — body `name`, `color`
-- `PATCH /api/folders/<id>` → the folder — `name`, `color`, `collapsed`
+- `PATCH /api/folders/<id>` → the folder — `name`, `color`, `emoji`, `collapsed`, `auto_resume` (true: once a usage limit resets, type the CLI's `after_limit`, default "continue", into this folder's sessions that stopped on it; needs a CLI with a `usage` probe and `limited` patterns in `clis.toml`)
 - `DELETE /api/folders/<id>` — sessions inside become Ungrouped
 
 `color` is three or six hex digits with a leading `#`, and nothing else — it is

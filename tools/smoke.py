@@ -8,6 +8,7 @@ tmux is actually running.
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import re
@@ -1777,12 +1778,15 @@ def main() -> int:
         cmd_payload == {"ok": True, "n": 7},
         cmd_payload,
     )
-    failed_cmd = usage.read(
-        "smoke-cmd",
-        {"cmd": [sys.executable, "-c", "import sys; sys.exit(1)"]},
-        lambda url: None,
-        force=True,
-    ) or {}
+    failed_cmd = (
+        usage.read(
+            "smoke-cmd",
+            {"cmd": [sys.executable, "-c", "import sys; sys.exit(1)"]},
+            lambda url: None,
+            force=True,
+        )
+        or {}
+    )
     check(
         "a nonzero exit is an error reading, not a crash",
         failed_cmd["windows"] == [] and "exited 1" in failed_cmd.get("error", ""),
@@ -1841,6 +1845,61 @@ def main() -> int:
         check("usage_bar off refuses even the explicit ask", seen_cli_ids == [], seen_cli_ids)
     finally:
         usage.read = usage._orig_read
+
+    print("auto-resume: a usage limit that has reset gets 'continue', nothing else does")
+    check(
+        "a limit message is read as limited, a permission prompt is not",
+        app_mod.attention.limited_text(
+            "5-hour limit reached · resets 3pm", [r"limit reached\W+resets"]
+        )
+        and not app_mod.attention.limited_text("Do you want to proceed? (y/n)", []),
+    )
+    screen = {"a": "You've hit your limit", "b": "Do you want to proceed?"}
+    sent: list[tuple] = []
+    reset = {"at": "2030-01-01T00:00:00+00:00"}
+    t0 = datetime.datetime.fromisoformat(reset["at"]).timestamp()
+    saved = (usage.read, app_mod.tmux.capture, app_mod.tmux.send_text)
+    usage.read = lambda *a, **k: {"windows": [{"percent": 100, "resets_at": reset["at"]}]}
+    app_mod.tmux.capture = lambda mux, socket, **k: screen[mux]
+    app_mod.tmux.send_text = lambda mux, text, socket, **k: sent.append((mux, text))
+    try:
+        cli = SimpleNamespace(usage={"url": "x"}, limited_patterns=[], after_limit="continue")
+        fake_panel = SimpleNamespace(
+            store=SimpleNamespace(
+                folders=[SimpleNamespace(id="night", auto_resume=True)],
+                sessions=[
+                    SimpleNamespace(id=m, mux=m, socket=None, cli="claude", folder="night")
+                    for m in ("a", "b")
+                ],
+            ),
+            registry=SimpleNamespace(types=lambda: {"claude": cli}),
+            session_state=lambda s: "idle",
+            _limit_at={},
+        )
+        tick = lambda now: app_mod.Panel.auto_resume_tick(fake_panel, now)  # type: ignore[arg-type]  # noqa: E731
+        check("before the reset, nothing is sent", tick(t0 - 600) == [] and sent == [], str(sent))
+        check(
+            "a minute after the reset, only the limited session is sent to",
+            tick(t0 + 61) == ["a"] and sent == [("a", "continue")],
+            str(sent),
+        )
+        check("it is sent once, not every tick", tick(t0 + 200) == [] and len(sent) == 1, str(sent))
+        fake_panel._limit_at.clear()
+        sent.clear()
+        check(
+            "a reset already past when first seen is not fired on",
+            tick(t0 + 61) == [] and tick(t0 + 120) == [] and sent == [],
+            str(sent),
+        )
+        fake_panel.store.folders[0].auto_resume = False
+        fake_panel._limit_at["a"] = t0
+        check(
+            "a folder that did not opt in is left alone",
+            tick(t0 + 999) == [] and sent == [] and not fake_panel._limit_at,
+            str(sent),
+        )
+    finally:
+        usage.read, app_mod.tmux.capture, app_mod.tmux.send_text = saved
 
     print("mounted under a path prefix")
     # CLIque is documented as running behind `tailscale serve` at /clique,

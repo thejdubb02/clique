@@ -87,6 +87,14 @@ DEFAULT_COMPACTING = [
     r"(?i)compacting",
 ]
 
+#: A session that stopped because the plan ran out. Not a question and not an
+#: error: nothing is wrong and nobody needs to answer, it just has to wait for
+#: a clock. Only auto-resume reads it, so a miss costs a manual "continue".
+DEFAULT_LIMITED = [
+    r"(?i)\b(usage|rate) limit (reached|exceeded)",
+    r"(?i)\bhit your (usage )?limit",
+]
+
 #: Compiled patterns, keyed by the strings they came from, so a hot-reloaded
 #: clis.toml does not mean recompiling on every poll.
 _compiled: dict[tuple[str, ...], list[re.Pattern]] = {}
@@ -243,6 +251,15 @@ def verdict_text(
     if any(p.search(recent) for p in _patterns(waiting)):
         return "waiting"
     return ""
+
+
+def limited_text(text: str, patterns: list[str]) -> bool:
+    """Whether the last few content lines say the plan ran out.
+
+    Same short tail as a question, so a limit message that has scrolled up
+    under newer work does not keep the session looking stopped."""
+    recent = "\n".join(content_lines(_tail(text, LINES))[-WAITING_TAIL:])
+    return any(p.search(recent) for p in _patterns([*DEFAULT_LIMITED, *patterns]))
 
 
 def detect(

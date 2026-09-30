@@ -195,6 +195,15 @@ class CliType:
         return [str(x) for x in (self.attention.get("compacting") or [])]
 
     @property
+    def limited_patterns(self) -> list[str]:
+        return [str(x) for x in (self.attention.get("limited") or [])]
+
+    @property
+    def after_limit(self) -> str:
+        """What auto-resume types once a usage limit has reset."""
+        return str(self.attention.get("after_limit") or "continue")
+
+    @property
     def mode_seq(self) -> str:
         """What a terminal actually sends when `mode_key` is pressed.
 

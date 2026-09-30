@@ -123,6 +123,12 @@ error = [
   "command not found",
   "Traceback \\(most recent call last\\)",
 ]
+# The plan ran out ("5-hour limit reached · resets 3pm"). Read only by a
+# folder's auto-resume, which types `after_limit` (default "continue") once
+# the usage probe says the window has reset.
+limited = [
+  "(?i)limit reached\\W+resets",
+]
 
 # Where Claude Code keeps its transcripts. One directory per project, named
 # after the working directory with every "/" and "." replaced by "-", and one
