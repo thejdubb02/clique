@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.86.1 — 2026-09-30 09:53 PDT
+
+**The scroll wheel stopped overshooting.** Every pane's wheel handler floored
+each event to at least one scroll tick, so a trackpad or a precision mouse
+sending dozens of tiny wheel events for one physical gesture fired a tick for
+every one of them, several times more scroll than the same motion on a
+notched wheel — the pane flew past what you meant to read. Wheel pixels now
+accumulate and only spend a tick once the total crosses a threshold, the same
+approach the touch handler already used. Firefox's line-mode wheel deltas
+(deltaMode 1) are converted to pixels first, since the old code's per-event
+floor happened to read those correctly by accident and the new accumulator
+would otherwise have needed eight notches to register one. Applies to every
+session's pane, on both the normal screen (own scrollback) and the alternate
+screen (forwarded to the app).
+
 ## 0.86.0 — 2026-09-22 16:00 PDT
 
 **One house loader, everywhere the panel makes you wait.** CLQ-46. Four

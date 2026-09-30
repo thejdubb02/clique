@@ -11195,15 +11195,42 @@ function wirePaneClipboard(term, host, sessionId) {
    * buffer never fills and scrolling it does nothing. The scroll is the app's.
    * So we forward the wheel to it as SGR mouse-wheel events; it moves its own
    * view and the redraw streams back. That is what makes those CLIs, which
-   * never scrolled here before, finally scroll. */
+   * never scrolled here before, finally scroll.
+   *
+   * Carried, not floored. A physical notch used to arrive as one `wheel`
+   * event with deltaY around 100; a trackpad or a precision mouse instead
+   * fires dozens of tiny ones (deltaY 1-10) for the same gesture. Flooring
+   * each event to at least one tick — the old `Math.max(1, ...)` — sent a
+   * tick for every one of those tiny events, so a trackpad scroll landed
+   * several times more lines than the same physical motion on a notched
+   * wheel: scrolling that felt like it had a mind of its own. Pixels now
+   * accumulate across events, same as the touch handler below, and a tick
+   * only fires once the total crosses the threshold.
+   *
+   * Normalized to pixels first. Chrome and Safari already report deltaY in
+   * pixels (deltaMode 0), but Firefox's default mouse wheel reports it in
+   * lines (deltaMode 1, deltaY around 3 per notch) — accumulating that
+   * against a 24px threshold would need eight notches before the first
+   * tick, eight times less sensitive than before for exactly the browser
+   * that made the old per-event floor look correct by accident. */
+  const WHEEL_PX_PER_TICK = 24;
+  let wheelCarried = 0;
   host.addEventListener("wheel", (e) => {
     if (!sessionOwnsInput(sessionId)) return;
-    const ticks = Math.max(1, Math.round(Math.abs(e.deltaY) / 24));
-    const s = session(sessionId);
-    if (s && s.alt) {
-      sendPaneWheel(term, e.clientX, e.clientY, e.deltaY < 0, ticks, sessionId);
-    } else {
-      term.scrollLines(Math.sign(e.deltaY) * ticks);
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= (paneCellPx(term).h || 17);       // lines
+    else if (e.deltaMode === 2) dy *= (host.clientHeight || 400);  // pages
+    wheelCarried += dy;
+    const ticks = Math.trunc(Math.abs(wheelCarried) / WHEEL_PX_PER_TICK);
+    if (ticks) {
+      const dir = wheelCarried < 0 ? -1 : 1;
+      wheelCarried -= dir * ticks * WHEEL_PX_PER_TICK;
+      const s = session(sessionId);
+      if (s && s.alt) {
+        sendPaneWheel(term, e.clientX, e.clientY, dir < 0, ticks, sessionId);
+      } else {
+        term.scrollLines(dir * ticks);
+      }
     }
     e.preventDefault();
     e.stopPropagation();
