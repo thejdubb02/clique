@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.86.2
+
+**A usage probe that fails now says why.** Before, a CLI whose plan-usage
+probe failed showed exactly the same blank as a CLI with no probe at all, so
+there was no telling "not configured" from "broken". Now the usage panel shows
+one quiet line under that CLI, such as "Couldn't read usage: no token (not
+signed in?)", "HTTP 401", "command exited 1" or "reply is not JSON". The API's
+`/api/usage` entry carries the same text as `error`, with empty `windows`. A
+CLI with no probe declared still gets no entry. Failures stay cached for the
+same five minutes as successes, so a box with no key still stops asking.
+
 ## 0.86.1 — 2026-09-30 09:53 PDT
 
 **The scroll wheel stopped overshooting.** Every pane's wheel handler floored

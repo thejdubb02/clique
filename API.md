@@ -724,7 +724,7 @@ allowed for local models. `CLIQUE_LLM_ALLOW_PRIVATE=1` opts into private ranges.
 ## Plan usage
 
 `GET /api/usage` → `{"usage": [{"cli", "windows": [{"label", "percent",
-"resets_at"}], "checked"}]}`. How much of a plan each running CLI has spent.
+"resets_at"}], "checked", "error"?}]}`. How much of a plan each running CLI has spent.
 Read scope.
 
 Nothing in the panel knows whose API is being asked. A CLI's `usage` block in
@@ -743,8 +743,10 @@ same five minutes so a machine with no credentials does not retry forever.
 **The token never leaves the process.** It is read from disk, spent on one
 request, and dropped; what comes back over this route is a percentage and a
 reset time. Anything unexpected (no token, an expired one, no network, a reply
-in a shape the block did not describe) returns no entry for that CLI rather
-than an error. Set `usage_bar` to `false` to turn the whole thing off.
+in a shape the block did not describe) still returns an entry for that CLI,
+with empty `windows` and a short `error` string saying which ("no token (not
+signed in?)", "HTTP 401", "reply is not JSON", ...). The route itself never
+fails over it, and a CLI with no probe declared gets no entry at all. Set `usage_bar` to `false` to turn the whole thing off.
 
 ## Themes
 

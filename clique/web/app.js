@@ -1760,6 +1760,11 @@ function renderUsagePanel() {
       head.append(tag);
     }
     wrap.append(head, ...(u.windows || []).map((w) => planMeter(w, cli?.label || u.cli)));
+    if (u.error) {
+      const why = mk("div", "usage-empty");
+      why.textContent = `Couldn't read usage: ${u.error}`;
+      wrap.append(why);
+    }
     return wrap;
   }));
 }

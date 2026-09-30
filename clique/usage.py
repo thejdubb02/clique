@@ -18,10 +18,11 @@ dropped. What reaches the browser is a percentage and a reset time. A panel on
 a phone should not be able to walk away with the credentials of the machine it
 is driving.
 
-**Failure is silence.** No token, an expired one, no network, a reply in a
-shape we did not expect: the bar shows nothing rather than an error. This is a
-convenience on a status bar, and a panel that shouts because it could not reach
-an API it does not need is worse than one that says nothing.
+**Failure is quiet, not invisible.** No token, an expired one, no network, a
+reply in a shape we did not expect: the reading carries a one-line `error` and
+no windows. It never raises, and nothing shouts; the usage panel prints the
+reason in small type, so "this probe is broken" and "no probe declared" no
+longer look the same.
 """
 
 from __future__ import annotations
@@ -50,6 +51,10 @@ MAX_BYTES = 64 * 1024
 
 _lock = threading.Lock()
 _cache: dict[str, tuple[float, dict]] = {}
+
+
+class _Miss(Exception):
+    """A probe that produced nothing, with the short reason a person sees."""
 
 
 def _dig(data: object, path: str) -> object:
@@ -108,7 +113,7 @@ def _token(spec: dict) -> str | None:
     return found if isinstance(found, str) and found else None
 
 
-def _fetch_cmd(spec: dict) -> dict | None:
+def _fetch_cmd(spec: dict) -> dict:
     """The declared argv, run and its stdout read as JSON.
 
     For a probe with no plain REST endpoint: Antigravity's quota lives behind
@@ -120,35 +125,43 @@ def _fetch_cmd(spec: dict) -> dict | None:
     """
     argv = spec.get("cmd")
     if not isinstance(argv, list) or not argv:
-        return None
+        raise _Miss("cmd is not a list")
     try:
         result = subprocess.run(  # noqa: S603 — argv comes from clis.toml, not a request
             [str(a) for a in argv], capture_output=True, timeout=TIMEOUT, check=False
         )
+    except subprocess.TimeoutExpired:
+        raise _Miss("command timed out") from None
     except (OSError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0 or len(result.stdout) > MAX_BYTES:
-        return None
+        raise _Miss(f"could not run {argv[0]}") from None
+    if result.returncode != 0:
+        raise _Miss(f"command exited {result.returncode}")
+    if len(result.stdout) > MAX_BYTES:
+        raise _Miss("reply too large")
+    return _parse(result.stdout)
+
+
+def _parse(body: bytes) -> dict:
     try:
-        parsed = json.loads(result.stdout)
+        parsed = json.loads(body)
     except ValueError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+        raise _Miss("reply is not JSON") from None
+    if not isinstance(parsed, dict):
+        raise _Miss("reply is not a JSON object")
+    return parsed
 
 
-def _fetch(spec: dict, guard) -> dict | None:
+def _fetch(spec: dict, guard) -> dict:
     if spec.get("cmd"):
         return _fetch_cmd(spec)
     url = str(spec.get("url") or "")
-    if not url:
-        return None
     try:
         guard(url)  # the same check outbound model calls get
     except Exception:  # noqa: BLE001 — a refused URL is "no usage", not a crash
-        return None
+        raise _Miss("URL refused") from None
     token = _token(spec)
     if not token:
-        return None
+        raise _Miss("no token (not signed in?)")
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     for key, value in (spec.get("headers") or {}).items():
         headers[str(key)] = str(value)
@@ -158,17 +171,15 @@ def _fetch(spec: dict, guard) -> dict | None:
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
             if response.status != 200:
-                return None
+                raise _Miss(f"HTTP {response.status}")
             body = response.read(MAX_BYTES + 1)
+    except urllib.error.HTTPError as err:
+        raise _Miss(f"HTTP {err.code}") from None
     except (urllib.error.URLError, OSError, ValueError):
-        return None
+        raise _Miss("could not reach it") from None
     if len(body) > MAX_BYTES:
-        return None
-    try:
-        parsed = json.loads(body)
-    except ValueError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+        raise _Miss("reply too large")
+    return _parse(body)
 
 
 def _resets_at(value: object) -> str | None:
@@ -221,7 +232,9 @@ def _windows(spec: dict, payload: dict) -> list[dict]:
 
 
 def read(cli_id: str, spec: dict, guard, *, force: bool = False) -> dict | None:
-    """One CLI's usage, cached. None when there is nothing honest to show.
+    """One CLI's usage, cached. None when no probe is declared.
+
+    A probe that fails still answers, with no windows and a short `error`.
 
     Every browser attached to this panel shares the cache, so twenty open tabs
     are still one request every few minutes.
@@ -232,16 +245,20 @@ def read(cli_id: str, spec: dict, guard, *, force: bool = False) -> dict | None:
     with _lock:
         hit = _cache.get(cli_id)
         if hit and not force and now - hit[0] < TTL:
-            return hit[1] or None
+            return hit[1]
 
-    payload = _fetch(spec, guard)
-    windows = _windows(spec, payload) if payload else []
-    result = {"cli": cli_id, "windows": windows, "checked": int(now)} if windows else {}
+    result = {"cli": cli_id, "windows": [], "checked": int(now)}
+    try:
+        result["windows"] = _windows(spec, _fetch(spec, guard))
+        if not result["windows"]:
+            raise _Miss("no usage numbers in the reply")
+    except _Miss as miss:
+        result["error"] = str(miss)
     with _lock:
         # A failure is cached too, for the same TTL. Otherwise a box with no
         # credentials retries on every poll forever.
         _cache[cli_id] = (now, result)
-    return result or None
+    return result
 
 
 def forget(cli_id: str | None = None) -> None:

@@ -1777,13 +1777,20 @@ def main() -> int:
         cmd_payload == {"ok": True, "n": 7},
         cmd_payload,
     )
+    failed_cmd = usage.read(
+        "smoke-cmd",
+        {"cmd": [sys.executable, "-c", "import sys; sys.exit(1)"]},
+        lambda url: None,
+        force=True,
+    ) or {}
     check(
-        "a nonzero exit is no usage, not a crash",
-        usage._fetch_cmd({"cmd": [sys.executable, "-c", "import sys; sys.exit(1)"]}) is None,
+        "a nonzero exit is an error reading, not a crash",
+        failed_cmd["windows"] == [] and "exited 1" in failed_cmd.get("error", ""),
+        str(failed_cmd),
     )
     check(
         "a spec with neither cmd nor url is None",
-        usage._fetch_cmd({}) is None,
+        usage.read("smoke-none", {}, lambda url: None, force=True) is None,
     )
 
     print("usage: running-only by default, every installed CLI on an explicit ask")

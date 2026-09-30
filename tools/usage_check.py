@@ -121,38 +121,22 @@ def main() -> int:
     check("it went out as a bearer token", seen and seen[-1] == "Bearer SECRET-TOKEN", seen[-1:])
     check("and never rides the result", "SECRET-TOKEN" not in json.dumps(got), got)
 
-    print("everything that can go wrong goes quiet")
-    usage.forget()
-    check(
-        "no token file, no reading",
-        usage.read("f", {**spec, "token_file": str(home / "nope.json")}, allow_all, force=True)
-        is None,
-    )
-    usage.forget()
-    check(
-        "a token field that is not there, no reading",
-        usage.read("f", {**spec, "token_field": "outer.missing"}, allow_all, force=True) is None,
-    )
-    usage.forget()
-    check(
-        "a refused URL, no reading",
-        usage.read("f", {**spec, "url": "file:///etc/passwd"}, allow_all, force=True) is None,
-    )
-    usage.forget()
-    check(
-        "a reply that is not JSON, no reading",
-        usage.read("f", {**spec, "url": base + "/notjson"}, allow_all, force=True) is None,
-    )
-    usage.forget()
-    check(
-        "a reply that is too big, no reading",
-        usage.read("f", {**spec, "url": base + "/huge"}, allow_all, force=True) is None,
-    )
-    usage.forget()
-    check(
-        "a bad status, no reading",
-        usage.read("f", {**spec, "url": base + "/teapot"}, allow_all, force=True) is None,
-    )
+    print("everything that can go wrong says why, quietly")
+
+    def miss(label: str, override: dict, want: str) -> None:
+        usage.forget()
+        got = usage.read("f", {**spec, **override}, allow_all, force=True) or {}
+        check(label, got.get("windows") == [] and want in got.get("error", ""), got)
+
+    miss("no token file", {"token_file": str(home / "nope.json")}, "no token")
+    miss("a token field that is not there", {"token_field": "outer.missing"}, "no token")
+    miss("a refused URL", {"url": "file:///etc/passwd"}, "refused")
+    miss("a reply that is not JSON", {"url": base + "/notjson"}, "not JSON")
+    miss("a reply that is too big", {"url": base + "/huge"}, "too large")
+    miss("a bad status", {"url": base + "/teapot"}, "HTTP 418")
+    miss("a reply with none of the declared numbers", {"window": [{"label": "X", "percent": "nope"}]}, "no usage numbers")
+    miss("a command that fails", {"cmd": ["false"]}, "exited 1")
+    miss("a command that is not there", {"cmd": ["/nonexistent/probe"]}, "could not run")
     check("no probe declared, no reading", usage.read("f", {}, allow_all, force=True) is None)
 
     print("the cache is shared, so extra browsers are free")
