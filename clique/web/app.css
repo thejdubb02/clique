@@ -58,7 +58,12 @@ body {
    measuring the whole viewport hangs its bottom bar off the end of a parent
    with `overflow: hidden` -- which is the safe area re-created one level
    down. */
-#shell { display: flex; height: 100%; }
+#shell { display: flex; height: 100%; overflow-x: clip; }
+/* The clip is for touch screens. There the right rail's buttons carry an
+   invisible 44px hit area (see "Tap targets" below), and on the rail at the
+   screen edge it reached 13px past it: a page a phone could be dragged
+   sideways. Nothing drawn lives out there, so clipping at the shell costs
+   nothing, and `clip` rather than `hidden` makes no scroll container. */
 /* Keyboard-aware. When the on-screen keyboard shrinks the visible viewport,
    trackKeyboard() adds .kb-open and sets --app-h to the visible height, so the
    app fits the space left and the prompt sits above the keyboard instead of

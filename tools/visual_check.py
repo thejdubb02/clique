@@ -1653,13 +1653,18 @@ def _run(panel) -> int:
             (update_btn.inner_text() or "").strip() == "Update to 0.76.1",
             update_btn.inner_text(),
         )
-        check("it arrives with motion the first time", "arrive" in (update_btn.get_attribute("class") or ""))
+        check(
+            "it arrives with motion the first time",
+            "arrive" in (update_btn.get_attribute("class") or ""),
+        )
         page.evaluate("() => renderVersion()")
         page.wait_for_timeout(50)
         check(
             "a repaint does not replay the motion, it holds a steady highlight",
             "arrive" not in (page.locator("#version .version-update").get_attribute("class") or "")
-            and page.locator("#version .version-update").evaluate("b => getComputedStyle(b).backgroundColor")
+            and page.locator("#version .version-update").evaluate(
+                "b => getComputedStyle(b).backgroundColor"
+            )
             not in ("rgba(0, 0, 0, 0)", "transparent"),
         )
         page.locator("#version").screenshot(path=str(SHOTS / "version-update-ready.png"))
@@ -1795,7 +1800,7 @@ def _run(panel) -> int:
         resolved = (page.locator("#fontResolved").text_content() or "").strip()
         check(
             "the typeface line names the family that resolved",
-            resolved.startswith("Using: ") and bool(resolved[len("Using: "):].strip()),
+            resolved.startswith("Using: ") and bool(resolved[len("Using: ") :].strip()),
             resolved,
         )
 
@@ -2211,6 +2216,29 @@ def _run(panel) -> int:
             context.set_offline(False)
         page.goto(BASE, wait_until="networkidle")
         check("and the panel returns once it can be reached", page.locator("#tabbar").is_visible())
+
+        # A real phone, not a narrow desktop window: only a touch context
+        # matches `pointer: coarse`, which is where the enlarged tap targets
+        # live. Those on the right rail reached 13px past the screen edge,
+        # and the whole page could be dragged sideways (CLQ-62). The window
+        # above never saw it because a mouse gets the small targets.
+        print("\na phone cannot drag the page sideways")
+        phone = browser.new_context(**play.devices["Pixel 7"])
+        phone.add_cookies(
+            [{"name": COOKIE_NAME, "value": auth.issue(), "domain": "127.0.0.1", "path": "/"}]
+        )
+        tap = phone.new_page()
+        tap.goto(BASE, wait_until="networkidle")
+        tap.wait_for_timeout(500)
+        widths = tap.evaluate(
+            "() => ({view: screen.width, page: document.documentElement.scrollWidth,"
+            " coarse: matchMedia('(pointer: coarse)').matches})"
+        )
+        check("it is a touch screen", widths["coarse"], widths)
+        # Against the screen, not innerWidth: a phone widens its layout
+        # viewport to fit an overflowing page, so innerWidth grows with it.
+        check("and the page is no wider than the screen", widths["page"] <= widths["view"], widths)
+        phone.close()
 
         browser.close()
 

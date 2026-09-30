@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.86.4 — 2026-09-30 10:57 PDT
+
+**A phone can no longer drag the panel sideways.** On a touch screen the
+page was 13px wider than the screen, so a thumb could slide the whole panel
+left and bounce it back. The cause was the enlarged, invisible tap area on the
+right-hand rail's buttons, which reached past the screen edge. The panel now
+clips anything past that edge; nothing visible lived there, and the buttons
+keep their full tap area. The visual check now opens the panel as a real
+touch phone and fails if the page is wider than the screen.
+
 ## 0.86.3 — 2026-09-30 10:33 PDT
 
 **The desktop update control says what it will do, and is hard to miss.** When
