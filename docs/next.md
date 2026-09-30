@@ -42,7 +42,6 @@ Next, in order, as of 2026-09-21 (evening):
 
 | | Card |
 |---|---|
-| 13px of phantom horizontal scroll on a phone | CLQ-62 |
 | Local echo, so the pane stops feeling like a web page | CLQ-64 |
 | The key row keys are too narrow, and that is a decision — CSS already has `overflow-x: auto`; the card's own measured widths may be stale, needs a real phone check before it needs code | CLQ-63 |
 | Auto-resume when a usage limit resets — the probe now exists for Claude, Codex and Grok (see "Grok usage probe" below); Gemini/Antigravity are checked and blocked, not just unresearched. The resume trigger itself is not built | CLQ-68 |
@@ -91,6 +90,14 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **A phone can no longer drag the panel sideways**, 0.86.4. CLQ-62. The 13px
+  was the enlarged touch hit area (`inset: -16px` under `pointer: coarse`) on
+  the right rail's buttons, reaching past the screen edge. `mobile_view.py`
+  never found it because it skipped zero-size boxes; a pseudo-element hit area
+  has no box of its own. `#shell` now has `overflow-x: clip`. The visual check
+  opens a Pixel 7 touch context and compares page width against
+  `screen.width`, not `innerWidth`: a phone widens its layout viewport to fit
+  an overflowing page, so `innerWidth` grows with the bug and hides it.
 - **One house loader, everywhere the panel makes you wait**, 0.86.0. CLQ-46.
   Four small cells walking, `currentColor`-tinted so one shape drops into a
   note, a button, or a badge with no per-site styling. Wired into the
