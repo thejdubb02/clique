@@ -15,46 +15,11 @@ Docs, each with one job — read the one that matches the question:
 | Raised but not committed to | `docs/ideas-inbox.md` |
 | What shipped | `CHANGELOG.md` |
 
-## Motion
+## On-demand guidance (skills in `.claude/skills/`)
 
-Wanted, and cheap, or not at all. The whole argument for this tool is that it
-is 24 MB and starts instantly; motion that costs a library, a frame budget or a
-main-thread stall gives that away for polish.
-
-- **CSS transitions, `@starting-style`, CSS animations, and WAAPI
-  (`element.animate()`). Never a motion library.** Those four are in every
-  browser already and cost nothing to ship.
-- **Animate `transform` and `opacity`.** Anything that moves layout — width,
-  height, top, left — repaints the world on a box that is also running a dozen
-  PTYs.
-- **The frequency gate decides first, not the easing.** Something opened
-  hundreds of times a day should not animate at all: the command palette,
-  tab switching, the sidebar rail. Modals, drawers, toasts and the settings
-  sheet are where motion earns its place.
-- **`prefers-reduced-motion` ships with the animation**, not after it — and as
-  a gentler variant rather than nothing.
-- Hover effects go behind `@media (hover: hover) and (pointer: fine)`; touch
-  fires a false hover on tap.
-
-Guidance for the details is vendored in `.claude/skills/` — see the README
-there for what was left out and why.
-
-## Looking at it
-
-Every other check here reasons about the code, and none of them can see that a
-control is invisible, that one thing is covering another, or that a theme did
-not reach the pane. That is where the bugs have actually been: a preview popup
-layered above the context menu broke right-click on every sidebar row and the
-suite stayed green through it.
-
-```bash
-~/.cache/clique-visual/bin/python tools/visual_check.py     # asserts, and writes screenshots
-```
-
-**Run it after any change to `web/`.** Setup is in the file's docstring — it
-needs Chromium and Playwright, so it lives in a virtualenv of its own and the
-product stays standard-library with no build step. Screenshots land in
-`/tmp/clique-visual/`; open them, do not just read the passes.
+- **Motion** (`clique-motion`): CSS/WAAPI only, never a library; animate transform and opacity; reduced-motion ships with it.
+- **After any `web/` change, and before calling a session done** (`clique-release-check`): `tools/visual_check.py`, `tools/shipped_check.py`, release steps.
+- **End of any panel feature** (`clique-three-surfaces`): does Android need this, and if not, why not? Answer out loud.
 
 ## The API is the whole surface
 
@@ -66,32 +31,6 @@ feature an agent driving CLIque cannot use.
 same commit.** `tools/api_drift.py` fails otherwise, so this is not a thing to
 remember — but write the description properly, because the check only proves
 the name is present, not that the prose is any good.
-
-## Releasing
-
-Bump `__version__`, write the `CHANGELOG.md` entry, then run
-`python3 tools/stamp_changelog.py` — it puts the wall-clock Pacific time on any
-heading that lacks one, taking it from the release commit where there is one.
-Skipping it leaves an entry the app renders without a time, and on a day with
-ten releases the date alone distinguishes nothing. It is idempotent; run it
-whenever.
-
-## Before calling a session done
-
-```bash
-python3 tools/shipped_check.py
-```
-
-Four surfaces have to agree: the panel's version, the README badge, what
-useclique.dev tells people to install, and what PyPI actually serves. They
-drift apart quietly and each one embarrasses differently, and none of it is
-visible from inside the panel. Ten seconds, so it is a command rather than a
-habit.
-
-Being ahead of PyPI is normal while work is in flight and stops being normal
-the moment the site tells a stranger to `pip install`, which it does. Cutting
-the release is: bump, changelog, tag `vX.Y.Z`, `gh release create`. Publishing
-fires on the release, uses Trusted Publishing, and needs no token.
 
 ## It has to work on a stranger's machine
 
@@ -120,26 +59,6 @@ they already belong.
    lighter and more powerful, and a lifted implementation forfeits all four.
    The same applies to any other tool we borrow ideas from, including the
    VS Code Claude Code extension.
-
-## Three surfaces, and only one of them costs anything
-
-The panel is the product. Two clients wrap it, and a new feature does not reach
-them on the same terms:
-
-| | What it is | What a new panel feature costs it |
-|---|---|---|
-| **PWA** | the panel, installed | nothing, it is the same page |
-| **Desktop** (`clique-desktop`) | a Windows window around the panel | nothing, it is a webview of the same page |
-| **Android** (`clique-android`) | a native app with its own terminal | a port, every time |
-
-So the question at the end of a feature is only ever about the phone, and it
-gets asked out loud rather than assumed: **does Android need this, and if not,
-why not?** A yes becomes a tiered row in `clique-android/docs/port-plan.md`, a
-no goes in that file's Tier 3, which exists so leaving something out is a
-decision on the record instead of an oversight.
-
-Three releases, none implied by another: PyPI for the panel, our own F-Droid
-repo for the phone, a GitHub release for the desktop exe.
 
 ## It has to work on a phone
 
