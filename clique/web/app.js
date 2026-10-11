@@ -4474,6 +4474,39 @@ async function removeFromBar(snippet) {
   renderInputBar();
 }
 
+/* A horizontal strip should follow a finger natively (CSS owns that), while a
+ * mouse wheel over it should not feel dead. Chromium/WebView2 does not turn a
+ * vertical wheel into horizontal movement just because vertical overflow is
+ * absent, so translate that one case here. Native horizontal trackpad input is
+ * left alone, and an event at either end is released instead of trapping it. */
+function wireQuickRow() {
+  const row = $("#quickRow");
+  if (!row) return;
+  const updateEdges = () => {
+    const max = Math.max(0, row.scrollWidth - row.clientWidth);
+    row.classList.toggle("can-scroll-left", row.scrollLeft > 1);
+    row.classList.toggle("can-scroll-right", row.scrollLeft < max - 1);
+  };
+  row._updateEdges = updateEdges;
+  row.addEventListener("scroll", updateEdges, { passive: true });
+  row.addEventListener("wheel", (ev) => {
+    if (ev.ctrlKey || Math.abs(ev.deltaX) >= Math.abs(ev.deltaY)) return;
+    const max = row.scrollWidth - row.clientWidth;
+    if (max <= 0) return;
+    let dx = ev.deltaY;
+    if (ev.deltaMode === 1) dx *= 16;
+    else if (ev.deltaMode === 2) dx *= row.clientWidth;
+    const next = Math.max(0, Math.min(max, row.scrollLeft + dx));
+    if (next === row.scrollLeft) return;
+    row.scrollLeft = next;
+    updateEdges();
+    ev.preventDefault();
+  }, { passive: false });
+  if (window.ResizeObserver) new ResizeObserver(updateEdges).observe(row);
+  else addEventListener("resize", updateEdges);
+  updateEdges();
+}
+
 
 function renderInputBar() {
   const s = session(activeId);
@@ -4519,6 +4552,7 @@ function renderInputBar() {
       };
       qr.appendChild(add);
     }
+    requestAnimationFrame(() => qr._updateEdges && qr._updateEdges());
   }
 
   /* The prompt box goes; the pill stays.
@@ -12037,6 +12071,7 @@ wireTouchMenus($("#tree"), (node) => {
 });
 wireTouchMenus($("#groups"), (node) => node.closest(".group-row"));
 wireTermTouchMenus();
+wireQuickRow();
 wirePeekTooltips();
 wireKeyRow();
 wireUsagePanel();

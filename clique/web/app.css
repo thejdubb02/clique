@@ -665,8 +665,25 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
   display: flex; gap: 6px; padding: 6px 10px; overflow-x: auto;
   background: var(--panel); border-top: 1px solid var(--line);
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  touch-action: pan-x pinch-zoom; overscroll-behavior-x: contain;
 }
 #quickRow::-webkit-scrollbar { display: none; }
+/* The scrollbar is intentionally hidden, so softly fading the clipped edge is
+ * the affordance that more commands live off-screen. JS removes each fade at
+ * its corresponding end; an always-on gradient would make a complete row look
+ * needlessly clipped. A mask leaves the panel background itself untouched. */
+#quickRow.can-scroll-left.can-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22px, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 22px, #000 calc(100% - 22px), transparent);
+}
+#quickRow.can-scroll-left:not(.can-scroll-right) {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22px);
+  mask-image: linear-gradient(to right, transparent, #000 22px);
+}
+#quickRow.can-scroll-right:not(.can-scroll-left) {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 22px);
+  mask-image: linear-gradient(to left, transparent, #000 22px);
+}
 #quickRow > button, .quick-cmd {
   flex: 0 0 auto; border: 1px solid var(--line); background: var(--bg);
   color: var(--fg); border-radius: 999px; font-size: 11px; white-space: nowrap;

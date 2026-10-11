@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.90.0 — 2026-10-11
+
+**The shortcuts bar scrolls properly, touch or mouse.** `#quickRow` kept
+touch gestures and vertical page scroll separate with `touch-action`, and
+contained horizontal overscroll so a drag that reaches either end doesn't
+bounce the whole page. A left/right fade now shows when more commands sit
+off-screen, and disappears once there are none. On a desktop or the
+WebView2-based Windows client, a plain mouse wheel over the row now scrolls
+it sideways instead of doing nothing: Chromium doesn't do that translation
+on its own when there's no vertical overflow to consume. Native horizontal
+trackpad scroll and ctrl-wheel zoom are untouched. No desktop-client change
+needed: it renders the same panel, so the fix applies there too.
+
 ## 0.89.0 — 2026-10-11
 
 **Bigger tap targets on the mobile shortcuts bar.** The row of one-tap
