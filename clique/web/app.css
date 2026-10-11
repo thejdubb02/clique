@@ -698,6 +698,11 @@ kbd { background: var(--field); border-radius: 3px; padding: 1px 5px; font: inhe
   .quick-cmd-del:hover { color: #f85149; }
   .quick-add:hover { border-color: var(--accent); color: var(--accent); }
 }
+/* Same tap-target bump as #keyrow: a 24px-tall pill is easy to miss and hard
+ * to tell from a scroll-drag on a touch screen. */
+@media (max-width: 640px) {
+  #quickRow > button, .quick-cmd button, .quick-add { min-height: 38px; padding-top: 9px; padding-bottom: 9px; }
+}
 
 #prompt {
   flex: 1; resize: none; max-height: 140px; font: inherit;
