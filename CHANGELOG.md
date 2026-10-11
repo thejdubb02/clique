@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.89.0 — 2026-10-11
+
+**Bigger tap targets on the mobile shortcuts bar.** The row of one-tap
+snippet and quick-command pills above the input box already worked on phone,
+but the buttons were 24px tall, well under the 38px used everywhere else on
+phone (`#keyrow`'s on-screen terminal keys). In a packed, mostly-offscreen
+row that made a scroll swipe easy to misread as a tap. Buttons now match
+`#keyrow`'s size.
+
 ## 0.88.0 — 2026-09-30 11:58 PDT
 
 **Overnight work picks itself back up.** When a session runs out of plan
