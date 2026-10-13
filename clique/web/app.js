@@ -6922,7 +6922,31 @@ function layoutPane(entry) {
     return;
   }
   applyPaneZoom(entry.term, 1);
+  if (boxed) {
+    // Even with room to spare, a boxed CLI's columns stay put. fitPaneRows
+    // would otherwise widen the grid to fill the freed space (sidebar
+    // collapsed), and collapsing back later then needs a smaller zoom than
+    // before to fit that wider grid — the text shrinks on the way back
+    // instead of returning to where it started. Rows still follow the pane.
+    try { fitPaneRowsOnly(entry, cell, box); } catch (err) { /* not laid out yet */ }
+    return;
+  }
   try { fitPaneRows(entry, cell, box); } catch (err) { /* not laid out yet */ }
+}
+
+/* Like fitPaneRows, but never lets the column count move. */
+function fitPaneRowsOnly(entry, cell, box) {
+  const top = entry.term.element
+    ? entry.term.element.getBoundingClientRect().top : box.top;
+  const room = box.bottom - top;
+  const rows = Math.max(4, cell.h > 0 ? Math.floor(room / cell.h) : entry.term.rows);
+  if (rows === entry.term.rows) return;
+  entry.relaying = true;
+  try {
+    entry.term.resize(entry.term.cols, rows);
+  } finally {
+    entry.relaying = false;
+  }
 }
 
 /* FitAddon's own fit(), with the last row taken back when it does not fit.
