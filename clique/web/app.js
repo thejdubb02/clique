@@ -4893,6 +4893,11 @@ function fillEmptyList(block, rows) {
  * sheet and drops the path where you are already typing. */
 const LINK_RE = /\bhttps?:\/\/[^\s"'`<>]+/g;
 
+/* "! <command>" is the standing convention for a CLI to suggest something to
+ * run in the real shell, not the pane. Click it to copy that command, same
+ * click-to-act pattern as a URL, rather than selecting and copying by hand. */
+const SHELL_SUGGEST_RE = /^!\s+(\S.*)$/;
+
 /* A URL that wraps is still one URL. xterm only asks about one row at a
  * time, so without this a login link split at column 80 is two dead halves. */
 function paneLineWrapped(term, row0) {
@@ -5152,6 +5157,19 @@ function wireLinks(term, sessionId) {
             handlePaneUrl(uri, event, sessionId);
           },
         });
+      }
+      const suggest = SHELL_SUGGEST_RE.exec(text);
+      if (suggest) {
+        const cmd = suggest[1].trimEnd();
+        for (const seg of paneUrlSegments(parts, 0, text.length)) {
+          if (seg.y !== lineNumber) continue;
+          links.push({
+            range: { start: { x: seg.x0, y: seg.y }, end: { x: seg.x1, y: seg.y } },
+            text: cmd,
+            decorations: { underline: true, pointerCursor: true },
+            activate() { copyText(cmd).then(() => toast("Command copied")); },
+          });
+        }
       }
       for (const hit of panePathLinks(parts, lineNumber)) {
         links.push({
@@ -9991,10 +10009,10 @@ function wire() {
       // off the screen of a phone at all.
       const term = entry && entry.term;
       const row = term ? paneCellAt(term, ev.clientX, ev.clientY).y : -1;
-      const here = term && row >= 0
-        ? (term.buffer.active.getLine(row) || { translateToString: () => "" })
-            .translateToString(true).trimEnd()
-        : "";
+      // A long command wraps across rows on screen but is one line underneath;
+      // stitch it back together the same way the URL links do, or a copy off
+      // a wrapped command comes back cut at the wrap column every time.
+      const here = term && row >= 0 ? paneRowsText(paneWrapParts(term, row + 1)).trimEnd() : "";
       showMenu(ev, [
         ...(here ? [["Copy this line", () => copyText(here)
           .then(() => toast("Line copied"))]] : []),

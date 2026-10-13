@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.93.0 — 2026-10-13
+
+**Suggested commands are now click to copy.**
+
+- A line a CLI prints as `! <command>` (the convention for "run this in your
+  own shell") is now a click target, like a URL already was: click it to
+  copy the command, no select-and-paste needed.
+- A wrapped command is stitched back into one line before it is matched or
+  copied, so a long suggestion does not get cut at the column it wrapped on.
+- The phone long-press menu's "Copy this line" had the same wrap bug (it only
+  ever read the one row under your finger); it now stitches too.
+
 ## 0.92.0 — 2026-10-13
 
 **Four fixes from a Codex code review.**

@@ -302,6 +302,19 @@ console.log("a host with no https:// in front of it");
         panePathLinks([{ y: 8, text: "wrote docs/foo.md" }], 8).length === 1);
 }
 
+console.log("a suggested shell command, stitched back into one line");
+{
+  const code = region("const SHELL_SUGGEST_RE", "const PATH_RE");
+  const { SHELL_SUGGEST_RE } = new Function(code + "; return { SHELL_SUGGEST_RE };")();
+  const run = (text) => { const m = SHELL_SUGGEST_RE.exec(text); SHELL_SUGGEST_RE.lastIndex = 0; return m; };
+  const hit = run("! cd /root/ventures/x && git push");
+  check("the command is everything after '! '",
+        hit && hit[1] === "cd /root/ventures/x && git push", hit);
+  check("ordinary output starting with '!' but no space is not a suggestion",
+        !run("!important: read this"));
+  check("a line with no leading '!' is not a suggestion", !run("cd /root/ventures/x"));
+}
+
 console.log("things that sit on top of other things");
 {
   // A preview that outranks a menu is a menu nobody can use — and it fails
