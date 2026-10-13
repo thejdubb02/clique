@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.92.0 — 2026-10-13
+
+**Four fixes from a Codex code review.**
+
+- API token store: creating or revoking a token now reloads the file first,
+  so the panel process and a concurrent `token` CLI call no longer stomp on
+  each other's writes.
+- WebSocket frames: the server now rejects a data frame that starts before
+  the previous fragmented one finished, or a continuation frame with nothing
+  to continue, per RFC 6455. Previously the two could be merged into one
+  message.
+- Theme limit: hitting the 40-theme ceiling now clears the active theme and
+  rotation pool if the evicted theme was either, instead of leaving them
+  pointing at a theme that no longer exists.
+- `API.md`: corrected the WebSocket text/binary frame description (it had
+  them backwards) and documented the `routes` and `features` fields that
+  `GET /api/llm/providers` already returned.
+
 ## 0.91.0 — 2026-10-13
 
 **Boxed CLI text stays the size you set it to, across sidebar collapse and

@@ -699,8 +699,10 @@ Optional. Storing a key needs the crypto extra — `pip install 'clique-panel[ll
 that hint. **The key is never returned by any endpoint**; a provider reads back
 with `key_set` only, and it never rides `/api/state`.
 
-- `GET /api/llm/providers` → `{"providers": [...], "encryption": <bool>}`. Each
-  provider is `{id, label, kind, base_url, model, key_set}`. Read scope.
+- `GET /api/llm/providers` → `{"providers": [...], "routes": {...}, "features":
+  [...], "encryption": <bool>}`. Each provider is `{id, label, kind, base_url,
+  model, key_set}`. `routes` and `features` are the same ones `POST
+  /api/llm/routes` reads and writes. Read scope.
 - `POST /api/llm/providers` → `201` the redacted provider. Body `{label, kind,
   base_url, model, key}`. `kind` is `openai` (any OpenAI-compatible endpoint —
   OpenRouter, Groq, Together, local Ollama) or `anthropic`; `base_url` must be
@@ -981,9 +983,9 @@ front of you (sidebar width, sidebar shown or hidden).
 ## Terminals
 
 `GET /ws?id=<id>&cols=<n>&rows=<n>` upgrades to a WebSocket carrying the
-pane. Text frames are keystrokes; JSON control frames handle `resize`,
-`refresh` and running a command. The handshake enforces `Origin`, because a
-WebSocket is not subject to CORS and `SameSite=Lax` does not cover it.
+pane. JSON text frames are control, handling `resize`, `refresh` and running
+a command; binary frames are keystrokes. The handshake enforces `Origin`,
+because a WebSocket is not subject to CORS and `SameSite=Lax` does not cover it.
 
 `{"type": "refresh"}` asks tmux to repaint this socket's own view at once,
 and takes no arguments. It is what a client sends after a layout change that

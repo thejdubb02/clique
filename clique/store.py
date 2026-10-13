@@ -1066,7 +1066,17 @@ class Store:
         with self._lock:
             stored = {**theme, "id": f"t-{uuid.uuid4().hex[:8]}", "created": int(time.time())}
             self.themes.append(stored)
-            del self.themes[: max(0, len(self.themes) - self.THEME_LIMIT)]
+            overflow = max(0, len(self.themes) - self.THEME_LIMIT)
+            evicted = {t.get("id") for t in self.themes[:overflow]}
+            del self.themes[:overflow]
+            # Same cleanup as an explicit delete: an evicted theme must not be
+            # left as the active one or in the rotation pool, pointing at
+            # nothing.
+            if self.settings.get("theme") in evicted:
+                self.settings["theme"] = ""
+            pool = self.settings.get("theme_rotate_pool")
+            if isinstance(pool, list) and evicted & set(pool):
+                self.settings["theme_rotate_pool"] = [t for t in pool if t not in evicted]
             self._write()
             return stored
 
@@ -1224,3 +1234,23 @@ class Store:
                     session.folder = None
             self._write()
             return True
+
+
+def _demo() -> None:
+    """Evicting the oldest theme must not leave the active theme pointing
+    at a theme that no longer exists."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        store = Store(Path(d) / "state.json")
+        first = store.add_theme({"name": "t0"})
+        store.update_settings({"theme": first["id"]})
+        for i in range(1, Store.THEME_LIMIT + 1):
+            store.add_theme({"name": f"t{i}"})
+        if store.settings.get("theme") != "":
+            raise AssertionError("evicted theme still active")
+
+
+if __name__ == "__main__":
+    _demo()
+    print("ok")
