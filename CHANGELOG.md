@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.91.0 — 2026-10-13
+
+**Boxed CLI text stays the size you set it to, across sidebar collapse and
+expand.** A boxed CLI (Claude Code, Codex, Gemini's own TUI) widened its grid
+to fill the extra room a collapsed sidebar freed, so expanding the sidebar
+back needed a smaller zoom than before, and the text came back shrunk. Its
+column count now stays fixed at every pane width, not just the zoomed ones,
+so collapsing and re-expanding leaves it where it started. Same fix covers
+the desktop client, which renders the same panel.
+
 ## 0.90.0 — 2026-10-11
 
 **The shortcuts bar scrolls properly, touch or mouse.** `#quickRow` kept
