@@ -226,6 +226,13 @@ error = [
 # endpoint the CLI's TUI does. Verified against a live account, 2026-09-22.
 # Undocumented, so xAI can change or lock it without notice; failure here is
 # silence (usage.py), same as any other probe.
+#
+# A transient 401 here is usually not a broken probe: `auth.json`'s token is
+# OIDC, ~6h lifetime, and only the grok CLI refreshes it, on its own run. If
+# nothing has run grok in a while, the stored token has simply expired; run
+# `grok` once and the next poll reads it fresh (token_file is read every
+# poll, never cached). Confirmed 2026-10-17: a stale token 401'd, the same
+# endpoint returned 200 the moment grok minted a new one.
 [cli.grok.usage]
 url         = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
 token_file  = "~/.grok/auth.json"
