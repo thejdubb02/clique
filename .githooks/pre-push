@@ -1,0 +1,10 @@
+#!/bin/sh
+# core.hooksPath in this repo's .git/config points at .githooks instead of the
+# default, which REPLACES the estate's global hook chain rather than adding to
+# it. There is otherwise no local pre-push at all, so without this file the
+# global bad-author guard (blocks pushing anything authored as
+# jdubb@consumerquest.online) never runs here. See .githooks/pre-commit for the
+# matching note on the commit side.
+GLOBAL_HOOK=/root/.githooks/pre-push
+[ -x "$GLOBAL_HOOK" ] && exec "$GLOBAL_HOOK" "$@"
+exit 0
