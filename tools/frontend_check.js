@@ -662,6 +662,97 @@ console.log("markdown in the file sheet");
         esc);
 }
 
+console.log("settings queue, send errors, file save race, hidden polling");
+{
+  const toasts = [];
+  const toast = (t, bad) => toasts.push(t);
+  let state = { settings: {} }, calls = [], pend = [];
+  const api = () => new Promise((res, rej) => { pend.push({ res, rej }); });
+  const applySettings = () => {}, reclaimSize = () => {}, renderTree = () => {}, renderGroups = () => {}, renderTabs = () => {};
+  eval(region("let settingsQueue", "function fmtSize") + "; globalThis.__s = saveSettings;");
+  const save = globalThis.__s;
+  const tick = () => new Promise((r) => setTimeout(r, 5));
+  const pre = (async () => {
+    const a = save({ a: 1 }), b = save({ b: 1 });
+    await tick();
+    check("second settings write waits for the first", pend.length === 1, pend.length);
+    pend[0].res({ v: "first" }); await tick();
+    pend[1].res({ v: "second" }); await a; await b;
+    check("settings responses apply in order", state.settings.v === "second", state.settings);
+    pend = [];
+    const c = save({ c: 1 }); await tick(); pend[0].rej(new Error("down"));
+    let threw = false; try { await c; } catch { threw = true; }
+    check("a failed settings save is shown AND rejected to the caller", threw && toasts.some((t) => /down/.test(t)), toasts);
+    const d = save({ d: 1 }); await tick();
+    check("and the queue keeps working after a failure", pend.length === 2); pend[1].res({ v: "ok" }); await d;
+
+    // prompt send failure keeps the draft and says so
+    toasts.length = 0; pend = [];
+    let sending = false, activeId = "s", repeat = 1, cleared = 0;
+    const reviewLockedOf = () => false, hintReviewLocked = () => {}, session = () => ({ name: "n" });
+    const okToSend = async () => true, control = () => false, maybeAutoTitle = () => {};
+    const clearPrompt = () => { cleared++; }, saveDraft = () => {}, setRepeat = () => {};
+    eval(region("async function run(text)", "async function runShell") + "; globalThis.__run = run;");
+    const r = globalThis.__run("hello"); await tick(); pend[0].rej(new Error("503")); await r;
+    check("a failed prompt send shows an error and keeps the draft",
+          toasts.some((t) => /503/.test(t)) && cleared === 0 && sending === false, [toasts, cleared]);
+
+    // file save finishing after the sheet moved on
+    toasts.length = 0; pend = [];
+    let fileEditing = true, fileSession = "s", fileAsked = "a.txt", shown = 0;
+    let currentFile = { path: "a.txt", name: "a.txt", text: "old" };
+    const btn = { disabled: false };
+    const $ = (q) => (q === "#fileSave" ? btn : { value: "new", hidden: false });
+    const showFile = () => { shown++; };
+    eval(region("let fileSaveSeq", "function closeFileSheet") + "; globalThis.__sf = saveFileEdit; globalThis.__swap = () => { currentFile = { path: 'b.txt', name: 'b.txt', text: 'B' }; }; globalThis.__cf = () => currentFile;");
+    const f = globalThis.__sf(); await tick(); globalThis.__swap(); pend[0].res({}); await f;
+    check("a late file save does not repaint another file", shown === 0 && globalThis.__cf().text === "B", [shown, globalThis.__cf()]);
+
+    // two overlapping saves: the first finishing must not free the button
+    pend = [];
+    currentFile = null; globalThis.__swap(); fileEditing = true;
+    const f1 = globalThis.__sf(); const f2 = globalThis.__sf(); await tick();
+    pend[0].res({}); await f1;
+    check("an older save finishing leaves Save disabled for the newer one", btn.disabled === true);
+    pend[1].res({}); await f2;
+    check("and the newest finishing re-enables it", btn.disabled === false);
+
+    // runShell failing after it switched tabs goes back with the command kept
+    toasts.length = 0; pend = [];
+    let act = "src", boxv = "", saved = [];
+    const box = { get value() { return boxv; }, set value(v) { boxv = v; } };
+    const $2 = () => box;
+    const growPrompt = () => {}, refresh = async () => {};
+    const openSession = async (id) => { act = id; boxv = id === "src" ? "" : "shell draft"; };
+    const sessionX = (id) => ({ id, cwd: "/w", folder: "f", cli: "x" });
+    const stateX = { sessions: [{ id: "sh", cli: "shell", cwd: "/w", alive: true }] };
+    const rs = new Function("session", "state", "activeId", "reviewLockedOf", "hintReviewLocked", "okToSend", "api", "openSession", "toast", "clearPrompt", "saveDraft", "$", "growPrompt", "refresh", "sending",
+      "return (" + region("async function runShell", "function setRepeat").replace(/^async function runShell/, "async function") + ")")(
+      sessionX, stateX, "src", () => false, () => {}, async () => true, () => new Promise((res, rej) => pend.push({ res, rej })),
+      openSession, (t) => toasts.push(t), () => {}, (n) => saved.push(boxv), $2, growPrompt, refresh, false);
+    const p = rs("ls -la"); await tick(); pend[0].rej(new Error("boom")); await p;
+    check("a failed shell send returns to the source tab with the command in the draft",
+          act === "src" && boxv === "ls -la" && toasts.some((t) => /boom/.test(t)), [act, boxv, toasts]);
+  })().then(() => {
+    // hidden tabs do not poll
+    let fn = null, calls2 = 0;
+    const setInterval = (f) => { if (!fn) fn = f; };
+    const document = { hidden: true }; const refresh = () => { calls2++; };
+    const pollArtifacts = () => {}, ART_POLL_MS = 1, renderClock = () => {}, activeId = null;
+    eval(region("setInterval(() => { if (!document.hidden) refresh", "// Slower than the sidebar"));
+    fn(); check("a hidden tab does not poll state", calls2 === 0, calls2);
+    document.hidden = false; fn(); check("a visible tab does", calls2 === 1, calls2);
+    const listeners = {}; let n3 = 0;
+    const doc = { hidden: false, addEventListener: (e, f) => { listeners[e] = f; } };
+    const mk = (document, refresh) => new Function("document", "refresh", "pollArtifacts", "scheduleWake",
+      region('document.addEventListener("visibilitychange", () => {\n  if (!document.hidden) {\n    refresh', 'addEventListener("focus"') .replace(/\naddEventListener\("focus"[\s\S]*$/, "") + "");
+    mk(doc, () => { n3++; })(doc, () => { n3++; }, () => {}, () => {});
+    listeners.visibilitychange();
+    check("coming back to the tab refreshes (listener is on document)", typeof listeners.visibilitychange === "function" && n3 === 1, n3);
+  });
+  globalThis.__pre = pre;
+}
+
 console.log("stale polls, artifact races, vanished sessions");
 {
   const code = region("let refreshSeq", "  if (!workspaceRestored) restoreWorkspace();") + "  return true;\n}\n"
@@ -677,6 +768,7 @@ console.log("stale polls, artifact races, vanished sessions");
   eval(code + "; globalThis.__t = { refresh, pollArtifacts, setActive: (v) => { activeId = v; }, st: () => state };");
   const t = globalThis.__t;
   (async () => {
+    await globalThis.__pre;
     const r1 = t.refresh(), r2 = t.refresh();
     pending[1]({ sessions: [{ id: "a" }], v: "new" });
     await r2;

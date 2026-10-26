@@ -6110,16 +6110,22 @@ function cancelFileEdit() {
   if (currentFile) showFile(currentFile);   // back to the preview we came from
 }
 
+let fileSaveSeq = 0;
 async function saveFileEdit() {
   if (!fileEditing || !currentFile) return;
   const text = $("#fileEdit").value;
   const save = $("#fileSave");
+  const file = currentFile;
+  const mine = ++fileSaveSeq;
   save.disabled = true;
   try {
     await api("api/sessions/" + encodeURIComponent(fileSession) + "/file", {
       method: "POST",
       body: JSON.stringify({ path: currentFile.path || fileAsked, text }),
     });
+    // The sheet was closed or moved to another file meanwhile: the write
+    // landed, but there is nothing here to repaint.
+    if (currentFile !== file) { toast("Saved " + (file.name || "file")); return; }
     // Reflect what is now on disk, then drop back to the preview.
     currentFile = { ...currentFile, text, size: new TextEncoder().encode(text).length };
     fileEditing = false;
@@ -6129,7 +6135,7 @@ async function saveFileEdit() {
   } catch (err) {
     toast("Could not save — " + (err.message || err), true);
   } finally {
-    save.disabled = false;
+    if (mine === fileSaveSeq) save.disabled = false;   // a newer save owns the button
   }
 }
 
@@ -7702,6 +7708,9 @@ async function run(text) {
     clearPrompt(text);
     saveDraft(true);   // sent, so there is no longer a draft
     setRepeat(1);
+  } catch (err) {
+    // The prompt box is only emptied after success, so the draft is still there.
+    toast("Could not send: " + (err.message || err), true);
   } finally {
     sending = false;
   }
@@ -7717,6 +7726,7 @@ async function runShell(text) {
   if (!current) return;
   if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
   sending = true;
+  let switched = false;
   try {
     if (!await okToSend(text, "a shell for this directory")) return;
     let shell = state.sessions.find(
@@ -7732,12 +7742,23 @@ async function runShell(text) {
       await refresh();
       shell = session(created.id);
     }
+    saveDraft(true);
+    switched = true;
     await openSession(shell.id);
     await api(`api/sessions/${shell.id}/send`, {
       method: "POST", body: JSON.stringify({ text, enter: true }),
     });
     clearPrompt(text);
     saveDraft(true);   // sent, so there is no longer a draft
+    switched = false;
+  } catch (err) {
+    toast("Could not send: " + (err.message || err), true);
+    if (switched) {
+      // Back to where the command was typed, with the command still in the box.
+      await openSession(current.id);
+      const box = $("#prompt");
+      if (!box.value) { box.value = text; growPrompt(box); saveDraft(true); }
+    }
   } finally {
     sending = false;
   }
@@ -8722,7 +8743,21 @@ function noticeFinished(sessions) {
 
 /* ----------------------------------------------------------------- settings */
 
-async function saveSettings(changes) {
+/* One write at a time, in the order they were made, so a slow earlier PATCH
+ * cannot land after a newer one and put the old values back. A failure is
+ * toasted here, and still rejected to the caller, so code that goes on to
+ * say "Applied" or repaint only does so when the write really landed. The
+ * toast branch counts as handling it, so a fire-and-forget caller does not
+ * raise an unhandled rejection of its own. */
+let settingsQueue = Promise.resolve();
+function saveSettings(changes) {
+  const job = settingsQueue.then(() => saveSettingsNow(changes));
+  settingsQueue = job.catch(() => {});
+  job.catch((err) => { toast("Could not save settings: " + (err.message || err), true); });
+  return job;
+}
+
+async function saveSettingsNow(changes) {
   // Settings live on the server, not in localStorage, so the panel looks the
   // same on his phone as on the desktop.
   state.settings = await api("api/settings", {
@@ -12140,7 +12175,8 @@ bootWorkspace();
 // and they change about twice a year, so this is a boot fetch rather than
 // weight on every poll.
 loadThemes();
-setInterval(refresh, 3000);
+// A hidden tab has nobody to show it to; coming back refreshes at once.
+setInterval(() => { if (!document.hidden) refresh(); }, 3000);
 // Slower than the sidebar poll on purpose: this one touches a filesystem, and
 // nobody is waiting on a screenshot to the second.
 setInterval(pollArtifacts, ART_POLL_MS);
@@ -12163,8 +12199,9 @@ function scheduleWake() {
   setTimeout(wakePane, 1000);
 }
 
-addEventListener("visibilitychange", () => {
+document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
+    refresh();
     pollArtifacts();
     scheduleWake();
   }
