@@ -357,3 +357,24 @@ a built-in diff editor. Driver, not an IDE.
 
 `~/.cache/clique-visual/bin/python tools/visual_check.py` after any `web/`
 change, and **open the screenshots**.
+
+---
+
+## 2026-10-26 audit: what is left
+
+A Codex review of the panel, browser, phone and desktop found 40 issues. The
+critical, high and medium ones for the server and browser shipped in 0.94.0.
+Still open, each a card on the board:
+
+- **Monolith splits, one at a time, behind the existing checks:** `clique/app.py`
+  (terminal handler, then file routes), `web/app.js` (about 12k lines, no build
+  step so plain scripts), Android `SessionFragment.kt` and `SessionsFragment.kt`,
+  `terminal.html` link handling.
+- **Browser:** eager WebSockets for every tab and a 50k-line xterm buffer each;
+  a selection listener leak.
+- **Android:** notification action collisions across servers, destroyed WebView
+  retention, image size limits applied after the full read, draft persistence,
+  download size limits, preview request fan-out.
+- **Desktop:** held uncommitted. Needs the update signing key (an empty
+  `releasePubKey` keeps updates off), replay protection in the signed payload,
+  an atomic setup consume, and a Windows smoke test.

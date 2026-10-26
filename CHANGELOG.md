@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.94.0 — 2026-10-26
+
+**Hardening pass from a full Codex review of the panel, browser, phone and desktop.**
+
+Server:
+
+- Uploads open the drop directory by file descriptor and check it is still
+  inside the session directory, so a symlink swapped in mid-upload cannot
+  write outside it.
+- Login throttling is one locked step (check and record together), no longer
+  racy under concurrent attempts, and old entries are dropped instead of
+  piling up.
+- A request body over the limit now gets a 413 and the connection is closed,
+  and a body that is not a JSON object gets a 400 instead of a 500.
+- LLM calls refuse redirects (SSRF) and cap the response at 4 MB.
+- A saved state file with the wrong shape falls back to the backup instead of
+  blocking startup. A bad timestamp in one usage window no longer disables
+  auto-resume for the rest.
+- File saves use a unique temp file and replace atomically. Creating a session
+  that fails part way now removes its worktree and tmux session.
+
+Browser:
+
+- Settings writes are queued and report failure (a toast, not a false
+  "Applied"). A failed send keeps your draft.
+- A slow poll can no longer overwrite a newer one, artifacts cannot land on the
+  wrong session, dead terminals are closed, and polling pauses while the tab is
+  hidden and catches up the moment it is shown again.
+- Saving a file no longer repaints over a different file, and overlapping
+  saves cannot re-enable Save early.
+
+New checks: `tools/hardening_check.py` (12 server checks, each proved by
+breaking the fix) and more cases in `tools/frontend_check.js`.
+
+Not in this release: the Windows desktop trust gate and signed updater are
+written but held until the signing key and a Windows smoke test exist.
+
 ## 0.93.0 — 2026-10-13
 
 **Suggested commands are now click to copy.**
