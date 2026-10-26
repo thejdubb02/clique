@@ -662,5 +662,41 @@ console.log("markdown in the file sheet");
         esc);
 }
 
+console.log("stale polls, artifact races, vanished sessions");
+{
+  const code = region("let refreshSeq", "  if (!workspaceRestored) restoreWorkspace();") + "  return true;\n}\n"
+    + region("async function pollArtifacts", "function setArtifacts");
+  let state = { sessions: [] }, openTabs = [], activeId = "a", pollFailures = 0, artItems = [];
+  const terms = new Map(), closed = [], set = [];
+  const session = (id) => state.sessions.find((x) => x.id === id);
+  const closeTab = (id) => { closed.push(id); terms.delete(id); };
+  const setArtifacts = (i) => set.push(i);
+  const $ = () => ({}); const document = { hidden: false };
+  let pending = [];
+  const api = () => new Promise((res) => pending.push(res));
+  eval(code + "; globalThis.__t = { refresh, pollArtifacts, setActive: (v) => { activeId = v; }, st: () => state };");
+  const t = globalThis.__t;
+  (async () => {
+    const r1 = t.refresh(), r2 = t.refresh();
+    pending[1]({ sessions: [{ id: "a" }], v: "new" });
+    await r2;
+    pending[0]({ sessions: [], v: "old" });
+    await r1;
+    check("an older poll finishing late does not replace newer state", t.st().v === "new", t.st().v);
+    pending = [];
+    state = { sessions: [{ id: "a" }], settings: {} };
+    terms.set("gone", {});
+    const r3 = t.refresh(); pending[0]({ sessions: [{ id: "a" }], settings: {} }); await r3;
+    check("a terminal whose session vanished is torn down", closed.includes("gone") && !terms.has("gone"), closed);
+    pending = [];
+    const p = t.pollArtifacts(); t.setActive("b"); pending[0]([{ rel: "x" }]); await p;
+    check("artifacts for a tab we left are dropped", set.length === 0, set);
+  })().then(() => {
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+  });
+  return;
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

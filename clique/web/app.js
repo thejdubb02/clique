@@ -1320,9 +1320,17 @@ async function sendKey(id, key, label) {
  * reading from somebody else's decision, and nothing else has the timestamp. */
 let lastPollAt = 0;
 
+let refreshSeq = 0;      // issued
+let refreshApplied = 0;  // newest one applied
+
 async function refresh() {
+  const mine = ++refreshSeq;
   try {
-    state = await api("api/state");
+    const fresh = await api("api/state");
+    // A slower, older poll must not overwrite a newer one already applied.
+    if (mine < refreshApplied) return false;
+    refreshApplied = mine;
+    state = fresh;
     lastPollAt = Date.now();
     pollFailures = 0;
     $("#offline").hidden = true;
@@ -1333,6 +1341,7 @@ async function refresh() {
   }
   // A session killed behind our back keeps its tab until the user closes it,
   // but must not keep a dead socket open.
+  for (const id of [...terms.keys()]) if (!session(id)) closeTab(id, true);
   openTabs = openTabs.filter((id) => session(id));
   if (!workspaceRestored) restoreWorkspace();   // before the first render
   applySettings();
@@ -6160,8 +6169,10 @@ async function pollArtifacts() {
   // costs nothing to leave running.
   if (!activeId || state.settings.artifacts_show === false) return setArtifacts([]);
   if (document.hidden) return;
+  const asked = activeId;
   try {
-    setArtifacts(await api("api/sessions/" + encodeURIComponent(activeId) + "/artifacts"));
+    const items = await api("api/sessions/" + encodeURIComponent(asked) + "/artifacts");
+    if (asked === activeId) setArtifacts(items);   // tab switched mid-request: drop it
   } catch {
     /* A session can end mid-poll. The next one will agree with reality. */
   }

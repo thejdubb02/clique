@@ -137,6 +137,17 @@ def _text_of(kind: str, payload: dict) -> str:
     raise LLMError(f"unknown provider kind: {kind!r}")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """_guard_url vets only the first URL, so a redirect would walk the key and
+    prompt past it. Refuse to follow: the 3xx surfaces as an HTTPError."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def complete(profile: dict, messages: list, *, max_tokens: int = 1024, timeout: float = 30) -> str:
     """Ask ``profile``'s model to continue ``messages`` and return the text.
 
@@ -150,7 +161,7 @@ def complete(profile: dict, messages: list, *, max_tokens: int = 1024, timeout: 
         url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST"
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — see _guard_url
+        with _OPENER.open(req, timeout=timeout) as resp:  # noqa: S310 — see _guard_url
             payload = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
         raise LLMError(f"provider returned {exc.code}: {_safe_detail(exc)}") from None

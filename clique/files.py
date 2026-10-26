@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import tempfile
 import time
 from pathlib import Path
 
@@ -178,9 +179,11 @@ def write(cwd: str, raw: str, text: str) -> int:
     if not target.is_file():
         raise ValueError("not an editable file")
     mode = target.stat().st_mode & 0o777
-    tmp = target.with_name(target.name + ".clique-save")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    # Unique per call, so two saves at once cannot share (and interleave) a temp.
+    fd, name = tempfile.mkstemp(dir=target.parent, prefix=target.name + ".", suffix=".clique-save")
+    tmp = Path(name)
     try:
+        os.fchmod(fd, mode)
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
         os.replace(tmp, target)

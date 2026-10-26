@@ -1103,6 +1103,7 @@ class Panel:
         # worktree as the working directory, because it is.
         worktree = ""
         setup_sh = None
+        repo, made = "", ""
         if body.get("worktree"):
             repo = gitinfo.repo_root(cwd)
             if not repo:
@@ -1114,10 +1115,21 @@ class Panel:
             if not made:
                 raise ValueError(why)
             cwd = worktree = made
-            # .clique-copy and .clique-setup, if the repo declares either —
-            # see gitinfo.worktree_setup for why both live in the repo rather
-            # than in CLIque's own config.
-            setup_sh = gitinfo.worktree_setup(repo, made)
+        try:
+            if worktree:
+                # .clique-copy and .clique-setup, if the repo declares either —
+                # see gitinfo.worktree_setup for why both live in the repo rather
+                # than in CLIque's own config.
+                setup_sh = gitinfo.worktree_setup(repo, made)
+            return self._start_session(body, cli_id, cwd, worktree, setup_sh)
+        except BaseException:
+            # Unwind the worktree this call made so a failed create leaks nothing.
+            if worktree:
+                with contextlib.suppress(Exception):
+                    gitinfo.remove_worktree(worktree)
+            raise
+
+    def _start_session(self, body: dict, cli_id: str, cwd: str, worktree: str, setup_sh) -> dict:
         name = (body.get("name") or "").strip() or Path(cwd).name or cli_id
         mode = body.get("mode")
         # Resuming a past conversation is the same code path as starting a new
@@ -1152,31 +1164,36 @@ class Panel:
             # into the script string, so a space or a quote in a session name
             # or a path cannot reshape the command that runs.
             launch = ["sh", "-c", f'{setup_sh}; exec "$@"', "sh", *launch]
-        tmux.create(
-            mux,
-            cwd,
-            launch,
-            env=self._pane_env(session_id),
-        )
-        session = self.store.add_session(
-            Session(
-                id=session_id,
-                name=name,
-                cli=cli_id,
-                cwd=cwd,
-                mux=mux,
-                socket=tmux.SOCKET,
-                mode=mode or cli.default_mode,
-                # Deliberately not auto-filed. A session you started yourself
-                # lands in Ungrouped, at the top, where you will see it — filing
-                # it is a decision made afterwards, if at all. Auto-filing by
-                # directory stays where it earns its keep: adoption, where there
-                # is nobody to ask.
-                folder=body.get("folder") or None,
-                cli_session_id=prior,
-                worktree=worktree,
+        try:
+            tmux.create(
+                mux,
+                cwd,
+                launch,
+                env=self._pane_env(session_id),
             )
-        )
+            session = self.store.add_session(
+                Session(
+                    id=session_id,
+                    name=name,
+                    cli=cli_id,
+                    cwd=cwd,
+                    mux=mux,
+                    socket=tmux.SOCKET,
+                    mode=mode or cli.default_mode,
+                    # Deliberately not auto-filed. A session you started yourself
+                    # lands in Ungrouped, at the top, where you will see it — filing
+                    # it is a decision made afterwards, if at all. Auto-filing by
+                    # directory stays where it earns its keep: adoption, where there
+                    # is nobody to ask.
+                    folder=body.get("folder") or None,
+                    cli_session_id=prior,
+                    worktree=worktree,
+                )
+            )
+        except BaseException:
+            with contextlib.suppress(Exception):
+                tmux.kill(mux)
+            raise
         return {"id": session.id, "worktree": worktree}
 
     def spawn(self, body: dict) -> dict:
@@ -1916,7 +1933,7 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, obj, status: int = 200) -> None:
         self._send(status, json.dumps(obj).encode(), "application/json")
 
-    def _body(self) -> dict:
+    def _body(self) -> dict | None:
         # A Content-Length that is not a number is a malformed request, not a
         # 500. `int("abc")` here used to take the whole response down.
         try:
@@ -1929,8 +1946,12 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         # Bounded, because a pasted image arrives through here and an unbounded
         # Content-Length is a one-request way to exhaust memory.
+        # The unread body would be parsed as the next request on a keep-alive
+        # connection, so answer 413 and close. Returns None: already answered.
         if length > MAX_BODY_BYTES:
-            return {}
+            self.close_connection = True
+            self._send(413, b'{"error": "request too large"}', "application/json")
+            return None
         try:
             return json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
@@ -2464,6 +2485,8 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             body = self._body()
+            if body is None:
+                return
             if path == "/api/pair":
                 return self._json(self.panel.pair_start())
             if path == "/api/pair/claim":
@@ -3109,6 +3132,8 @@ class Handler(BaseHTTPRequestHandler):
         if not allowed:
             return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
         body = self._body()
+        if body is None:
+            return
         parts = path.strip("/").split("/")
         try:
             if len(parts) == 2 and parts[1] == "settings":
