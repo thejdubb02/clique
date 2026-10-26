@@ -145,6 +145,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+#: A completion is text; anything past this is a misbehaving endpoint.
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
@@ -162,7 +165,10 @@ def complete(profile: dict, messages: list, *, max_tokens: int = 1024, timeout: 
     )
     try:
         with _OPENER.open(req, timeout=timeout) as resp:  # noqa: S310 — see _guard_url
-            payload = json.loads(resp.read().decode("utf-8", "replace"))
+            raw = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise LLMError("provider response was too large")
+            payload = json.loads(raw.decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
         raise LLMError(f"provider returned {exc.code}: {_safe_detail(exc)}") from None
     except (urllib.error.URLError, TimeoutError, OSError) as exc:

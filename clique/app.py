@@ -204,6 +204,7 @@ class Panel:
         self.conversations = ConversationHistory(registry)
         #: Failed logins per client address, for throttling.
         self.failures: dict[str, list[float]] = {}
+        self.failures_lock = threading.Lock()
         #: Watches for the transitions worth a notification. Only actually
         #: runs while a webhook URL is set, so a panel nobody has configured
         #: one on still costs nothing when idle.
@@ -680,11 +681,13 @@ class Panel:
             due = self._limit_at.get(session.id)
             if due is None:
                 reading = usage.read(session.cli, cli.usage, llm._guard_url) or {}
-                resets = [
-                    datetime.datetime.fromisoformat(w["resets_at"]).timestamp()
-                    for w in reading.get("windows", [])
-                    if w.get("percent", 0) >= 100 and w.get("resets_at")
-                ]
+                resets = []
+                for w in reading.get("windows", []):
+                    try:
+                        if w.get("percent", 0) >= 100 and w.get("resets_at"):
+                            resets.append(datetime.datetime.fromisoformat(w["resets_at"]).timestamp())
+                    except (ValueError, TypeError, AttributeError):
+                        continue  # one bad window must not stop the other sessions
                 if resets and max(resets) > now:
                     self._limit_at[session.id] = max(resets) + 60
             elif due and now >= due:
@@ -1953,9 +1956,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, b'{"error": "request too large"}', "application/json")
             return None
         try:
-            return json.loads(self.rfile.read(length) or b"{}")
+            data = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
-            return {}
+            data = None
+        if not isinstance(data, dict):
+            self._json({"error": "request body must be a JSON object"}, 400)
+            return None
+        return data
 
     @property
     def _bearer(self):
@@ -2398,7 +2405,7 @@ class Handler(BaseHTTPRequestHandler):
             attempt = (form.get("password") or [""])[0]
             pair_code = (form.get("pair") or [""])[0]
             who = self.client_address[0] if self.client_address else "?"
-            throttled = self._throttled(who)
+            throttled = self._reserve_attempt(who)
             # Check even when throttled, so a correct password or code always
             # gets through. Behind a tunnel every request arrives from the same
             # loopback address, so a per-IP lockout would lock out the only
@@ -2416,7 +2423,6 @@ class Handler(BaseHTTPRequestHandler):
                 refused = "Wrong password."
             if not accepted:
                 if throttled:
-                    self._record_failure(who)
                     time.sleep(2.0)
                     nonce = secrets.token_urlsafe(16)
                     return self._send(
@@ -2428,7 +2434,6 @@ class Handler(BaseHTTPRequestHandler):
                 # Deliberately slow, and counted: this endpoint is reachable by
                 # anyone who can reach the tunnel, and guessing should be both
                 # expensive and self-limiting.
-                self._record_failure(who)
                 time.sleep(1.0)
                 nonce = secrets.token_urlsafe(16)
                 return self._send(
@@ -2437,7 +2442,8 @@ class Handler(BaseHTTPRequestHandler):
                     "text/html; charset=utf-8",
                     nonce=nonce,
                 )
-            self.panel.failures.pop(who, None)
+            with self.panel.failures_lock:
+                self.panel.failures.pop(who, None)
             token = self.panel.auth.issue()
             # Secure whenever the external leg is TLS. A forged X-Forwarded-Proto
             # can only *restrict* where the cookie is sent (https-only), never
@@ -3214,14 +3220,21 @@ class Handler(BaseHTTPRequestHandler):
     MAX_FAILURES = 8
     FAILURE_WINDOW = 300
 
-    def _throttled(self, who: str) -> bool:
-        cutoff = time.time() - self.FAILURE_WINDOW
-        recent = [t for t in self.panel.failures.get(who, []) if t > cutoff]
-        self.panel.failures[who] = recent
-        return len(recent) >= self.MAX_FAILURES
-
-    def _record_failure(self, who: str) -> None:
-        self.panel.failures.setdefault(who, []).append(time.time())
+    def _reserve_attempt(self, who: str) -> bool:
+        """Count this attempt as a failure and say whether it was already over
+        the limit, in one locked step. Concurrent attempts each see the others'
+        reservations; a success clears the entry."""
+        now = time.time()
+        cutoff = now - self.FAILURE_WINDOW
+        with self.panel.failures_lock:
+            failures = self.panel.failures
+            for addr in [a for a, ts in failures.items() if not ts or ts[-1] <= cutoff]:
+                del failures[addr]  # aged out: no entry lingers per address
+            recent = [t for t in failures.get(who, []) if t > cutoff]
+            over = len(recent) >= self.MAX_FAILURES
+            recent.append(now)
+            failures[who] = recent
+            return over
 
     def _fail(self, exc: Exception) -> None:
         # Full traceback to the server's stderr only; the client gets a generic

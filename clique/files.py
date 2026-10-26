@@ -360,24 +360,38 @@ def store_upload(cwd: str, filename: str, data: bytes) -> Path:
         _fence(cwd, target)
     drops.mkdir(parents=True, exist_ok=True)
     stem, suffix, parent = target.stem, target.suffix, target.parent
-    n = 0
-    while True:
-        candidate = target if n == 0 else parent / f"{stem} ({n}){suffix}"
-        try:
-            fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            n += 1
-            if n > 9999:
-                raise ValueError("too many files by that name") from None
-            continue
-        break
+    # Pin the directory by fd and re-fence what the fd really is: a symlink
+    # swapped in after the check above would otherwise redirect the create.
+    dfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-    except OSError:
-        with contextlib.suppress(OSError):
-            candidate.unlink()
-        raise
+        if _FENCE:
+            # Re-fence what is there now, and prove the fd is that very
+            # directory (no /proc needed): a swap on either side fails one.
+            real = Path(os.path.realpath(parent))
+            _fence(cwd, real)
+            a, b = os.fstat(dfd), os.stat(real)
+            if (a.st_dev, a.st_ino) != (b.st_dev, b.st_ino):
+                raise ValueError("outside the session directory")
+        n = 0
+        while True:
+            candidate = target if n == 0 else parent / f"{stem} ({n}){suffix}"
+            try:
+                fd = os.open(candidate.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644, dir_fd=dfd)
+            except FileExistsError:
+                n += 1
+                if n > 9999:
+                    raise ValueError("too many files by that name") from None
+                continue
+            break
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+        except OSError:
+            with contextlib.suppress(OSError):
+                os.unlink(candidate.name, dir_fd=dfd)
+            raise
+    finally:
+        os.close(dfd)
     return candidate
 
 

@@ -656,24 +656,31 @@ class Store:
         for candidate in (self.path, self.path.with_suffix(".json.bak")):
             try:
                 raw = json.loads(candidate.read_text())
+                # Valid JSON of the wrong shape is corruption too: build the
+                # records now, so a bad one falls through to the backup.
+                folders = raw.get("folders") or DEFAULT_FOLDERS
+                built = (
+                    [Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__}) for f in folders],
+                    [
+                        Group(**{k: v for k, v in g.items() if k in Group.__annotations__})
+                        for g in (raw.get("groups") or [])
+                    ],
+                    [
+                        Session(**{k: v for k, v in x.items() if k in Session.__annotations__})
+                        for x in raw.get("sessions", [])
+                    ],
+                )
+                if not isinstance(raw.get("settings", {}), dict):
+                    raise ValueError("settings is not an object")
                 break
             except FileNotFoundError:
                 continue
-            except (ValueError, OSError):
+            except (ValueError, OSError, TypeError, AttributeError):
                 continue  # try the backup rather than starting empty
-
-        folders = raw.get("folders") or DEFAULT_FOLDERS
-        self.folders = [
-            Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__}) for f in folders
-        ]
-        self.groups = [
-            Group(**{k: v for k, v in g.items() if k in Group.__annotations__})
-            for g in (raw.get("groups") or [])
-        ]
-        self.sessions = [
-            Session(**{k: v for k, v in s.items() if k in Session.__annotations__})
-            for s in raw.get("sessions", [])
-        ]
+        else:
+            raw = {}
+            built = ([Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__}) for f in DEFAULT_FOLDERS], [], [])
+        self.folders, self.groups, self.sessions = built
         # Merge rather than replace, so a setting added in a later version
         # appears with its default instead of being missing.
         self.settings = {**DEFAULT_SETTINGS, **(raw.get("settings") or {})}
