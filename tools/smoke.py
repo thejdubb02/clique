@@ -422,8 +422,10 @@ def main() -> int:
     check("the alt screen switch is hidden", filt.feed(b"\x1b[?1049hview") == b"view")
     check("wiping scrollback is hidden", filt.feed(b"\x1b[3Jkeep") == b"keep")
     check("a visible clear still happens", filt.feed(b"\x1b[2J") == b"\x1b[2J")
-    passthrough = termstrip.StreamFilter()
-    check("a shell keeps mouse tracking", passthrough.feed(b"\x1b[?1000h") == b"\x1b[?1000h")
+    shell = termstrip.plain_stream()
+    check("a shell keeps mouse tracking", shell.feed(b"\x1b[?1000h") == b"\x1b[?1000h")
+    # The browser in the alt buffer shows one screen and none of the history.
+    check("a shell hides the alt screen switch too", shell.feed(b"\x1b[?1049hls") == b"ls")
 
     print("registry")
     # The same file the app resolves to, asked for the same way. Naming the
