@@ -20,7 +20,9 @@
   background, so a slow probe (Antigravity shells out, ~2-4 s) no longer holds
   up a poll. A failed refresh keeps the last good bars with the error beside
   them. An expired sign-in (HTTP 401/403) says to open the CLI and sign in
-  again.
+  again. A slow background refresh can no longer overwrite a newer forced one.
+- Android 0.10.0 uses all of this: flick scrolling with a jump-to-latest
+  button, a Model item in the session menu, and tappable file paths.
 
 ## 0.94.0 — 2026-10-26
 
