@@ -255,8 +255,8 @@ def bootstrap(socket: str | None = SOCKET, history_limit: int = HISTORY_LIMIT) -
     first session or scrollback silently caps at tmux's default 2000 lines.
 
     A panel restart leaves that server running, so the same options are then
-    applied again on their own. That is how a bumped history-limit actually
-    takes effect without killing sessions.
+    applied again on their own. A bumped history-limit reaches only panes
+    created after it; a running session keeps the cap it was born with.
     """
     options = _global_options(history_limit)
     # A server that is still shutting down from a previous run answers

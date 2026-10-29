@@ -437,6 +437,17 @@ def _run() -> int:
     out = client.drain(2.5)
     check("control frame runs a command", b"via-control" in out, out[-160:])
 
+    # A reattach replays history deeper than a few thousand lines, or a phone
+    # opening a long session cannot scroll back to its start.
+    client.send(b"clear; seq -f L%05g 1 9000\n")
+    client.drain(2.0)
+    client.close()
+    time.sleep(0.5)
+    client = Client(url, cookie, bearer)
+    replay = client.drain(2.5)
+    check("a reattach replays deep history", b"L00500" in replay and b"L09000" in replay,
+          str(len(replay)))
+
     client.send(json.dumps({"type": "resize", "cols": 80, "rows": 24}).encode(), OP_TEXT)
     time.sleep(0.5)
     check("resize accepted without dropping the socket", True)

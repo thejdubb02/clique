@@ -3372,7 +3372,9 @@ class Handler(BaseHTTPRequestHandler):
                 ws.send(data)
 
             try:
-                history = tmux.capture(session.mux, session.socket, history_only=True)
+                # As deep as a phone's xterm keeps (terminal.html), so a
+                # reattach can scroll back past the last screenful or two.
+                history = tmux.capture(session.mux, session.socket, lines=20000, history_only=True)
                 if history.strip():
                     outbound(history.replace("\n", "\r\n").encode())
             except tmux.TmuxError:

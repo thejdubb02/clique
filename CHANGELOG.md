@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.95.1 - 2026-10-29
+## 0.95.1 - 2026-10-29 14:57 PDT
 
 **Plan usage probes hardened, from the estate audit.**
 
@@ -11,11 +11,18 @@
   reset time instead of a 500, and any unexpected reply clears the in-flight
   marker, so one bad answer cannot wedge that CLI's bars.
 - Cold probes run side by side, so one slow CLI no longer delays the rest.
+- Reopening a session replays up to 20,000 lines of history (was 5,000), and
+  the Android pane keeps 20,000 (was 8,000), so a long session scrolls back
+  further. Only sessions started after the history-limit was raised can hold
+  that much.
+- Release headings written with a plain hyphen are parsed and stamped, and the
+  stamper finds releases whose commit starts with the version, so old entries
+  keep their real release time instead of today's.
 - Android 0.10.1: notification permission buttons no longer answer each
   other, the terminal stops touching a closed pane, draft saves survive
   leaving a session, and shared images are read with a size cap.
 
-## 0.95.0 - 2026-10-29
+## 0.95.0 - 2026-10-29 13:27 PDT
 
 **Scrollback that survives a redraw, file links that open, sturdier plan usage.**
 
@@ -39,7 +46,7 @@
 - Android 0.10.0 uses all of this: flick scrolling with a jump-to-latest
   button, a Model item in the session menu, and tappable file paths.
 
-## 0.94.0 — 2026-10-26
+## 0.94.0 - 2026-10-26 14:14 PDT
 
 **Hardening pass from a full Codex review of the panel, browser, phone and desktop.**
 
@@ -76,7 +83,7 @@ breaking the fix) and more cases in `tools/frontend_check.js`.
 Not in this release: the Windows desktop trust gate and signed updater are
 written but held until the signing key and a Windows smoke test exist.
 
-## 0.93.0 — 2026-10-13
+## 0.93.0 - 2026-10-13 13:58 PDT
 
 **Suggested commands are now click to copy.**
 
@@ -88,7 +95,7 @@ written but held until the signing key and a Windows smoke test exist.
 - The phone long-press menu's "Copy this line" had the same wrap bug (it only
   ever read the one row under your finger); it now stitches too.
 
-## 0.92.0 — 2026-10-13
+## 0.92.0 - 2026-10-13 11:52 PDT
 
 **Four fixes from a Codex code review.**
 
@@ -106,7 +113,7 @@ written but held until the signing key and a Windows smoke test exist.
   them backwards) and documented the `routes` and `features` fields that
   `GET /api/llm/providers` already returned.
 
-## 0.91.0 — 2026-10-13
+## 0.91.0 - 2026-10-13 10:20 PDT
 
 **Boxed CLI text stays the size you set it to, across sidebar collapse and
 expand.** A boxed CLI (Claude Code, Codex, Gemini's own TUI) widened its grid
@@ -116,7 +123,7 @@ column count now stays fixed at every pane width, not just the zoomed ones,
 so collapsing and re-expanding leaves it where it started. Same fix covers
 the desktop client, which renders the same panel.
 
-## 0.90.0 — 2026-10-11
+## 0.90.0 - 2026-10-11 10:41 PDT
 
 **The shortcuts bar scrolls properly, touch or mouse.** `#quickRow` kept
 touch gestures and vertical page scroll separate with `touch-action`, and
@@ -129,7 +136,7 @@ on its own when there's no vertical overflow to consume. Native horizontal
 trackpad scroll and ctrl-wheel zoom are untouched. No desktop-client change
 needed: it renders the same panel, so the fix applies there too.
 
-## 0.89.0 — 2026-10-11
+## 0.89.0 - 2026-10-11 10:29 PDT
 
 **Bigger tap targets on the mobile shortcuts bar.** The row of one-tap
 snippet and quick-command pills above the input box already worked on phone,
