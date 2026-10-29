@@ -1725,16 +1725,30 @@ function planMeter(w, askedOf) {
 // while the panel is open (?all=1 is the explicit ask that widens usage_now()
 // past sessions actually running; a panel nobody opens makes no outbound call).
 let allUsage = null;   // null = not fetched yet
+let usageError = "";   // the panel itself could not be reached
 let usageTimer = null;
+const USAGE_STALE_S = 300;  // usage.TTL on the server
 
-async function loadAllUsage() {
+function usageAge(u) {
+  return u.checked ? Date.now() / 1000 - u.checked : 0;
+}
+
+async function loadAllUsage(recheck = true) {
   try {
     const payload = await api("api/usage?all=1");
     allUsage = payload.usage || [];
+    usageError = "";
   } catch (err) {
-    allUsage = [];
+    // Keep the last bars on a blip; say why only when there is nothing else.
+    usageError = err.message || "network error";
+    if (allUsage === null) allUsage = [];
   }
   renderUsagePanel();
+  // A stale reading is answered at once and refreshed behind it, so one
+  // quiet look a few seconds later picks up the fresh numbers.
+  if (recheck && !usageError && allUsage.some((u) => usageAge(u) >= USAGE_STALE_S)) {
+    setTimeout(() => loadAllUsage(false), 4000);
+  }
 }
 
 function renderUsagePanel() {
@@ -1747,7 +1761,9 @@ function renderUsagePanel() {
 
   if (!allUsage.length) {
     const empty = mk("div", "usage-empty");
-    empty.textContent = "No CLI reports plan usage yet.";
+    empty.textContent = usageError
+      ? `Couldn't reach the panel: ${usageError}`
+      : "No CLI reports plan usage yet.";
     body.replaceChildren(empty);
     return;
   }
@@ -1771,6 +1787,14 @@ function renderUsagePanel() {
       tag.textContent = "idle";
       head.append(tag);
     }
+    // Only an old reading says how old: a fresh one needs no caption.
+    const age = usageAge(u);
+    if (age >= USAGE_STALE_S) {
+      const checked = mk("span", "usage-cli-idle-tag");
+      const mins = Math.round(age / 60);
+      checked.textContent = mins < 60 ? `checked ${mins}m ago` : `checked ${Math.round(mins / 60)}h ago`;
+      head.append(checked);
+    }
     wrap.append(head, ...(u.windows || []).map((w) => planMeter(w, cli?.label || u.cli)));
     if (u.error) {
       const why = mk("div", "usage-empty");
@@ -1785,7 +1809,7 @@ function wireUsagePanel() {
   const toggle = $("#usageToggle");
   if (!toggle) return;
   const startPolling = () => {
-    if (!usageTimer) usageTimer = setInterval(loadAllUsage, 5 * 60 * 1000);
+    if (!usageTimer) usageTimer = setInterval(() => loadAllUsage(), 5 * 60 * 1000);
     loadAllUsage();
   };
   const startOpen = localStorage.getItem("clique.usagePanel") === "1";

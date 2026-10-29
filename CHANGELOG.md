@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.95.2 - 2026-10-29 16:30 PDT
+
+**Plan usage says when it is old, and fetches the fresh numbers itself.**
+
+- The panel answers a stale reading at once and probes behind it, so the
+  sidebar's usage panel now takes one more look four seconds later and
+  shows the fresh bars without waiting five minutes for the next poll.
+- A reading older than five minutes (say, after a sign-in expired) is
+  captioned "checked 12m ago", so old bars no longer pass for current ones.
+- When the panel itself cannot be reached, the usage panel says so instead of
+  claiming no CLI reports plan usage, and a blip keeps the last bars.
+- Android 0.10.2: the Plan usage screen honours a reset time's offset (it
+  read every time as UTC), pulls to refresh with a fresh probe, and gets the
+  same stale caption and recheck.
+
 ## 0.95.1 - 2026-10-29 14:57 PDT
 
 **Plan usage probes hardened, from the estate audit.**
