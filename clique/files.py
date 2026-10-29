@@ -98,7 +98,13 @@ def _is_credential(target: Path) -> bool:
     return bool({p.lower() for p in target.parts} & _BLOCKED_DIRS)
 
 
-def _fence(cwd: str, target: Path) -> None:
+#: Where a CLI keeps its scratch files (Claude Code's scratchpad, for one),
+#: and the paths it prints most often from outside the project. Readable,
+#: never writable: `write` keeps the session-directory fence.
+_TEMP = Path(tempfile.gettempdir()).resolve()
+
+
+def _fence(cwd: str, target: Path, *, read: bool = False) -> None:
     """Directory containment: a read may not resolve outside the session's cwd.
 
     Checked *after* resolution so a symlink cannot smuggle a path out — both
@@ -106,6 +112,8 @@ def _fence(cwd: str, target: Path) -> None:
     credential block above is not.
     """
     base = Path(cwd).resolve()
+    if read and _TEMP in target.parents:
+        return
     if target != base and base not in target.parents:
         raise ValueError("outside the session directory")
 
@@ -134,7 +142,7 @@ def clean(raw: str) -> str:
     return text.rstrip(".,;:!?)\"'")
 
 
-def resolve(cwd: str, raw: str) -> Path:
+def resolve(cwd: str, raw: str, *, read: bool = False) -> Path:
     """Turn what was printed into an absolute path.
 
     ``~/`` follows the user that started the panel, not a username. Relative
@@ -152,7 +160,7 @@ def resolve(cwd: str, raw: str) -> Path:
     if _is_credential(target):
         raise ValueError("blocked credential file")
     if _FENCE:
-        _fence(cwd, target)
+        _fence(cwd, target, read=read)
     return target
 
 
@@ -263,8 +271,11 @@ def inspect(cwd: str, raw: str) -> dict:
     if not asked:
         return out
     try:
-        target = resolve(cwd, asked)
-    except (OSError, RuntimeError, ValueError):
+        target = resolve(cwd, asked, read=True)
+    except ValueError as exc:
+        out["error"] = str(exc)
+        return out
+    except (OSError, RuntimeError):
         return out
     out["path"] = str(target)
     out["name"] = target.name

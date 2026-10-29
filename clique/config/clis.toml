@@ -39,6 +39,16 @@
 #               per entry. Presence of this key is what makes the row appear;
 #               omit it and no row shows for that CLI. There is no per-CLI
 #               branch in the code, same as `modes`.
+#   models      models a session can be switched to with one tap, each sent as
+#               `model_cmd` with {model} filled in. A plain list here, so a
+#               new model is a one-line edit, not a release.
+#   model_cmd   the text that switches model, e.g. "/model {model}". Set it
+#               without `models` and it is sent as typed: right for a CLI
+#               whose only way in is its own picker.
+#   keep_scrollback  true runs the CLI under clique/keepscroll.py, which drops
+#               its "erase scrollback" escape (ESC[3J). tmux obeys that by
+#               deleting the pane's history, so a CLI that sends it on every
+#               redraw leaves nothing to scroll back to after a reattach.
 #   resume      argv used instead of `args` when reattaching to a known
 #               {cli_session_id}
 #   own_input   true if this CLI draws its own input box at the bottom of the
@@ -83,6 +93,11 @@ modes      = ["auto", "default", "acceptEdits", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode on (shift+tab to cycle)"
 quick_commands = ["/clear", "/compact", "/cost"]
+models     = ["opus", "sonnet", "haiku"]
+model_cmd  = "/model {model}"
+# Claude Code clears with ESC[3J on every full redraw, which emptied the
+# history of most live sessions (measured 2026-10-29).
+keep_scrollback = true
 
 # Extra regexes on top of the generic question marks every CLI already gets
 # (y/n, Do you want, a numbered choice). Match one and the session's ring
@@ -172,6 +187,7 @@ icon       = "gemini.svg"
 modes      = ["yolo", "default", "auto_edit", "plan"]
 mode_key   = "S-Tab"
 mode_label = "{mode} mode"
+model_cmd  = "/model"
 
 own_input = true
 
@@ -184,6 +200,8 @@ color   = "#E8E8E8"
 icon    = "grok.svg"
 # No `modes`: grok's approval is one boolean flag, not a cycle. The pill is
 # hidden because the key is absent, not because anything knows what grok is.
+models    = ["grok-4.7", "grok-4.7-build-fast", "grok-4.6"]
+model_cmd = "/model {model}"
 
 own_input = true
 
@@ -255,6 +273,8 @@ color   = "#7c6cf0"
 icon    = "antigravity.svg"
 # No `modes`: agy cycles its own execution mode inside the TUI (accept-edits,
 # plan), like Grok's approval toggle. The pill stays hidden with the key absent.
+models    = ["gemini-4-argon-high", "gemini-3.8-flash-medium", "claude-opus-5-5-high", "claude-sonnet-5-5-medium"]
+model_cmd = "/model {model}"
 
 own_input = true
 
@@ -295,6 +315,7 @@ label   = "Codex CLI"
 command = "codex"
 args    = []
 color   = "#10A37F"
+model_cmd = "/model"
 
 status  = { url = "https://status.openai.com/api/v2/status.json", page = "https://status.openai.com" }
 

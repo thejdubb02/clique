@@ -120,13 +120,13 @@ The whole panel in one object, and what the browser polls every three seconds.
 | `home` | the home directory of whoever started the server — where a new session starts when nothing better is known |
 | `folders` | `id`, `name`, `color`, `collapsed`, `order` |
 | `sessions` | see below |
-| `clis` | every CLI the registry knows: `id`, `label`, `command`, `installed`, `modes`, `quick_commands`, `color`, `icon` |
+| `clis` | every CLI the registry knows: `id`, `label`, `command`, `installed`, `modes`, `quick_commands`, `models`, `model_cmd`, `color`, `icon` |
 | `settings` | the full settings object — see **Settings** |
 | `stats` | the same snapshot as `/api/stats` |
 
 Each session carries `own_input` — whether this CLI draws its own input box,
 which is what `input_mode: "auto"` reads — plus `id`, `name`, `cli`, `cli_label`, `cwd`, `project`,
-`folder`, `mode` (and `modes`, `mode_label`, `quick_commands`), `adopted`, `archived`, `pinned`, `draft`, `state`,
+`folder`, `mode` (and `modes`, `mode_label`, `quick_commands`), `models` and `model_cmd` (one-tap model switch: send `model_cmd` with `{model}` filled in, or as typed when `models` is empty), `adopted`, `archived`, `pinned`, `draft`, `state`,
 `saying` — the last line a session actually printed, captured for anything
 carrying a `signal` (waiting, errored, or compacting). It is what the sidebar
 shows in place of the working directory when something is asking for you: the
@@ -609,6 +609,11 @@ anyone who can reach the panel already has a shell as this user.
 {"asked": "docs/foo.md", "path": "/srv/app/docs/foo.md", "name": "foo.md",
  "kind": "text", "size": 1204, "text": "# Foo\n", "truncated": false}
 ```
+
+Reads are fenced to the session folder (`CLIQUE_FENCE_READS`), with one
+exception: anything under the system temp folder is readable, because CLIs
+write drafts and scratch files there and print the path. Never writable. A
+refused path comes back as `missing` with an `error` saying why.
 
 `kind` is `text`, `image`, `binary`, `dir` or `missing`. Text is capped;
 `truncated` is true when there is more. `?raw=1` on an image returns the

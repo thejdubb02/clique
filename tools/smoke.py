@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[1]
 passed = failed = 0
 
 
-def check(label: str, cond: bool, detail: str = "") -> None:
+def check(label: str, cond: bool, detail: object = "") -> None:
     global passed, failed
     if cond:
         passed += 1
@@ -515,6 +515,14 @@ def main() -> int:
         "missing stays missing, not an error",
         files.inspect(str(tmp), "nope.md")["kind"] == "missing",
     )
+    # The temp folder is readable from any session (CLIs print scratch paths
+    # there), but these fixtures live in temp too, so point the exception
+    # elsewhere for the fence checks below.
+    check(
+        "a temp-folder file is readable from another session dir",
+        files.inspect("/", str(tmp / "note.md"))["kind"] == "text",
+    )
+    files._TEMP = Path("/nonexistent-clique-temp")
     # Reads are fenced to the session directory by default now, so climbing out
     # with `..` is refused. Opting out (CLIQUE_FENCE_READS=0) restores the old
     # trusted-local behaviour where the path simply resolves.

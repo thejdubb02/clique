@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -115,6 +116,14 @@ class CliType:
     #: pane exactly as typed, Enter included, the same path the prompt box's
     #: Run button uses. Empty means no row, same as `modes` and the pill.
     quick_commands: list[str] = field(default_factory=list)
+    #: Models a session can be switched to with one tap, and the text that
+    #: does it, ``{model}`` substituted. A ``model_cmd`` with no ``models``
+    #: is sent as typed: for a CLI whose own picker is the only way in.
+    models: list[str] = field(default_factory=list)
+    model_cmd: str = ""
+    #: Run the CLI under keepscroll.py, which drops its "erase scrollback"
+    #: requests so tmux keeps the session's history.
+    keep_scrollback: bool = False
     #: Filename in web/icons/. Drawn as a mask and tinted, so only the
     #: silhouette matters — a flat single-colour shape, not artwork.
     #: Whether this CLI draws its own input box at the bottom of the pane.
@@ -273,6 +282,8 @@ class CliType:
             "modes": list(self.modes),
             "mode_key": self.mode_key,
             "quick_commands": list(self.quick_commands),
+            "models": list(self.models),
+            "model_cmd": self.model_cmd,
             "installed": self.installed,
             # Empty means "no drawing for this one" — the UI falls back to a
             # letter badge, so a newly added CLI looks deliberate without
@@ -361,6 +372,9 @@ def parse(data: dict) -> dict[str, CliType]:
             "mode_key",
             "mode_label",
             "quick_commands",
+            "models",
+            "model_cmd",
+            "keep_scrollback",
             "icon",
             "history",
             "attention",
@@ -382,6 +396,9 @@ def parse(data: dict) -> dict[str, CliType]:
             mode_key=raw.get("mode_key", "S-Tab"),
             mode_label=raw.get("mode_label", "{mode} mode"),
             quick_commands=list(raw.get("quick_commands", [])),
+            models=list(raw.get("models", [])),
+            model_cmd=raw.get("model_cmd", ""),
+            keep_scrollback=bool(raw.get("keep_scrollback", False)),
             icon=raw.get("icon", ""),
             own_input=bool(raw.get("own_input", False)),
             hooks=bool(raw.get("hooks", False)),
@@ -464,4 +481,9 @@ class Registry:
         rendered = [_TOKEN.sub(lambda m: ctx[m.group(1)], arg) for arg in template]
         # The resolved path, not the bare name: the CLI may live somewhere the
         # service's PATH does not reach.
-        return [cli.resolve() or cli.command, *rendered]
+        argv = [cli.resolve() or cli.command, *rendered]
+        if cli.keep_scrollback:
+            # -I: the script's own folder stays off sys.path, so nothing in
+            # clique/ can shadow a stdlib module it imports.
+            argv = [sys.executable, "-I", str(Path(__file__).with_name("keepscroll.py")), "--", *argv]
+        return argv

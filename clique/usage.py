@@ -51,6 +51,7 @@ MAX_BYTES = 64 * 1024
 
 _lock = threading.Lock()
 _cache: dict[str, tuple[float, dict]] = {}
+_inflight: set[str] = set()
 
 
 class _Miss(Exception):
@@ -174,6 +175,9 @@ def _fetch(spec: dict, guard) -> dict:
                 raise _Miss(f"HTTP {response.status}")
             body = response.read(MAX_BYTES + 1)
     except urllib.error.HTTPError as err:
+        if err.code in (401, 403):
+            # Nearly always an expired sign-in; the CLI refreshes it on its next run.
+            raise _Miss(f"signed out (HTTP {err.code}): open the CLI to sign in again") from None
         raise _Miss(f"HTTP {err.code}") from None
     except (urllib.error.URLError, OSError, ValueError):
         raise _Miss("could not reach it") from None
@@ -231,22 +235,13 @@ def _windows(spec: dict, payload: dict) -> list[dict]:
     return out
 
 
-def read(cli_id: str, spec: dict, guard, *, force: bool = False) -> dict | None:
-    """One CLI's usage, cached. None when no probe is declared.
+def _probe(cli_id: str, spec: dict, guard, previous: dict | None) -> dict:
+    """Run the probe once and cache what it said.
 
-    A probe that fails still answers, with no windows and a short `error`.
-
-    Every browser attached to this panel shares the cache, so twenty open tabs
-    are still one request every few minutes.
+    A failed refresh keeps the last good windows, with the error beside them:
+    one network blip should not wipe the bars for five minutes.
     """
-    if not spec or not (spec.get("url") or spec.get("cmd")):
-        return None
     now = time.time()
-    with _lock:
-        hit = _cache.get(cli_id)
-        if hit and not force and now - hit[0] < TTL:
-            return hit[1]
-
     result = {"cli": cli_id, "windows": [], "checked": int(now)}
     try:
         result["windows"] = _windows(spec, _fetch(spec, guard))
@@ -254,11 +249,44 @@ def read(cli_id: str, spec: dict, guard, *, force: bool = False) -> dict | None:
             raise _Miss("no usage numbers in the reply")
     except _Miss as miss:
         result["error"] = str(miss)
+        if previous and previous.get("windows"):
+            result["windows"] = previous["windows"]
+            result["checked"] = previous["checked"]
     with _lock:
         # A failure is cached too, for the same TTL. Otherwise a box with no
-        # credentials retries on every poll forever.
-        _cache[cli_id] = (now, result)
+        # credentials retries on every poll forever. A slow background probe
+        # that finishes after a forced one must not overwrite the newer answer.
+        if cli_id not in _cache or _cache[cli_id][0] <= now:
+            _cache[cli_id] = (now, result)
+        else:
+            result = _cache[cli_id][1]
+        _inflight.discard(cli_id)
     return result
+
+
+def read(cli_id: str, spec: dict, guard, *, force: bool = False) -> dict | None:
+    """One CLI's usage, cached. None when no probe is declared.
+
+    A probe that fails still answers, with no windows and a short `error`.
+
+    Every browser attached to this panel shares the cache, so twenty open tabs
+    are still one request every few minutes. Once something is cached, an old
+    reading is answered at once and refreshed in the background: a probe can
+    take seconds (agy shells out), and a status poll should not wait on it.
+    """
+    if not spec or not (spec.get("url") or spec.get("cmd")):
+        return None
+    with _lock:
+        hit = _cache.get(cli_id)
+        if hit and not force and time.time() - hit[0] < TTL:
+            return hit[1]
+        if hit and not force:
+            if cli_id not in _inflight:
+                _inflight.add(cli_id)
+                threading.Thread(target=_probe, args=(cli_id, spec, guard, hit[1]), daemon=True).start()
+            return hit[1]
+        _inflight.add(cli_id)
+    return _probe(cli_id, spec, guard, hit[1] if hit else None)
 
 
 def forget(cli_id: str | None = None) -> None:

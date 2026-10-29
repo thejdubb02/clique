@@ -515,6 +515,8 @@ class Panel:
                     "mode_seq": cli.mode_seq if cli else "",
                     "mode_label": cli.mode_label if cli else "",
                     "quick_commands": list(cli.quick_commands) if cli else [],
+                    "models": list(cli.models) if cli else [],
+                    "model_cmd": cli.model_cmd if cli else "",
                     "adopted": session.adopted,
                     "archived": session.archived,
                     "pinned": session.pinned,
@@ -527,7 +529,11 @@ class Panel:
                     # so the browser forwards the wheel to it instead of scrolling a
                     # pane scrollback that tmux only ever redraws in place.
                     "alt": bool(pane and pane.alternate_on),
-                    "command": pane.command if pane else None,
+                    # Under keepscroll the pane's process is python and the
+                    # CLI is its child, so name the CLI.
+                    "command": (cli.command if cli and cli.keep_scrollback else pane.command)
+                    if pane
+                    else None,
                     # Resident memory of the whole process tree, so you can see
                     # which tab is expensive before deciding what to do with it.
                     "rss": (rss_map.get(pane.pid, 0) * 1024) if pane else 0,
@@ -540,7 +546,13 @@ class Panel:
                     # do sub-work. A process-tree fact, not a guess about
                     # intent. comm is the kernel's task name, truncated to 15
                     # bytes, so this is a heuristic name match, not a certainty.
-                    "sub_clis": sub_map.get(pane.pid, []) if pane else [],
+                    "sub_clis": [
+                        c
+                        for c in sub_map.get(pane.pid, [])
+                        if not (cli and cli.keep_scrollback and c == cli.command)
+                    ]
+                    if pane
+                    else [],
                     "activity": pane.activity if pane else 0,
                     # The pane's real size, so a browser can notice when it has
                     # drifted from what it is drawing. A tmux window has one size

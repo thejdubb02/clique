@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -56,6 +57,10 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps({"pad": "x" * (usage.MAX_BYTES + 1000)}).encode()
         elif self.path == "/notjson":
             body = b"<html>nope</html>"
+        elif self.path == "/expired":
+            self.send_response(401)
+            self.end_headers()
+            return
         elif self.path == "/teapot":
             self.send_response(418)
             self.end_headers()
@@ -157,6 +162,31 @@ def main() -> int:
         len(seen) - fails == 1,
         len(seen) - fails,
     )
+
+    miss("an expired sign-in says so", {"url": base + "/expired"}, "sign in again")
+
+    print("an old reading answers at once, and one blip does not wipe it")
+    usage.forget()
+    good = usage.read("s", spec, allow_all) or {}
+    usage._cache["s"] = (0.0, good)  # long past its TTL
+    before = len(seen)
+    stale = usage.read("s", spec, allow_all)
+    check("a stale reading is answered without waiting", stale is good, stale)
+    for _ in range(50):
+        if usage._cache["s"][0] > 0:
+            break
+        time.sleep(0.05)
+    check("and refreshed behind it", len(seen) - before == 1 and usage._cache["s"][0] > 0, len(seen) - before)
+    usage._cache["s"] = (0.0, good)
+    broken = usage.read("s", {**spec, "url": base + "/teapot"}, allow_all, force=True) or {}
+    check("a failed refresh keeps the last good bars",
+          broken["windows"] == good["windows"] and "418" in broken.get("error", ""), broken)
+
+    newer = {**good, "checked": 2**40}
+    usage._cache["s"] = (2.0**40, newer)  # a forced probe already landed
+    late = usage._probe("s", spec, allow_all, good)
+    check("a slow probe does not overwrite a newer answer",
+          usage._cache["s"][1] is newer and late is newer, usage._cache["s"])
 
     print("the shipped catalogue still says what it said")
     claude = Registry(ROOT / "clique" / "config" / "clis.toml").types()["claude"]

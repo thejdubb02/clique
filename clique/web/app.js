@@ -6063,7 +6063,9 @@ function showFile(info) {
     note.textContent = "Not text. Copy or send the path to open it in something that can.";
   } else {
     note.hidden = false;
-    note.textContent = "Nothing at that path from this session's directory.";
+    note.textContent = info.error
+      ? "Can't open that here: " + info.error + "."
+      : "Nothing at that path from this session's directory.";
   }
 
   const parent = (info.kind === "dir") ? "" : fileParentPath(info);

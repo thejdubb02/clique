@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.95.0 - 2026-10-29
+
+**Scrollback that survives a redraw, file links that open, sturdier plan usage.**
+
+- Claude Code clears tmux's scrollback (ESC[3J) on every full redraw, which is
+  why a long session could not be scrolled back on the phone. A CLI can now set
+  `keep_scrollback = true` in `clis.toml`; it runs under a small pty shim
+  (`clique/keepscroll.py`) that drops only that one sequence. On for Claude.
+  Sessions started before the upgrade keep the old behaviour until restarted.
+- A CLI can list its `models` and a `model_cmd` (`/model {model}`) in
+  `clis.toml`. Both are on the session in `/api/state`, so a client can offer
+  a model switcher without knowing the vendor. Filled in for Claude, Grok,
+  Antigravity; Gemini and Codex open their own picker.
+- File links in the pane now open files under the system temp folder (CLIs
+  print draft and scratch paths there). Read only; writes keep the strict
+  fence. A refused path says why instead of looking missing.
+- Plan usage: an old reading is answered at once and refreshed in the
+  background, so a slow probe (Antigravity shells out, ~2-4 s) no longer holds
+  up a poll. A failed refresh keeps the last good bars with the error beside
+  them. An expired sign-in (HTTP 401/403) says to open the CLI and sign in
+  again.
+
 ## 0.94.0 — 2026-10-26
 
 **Hardening pass from a full Codex review of the panel, browser, phone and desktop.**
