@@ -47,6 +47,7 @@ REPLY = {
     "alpha": {"used": 12.5, "until": "2026-09-01T00:00:00+00:00"},
     "beta": {"used": 140, "until": None},
     "gamma": {"used": "not a number"},
+    "epsilon": {"used": 5, "until": 1e300},
 }
 
 
@@ -59,6 +60,11 @@ class Handler(BaseHTTPRequestHandler):
             body = b"<html>nope</html>"
         elif self.path == "/expired":
             self.send_response(401)
+            self.end_headers()
+            return
+        elif self.path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", "/usage")
             self.end_headers()
             return
         elif self.path == "/teapot":
@@ -139,6 +145,14 @@ def main() -> int:
     miss("a reply that is not JSON", {"url": base + "/notjson"}, "not JSON")
     miss("a reply that is too big", {"url": base + "/huge"}, "too large")
     miss("a bad status", {"url": base + "/teapot"}, "HTTP 418")
+    before = len(seen)
+    miss("a redirect is refused, not followed", {"url": base + "/redirect"}, "HTTP 302")
+    check("so the token went to one place only", len(seen) - before == 1, len(seen) - before)
+    usage.forget()
+    far = usage.read("f", {**spec, "window": [{"label": "E", "percent": "epsilon.used", "resets": "epsilon.until"}]},
+                     allow_all, force=True) or {}
+    check("a reset time past any clock is null, not a crash",
+          far.get("windows") == [{"label": "E", "percent": 5.0, "resets_at": None}], far)
     miss("a reply with none of the declared numbers", {"window": [{"label": "X", "percent": "nope"}]}, "no usage numbers")
     miss("a command that fails", {"cmd": ["false"]}, "exited 1")
     miss("a command that is not there", {"cmd": ["/nonexistent/probe"]}, "could not run")

@@ -29,6 +29,7 @@ import threading
 import time
 import traceback
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -925,19 +926,16 @@ class Panel:
         if not self.store.settings.get("usage_bar", True):
             return {"usage": []}
         running = {s.cli for s in self.store.sessions if s.cli}
-        out = []
-        for cli_id, cli in self.registry.types().items():
-            if not getattr(cli, "usage", None):
-                continue
-            if all_installed:
-                if not cli.installed:
-                    continue
-            elif cli_id not in running:
-                continue
-            found = usage.read(cli_id, cli.usage, llm._guard_url, force=force)
-            if found:
-                out.append(found)
-        return {"usage": out}
+        wanted = [
+            (cli_id, cli)
+            for cli_id, cli in self.registry.types().items()
+            if getattr(cli, "usage", None) and (cli.installed if all_installed else cli_id in running)
+        ]
+        # Side by side: a cold read probes for real, and one slow CLI (agy
+        # shells out) should not make the others wait behind it.
+        with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as pool:
+            found = pool.map(lambda w: usage.read(w[0], w[1].usage, llm._guard_url, force=force), wanted)
+            return {"usage": [f for f in found if f]}
 
     # ------------------------------------------------------------- themes
 

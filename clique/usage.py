@@ -36,6 +36,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .llm import _OPENER  # refuses redirects: the guard vets only the first URL
+
 #: How long a reading stays good. The windows it reports move over hours, and
 #: every browser watching shares this, so the interval is about being a polite
 #: client rather than about freshness.
@@ -170,7 +172,7 @@ def _fetch(spec: dict, guard) -> dict:
     # is not http(s) to a public host, which is the check S310 is asking for.
     request = urllib.request.Request(url, headers=headers)  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
+        with _OPENER.open(request, timeout=TIMEOUT) as response:  # noqa: S310
             if response.status != 200:
                 raise _Miss(f"HTTP {response.status}")
             body = response.read(MAX_BYTES + 1)
@@ -197,7 +199,10 @@ def _resets_at(value: object) -> str | None:
     if isinstance(value, str):
         return value
     if isinstance(value, (int, float)) and value > 0:
-        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None  # a number no clock can hold is no reset time
     return None
 
 
@@ -247,7 +252,9 @@ def _probe(cli_id: str, spec: dict, guard, previous: dict | None) -> dict:
         result["windows"] = _windows(spec, _fetch(spec, guard))
         if not result["windows"]:
             raise _Miss("no usage numbers in the reply")
-    except _Miss as miss:
+    except Exception as miss:  # noqa: BLE001 — anything a vendor sends is "no usage", never a 500
+        if not isinstance(miss, _Miss):
+            miss = _Miss("could not read the reply")
         result["error"] = str(miss)
         if previous and previous.get("windows"):
             result["windows"] = previous["windows"]

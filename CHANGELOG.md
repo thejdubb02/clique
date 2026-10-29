@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.95.1 - 2026-10-29
+
+**Plan usage probes hardened, from the estate audit.**
+
+- A usage probe no longer follows redirects. The SSRF guard only vets the
+  first URL, so a redirect could have carried the CLI's token somewhere else;
+  it now reports "HTTP 302" and stops.
+- A reset time no clock can hold (a huge or broken timestamp) shows as no
+  reset time instead of a 500, and any unexpected reply clears the in-flight
+  marker, so one bad answer cannot wedge that CLI's bars.
+- Cold probes run side by side, so one slow CLI no longer delays the rest.
+- Android 0.10.1: notification permission buttons no longer answer each
+  other, the terminal stops touching a closed pane, draft saves survive
+  leaving a session, and shared images are read with a size cap.
+
 ## 0.95.0 - 2026-10-29
 
 **Scrollback that survives a redraw, file links that open, sturdier plan usage.**
