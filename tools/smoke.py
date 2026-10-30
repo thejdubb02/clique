@@ -1464,14 +1464,14 @@ def main() -> int:
 
     print("front end")
     # There is no build step, which is the point — and it also means nothing
-    # between a typo and the browser. A syntax error in app.js does not fail a
+    # between a typo and the browser. A syntax error in a panel script does not fail a
     # Python test suite; it fails silently, in front of the user, as a panel
     # that loads and then does nothing. `node --check` parses without running.
     node = shutil.which("node") or shutil.which("nodejs")
     if not node:
         print("  · no node; skipping the parse check")
     else:
-        for name in ("app.js", "themes.js"):
+        for name in ("app.js", "sidebar-status.js", "themes.js"):
             script = ROOT / "clique" / "web" / name
             done = subprocess.run([node, "--check", str(script)], capture_output=True, text=True)
             check(

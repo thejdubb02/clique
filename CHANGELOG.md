@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.95.3 - 2026-10-30 10:08 PDT
+
+**Two of the biggest files get smaller, with no change in behaviour.**
+
+- The WebSocket terminal code moved out of `app.py` into
+  `clique/terminal_handler.py` (CLQ-98, first slice). `app.py` is about 350
+  lines shorter.
+- The sidebar's plan usage and machine stats moved out of `app.js` into
+  `web/sidebar-status.js` (CLQ-99, first slice), loaded just before it.
+- Android 0.10.3: every reply the app reads is capped at 32 MB instead of
+  being held whole whatever its size (CLQ-100), and after a reconnect a late
+  frame from the old connection can no longer write into the new pane
+  (CLQ-104).
+- Gemini usage: looked into and not added. Its quota endpoint needs a
+  Google sign-in token that expires hourly and only the Gemini CLI can
+  renew; the Antigravity bar already shows the Gemini model quota.
+
 ## 0.95.2 - 2026-10-29 16:30 PDT
 
 **Plan usage says when it is old, and fetches the fresh numbers itself.**
