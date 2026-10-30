@@ -367,15 +367,15 @@ critical, high and medium ones for the server and browser shipped in 0.94.0.
 Still open, each a card on the board:
 
 - **Monolith splits, one at a time, behind the existing checks:** `clique/app.py`
-  (terminal handler done in 0.95.3 as `terminal_handler.py`, file routes in 0.95.4 as `file_routes.py`),
+  (terminal handler done in 0.95.3 as `terminal_handler.py`, file routes in 0.95.4 as `file_routes.py`, provider routes in 0.95.5 as `provider_routes.py`),
   `web/app.js` (about 12k lines, no build step so plain scripts; sidebar usage
-  and stats done in 0.95.3 as `web/sidebar-status.js`, file preview in 0.95.4 as `web/file-preview.js`), Android `SessionFragment.kt` and `SessionsFragment.kt`,
+  and stats done in 0.95.3 as `web/sidebar-status.js`, file preview in 0.95.4 as `web/file-preview.js`, providers, palette and pane helpers in 0.95.5 as `web/providers.js`), Android `SessionFragment.kt` and `SessionsFragment.kt`,
   `terminal.html` link handling.
 - **Browser:** eager WebSockets for every tab and a 50k-line xterm buffer each;
   a selection listener leak.
-- **Android:** notification action collisions across servers, destroyed WebView
-  retention, preview request fan-out. (Drafts now save while typing, Android 0.10.4.) (Image and download
-  size limits, and stale frames after a reconnect, shipped in Android 0.10.3.)
+- **Android:** review list cleared. Size limits, stale reconnect frames and
+  WebView retention in 0.10.3; notification collisions and drafts in 0.10.4;
+  stale preview overwrites in 0.10.5.
 - **Desktop:** held uncommitted. Needs the update signing key (an empty
   `releasePubKey` keeps updates off), replay protection in the signed payload,
   an atomic setup consume, and a Windows smoke test.

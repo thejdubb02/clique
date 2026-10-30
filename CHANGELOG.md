@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.95.5 - 2026-10-30 11:24 PDT
+
+**Two more slices off the biggest files, and the last Android review fix.**
+
+- Model provider routes moved out of `app.py` into
+  `clique/provider_routes.py` (CLQ-98, third slice). The API drift check now
+  reads every route module, so a moved route is still checked against
+  `API.md`.
+- Model providers, the command palette and pane drag and zoom moved out of
+  `app.js` into `web/providers.js` (CLQ-99, third slice). About 1,390 lines
+  shorter.
+- Android 0.10.5: a slow session preview can no longer overwrite a newer one.
+
 ## 0.95.4 - 2026-10-30 11:08 PDT
 
 **Two more slices off the biggest files, and two Android fixes.**
