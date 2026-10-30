@@ -1714,6 +1714,15 @@ a.give-value { color: var(--accent); }
   .tab .x, .tab .gear { opacity: .7; }
   .hdr-btn { min-width: 32px; min-height: 32px; padding: 8px; }
 }
+/* The same floor for every small control a phone shows. visual_check measures
+   them at phone width, so a new 22px button fails there, not in a hand. */
+@media (pointer: coarse), (max-width: 640px) {
+  .hdr-btn, .rail-dot, .tab .x, .tab .gear, .guard-x, .quick-add, .stepper button,
+  #attachFile, #reviewLock, #fullScr, .railr-btn {
+    min-width: 32px; min-height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+}
 
 /* ------------------------------------------------------------- file sheet */
 

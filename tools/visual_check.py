@@ -1926,6 +1926,18 @@ def _run(panel) -> int:
         )
         page.wait_for_timeout(900)
         page.screenshot(path=str(SHOTS / "mobile-closed.png"))
+        # A thumb needs about 32px. Every visible control in the main pane is
+        # measured, so a new 22px button on the phone layout fails here.
+        tiny = page.evaluate(
+            """() => [...document.querySelectorAll('button, [role=button]')]
+                 .filter(b => b.checkVisibility({ visibilityProperty: true }) && (() => {
+                   const r = b.getBoundingClientRect();
+                   return r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight; })())
+                 .map(b => { const r = b.getBoundingClientRect();
+                   return [b.id || b.className || b.textContent.trim(), Math.round(r.width), Math.round(r.height)]; })
+                 .filter(([, w, h]) => w && h && (w < 32 || h < 32))"""
+        )
+        check("every phone control is big enough for a thumb", not tiny, tiny)
 
         print("scrolling the pane with a finger")
         # Three separate things had to be true for this to work and none of

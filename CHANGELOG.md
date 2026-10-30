@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.95.6 - 2026-10-30 12:32 PDT
+
+**Bigger tap targets on a phone, and two more slices off the biggest files.**
+
+- Every small control the phone layout shows is now at least 32px to a
+  thumb: the tab's close and settings buttons (were 17 by 13), the repeat
+  stepper, attach, read-only lock, full screen, and the side rails. Desktop
+  with a mouse is unchanged. `visual_check.py` now measures every visible
+  control at phone width, so a new undersized button fails there (CLQ-65).
+- Session peek, attention, groups, checkpoints, export and notes routes
+  moved out of `app.py` into `clique/session_routes.py` (CLQ-98, fourth
+  slice). The HTTP smoke test now calls `/peek`, which nothing checked
+  before; the move briefly broke it and only the type check noticed.
+- The Notes, Git, Session info and Export panes moved out of `app.js` into
+  `web/panes.js` (CLQ-99, fourth slice), about 480 lines.
+
 ## 0.95.5 - 2026-10-30 11:24 PDT
 
 **Two more slices off the biggest files, and the last Android review fix.**
