@@ -43,7 +43,7 @@ Next, in order, as of 2026-09-21 (evening):
 | | Card |
 |---|---|
 | The key row keys are too narrow, and that is a decision — CSS already has `overflow-x: auto`; the card's own measured widths may be stale, needs a real phone check before it needs code | CLQ-63 |
-| The rest of the phone pass | CLQ-65 |
+| The rest of the phone pass. Tap targets done in 0.95.6 (every control 32px or more at phone width, measured by `visual_check.py`); swiping between sessions and input bar spacing wait on real handset use | CLQ-65 |
 | MCP server, phase 2: write verbs, blocked on CLQ-52's policy model | CLQ-76 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
 | Typography | CLQ-67 |
@@ -367,9 +367,9 @@ critical, high and medium ones for the server and browser shipped in 0.94.0.
 Still open, each a card on the board:
 
 - **Monolith splits, one at a time, behind the existing checks:** `clique/app.py`
-  (terminal handler done in 0.95.3 as `terminal_handler.py`, file routes in 0.95.4 as `file_routes.py`, provider routes in 0.95.5 as `provider_routes.py`),
-  `web/app.js` (about 12k lines, no build step so plain scripts; sidebar usage
-  and stats done in 0.95.3 as `web/sidebar-status.js`, file preview in 0.95.4 as `web/file-preview.js`, providers, palette and pane helpers in 0.95.5 as `web/providers.js`), Android `SessionFragment.kt` and `SessionsFragment.kt`,
+  (terminal handler done in 0.95.3 as `terminal_handler.py`, file routes in 0.95.4 as `file_routes.py`, provider routes in 0.95.5 as `provider_routes.py`, session peek, groups, checkpoints, export and notes in 0.95.6 as `session_routes.py`; now about 2.6k lines),
+  `web/app.js` (no build step so plain scripts; sidebar usage
+  and stats done in 0.95.3 as `web/sidebar-status.js`, file preview in 0.95.4 as `web/file-preview.js`, providers, palette and pane helpers in 0.95.5 as `web/providers.js`, Notes, Git, Session info and Export panes in 0.95.6 as `web/panes.js`; now about 9.3k lines), Android `SessionFragment.kt` and `SessionsFragment.kt`,
   `terminal.html` link handling.
 - **Browser:** eager WebSockets for every tab and a 50k-line xterm buffer each;
   a selection listener leak.
