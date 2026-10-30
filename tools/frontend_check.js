@@ -1,7 +1,7 @@
 /* Pure front-end logic, tested without a browser.
  *
- * app.js has no build step and no module system, which is the point — and it
- * also means the functions in it have nowhere to be tested from. Most of the
+ * The panel scripts have no build step and no module system, which is the point
+ * — and it also means the functions in them have nowhere to be tested from. Most of the
  * file is DOM work that only makes sense in a page, but the decisions are not:
  * what needs you first, and what counts as unread, are sorts over plain data,
  * and they are exactly the kind of thing that breaks quietly.
@@ -17,7 +17,9 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const SRC = fs.readFileSync(path.join(ROOT, "clique/web/app.js"), "utf8");
+const SRC = ["file-preview.js", "app.js"]
+  .map((name) => fs.readFileSync(path.join(ROOT, "clique/web", name), "utf8"))
+  .join("\n");
 
 let passed = 0;
 let failed = 0;
@@ -27,7 +29,7 @@ function check(label, cond, detail) {
   else { failed++; console.log(`  FAIL ${label} ${detail === undefined ? "" : detail}`); }
 }
 
-/* A named region of app.js, so a test names the code it covers rather than a
+/* A named region of the panel scripts, so a test names the code it covers rather than a
  * line number that moves the next time anything is inserted above it. */
 function region(from, to) {
   const start = SRC.indexOf(from);

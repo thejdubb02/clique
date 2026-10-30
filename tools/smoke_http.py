@@ -387,7 +387,7 @@ def _run() -> int:
     # The other half: the shell stays behind the password. A gated asset is
     # answered with the login page rather than a 403, so "is it HTML" is the
     # test, not the status code.
-    for path in ("/app.js", "/sidebar-status.js", "/index.html", "/app.css", "/themes.js"):
+    for path in ("/app.js", "/sidebar-status.js", "/file-preview.js", "/index.html", "/app.css", "/themes.js"):
         _, _, body = anon_fetch(path)
         check(f"{path} is not", b"<!doctype html>" in body.lower(), body[:40])
 
@@ -1011,6 +1011,11 @@ def _run() -> int:
     with urllib.request.urlopen(req, timeout=10) as res:
         check("serves split sidebar code",
               res.status == 200 and b"Sidebar plan usage" in res.read()[:400])
+    req = urllib.request.Request(BASE + "/file-preview.js")
+    req.add_header("Cookie", cookie)
+    with urllib.request.urlopen(req, timeout=10) as res:
+        check("serves split file preview code",
+              res.status == 200 and b"File, transcript, and usage preview" in res.read()[:400])
     # Every inline <script> must carry a nonce the CSP header actually allows.
     # This exists because curl does not enforce CSP: the policy shipped with a
     # bare `script-src 'self'`, every inline script on every page was silently

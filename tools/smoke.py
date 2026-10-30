@@ -1471,7 +1471,7 @@ def main() -> int:
     if not node:
         print("  · no node; skipping the parse check")
     else:
-        for name in ("app.js", "sidebar-status.js", "themes.js"):
+        for name in ("app.js", "sidebar-status.js", "file-preview.js", "themes.js"):
             script = ROOT / "clique" / "web" / name
             done = subprocess.run([node, "--check", str(script)], capture_output=True, text=True)
             check(
@@ -1488,7 +1488,10 @@ def main() -> int:
         # a ReferenceError into a console nobody had open, and it is a whole
         # class of bug that costs one regex to close. Arrow-wrapped calls are
         # the menu idiom throughout, so that is what this reads.
-        source = (ROOT / "clique" / "web" / "app.js").read_text(encoding="utf-8")
+        source = "\n".join(
+            (ROOT / "clique" / "web" / name).read_text(encoding="utf-8")
+            for name in ("file-preview.js", "app.js")
+        )
         declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", source))
         called = set(re.findall(r"\(\)\s*=>\s*([A-Za-z_$][\w$]*)\s*\(", source))
         # Things that are legitimately not ours: globals, and methods reached
