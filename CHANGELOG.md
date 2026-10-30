@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.95.4 - 2026-10-30 11:08 PDT
+
+**Two more slices off the biggest files, and two Android fixes.**
+
+- File, artifact, paste and upload routes moved out of `app.py` into
+  `clique/file_routes.py` (CLQ-98, second slice). About 250 lines shorter.
+- The file, transcript and usage preview sheet moved out of `app.js` into
+  `web/file-preview.js` (CLQ-99, second slice). About 830 lines shorter.
+- Android 0.10.4: a permission alert gets a third button that sends your
+  first bar snippet (CLQ-59), and the prompt box saves its draft a second
+  after you stop typing, not only when you leave the screen.
+
 ## 0.95.3 - 2026-10-30 10:08 PDT
 
 **Two of the biggest files get smaller, with no change in behaviour.**
