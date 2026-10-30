@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # app.py plus the route mixins split out of it, so a moved route stays checked.
 SOURCE = "\n".join(
     (ROOT / "clique" / name).read_text(encoding="utf-8")
-    for name in ("app.py", "file_routes.py", "provider_routes.py", "terminal_handler.py")
+    for name in ("app.py", "file_routes.py", "provider_routes.py", "session_routes.py", "terminal_handler.py")
 )
 REFERENCE = (ROOT / "API.md").read_text(encoding="utf-8")
 
