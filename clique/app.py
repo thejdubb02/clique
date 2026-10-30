@@ -44,6 +44,7 @@ from . import (
     notes,
     notify,
     pairing,
+    provider_routes,
     projects,
     secretbox,
     services,
@@ -1759,7 +1760,7 @@ def _is_public_asset(path: str) -> bool:
     )
 
 
-class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes):
+class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes, provider_routes.ProviderRoutes):
     panel: Panel = None  # set by serve()
     server_version = "clique"  # no version: it tells a scanner what to try
     protocol_version = "HTTP/1.1"
@@ -2061,8 +2062,8 @@ class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes):
                 return self._json([p.as_dict() for p in tmux.adoptable() if p.mux not in known])
             if path == "/api/orphans":
                 return self._json(self.panel.orphans())
-            if path == "/api/llm/providers":
-                return self._json(self.panel.llm_list())
+            if self._provider_GET(path):
+                return
             if path == "/api/themes":
                 return self._json(self.panel.themes_list())
             if path == "/api/usage":
@@ -2396,7 +2397,7 @@ class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes):
             if path == "/api/themes":
                 return self._json(self.panel.theme_add(body), 201)
             if path == "/api/themes/generate":
-                return self._json(self.panel.theme_generate(body.get("prompt")), 201)
+                return self._json(self.panel.theme_generate(body.get("prompt") or ""), 201)
             if path == "/api/themes/rotate":
                 # Ignores the schedule and the on/off switch on purpose: this
                 # is the button next to them, and its whole job is "not this
@@ -2414,27 +2415,12 @@ class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes):
                 if not self.panel.store.delete_theme(parts[2]):
                     return self._json({"error": "no such theme"}, 404)
                 return self._json({"ok": True})
-            if path == "/api/llm/providers":
-                return self._json(self.panel.llm_create(body), 201)
+            if self._provider_POST(path, body):
+                return
             if path == "/api/llm/routes":
                 return self._json(
-                    self.panel.llm_set_route(body.get("feature"), body.get("provider_id"))
+                    self.panel.llm_set_route(body.get("feature") or "", body.get("provider_id"))
                 )
-            if path.startswith("/api/llm/providers/"):
-                parts = path.split("/")
-                provider_id = parts[4]
-                action = parts[5] if len(parts) > 5 else ""
-                if action == "test":
-                    result = self.panel.llm_test(provider_id)
-                elif action == "delete":
-                    result = self.panel.llm_delete(provider_id)
-                elif not action:
-                    result = self.panel.llm_update(provider_id, body)
-                else:
-                    return self._json({"error": "not found"}, 404)
-                if result is None:
-                    return self._json({"error": "no such provider"}, 404)
-                return self._json(result)
             if path == "/api/workspace":
                 # A directory that does not exist yet is the commonest reason a
                 # new session fails, and "go and find a shell" is a poor answer
