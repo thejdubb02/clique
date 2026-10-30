@@ -367,14 +367,15 @@ critical, high and medium ones for the server and browser shipped in 0.94.0.
 Still open, each a card on the board:
 
 - **Monolith splits, one at a time, behind the existing checks:** `clique/app.py`
-  (terminal handler, then file routes), `web/app.js` (about 12k lines, no build
-  step so plain scripts), Android `SessionFragment.kt` and `SessionsFragment.kt`,
+  (terminal handler done in 0.95.3 as `terminal_handler.py`; file routes next),
+  `web/app.js` (about 12k lines, no build step so plain scripts; sidebar usage
+  and stats done in 0.95.3 as `web/sidebar-status.js`), Android `SessionFragment.kt` and `SessionsFragment.kt`,
   `terminal.html` link handling.
 - **Browser:** eager WebSockets for every tab and a 50k-line xterm buffer each;
   a selection listener leak.
 - **Android:** notification action collisions across servers, destroyed WebView
-  retention, image size limits applied after the full read, draft persistence,
-  download size limits, preview request fan-out.
+  retention, draft persistence, preview request fan-out. (Image and download
+  size limits, and stale frames after a reconnect, shipped in Android 0.10.3.)
 - **Desktop:** held uncommitted. Needs the update signing key (an empty
   `releasePubKey` keeps updates off), replay protection in the signed payload,
   an atomic setup consume, and a Windows smoke test.
