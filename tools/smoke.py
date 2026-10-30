@@ -855,7 +855,8 @@ def main() -> int:
     # by document.hasFocus(), which is per browser window: a desktop on one
     # machine and a phone in your hand both report true, so both claimed it
     # every poll and the CLI reflowed between 162 and 42 columns forever.
-    from clique.app import Handler, _desktop_size, _handheld, _may_size_window
+    from clique.terminal_handler import HANDHELD_HOLD, _desktop_size, _handheld, _may_size_window
+    from clique.app import Handler
 
     _handheld.clear()
     _desktop_size.clear()
@@ -881,7 +882,7 @@ def main() -> int:
     # The backstop, for a phone that vanishes without saying so.
     _handheld.clear()
     _may_size_window("sm-test", True)
-    _handheld["sm-test"] = time.time() - (app_mod.HANDHELD_HOLD + 1)
+    _handheld["sm-test"] = time.time() - (HANDHELD_HOLD + 1)
     check("a claim older than the hold has expired", _may_size_window("sm-test", False) is True)
     check("and the stale entry is pruned", "sm-test" not in _handheld, dict(_handheld))
     _handheld.clear()
@@ -944,7 +945,7 @@ def main() -> int:
         # phone still holds that mux (that size is what release restores).
         _handheld.clear()
         _desktop_size.clear()
-        _desktop_size["sm-restore"] = (235, 60, time.time() - (app_mod.HANDHELD_HOLD + 1))
+        _desktop_size["sm-restore"] = (235, 60, time.time() - (HANDHELD_HOLD + 1))
         _may_size_window("sm-restore", False)
         check(
             "a stale remembered size is pruned",
@@ -953,7 +954,7 @@ def main() -> int:
         )
 
         _may_size_window("sm-restore", True)
-        _desktop_size["sm-restore"] = (235, 60, time.time() - (app_mod.HANDHELD_HOLD + 1))
+        _desktop_size["sm-restore"] = (235, 60, time.time() - (HANDHELD_HOLD + 1))
         _may_size_window("sm-restore", False)
         check(
             "a remembered size is kept while the phone still holds",
