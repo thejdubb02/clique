@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const SRC = ["file-preview.js", "providers.js", "app.js"]
+const SRC = ["file-preview.js", "providers.js", "panes.js", "app.js"]
   .map((name) => fs.readFileSync(path.join(ROOT, "clique/web", name), "utf8"))
   .join("\n");
 

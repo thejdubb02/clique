@@ -1471,7 +1471,7 @@ def main() -> int:
     if not node:
         print("  · no node; skipping the parse check")
     else:
-        for name in ("app.js", "sidebar-status.js", "file-preview.js", "providers.js", "themes.js"):
+        for name in ("app.js", "sidebar-status.js", "file-preview.js", "providers.js", "panes.js", "themes.js"):
             script = ROOT / "clique" / "web" / name
             done = subprocess.run([node, "--check", str(script)], capture_output=True, text=True)
             check(
@@ -1490,7 +1490,7 @@ def main() -> int:
         # the menu idiom throughout, so that is what this reads.
         source = "\n".join(
             (ROOT / "clique" / "web" / name).read_text(encoding="utf-8")
-            for name in ("file-preview.js", "providers.js", "app.js")
+            for name in ("file-preview.js", "providers.js", "panes.js", "app.js")
         )
         declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", source))
         called = set(re.findall(r"\(\)\s*=>\s*([A-Za-z_$][\w$]*)\s*\(", source))
