@@ -376,6 +376,10 @@ Still open, each a card on the board:
 - **Android:** review list cleared. Size limits, stale reconnect frames and
   WebView retention in 0.10.3; notification collisions and drafts in 0.10.4;
   stale preview overwrites in 0.10.5.
+  Overlapping replies (2026-10-31, committed, not released): the app let its
+  90 s width claim lapse, so a desktop took the pane back mid-read and every
+  width flip made the CLI redraw into scrollback. The 3 s poll now renews the
+  claim. Old scrambled history stays; one redraw per real handover remains.
 - **Desktop:** held uncommitted. Needs the update signing key (an empty
   `releasePubKey` keeps updates off), replay protection in the signed payload,
   an atomic setup consume, and a Windows smoke test.
