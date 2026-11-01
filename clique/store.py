@@ -149,6 +149,11 @@ DEFAULT_SETTINGS = {
     #: them to a fallback chain that exists on Windows, Mac and Linux, so a
     #: font that is not installed still lines up instead of going proportional.
     "font_family": "system",
+    #: Row height as a percent of the font's own, and extra pixels between
+    #: letters. Both change how many rows and columns fit, so the pane refits
+    #: when either moves. 100 and 0 are xterm's own defaults.
+    "term_line_height": 100,
+    "term_letter_spacing": 0,
     #: Ctrl+K opens the command palette, which means the pane never sees that
     #: key — and Ctrl+K is readline's kill-to-end-of-line. Anyone who uses it
     #: there can hand it back; the palette stays reachable on Ctrl+Shift+P,
@@ -948,6 +953,12 @@ class Store:
                     name = str(value or "").strip().lower()
                     if name in FONT_FAMILIES:
                         self.settings[key] = name
+                elif key == "term_line_height":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(100, min(int(value), 160))
+                elif key == "term_letter_spacing":
+                    with contextlib.suppress(TypeError, ValueError):
+                        self.settings[key] = max(0, min(int(value), 4))
                 elif key.startswith("font_"):
                     # Clamped rather than rejected: a bad number here should
                     # not be able to make the UI unreadable and unfixable.

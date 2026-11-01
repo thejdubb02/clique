@@ -5747,6 +5747,8 @@ async function attachNow(id) {
     rows: size.rows,
     fontSize: state.settings.font_terminal || 13,
     fontFamily: termFontStack(),
+    lineHeight: termLineHeight(),
+    letterSpacing: state.settings.term_letter_spacing || 0,
     theme: termTheme(currentTheme()),
     // Kept in step with tmux.py's HISTORY_LIMIT: xterm cannot show scrollback
     // tmux never kept, and tmux keeping more than a client can render is
@@ -7037,6 +7039,10 @@ const FONT_FAMILIES = [
 const FONT_MIN = 9;
 const FONT_MAX = 28;
 
+function termLineHeight() {
+  return ((state.settings && state.settings.term_line_height) || 100) / 100;
+}
+
 function termFontStack() {
   const id = (state.settings && state.settings.font_family) || "system";
   const row = FONT_FAMILIES.find((item) => item.id === id);
@@ -7130,12 +7136,15 @@ function applySettings() {
    * left open was repainting every terminal it had, twenty times a minute, to
    * arrive at exactly the colours already on screen. */
   const stamp = (s.theme || "") + "|" + (s.appearance || "") + "|" +
-    (s.font_terminal || 13) + "|" + (s.font_family || "system");
+    (s.font_terminal || 13) + "|" + (s.font_family || "system") + "|" +
+    termLineHeight() + "|" + (s.term_letter_spacing || 0);
   for (const entry of terms.values()) {
     if (entry.painted === stamp) continue;
     entry.painted = stamp;
     entry.term.options.fontSize = s.font_terminal || 13;
     entry.term.options.fontFamily = termFontStack();
+    entry.term.options.lineHeight = termLineHeight();
+    entry.term.options.letterSpacing = s.term_letter_spacing || 0;
     entry.term.options.theme = termTheme(theme);
     try { entry.fit.fit(); } catch (err) { /* not visible yet */ }
   }
@@ -7502,12 +7511,14 @@ function openSettings() {
   }
   family.value = s.font_family || "system";
 
-  for (const [slider, out, value] of [
-    ["#setFontPanel", "#outFontPanel", s.font_panel || 13],
-    ["#setFontTerminal", "#outFontTerminal", s.font_terminal || 13],
+  for (const [slider, out, value, suffix] of [
+    ["#setFontPanel", "#outFontPanel", s.font_panel || 13, "px"],
+    ["#setFontTerminal", "#outFontTerminal", s.font_terminal || 13, "px"],
+    ["#setLineHeight", "#outLineHeight", s.term_line_height || 100, "%"],
+    ["#setLetterSpacing", "#outLetterSpacing", s.term_letter_spacing || 0, "px"],
   ]) {
     $(slider).value = value;
-    $(out).textContent = value + "px";
+    $(out).textContent = value + suffix;
   }
 
   $("#setGpu").checked = gpuEnabled();
@@ -8192,6 +8203,8 @@ function wire() {
   for (const [slider, out, key, suffix] of [
     ["#setFontPanel", "#outFontPanel", "font_panel", "px"],
     ["#setFontTerminal", "#outFontTerminal", "font_terminal", "px"],
+    ["#setLineHeight", "#outLineHeight", "term_line_height", "%"],
+    ["#setLetterSpacing", "#outLetterSpacing", "term_letter_spacing", "px"],
     ["#setIdle", "#outIdle", "notify_idle_seconds", ""],
   ]) {
     $(slider).oninput = (ev) => ($(out).textContent = ev.target.value + suffix);

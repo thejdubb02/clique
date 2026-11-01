@@ -1601,6 +1601,12 @@ def main() -> int:
         colors == ["#4A9EFF", ""],
         colors,
     )
+    qc_store.update_settings({"term_line_height": 999, "term_letter_spacing": -3})
+    check(
+        "line height and letter spacing are clamped, not stored raw",
+        (qc_store.settings["term_line_height"], qc_store.settings["term_letter_spacing"]) == (160, 0),
+        (qc_store.settings["term_line_height"], qc_store.settings["term_letter_spacing"]),
+    )
     qc_store.update_settings({"snippets": []})
     check(
         "clearing snippets clears the bar with it",

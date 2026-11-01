@@ -182,6 +182,21 @@ def main() -> int:
             res["terminal_opened"] = wide > 40 and tall > 10 and bool(mux)
             res["tmux_matches_at_rest"] = (tmux_cols(), tmux_rows()) == (wide, tall)
 
+            # Taller rows and wider letters fit fewer of each, and tmux has to
+            # be told: a pane that draws 30 rows while tmux paints 40 is the
+            # row-too-many bug from 0.67.12 under another name.
+            base_cols, base_rows = wide, tall
+            page.evaluate("() => saveSettings({ term_line_height: 150, term_letter_spacing: 2 })")
+            page.wait_for_timeout(600)
+            spaced_cols, spaced_rows = cols(), rows()
+            res["line_height_fits_fewer_rows"] = 0 < spaced_rows < base_rows
+            res["letter_spacing_fits_fewer_cols"] = 0 < spaced_cols < base_cols
+            res["tmux_matches_spaced_type"] = (tmux_cols(), tmux_rows()) == (spaced_cols, spaced_rows)
+            page.screenshot(path="/tmp/clique-redraw/spaced-type.png")
+            page.evaluate("() => saveSettings({ term_line_height: 100, term_letter_spacing: 0 })")
+            page.wait_for_timeout(600)
+            res["type_reset_restores_size"] = (cols(), rows()) == (base_cols, base_rows)
+
             # One toggle, one settle — and the columns it lands on are the ones
             # tmux is painting, not the ones the pane had before the panel.
             page.evaluate(COUNT_SETTLES)
