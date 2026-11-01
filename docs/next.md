@@ -371,8 +371,12 @@ Still open, each a card on the board:
   `web/app.js` (no build step so plain scripts; sidebar usage
   and stats done in 0.95.3 as `web/sidebar-status.js`, file preview in 0.95.4 as `web/file-preview.js`, providers, palette and pane helpers in 0.95.5 as `web/providers.js`, Notes, Git, Session info and Export panes in 0.95.6 as `web/panes.js`; now about 9.3k lines), Android `SessionFragment.kt` and `SessionsFragment.kt`,
   `terminal.html` link handling.
-- **Browser:** eager WebSockets for every tab and a 50k-line xterm buffer each;
-  a selection listener leak.
+- **Browser:** eager WebSockets for every tab and a 50k-line xterm buffer each
+  (a deliberate trade for instant tab switches; the buffer matches tmux's
+  history limit). Selection listener leak fixed 2026-11-01: a drag or
+  double-click released with no click after it left a document-wide catcher
+  that ate the next click; it is now removed after every release, and
+  `visual_check.py` proves it.
 - **Android:** review list cleared. Size limits, stale reconnect frames and
   WebView retention in 0.10.3; notification collisions and drafts in 0.10.4;
   stale preview overwrites in 0.10.5.

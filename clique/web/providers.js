@@ -1001,6 +1001,12 @@ function wirePaneClipboard(term, host, sessionId) {
       ev.preventDefault();
       document.removeEventListener("click", swallowClick, true);
     };
+    // The click that follows a mouseup arrives in the same task, so a timer
+    // runs after it. Without this, a release with no click after it (off the
+    // window, say) left the catcher armed to eat the next click anywhere.
+    const dropSwallow = () => {
+      setTimeout(() => document.removeEventListener("click", swallowClick, true));
+    };
     const paint = (x, y) => paneSelectRange(term, paneCellAt(term, startX, startY),
                                             paneCellAt(term, x, y));
     // A drag that reaches past the top or bottom edge keeps scrolling that
@@ -1037,6 +1043,7 @@ function wirePaneClipboard(term, host, sessionId) {
       document.addEventListener("click", swallowClick, true);
       const done = () => {
         document.removeEventListener("mouseup", done, true);
+        dropSwallow();
         requestAnimationFrame(() => copyPaneSelection(true));
       };
       document.addEventListener("mouseup", done, true);
@@ -1065,6 +1072,7 @@ function wirePaneClipboard(term, host, sessionId) {
         play(ev, "mouseup");
         play(ev, "click");
       } else {
+        dropSwallow();
         requestAnimationFrame(() => copyPaneSelection(true));
       }
     };

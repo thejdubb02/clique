@@ -1173,6 +1173,28 @@ def _run(panel) -> int:
                 "a drag still selects while the CLI is eating clicks",
                 page.locator("#copySel").is_visible(),
             )
+            # A release with no click after it (the pointer left the window)
+            # used to leave a document-wide catcher armed that ate the next
+            # click anywhere. Synthetic events, because real input always
+            # sends the click.
+            freed = page.evaluate("""() => new Promise((done) => {
+              const el = document.querySelector('#terminal .xterm.enable-mouse-events');
+              const r = el.getBoundingClientRect();
+              const at = (x, y, extra) => ({ bubbles: true, cancelable: true,
+                clientX: x, clientY: y, button: 0, ...extra });
+              el.dispatchEvent(new MouseEvent('mousedown', at(r.left + 12, r.top + 10, { buttons: 1, detail: 1 })));
+              document.dispatchEvent(new MouseEvent('mousemove', at(r.left + 300, r.top + 30, { buttons: 1 })));
+              document.dispatchEvent(new MouseEvent('mouseup', at(r.left + 300, r.top + 30)));
+              setTimeout(() => {
+                let heard = false;
+                const probe = () => { heard = true; };
+                document.addEventListener('click', probe);
+                document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                document.removeEventListener('click', probe);
+                done(heard);
+              }, 50);
+            })""")
+            check("a drag that ends with no click does not eat the next one", freed)
 
         print("copy from a boxed CLI")
         # The CLIs people actually copy from turn mouse tracking on. The
