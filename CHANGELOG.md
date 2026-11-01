@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.95.7 - 2026-11-01 09:52 PST
+
+**Line height and letter spacing for the terminal, and a click that went missing.**
+
+- Settings, Appearance has two new sliders: line height (100 to 160%) and
+  letter spacing (0 to 4px). Both are saved on the server and follow you to
+  other devices. Changing either refits the pane, and tmux gets the new size
+  at once; `redraw_check.py` proves it (CLQ-67). Ligatures are not included,
+  since xterm needs an extra addon for them.
+- A drag or double-click in a pane that was released with no click after it,
+  for example with the pointer outside the window, left a catcher armed that
+  swallowed the next click anywhere in the panel. It is now cleared after
+  every release (CLQ-107).
+
 ## 0.95.6 - 2026-10-30 12:32 PDT
 
 **Bigger tap targets on a phone, and two more slices off the biggest files.**
