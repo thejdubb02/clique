@@ -46,7 +46,7 @@ Next, in order, as of 2026-09-21 (evening):
 | The rest of the phone pass. Tap targets done in 0.95.6 (every control 32px or more at phone width, measured by `visual_check.py`); swiping between sessions and input bar spacing wait on real handset use | CLQ-65 |
 | MCP server, phase 2: write verbs, blocked on CLQ-52's policy model | CLQ-76 |
 | Operator: BYOK that narrates the fleet, never a fourth agent | CLQ-52 |
-| Typography | CLQ-67 |
+| Typography: line height and letter spacing sliders done 2026-11-01 (committed, not released; refit proved by `redraw_check.py`). Ligatures skipped, they need xterm's ligatures addon. Font picker already names the resolved font | CLQ-67 |
 
 Four shipped 2026-09-21, see **Shipped off this list** below: per-session CPU
 (CLQ-56, 0.73.0), session templates (CLQ-54, 0.74.0), an MCP server, read-only
@@ -380,6 +380,8 @@ Still open, each a card on the board:
   90 s width claim lapse, so a desktop took the pane back mid-read and every
   width flip made the CLI redraw into scrollback. The 3 s poll now renews the
   claim. Old scrambled history stays; one redraw per real handover remains.
+  Typography sliders (CLQ-67) stay off the phone: the app draws a fixed 13px
+  font, and every column spacing costs is one the reply needs.
 - **Desktop:** held uncommitted. Needs the update signing key (an empty
   `releasePubKey` keeps updates off), replay protection in the signed payload,
   an atomic setup consume, and a Windows smoke test.
