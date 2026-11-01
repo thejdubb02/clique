@@ -114,6 +114,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 # --------------------------------------------------------------- ws client --
 
+
 class Client:
     """A masking WebSocket client. Servers never mask; clients always must."""
 
@@ -126,19 +127,22 @@ class Client:
             # Exercising the real tailnet URL matters: a WebSocket that works on
             # loopback and dies at the proxy is the failure this catches.
             self.sock = ssl.create_default_context().wrap_socket(
-                self.sock, server_hostname=parsed.hostname)
+                self.sock, server_hostname=parsed.hostname
+            )
         key = base64.b64encode(secrets.token_bytes(16)).decode()
         path = parsed.path + ("?" + parsed.query if parsed.query else "")
-        self.sock.sendall((
-            f"GET {path} HTTP/1.1\r\n"
-            f"Host: {parsed.hostname}\r\n"
-            "Upgrade: websocket\r\nConnection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
-            f"Origin: {parsed.scheme.replace('ws', 'http')}://{parsed.hostname}\r\n"
-            + (f"Cookie: {cookie}\r\n" if cookie else "")
-            + (f"Authorization: Bearer {bearer}\r\n" if bearer else "")
-            + "\r\n"
-        ).encode())
+        self.sock.sendall(
+            (
+                f"GET {path} HTTP/1.1\r\n"
+                f"Host: {parsed.hostname}\r\n"
+                "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
+                f"Origin: {parsed.scheme.replace('ws', 'http')}://{parsed.hostname}\r\n"
+                + (f"Cookie: {cookie}\r\n" if cookie else "")
+                + (f"Authorization: Bearer {bearer}\r\n" if bearer else "")
+                + "\r\n"
+            ).encode()
+        )
         self.buffer = b""
         while b"\r\n\r\n" not in self.buffer:
             chunk = self.sock.recv(4096)
@@ -204,8 +208,8 @@ class Client:
             offset = 10
         if len(self.buffer) < offset + length:
             return None
-        payload = self.buffer[offset:offset + length]
-        self.buffer = self.buffer[offset + length:]
+        payload = self.buffer[offset : offset + length]
+        self.buffer = self.buffer[offset + length :]
         return payload
 
     def close(self) -> None:
@@ -216,7 +220,11 @@ class Client:
 def _cli(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-m", "clique", *args],
-        capture_output=True, text=True, cwd=str(ROOT), env=TEST_ENV)
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+        env=TEST_ENV,
+    )
 
 
 def mint_token() -> None:
@@ -240,12 +248,24 @@ def _own_panel() -> subprocess.Popen:
     shutil.rmtree(OWN_HOME, ignore_errors=True)
     OWN_HOME.mkdir(parents=True)
     proc = subprocess.Popen(
-        [sys.executable, "-m", "clique",
-         "--host", "127.0.0.1", "--port", str(OWN_PORT),
-         "--password", OWN_PASSWORD,
-         "--state", str(OWN_HOME / "state.json")],
-        cwd=str(ROOT), env=TEST_ENV,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        [
+            sys.executable,
+            "-m",
+            "clique",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(OWN_PORT),
+            "--password",
+            OWN_PASSWORD,
+            "--state",
+            str(OWN_HOME / "state.json"),
+        ],
+        cwd=str(ROOT),
+        env=TEST_ENV,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     for _ in range(80):
         try:
             urllib.request.urlopen(BASE + "/healthz", timeout=2).read()
@@ -262,10 +282,12 @@ def main() -> int:
     explicit = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else ""
     live = {"http://127.0.0.1:3200", "http://localhost:3200"}
     if explicit in live and os.environ.get("CLIQUE_TEST_LIVE") != "1":
-        print("refusing the live panel — this suite starts its own so it "
-              "cannot take over a window you are using. pass a different "
-              "url, or set CLIQUE_TEST_LIVE=1 if you mean it.",
-              file=sys.stderr)
+        print(
+            "refusing the live panel — this suite starts its own so it "
+            "cannot take over a window you are using. pass a different "
+            "url, or set CLIQUE_TEST_LIVE=1 if you mean it.",
+            file=sys.stderr,
+        )
         return 2
     try:
         if explicit:
@@ -277,9 +299,7 @@ def main() -> int:
             BASE = f"http://127.0.0.1:{OWN_PORT}"
             SOCKET = OWN_SOCKET
             PASSWORD = OWN_PASSWORD
-            TEST_ENV = dict(os.environ,
-                            CLIQUE_HOME=str(OWN_HOME),
-                            CLIQUE_TMUX_SOCKET=OWN_SOCKET)
+            TEST_ENV = dict(os.environ, CLIQUE_HOME=str(OWN_HOME), CLIQUE_TMUX_SOCKET=OWN_SOCKET)
             panel = _own_panel()
         return _run()
     finally:
@@ -310,6 +330,119 @@ def _run() -> int:
     else:
         print("  --   login form not covered (set CLIQUE_TEST_PASSWORD)")
 
+    print("working groups")
+    status, made = call("/api/groups", "POST", {"name": "Morning", "color": "#7aa2f7"})
+    check("a group is created", status == 201 and made.get("id", "").startswith("g-"), made)
+    gid = made.get("id", "")
+    status, state_now = call("/api/state")
+    check(
+        "and arrives whole in state, not by id",
+        any(g["id"] == gid and "members" in g for g in state_now.get("groups", [])),
+        state_now.get("groups"),
+    )
+
+    # Membership needs a real session, so make one.
+    status, sess = call(
+        "/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "group member"}
+    )
+    sid = sess.get("id", "")
+    if sid:
+        status, got = call(f"/api/groups/{gid}/add", "POST", {"session": sid})
+        member = (got.get("members") or [{}])[0]
+        check(
+            "adding a session stores a snapshot",
+            member.get("session") == sid
+            and member.get("cli") == "shell"
+            and member.get("cwd") == "/tmp",
+            member,
+        )
+
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {})
+        check("opening reports what is now running", sid in (opened.get("sessions") or []), opened)
+        check(
+            "and separates missing from failed",
+            isinstance(opened.get("missing"), list) and isinstance(opened.get("failed"), list),
+            opened,
+        )
+
+        # A member whose session is gone is reported, never silently dropped,
+        # and never recreated unless asked.
+        call(f"/api/sessions/{sid}", "DELETE")
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {})
+        check(
+            "a deleted member is reported as missing", len(opened.get("missing") or []) == 1, opened
+        )
+        check("and is not recreated behind your back", opened.get("sessions") == [], opened)
+        status, opened = call(f"/api/groups/{gid}/open", "POST", {"recreate": True})
+        check("recreate brings it back when asked", len(opened.get("sessions") or []) == 1, opened)
+        check(
+            "and the group now points at the new session",
+            (opened.get("missing") or []) == [],
+            opened,
+        )
+        for made_id in opened.get("sessions") or []:
+            call(f"/api/sessions/{made_id}", "DELETE")
+
+    status, _ = call(f"/api/groups/{gid}/delete", "POST")
+    check("a group can be deleted", status == 200, status)
+    status, _ = call(f"/api/groups/{gid}/open", "POST", {})
+    check("and is gone afterwards", status == 404, status)
+
+    print("what a stranger may fetch")
+    # PUBLIC_ASSETS is an allow-list, and it went dead once already: closing a
+    # traversal hole replaced the whole check with a "is it inside brand/"
+    # test, which silently un-published the manifest and the favicon. Nothing
+    # noticed for months, because the only symptom was that a phone would not
+    # offer to install the app, and nobody tests that from a logged-out page.
+    import urllib.error
+    import urllib.request
+
+    def anon_fetch(path: str) -> tuple[int, str, bytes]:
+        try:
+            with urllib.request.urlopen(BASE + path, timeout=5) as r:
+                return r.status, r.headers.get("Content-Type", ""), r.read(400)
+        except urllib.error.HTTPError as exc:
+            return exc.code, "", b""
+
+    for path, kind in (
+        ("/manifest.webmanifest", "manifest"),
+        ("/favicon.ico", "icon"),
+        ("/sw.js", "javascript"),
+        ("/brand/apple-touch-icon.png", "png"),
+    ):
+        status, ctype, _ = anon_fetch(path)
+        check(
+            f"{path} is served before login", status == 200 and kind in ctype, f"{status} {ctype}"
+        )
+
+    # The other half: the shell stays behind the password. A gated asset is
+    # answered with the login page rather than a 403, so "is it HTML" is the
+    # test, not the status code.
+    for path in (
+        "/app.js",
+        "/sidebar-status.js",
+        "/file-preview.js",
+        "/providers.js",
+        "/panes.js",
+        "/index.html",
+        "/app.css",
+        "/themes.js",
+    ):
+        _, _, body = anon_fetch(path)
+        check(f"{path} is not", b"<!doctype html>" in body.lower(), body[:40])
+
+    # And the traversal that made the allow-list get rewritten in the first
+    # place. Resolved-path comparison is what keeps this closed; a prefix
+    # check would let every one of these through.
+    for path in (
+        "/brand/../app.js",
+        "/brand/../index.html",
+        "/brand/../../etc/passwd",
+        "/brand/../app.css",
+    ):
+        _, _, body = anon_fetch(path)
+        check(f"{path} climbs nowhere", b"<!doctype html>" in body.lower(), body[:40])
+
     print("api")
     status, state = call("/api/state")
     check("state loads", status == 200 and "folders" in state, status)
@@ -318,8 +451,9 @@ def _run() -> int:
     check("stats present", "cpu" in state.get("stats", {}))
 
     print("session lifecycle")
-    status, created = call("/api/sessions", "POST",
-                           {"cli": "shell", "cwd": "/tmp", "name": "smoke-http"})
+    status, created = call(
+        "/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "smoke-http"}
+    )
     check("creates a session", status == 201 and "id" in created, created)
     sid = created.get("id")
 
@@ -334,19 +468,42 @@ def _run() -> int:
     check("rejects an unknown CLI", status == 400, status)
 
     print("terminal")
-    url = BASE.replace("https://", "wss://").replace("http://", "ws://") + \
-          f"/ws?id={sid}&cols=100&rows=30"
+    url = (
+        BASE.replace("https://", "wss://").replace("http://", "ws://")
+        + f"/ws?id={sid}&cols=100&rows=30"
+    )
     client = Client(url, cookie, bearer)
     check("websocket handshake", "101" in client.status, client.status)
     client.drain(1.5)  # scrollback + initial paint
     client.send(b"echo hello-from-clique\n")
     out = client.drain(2.5)
-    check("keystrokes reach the pane and output comes back",
-          b"hello-from-clique" in out, out[-160:])
+    check(
+        "keystrokes reach the pane and output comes back", b"hello-from-clique" in out, out[-160:]
+    )
 
     client.send(json.dumps({"type": "run", "text": "echo via-control"}).encode(), OP_TEXT)
     out = client.drain(2.5)
     check("control frame runs a command", b"via-control" in out, out[-160:])
+    status, peek = call(f"/api/sessions/{sid}/peek?lines=3")
+    check(
+        "peek returns the pane's last lines",
+        status == 200 and any("via-control" in line for line in peek.get("lines", [])),
+        peek,
+    )
+
+    # A reattach replays history deeper than a few thousand lines, or a phone
+    # opening a long session cannot scroll back to its start.
+    client.send(b"clear; seq -f L%05g 1 9000\n")
+    client.drain(2.0)
+    client.close()
+    time.sleep(0.5)
+    client = Client(url, cookie, bearer)
+    replay = client.drain(2.5)
+    check(
+        "a reattach replays deep history",
+        b"L00500" in replay and b"L09000" in replay,
+        str(len(replay)),
+    )
 
     client.send(json.dumps({"type": "resize", "cols": 80, "rows": 24}).encode(), OP_TEXT)
     time.sleep(0.5)
@@ -358,12 +515,16 @@ def _run() -> int:
     # Each of these was a real finding. They are asserted here so that fixing
     # them once is the same as fixing them for good.
     status, state = call("/api/state")
-    check("the webhook secret never comes back",
-          state.get("settings", {}).get("webhook_secret", "") == "",
-          "settings carried a secret")
-    check("but the UI can still tell one is set",
-          "webhook_secret_set" in state.get("settings", {}),
-          sorted(state.get("settings", {}))[:6])
+    check(
+        "the webhook secret never comes back",
+        state.get("settings", {}).get("webhook_secret", "") == "",
+        "settings carried a secret",
+    )
+    check(
+        "but the UI can still tell one is set",
+        "webhook_secret_set" in state.get("settings", {}),
+        sorted(state.get("settings", {}))[:6],
+    )
 
     # /brand/ is served before login; urlparse does not collapse "..", so a
     # startswith() test let the whole application shell out unauthenticated.
@@ -372,37 +533,50 @@ def _run() -> int:
     # was served, not about the status code — a 200 carrying the password form
     # is correct, and a 200 carrying app.js is the bug.
     for probe, forbidden, label in (
-            (f"{BASE}/brand/../app.js", b"CLIque front end", "the app script"),
-            (f"{BASE}/brand/../index.html", b'id="tabbar"', "the app page")):
-        request = urllib.request.Request(probe)   # deliberately no credentials
+        (f"{BASE}/brand/../app.js", b"CLIque front end", "the app script"),
+        (f"{BASE}/brand/../index.html", b'id="tabbar"', "the app page"),
+    ):
+        request = urllib.request.Request(probe)  # deliberately no credentials
         try:
             with urllib.request.urlopen(request, timeout=10) as res:
                 served = res.read()
-            check(f"anonymous cannot climb out of /brand/ to {label}",
-                  forbidden not in served, served[:80])
+            check(
+                f"anonymous cannot climb out of /brand/ to {label}",
+                forbidden not in served,
+                served[:80],
+            )
         except urllib.error.HTTPError as err:
-            check(f"anonymous cannot climb out of /brand/ to {label}",
-                  err.code in (401, 403, 404), err.code)
+            check(
+                f"anonymous cannot climb out of /brand/ to {label}",
+                err.code in (401, 403, 404),
+                err.code,
+            )
 
     # A folder colour is written straight into a `style` attribute in the
     # sidebar, so anything that is not a hex triple is a way to put script on
     # the next person's screen. The setter refuses it and keeps what was there.
-    status, folder = call("/api/folders", "POST",
-                          {"name": "smoke-colour", "color": 'red" onmouseover="x'})
+    status, folder = call(
+        "/api/folders", "POST", {"name": "smoke-colour", "color": 'red" onmouseover="x'}
+    )
     check("a folder is created", status == 201 and folder.get("id"), folder)
     if folder.get("id"):
-        check("a bad colour never reaches the sidebar",
-              re.fullmatch(r"#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}", folder.get("color", "")),
-              folder.get("color"))
-        status, patched = call("/api/folders/" + folder["id"], "PATCH",
-                               {"color": "javascript:alert(1)"})
-        check("and a bad one cannot be patched in later",
-              patched.get("color") == folder.get("color"), patched.get("color"))
+        check(
+            "a bad colour never reaches the sidebar",
+            re.fullmatch(r"#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}", folder.get("color", "")),
+            folder.get("color"),
+        )
+        status, patched = call(
+            "/api/folders/" + folder["id"], "PATCH", {"color": "javascript:alert(1)"}
+        )
+        check(
+            "and a bad one cannot be patched in later",
+            patched.get("color") == folder.get("color"),
+            patched.get("color"),
+        )
         call("/api/folders/" + folder["id"], "DELETE")
 
     status, _ = call("/", "POST", None)
-    oversize = urllib.request.Request(BASE + "/", data=b"x" * 200,
-                                      method="POST")
+    oversize = urllib.request.Request(BASE + "/", data=b"x" * 200, method="POST")
     oversize.add_header("Content-Length", "999999999")
     try:
         urllib.request.urlopen(oversize, timeout=10)
@@ -424,47 +598,55 @@ def _run() -> int:
     # attach and that repaint is idempotent, so the same text legitimately
     # crosses the wire more than once; what must never happen is a repaint at a
     # width the terminal does not have.
-    made_s = call("/api/sessions", "POST",
-                  {"cli": "shell", "cwd": "/tmp", "name": "size-order"})[1]
+    made_s = call("/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "size-order"})[1]
     time.sleep(0.8)
-    mux = next((p.mux for p in tmux.list_sessions(SOCKET)
-                if p.ours and made_s["id"][:8] in p.mux), "")
+    mux = next(
+        (p.mux for p in tmux.list_sessions(SOCKET) if p.ours and made_s["id"][:8] in p.mux), ""
+    )
     check("a session to size", bool(mux), made_s)
     if mux:
+
         def pane_width():
             try:
-                return int(tmux._run(["display-message", "-p", "-t", f"={mux}:",
-                                      "#{pane_width}"], SOCKET).strip())
+                return int(
+                    tmux._run(
+                        ["display-message", "-p", "-t", f"={mux}:", "#{pane_width}"], SOCKET
+                    ).strip()
+                )
             except (tmux.TmuxError, ValueError):
                 return -1
 
         check("starts wider than any browser", pane_width() > 120, pane_width())
-        socket_url = BASE.replace("https://", "wss://").replace("http://", "ws://") + \
-            f"/ws?id={made_s['id']}&cols=100&rows=30"
+        socket_url = (
+            BASE.replace("https://", "wss://").replace("http://", "ws://")
+            + f"/ws?id={made_s['id']}&cols=100&rows=30"
+        )
         watcher = Client(socket_url, cookie, bearer)
         seen = watcher.drain(3.0)
-        check("output only begins once the pane is the browser's size",
-              bool(seen) and pane_width() == 100,
-              f"width was {pane_width()} after {len(seen)} bytes")
+        check(
+            "output only begins once the pane is the browser's size",
+            bool(seen) and pane_width() == 100,
+            f"width was {pane_width()} after {len(seen)} bytes",
+        )
         time.sleep(0.6)
-        check("and it is not resized again underneath that output",
-              pane_width() == 100, pane_width())
+        check(
+            "and it is not resized again underneath that output", pane_width() == 100, pane_width()
+        )
         # A hidden reconnect used to shrink the window anyway: tmux sizes to
         # the latest client, and skipping resize-window left the viewer's PTY
         # as that client.
-        quiet = BASE.replace("https://", "wss://").replace("http://", "ws://") + \
-            f"/ws?id={made_s['id']}&cols=40&rows=10&passive=1"
+        quiet = (
+            BASE.replace("https://", "wss://").replace("http://", "ws://")
+            + f"/ws?id={made_s['id']}&cols=40&rows=10&passive=1"
+        )
         background = Client(quiet, cookie, bearer)
         background.drain(1.5)
         time.sleep(0.4)
-        check("a passive attach does not shrink the pane",
-              pane_width() == 100, pane_width())
+        check("a passive attach does not shrink the pane", pane_width() == 100, pane_width())
         tmux.resize_window(mux, 5, 5, SOCKET)
         check("a collapsed size is ignored", pane_width() == 100, pane_width())
-        size_opt = tmux._run(["show-window-options", "-t", mux, "window-size"],
-                             SOCKET)
-        check("the window does not autoscale from attach",
-              "manual" in size_opt, size_opt.strip())
+        size_opt = tmux._run(["show-window-options", "-t", mux, "window-size"], SOCKET)
+        check("the window does not autoscale from attach", "manual" in size_opt, size_opt.strip())
         background.close()
         watcher.close()
     call("/api/sessions/" + made_s["id"], "DELETE")
@@ -478,8 +660,11 @@ def _run() -> int:
     check("creates a path, parents and all", status == 201 and got.get("exists"), got)
     status, _ = call("/api/workspace", "POST", {"cwd": fresh})
     check("and asking twice is not an error", status == 201, status)
-    for bad, why in ((""," an empty path"), ("some/where", " a relative path"),
-                     ("/etc/hostname", " a file")):
+    for bad, why in (
+        ("", " an empty path"),
+        ("some/where", " a relative path"),
+        ("/etc/hostname", " a file"),
+    ):
         status, body = call("/api/workspace", "POST", {"cwd": bad})
         check("refuses" + why, status == 400 and body.get("error"), (status, body))
     shutil.rmtree(Path(fresh).parents[1], ignore_errors=True)
@@ -491,11 +676,17 @@ def _run() -> int:
     _, back = call("/api/settings", "PATCH", {"history_days": 21})
     check("a number stays a number", back.get("history_days") == 21, back.get("history_days"))
     _, back = call("/api/settings", "PATCH", {"history_days": 9999})
-    check("and is clamped rather than refused", back.get("history_days") == 90,
-          back.get("history_days"))
+    check(
+        "and is clamped rather than refused",
+        back.get("history_days") == 90,
+        back.get("history_days"),
+    )
     _, back = call("/api/settings", "PATCH", {"history_in_sidebar": True})
-    check("a checkbox is still a checkbox", back.get("history_in_sidebar") is True,
-          back.get("history_in_sidebar"))
+    check(
+        "a checkbox is still a checkbox",
+        back.get("history_in_sidebar") is True,
+        back.get("history_in_sidebar"),
+    )
     call("/api/settings", "PATCH", {"history_days": 14, "history_in_sidebar": False})
 
     print("finding a directory you have not opened yet")
@@ -503,6 +694,7 @@ def _run() -> int:
     # you have never started a session in, which is exactly when you are least
     # likely to remember where it lives.
     import urllib.parse as _up
+
     def browse(where):
         return call("/api/browse?path=" + _up.quote(where))[1].get("dirs", [])
 
@@ -515,10 +707,14 @@ def _run() -> int:
     found = browse(str(made_dir) + "/alpha")
     check("a partial segment matches its siblings", len(found) == 2, found)
     check("files are never offered", not any("a-file" in d for d in browse(str(made_dir) + "/")))
-    check("hidden ones stay hidden until asked for",
-          not any(".hidden" in d for d in browse(str(made_dir) + "/")))
-    check("and appear once the dot is typed",
-          any(".hidden" in d for d in browse(str(made_dir) + "/.")))
+    check(
+        "hidden ones stay hidden until asked for",
+        not any(".hidden" in d for d in browse(str(made_dir) + "/")),
+    )
+    check(
+        "and appear once the dot is typed",
+        any(".hidden" in d for d in browse(str(made_dir) + "/.")),
+    )
     check("a path that is not there completes to nothing", browse("/nope/nowhere/") == [])
     check("and a relative one is refused outright", browse("some/where") == [])
     shutil.rmtree(made_dir, ignore_errors=True)
@@ -537,8 +733,11 @@ def _run() -> int:
     check("mints a read-only token", bool(ro_token), made.stdout[-120:])
 
     status, _ = call("/api/state", body=None)
-    ro_req = urllib.request.Request(BASE + "/api/sessions", method="POST",
-                                    data=json.dumps({"cli": "shell", "cwd": "/tmp"}).encode())
+    ro_req = urllib.request.Request(
+        BASE + "/api/sessions",
+        method="POST",
+        data=json.dumps({"cli": "shell", "cwd": "/tmp"}).encode(),
+    )
     ro_req.add_header("Content-Type", "application/json")
     ro_req.add_header("Authorization", "Bearer " + ro_token)
     try:
@@ -564,10 +763,12 @@ def _run() -> int:
     ro_client.close()
     time.sleep(1.0)
 
-    check("keystrokes from a read-only token do not run",
-          not proof_keys.exists(), f"{proof_keys} was created")
-    check("nor does a control frame",
-          not proof_ctl.exists(), f"{proof_ctl} was created")
+    check(
+        "keystrokes from a read-only token do not run",
+        not proof_keys.exists(),
+        f"{proof_keys} was created",
+    )
+    check("nor does a control frame", not proof_ctl.exists(), f"{proof_ctl} was created")
     for leftover in (proof_keys, proof_ctl):
         with contextlib.suppress(OSError):
             leftover.unlink()
@@ -586,22 +787,25 @@ def _run() -> int:
 
     print("workspace")
     _, before = call("/api/state")
-    kept = {k: before["settings"][k]
-            for k in ("open_tabs", "active_tab", "views_collapsed")}
-    status, saved = call("/api/settings", "PATCH", {
-        "open_tabs": ["a", "b", "a", "c"],     # the repeat must be dropped
-        "active_tab": "b",
-        "views_collapsed": ["__archived", "__running"],
-    })
-    check("stores the open tabs, in order, without repeats",
-          status == 200 and saved["open_tabs"] == ["a", "b", "c"],
-          saved.get("open_tabs"))
+    kept = {k: before["settings"][k] for k in ("open_tabs", "active_tab", "views_collapsed")}
+    status, saved = call(
+        "/api/settings",
+        "PATCH",
+        {
+            "open_tabs": ["a", "b", "a", "c"],  # the repeat must be dropped
+            "active_tab": "b",
+            "views_collapsed": ["__archived", "__running"],
+        },
+    )
+    check(
+        "stores the open tabs, in order, without repeats",
+        status == 200 and saved["open_tabs"] == ["a", "b", "c"],
+        saved.get("open_tabs"),
+    )
     check("stores which tab was in front", saved["active_tab"] == "b")
-    check("stores the shut view-groups",
-          saved["views_collapsed"] == ["__archived", "__running"])
+    check("stores the shut view-groups", saved["views_collapsed"] == ["__archived", "__running"])
     _, again = call("/api/state")
-    check("comes back on the next panel to load",
-          again["settings"]["open_tabs"] == ["a", "b", "c"])
+    check("comes back on the next panel to load", again["settings"]["open_tabs"] == ["a", "b", "c"])
     call("/api/settings", "PATCH", kept)
 
     print("health")
@@ -609,22 +813,28 @@ def _run() -> int:
     check("answers a monitor without a login", status == 200 and health["ok"], status)
     check("tells an anonymous caller nothing else", list(health) == ["ok"], list(health))
     status, health = call("/healthz")
-    check("fills in for a signed-in caller",
-          status == 200 and health.get("tmux") and health.get("sessions") is not None,
-          health)
+    check(
+        "fills in for a signed-in caller",
+        status == 200 and health.get("tmux") and health.get("sessions") is not None,
+        health,
+    )
 
     print("changelog")
     status, log = call("/api/changelog")
     newest = log[0] if status == 200 and log else {}
     check("serves parsed release notes", status == 200 and len(log) > 1, status)
-    check("every entry carries a wall-clock time",
-          bool(log) and all(e["time"] and e["zone"] for e in log),
-          next((e["version"] for e in log if not e["time"]), ""))
+    check(
+        "every entry carries a wall-clock time",
+        bool(log) and all(e["time"] and e["zone"] for e in log),
+        next((e["version"] for e in log if not e["time"]), ""),
+    )
     _, running = call("/api/state")
     version = str(running.get("version", "")).split("+")[0]
     check("newest first", bool(newest) and newest["version"] == version, version)
-    check("markdown came back as structure, not markup",
-          bool(newest.get("blocks")) and "spans" in newest["blocks"][0])
+    check(
+        "markdown came back as structure, not markup",
+        bool(newest.get("blocks")) and "spans" in newest["blocks"][0],
+    )
 
     print("webhook")
     # A real receiver on a real socket. The failure modes worth catching here
@@ -635,11 +845,13 @@ def _run() -> int:
     class Catcher(http.server.BaseHTTPRequestHandler):
         def do_POST(self):
             raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
-            caught.append({
-                "body": json.loads(raw or b"{}"),
-                "signature": self.headers.get("X-CLIque-Signature", ""),
-                "raw": raw,
-            })
+            caught.append(
+                {
+                    "body": json.loads(raw or b"{}"),
+                    "signature": self.headers.get("X-CLIque-Signature", ""),
+                    "raw": raw,
+                }
+            )
             self.send_response(200)
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -651,8 +863,9 @@ def _run() -> int:
     threading.Thread(target=receiver.serve_forever, daemon=True).start()
     hook = f"http://127.0.0.1:{receiver.server_address[1]}/hook"
 
-    status, saved = call("/api/settings", "PATCH",
-                         {"webhook_url": hook, "webhook_secret": "s3cret"})
+    status, saved = call(
+        "/api/settings", "PATCH", {"webhook_url": hook, "webhook_secret": "s3cret"}
+    )
     check("stores a webhook URL", saved.get("webhook_url") == hook, saved.get("webhook_url"))
     status, saved = call("/api/settings", "PATCH", {"webhook_url": "file:///etc/passwd"})
     check("refuses a non-http scheme", saved.get("webhook_url") == "", saved.get("webhook_url"))
@@ -673,12 +886,17 @@ def _run() -> int:
     check("and it arrives", bool(caught), "nothing arrived in 10s")
     if caught:
         first = caught[0]
-        check("the event says what happened", first["body"].get("event") == "test",
-              first["body"].get("event"))
+        check(
+            "the event says what happened",
+            first["body"].get("event") == "test",
+            first["body"].get("event"),
+        )
         check("body carries readable text", bool(first["body"].get("text")), first["body"])
-        check("signature is over the bytes actually sent",
-              first["signature"] == notify.sign(first["raw"], "s3cret"),
-              first["signature"][:24])
+        check(
+            "signature is over the bytes actually sent",
+            first["signature"] == notify.sign(first["raw"], "s3cret"),
+            first["signature"][:24],
+        )
 
     call("/api/settings", "PATCH", {"webhook_url": "", "webhook_secret": ""})
     status, _none = call("/api/webhook/test", "POST", {})
@@ -686,8 +904,9 @@ def _run() -> int:
     receiver.shutdown()
 
     print("attention")
-    status, note = call("/api/sessions", "POST",
-                        {"cli": "shell", "cwd": "/tmp", "name": "smoke-attention"})
+    status, note = call(
+        "/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "smoke-attention"}
+    )
     att_id = note.get("id", "")
     check("session for the attention checks", status == 201 and bool(att_id), note)
     # The first prompt ticks tmux's activity clock (whole seconds). Wait for
@@ -695,8 +914,9 @@ def _run() -> int:
     time.sleep(1.2)
 
     status, said = call(f"/api/sessions/{att_id}/attention", "POST", {"state": "waiting"})
-    check("a session can say it is waiting",
-          status == 200 and said.get("signal") == "waiting", said)
+    check(
+        "a session can say it is waiting", status == 200 and said.get("signal") == "waiting", said
+    )
     _, state = call("/api/state")
     row = next((x for x in state["sessions"] if x["id"] == att_id), {})
     check("and the panel repeats it back", row.get("signal") == "waiting", row.get("signal"))
@@ -718,14 +938,16 @@ def _run() -> int:
     time.sleep(1.5)
     _, state = call("/api/state")
     row = next((x for x in state["sessions"] if x["id"] == att_id), {})
-    check("a signal goes stale once the session moves on",
-          row.get("signal") == "", row.get("signal"))
+    check(
+        "a signal goes stale once the session moves on", row.get("signal") == "", row.get("signal")
+    )
 
     call(f"/api/sessions/{att_id}", "DELETE")
 
     print("stop keeps the row")
-    status, note = call("/api/sessions", "POST",
-                        {"cli": "shell", "cwd": "/tmp", "name": "smoke-keep"})
+    status, note = call(
+        "/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "smoke-keep"}
+    )
     keep_id = note.get("id", "")
     check("session to stop", status == 201 and bool(keep_id), note)
     status, stopped = call(f"/api/sessions/{keep_id}/kill", "POST", {})
@@ -745,20 +967,24 @@ def _run() -> int:
 
     print("clock zone")
     status, saved = call("/api/settings", "PATCH", {"clock_zone": "Europe/Lisbon"})
-    check("stores a real zone", saved.get("clock_zone") == "Europe/Lisbon",
-          saved.get("clock_zone"))
+    check("stores a real zone", saved.get("clock_zone") == "Europe/Lisbon", saved.get("clock_zone"))
     # A name the browser would reject has to die here: Intl throws on a bad
     # zone, and that would take the pane down rather than degrade.
     status, saved = call("/api/settings", "PATCH", {"clock_zone": "Mars/Olympus"})
-    check("refuses a zone that does not exist", saved.get("clock_zone") == "Europe/Lisbon",
-          saved.get("clock_zone"))
+    check(
+        "refuses a zone that does not exist",
+        saved.get("clock_zone") == "Europe/Lisbon",
+        saved.get("clock_zone"),
+    )
     status, saved = call("/api/settings", "PATCH", {"clock_zone": ""})
     check("blank means the browser's own", saved.get("clock_zone") == "", saved.get("clock_zone"))
 
     print("per-CLI colours")
-    status, saved = call("/api/settings", "PATCH",
-                         {"cli_colors": {"claude": "#ABCDEF", "grok": "javascript:x",
-                                         "shell": "#f0f"}})
+    status, saved = call(
+        "/api/settings",
+        "PATCH",
+        {"cli_colors": {"claude": "#ABCDEF", "grok": "javascript:x", "shell": "#f0f"}},
+    )
     colours = saved.get("cli_colors", {})
     check("stores a colour, lower-cased", colours.get("claude") == "#abcdef", colours)
     check("takes the short form too", colours.get("shell") == "#f0f", colours)
@@ -766,10 +992,16 @@ def _run() -> int:
     # colour has to die here rather than downstream.
     check("drops anything that is not a colour", "grok" not in colours, colours)
     status, saved = call("/api/settings", "PATCH", {"cli_colors": {"claude": None}})
-    check("null restores the shipped colour",
-          "claude" not in saved.get("cli_colors", {}), saved.get("cli_colors"))
-    check("and leaves the others alone",
-          saved.get("cli_colors", {}).get("shell") == "#f0f", saved.get("cli_colors"))
+    check(
+        "null restores the shipped colour",
+        "claude" not in saved.get("cli_colors", {}),
+        saved.get("cli_colors"),
+    )
+    check(
+        "and leaves the others alone",
+        saved.get("cli_colors", {}).get("shell") == "#f0f",
+        saved.get("cli_colors"),
+    )
     call("/api/settings", "PATCH", {"cli_colors": {"shell": None}})
 
     print("artifacts")
@@ -777,8 +1009,9 @@ def _run() -> int:
     # read, so mocking the filesystem would test nothing that can break.
     art_dir = Path("/tmp") / f"clique-art-{secrets.token_hex(4)}"
     art_dir.mkdir()
-    status, art_session = call("/api/sessions", "POST",
-                               {"cli": "shell", "cwd": str(art_dir), "name": "smoke-art"})
+    status, art_session = call(
+        "/api/sessions", "POST", {"cli": "shell", "cwd": str(art_dir), "name": "smoke-art"}
+    )
     art_id = art_session.get("id", "")
     check("session for the artifact checks", status == 201 and bool(art_id), art_session)
     status, listing = call(f"/api/sessions/{art_id}/artifacts")
@@ -787,14 +1020,21 @@ def _run() -> int:
     # Smallest valid PNG: a 1x1 image, so the magic-byte check has something
     # true to agree with rather than a file that merely ends in .png.
     png = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
     (art_dir / "shot.png").write_bytes(png)
     (art_dir / "notes.txt").write_bytes(b"not an image")
     status, listing = call(f"/api/sessions/{art_id}/artifacts")
-    check("finds an image written after the session started",
-          status == 200 and [row["rel"] for row in listing] == ["shot.png"], listing)
-    check("hands back both paths a caller needs",
-          bool(listing) and listing[0]["path"] == str(art_dir / "shot.png"), listing)
+    check(
+        "finds an image written after the session started",
+        status == 200 and [row["rel"] for row in listing] == ["shot.png"],
+        listing,
+    )
+    check(
+        "hands back both paths a caller needs",
+        bool(listing) and listing[0]["path"] == str(art_dir / "shot.png"),
+        listing,
+    )
 
     def fetch_raw(path: str):
         req = urllib.request.Request(BASE + path)
@@ -813,11 +1053,14 @@ def _run() -> int:
 
     # The three ways a path can try to leave the working directory. All of them
     # are re-derived server-side, so none of them depends on the browser.
-    for label, rel in (("climbing out", "../etc/passwd"),
-                       ("an absolute path", "/etc/hostname"),
-                       ("a file that is not an image", "notes.txt")):
+    for label, rel in (
+        ("climbing out", "../etc/passwd"),
+        ("an absolute path", "/etc/hostname"),
+        ("a file that is not an image", "notes.txt"),
+    ):
         status, _kind, _body = fetch_raw(
-            f"/api/sessions/{art_id}/artifact?rel={urllib.parse.quote(rel)}")
+            f"/api/sessions/{art_id}/artifact?rel={urllib.parse.quote(rel)}"
+        )
         check(f"refuses {label}", status == 404, status)
 
     call(f"/api/sessions/{art_id}", "DELETE")
@@ -832,39 +1075,43 @@ def _run() -> int:
     (file_dir / "readme.md").write_text("# hi\n", encoding="utf-8")
     (file_dir / "shot.png").write_bytes(png)
     (file_dir / "sub").mkdir()
-    status, file_session = call("/api/sessions", "POST",
-                                {"cli": "shell", "cwd": str(file_dir),
-                                 "name": "smoke-file"})
+    (file_dir / "sub" / "child.md").write_text("nested\n", encoding="utf-8")
+    status, file_session = call(
+        "/api/sessions", "POST", {"cli": "shell", "cwd": str(file_dir), "name": "smoke-file"}
+    )
     file_id = file_session.get("id", "")
     check("session for the file checks", status == 201 and bool(file_id), file_session)
     q = urllib.parse.quote
     status, info = call(f"/api/sessions/{file_id}/file?path=readme.md")
-    check("reads a relative file",
-          status == 200 and info.get("kind") == "text" and info.get("text") == "# hi\n",
-          info)
+    check(
+        "reads a relative file",
+        status == 200 and info.get("kind") == "text" and info.get("text") == "# hi\n",
+        info,
+    )
     status, info = call(f"/api/sessions/{file_id}/file?path=readme.md:12")
-    check("strips a :line suffix",
-          status == 200 and info.get("kind") == "text", info)
+    check("strips a :line suffix", status == 200 and info.get("kind") == "text", info)
     status, info = call(f"/api/sessions/{file_id}/file?path=shot.png")
-    check("describes an image without dumping it",
-          status == 200 and info.get("kind") == "image" and not info.get("text"),
-          info)
-    status, kind, body = fetch_raw(
-        f"/api/sessions/{file_id}/file?path={q('shot.png')}&raw=1")
+    check(
+        "describes an image without dumping it",
+        status == 200 and info.get("kind") == "image" and not info.get("text"),
+        info,
+    )
+    status, kind, body = fetch_raw(f"/api/sessions/{file_id}/file?path={q('shot.png')}&raw=1")
     check("serves the image itself on raw=1", status == 200 and body == png, status)
     check("typed from its bytes", kind == "image/png", kind)
     status, info = call(f"/api/sessions/{file_id}/file?path=nope.md")
-    check("missing is missing, not an error",
-          status == 200 and info.get("kind") == "missing", info)
+    check("missing is missing, not an error", status == 200 and info.get("kind") == "missing", info)
     status, info = call(f"/api/sessions/{file_id}/file?path=sub")
-    check("a directory is a directory",
-          status == 200 and info.get("kind") == "dir", info)
+    names = [row.get("name") for row in (info.get("entries") or [])]
+    check("a directory is a directory", status == 200 and info.get("kind") == "dir", info)
+    check("and it names what is inside", "child.md" in names and ".." in names, names)
     status, info = call("/api/sessions/no-such/file?path=x")
     check("unknown session is 404", status == 404, info)
     call(f"/api/sessions/{file_id}", "DELETE")
     with contextlib.suppress(OSError):
         (file_dir / "readme.md").unlink()
         (file_dir / "shot.png").unlink()
+        (file_dir / "sub" / "child.md").unlink()
         (file_dir / "sub").rmdir()
         file_dir.rmdir()
 
@@ -872,12 +1119,15 @@ def _run() -> int:
     git_dir = Path("/tmp") / f"clique-git-{secrets.token_hex(4)}"
     git_dir.mkdir()
     subprocess.run(["git", "init"], cwd=git_dir, check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(git_dir), "symbolic-ref", "HEAD",
-                    "refs/heads/visual"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(git_dir), "symbolic-ref", "HEAD", "refs/heads/visual"],
+        check=True,
+        capture_output=True,
+    )
     (git_dir / "a.txt").write_text("x\n", encoding="utf-8")
-    status, git_session = call("/api/sessions", "POST",
-                               {"cli": "shell", "cwd": str(git_dir),
-                                "name": "smoke-git"})
+    status, git_session = call(
+        "/api/sessions", "POST", {"cli": "shell", "cwd": str(git_dir), "name": "smoke-git"}
+    )
     git_id = git_session.get("id", "")
     check("session for the git checks", status == 201 and bool(git_id), git_session)
     got = {}
@@ -890,9 +1140,11 @@ def _run() -> int:
     check("the session names the branch", got.get("branch") == "visual", got)
     check("and counts the untracked file", got.get("dirty") == 1, got)
     status, look = call("/api/workspace?cwd=" + urllib.parse.quote(str(git_dir)))
-    check("the new-session look agrees",
-          status == 200 and look.get("branch") == "visual" and look.get("dirty") == 1,
-          look)
+    check(
+        "the new-session look agrees",
+        status == 200 and look.get("branch") == "visual" and look.get("dirty") == 1,
+        look,
+    )
     call(f"/api/sessions/{git_id}", "DELETE")
     shutil.rmtree(git_dir, ignore_errors=True)
 
@@ -901,6 +1153,35 @@ def _run() -> int:
     req.add_header("Cookie", cookie)
     with urllib.request.urlopen(req, timeout=10) as res:
         check("serves the app", res.status == 200 and b"CLIque" in res.read()[:400])
+    req = urllib.request.Request(BASE + "/sidebar-status.js")
+    req.add_header("Cookie", cookie)
+    with urllib.request.urlopen(req, timeout=10) as res:
+        check(
+            "serves split sidebar code",
+            res.status == 200 and b"Sidebar plan usage" in res.read()[:400],
+        )
+    req = urllib.request.Request(BASE + "/file-preview.js")
+    req.add_header("Cookie", cookie)
+    with urllib.request.urlopen(req, timeout=10) as res:
+        check(
+            "serves split file preview code",
+            res.status == 200 and b"File, transcript, and usage preview" in res.read()[:400],
+        )
+    req = urllib.request.Request(BASE + "/providers.js")
+    req.add_header("Cookie", cookie)
+    with urllib.request.urlopen(req, timeout=10) as res:
+        check(
+            "serves split providers code",
+            res.status == 200
+            and b"Model providers, palette, and pane interaction helpers" in res.read()[:400],
+        )
+    req = urllib.request.Request(BASE + "/panes.js")
+    req.add_header("Cookie", cookie)
+    with urllib.request.urlopen(req, timeout=10) as res:
+        check(
+            "serves split panes code",
+            res.status == 200 and b"Notes, Git, Session info and Export panes" in res.read()[:400],
+        )
     # Every inline <script> must carry a nonce the CSP header actually allows.
     # This exists because curl does not enforce CSP: the policy shipped with a
     # bare `script-src 'self'`, every inline script on every page was silently
@@ -918,9 +1199,11 @@ def _run() -> int:
         allowed = re.findall(r"'nonce-([A-Za-z0-9_-]+)'", policy)
         inline = re.findall(r"<script(?![^>]*\ssrc=)([^>]*)>", html)
         ok = all(any(f'nonce="{n}"' in tag for n in allowed) for tag in inline)
-        check(f"{name} page: inline scripts carry an allowed nonce",
-              bool(inline) and bool(allowed) and ok,
-              f"{len(inline)} inline, {len(allowed)} nonce(s)")
+        check(
+            f"{name} page: inline scripts carry an allowed nonce",
+            bool(inline) and bool(allowed) and ok,
+            f"{len(inline)} inline, {len(allowed)} nonce(s)",
+        )
 
     status, _ = call("/../etc/passwd")
     # Direct, this is our 404. Through tailscale serve the proxy rejects it

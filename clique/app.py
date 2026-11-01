@@ -13,13 +13,13 @@ haunting the sidebar forever.
 
 from __future__ import annotations
 
-import base64
-import binascii
 import contextlib
 import dataclasses
+import datetime
 import json
 import mimetypes
 import os
+import random
 import secrets
 import shlex
 import sys
@@ -27,6 +27,7 @@ import threading
 import time
 import traceback
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -36,15 +37,22 @@ from . import (
     attention,
     changelog,
     files,
+    file_routes,
     gitinfo,
     llm,
     migrate,
     notify,
+    pairing,
+    provider_routes,
+    projects,
     secretbox,
     services,
+    session_routes,
     sysinfo,
-    termstrip,
+    terminal_handler,
+    themegen,
     tmux,
+    usage,
     version_string,
     working,
     workspace,
@@ -53,20 +61,15 @@ from .auth import Auth, landing_page, login_page
 from .history import History as ConversationHistory
 from .registry import Registry, RegistryError
 from .registry import icon_is_full_colour as registry_icon_is_colour
-from .store import Session, Store, auto_folder, new_id
-from .stream import PtyBridge
+from .store import DEFAULT_SETTINGS, Session, Store, auto_folder, clock_time, new_id
 from .tokens import TokenStore
-from .wsproto import OP_TEXT, WebSocket, handshake_response
+
 
 WEB = Path(__file__).parent / "web"
 
 #: The reporter a hook-speaking CLI runs to report its state (clique/hook.py).
 #: Standard-library only, so any python can run it as a plain script.
 HOOK = Path(__file__).parent / "hook.py"
-
-#: A per-session note is a scratchpad, not a document store. Bounded so a paste
-#: gone wrong cannot write an unbounded file under the panel's home.
-NOTE_CAP = 100_000
 
 
 def _hooks_settings(python: str) -> str:
@@ -154,6 +157,33 @@ def host_allowed(host: str, extra: set[str]) -> bool:
 _STARTED = time.time()
 
 
+def _theme_seed(reply: str, asked: str) -> dict:
+    """The JSON out of a model's answer, however it chose to wrap it.
+
+    Told to send one object and nothing else, a model will still occasionally
+    fence it, preface it, or add a closing remark. Cutting from the first brace
+    to the last costs nothing and turns a whole class of "it did not work" into
+    a theme, so it is worth doing rather than being strict on principle.
+
+    The description is kept as a fallback label: a model that names its theme
+    gets to, and one that forgets still produces something recognisable in the
+    picker rather than a row called "Generated".
+    """
+    text = str(reply or "").strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("the model did not return a theme")
+    try:
+        seed = json.loads(text[start : end + 1])
+    except ValueError as exc:
+        raise ValueError(f"the model's theme was not valid JSON: {exc}") from exc
+    if not isinstance(seed, dict):
+        raise ValueError("the model did not return a theme")
+    if not str(seed.get("label") or "").strip():
+        seed["label"] = asked
+    return seed
+
+
 class Panel:
     """Everything the request handlers share. One instance per process."""
 
@@ -174,6 +204,7 @@ class Panel:
         self.conversations = ConversationHistory(registry)
         #: Failed logins per client address, for throttling.
         self.failures: dict[str, list[float]] = {}
+        self.failures_lock = threading.Lock()
         #: Watches for the transitions worth a notification. Only actually
         #: runs while a webhook URL is set, so a panel nobody has configured
         #: one on still costs nothing when idle.
@@ -184,6 +215,9 @@ class Panel:
         #: it only asks about CLIs that have a session open right now.
         self.services = services.Services(self)
         self.services.ensure()
+        #: Session id -> when to send `after_limit` (0 once sent). See
+        #: auto_resume_tick; the loop starts in serve().
+        self._limit_at: dict[str, float] = {}
         self.clients = 0
         self.allowed_hosts = {
             h.strip().lower()
@@ -202,6 +236,14 @@ class Panel:
         self._last_reap = 0.0
         self._last_idle_reap = 0.0
         self._last_sweep = 0.0
+        #: One outstanding device-pairing code. In memory on purpose: a
+        #: restart invalidating a code somebody is mid-way through typing is
+        #: the correct outcome, and a file would only make it outlive that.
+        self.pairing = pairing.Desk()
+        #: Sessions whose resume is being watched (see _recover_dead_resume).
+        #: Stopping or deleting one takes it out, so a session someone shut
+        #: down inside the grace window is never resurrected behind them.
+        self._resume_watch: set[str] = set()
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ views
@@ -236,6 +278,7 @@ class Panel:
         self._reap_viewers(tuple(sockets))
         self._reap_idle(panes)
         self._sweep_shares()
+        self._rotate_theme()
         return panes
 
     def _reap_viewers(self, sockets: tuple[str | None, ...]) -> None:
@@ -282,6 +325,79 @@ class Panel:
                 continue  # do not interrupt work in progress
             with contextlib.suppress(tmux.TmuxError):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
+
+    def _rotate_theme(self, force: bool = False) -> str | None:
+        """Put on a different theme when a scheduled slot has passed.
+
+        Rides the poll like the other housekeeping here, which means it only
+        runs while somebody has the panel open. That is the right shape for
+        this: nothing needs changing while nobody is looking, and the first
+        poll after opening catches up to the slot that has most recently gone
+        by. It catches up to *one* slot, never a week of them.
+
+        Random rather than a cycle, and never the one already on. A rotation
+        that lands on the theme you are wearing looks broken from the outside,
+        and with a pool of two a strict cycle and a random pick are the same
+        thing anyway.
+
+        Returns the theme now on, or None when nothing changed. None rather
+        than "" because "" is the built-in dark theme and a perfectly good
+        thing to rotate onto — reading it as "nothing happened" is what made
+        the button report failure while it was working.
+
+        The server never learns what a theme *is*. The presets live in
+        web/themes.js and are the browser's business; this moves an id the
+        person chose.
+        """
+        settings = self.store.settings
+        if not force and not settings.get("theme_rotate"):
+            return None
+        pool = [t for t in (settings.get("theme_rotate_pool") or []) if isinstance(t, str)]
+        if not pool:
+            return None
+        now = time.time()
+        if force:
+            slot = now
+        else:
+            slot = self._rotate_slot(now)
+            if slot is None or float(settings.get("theme_rotate_last") or 0) >= slot:
+                return None
+        current = settings.get("theme") or ""
+        choices = [t for t in pool if t != current] or pool
+        self.store.update_settings(
+            {"theme": random.choice(choices), "theme_rotate_last": int(slot)}  # noqa: S311, a theme pick is not a secret
+        )
+        return self.store.settings.get("theme") or ""
+
+    def _rotate_slot(self, now: float) -> float | None:
+        """The most recent scheduled change at or before ``now``, as a unix time.
+
+        Slots are `theme_rotate_at` plus whole multiples of the interval, in
+        the server's own local time, so "07:00 every 6 hours" is 07:00, 13:00,
+        19:00, 01:00 and stays on those times through a restart. Local rather
+        than UTC because the setting is a time of day and a person means their
+        morning by it; that it drifts by an hour across a daylight-saving
+        change is the correct answer for the same reason.
+        """
+        at = clock_time(str(self.store.settings.get("theme_rotate_at") or "")) or clock_time(
+            DEFAULT_SETTINGS["theme_rotate_at"]
+        )
+        if at is None:  # pragma: no cover - the default is a valid time
+            return None
+        try:
+            hours = max(1, int(self.store.settings.get("theme_rotate_hours") or 24))
+        except (TypeError, ValueError):
+            hours = 24
+        step = hours * 3600
+        anchor = datetime.datetime.fromtimestamp(now).replace(
+            hour=at[0], minute=at[1], second=0, microsecond=0
+        )
+        # `//` on floats floors toward minus infinity, so an anchor still to
+        # come today gives k = -1 and the slot before it, whatever the step.
+        # An `int()` truncation here instead would round toward zero and hand
+        # back a slot in the future, which never fires.
+        base = anchor.timestamp()
+        return base + step * int((now - base) // step)
 
     def _sweep_shares(self) -> None:
         """Prune old dropped/pasted files from every session's scratch folders.
@@ -353,6 +469,12 @@ class Panel:
     def sessions_view(self, panes: dict | None = None) -> list[dict]:
         panes = self.live() if panes is None else panes
         rss_map = sysinfo.rss_by_root([p.pid for p in panes.values()])
+        cpu_map = sysinfo.cpu_percent_by_root([p.pid for p in panes.values()])
+        # shell's command is bash, which is not an agent CLI and would be pure noise.
+        known_sub_commands = {
+            c.command for cid, c in self.registry.types().items() if cid != "shell" and c.command
+        }
+        sub_map = sysinfo.sub_clis_by_root([p.pid for p in panes.values()], known_sub_commands)
         now = time.time()
         # Sessions that have gone stop being remembered by the busy check.
         working.forget(set(panes))
@@ -392,6 +514,9 @@ class Panel:
                     "mode_key": cli.mode_key if cli else None,
                     "mode_seq": cli.mode_seq if cli else "",
                     "mode_label": cli.mode_label if cli else "",
+                    "quick_commands": list(cli.quick_commands) if cli else [],
+                    "models": list(cli.models) if cli else [],
+                    "model_cmd": cli.model_cmd if cli else "",
                     "adopted": session.adopted,
                     "archived": session.archived,
                     "pinned": session.pinned,
@@ -404,10 +529,30 @@ class Panel:
                     # so the browser forwards the wheel to it instead of scrolling a
                     # pane scrollback that tmux only ever redraws in place.
                     "alt": bool(pane and pane.alternate_on),
-                    "command": pane.command if pane else None,
+                    # Under keepscroll the pane's process is python and the
+                    # CLI is its child, so name the CLI.
+                    "command": (cli.command if cli and cli.keep_scrollback else pane.command)
+                    if pane
+                    else None,
                     # Resident memory of the whole process tree, so you can see
                     # which tab is expensive before deciding what to do with it.
                     "rss": (rss_map.get(pane.pid, 0) * 1024) if pane else 0,
+                    # CPU percent of that same tree since the previous sample.
+                    # 0.0 until a second sample exists. Can pass 100 when the
+                    # session is on more than one core.
+                    "cpu": cpu_map.get(pane.pid, 0.0) if pane else 0.0,
+                    # Another known CLI running as a descendant right now — a
+                    # Claude Code session that shelled out to Grok or Codex to
+                    # do sub-work. A process-tree fact, not a guess about
+                    # intent. comm is the kernel's task name, truncated to 15
+                    # bytes, so this is a heuristic name match, not a certainty.
+                    "sub_clis": [
+                        c
+                        for c in sub_map.get(pane.pid, [])
+                        if not (cli and cli.keep_scrollback and c == cli.command)
+                    ]
+                    if pane
+                    else [],
                     "activity": pane.activity if pane else 0,
                     # The pane's real size, so a browser can notice when it has
                     # drifted from what it is drawing. A tmux window has one size
@@ -458,6 +603,37 @@ class Panel:
             )
         return out
 
+    def briefing(self) -> list[dict]:
+        """The sessions actually asking for a person, reshaped for a glance.
+
+        `sessions_view()` already knows which state each session is in; this
+        just keeps the rows where that state is "waiting" or "error" and
+        drops the fields that only matter to the sidebar (icon, colour, mode,
+        …) down to the ones worth showing in a list of things to look at. No
+        new capture logic and no new idea of "waiting" — a second definition
+        of either is exactly how the two would drift.
+
+        `draft` is the half-typed, unsent box content, not a log of the last
+        prompt actually sent — CLIque does not keep one of those per session,
+        and this endpoint is not the place to start. It is named for what it
+        is so nobody reads more into it than that.
+
+        `lines` costs one capture per matching session, same as a `/peek` —
+        there is no cache to share across calls the way `/peek` has, because
+        nothing here is re-asking about a row someone is already hovering
+        over."""
+        out = []
+        for row in self.sessions_view():
+            if row["state"] not in ("waiting", "error"):
+                continue
+            session = self.store.session(row["id"])
+            try:
+                lines = session_routes._peek_lines(session, BRIEFING_LINES) if session else []
+            except (tmux.TmuxError, OSError):
+                lines = []
+            out.append({**{k: row[k] for k in BRIEFING_KEYS}, "lines": lines})
+        return out
+
     def _authoritative(self, session, pane) -> str:
         """The session's own declared state — from a hook or the attention
         endpoint — when no output has arrived to supersede it, else "".
@@ -488,6 +664,57 @@ class Panel:
             return "working"
         cli = self.registry.types().get(session.cli)
         return self._signal(session, pane, cli) or "idle"
+
+    def auto_resume_tick(self, now: float | None = None) -> list[str]:
+        """Type `after_limit` into sessions that stopped on a usage limit
+        which has now reset. Only in folders that opted in, and only for a
+        CLI with a usage probe: the reset time comes from that probe, and a
+        guessed time would send keys into a session that cannot use them.
+
+        A session is due when it sits idle with a limit message on screen and
+        the probe's latest full window reset has passed (plus a minute). A
+        reset already in the past when first seen is not recorded, so a stale
+        reading cannot fire straight away and then again. Returns the ids sent
+        to, for the check."""
+        now = time.time() if now is None else now
+        on = {f.id for f in self.store.folders if f.auto_resume}
+        types = self.registry.types()
+        seen = set()
+        fired = []
+        for session in list(self.store.sessions):
+            cli = types.get(session.cli)
+            if session.folder not in on or not cli or not getattr(cli, "usage", None):
+                continue
+            if self.session_state(session) != "idle" or not attention.limited_text(
+                tmux.capture(session.mux, session.socket), cli.limited_patterns
+            ):
+                continue
+            seen.add(session.id)
+            due = self._limit_at.get(session.id)
+            if due is None:
+                reading = usage.read(session.cli, cli.usage, llm._guard_url) or {}
+                resets = []
+                for w in reading.get("windows", []):
+                    try:
+                        if w.get("percent", 0) >= 100 and w.get("resets_at"):
+                            resets.append(datetime.datetime.fromisoformat(w["resets_at"]).timestamp())
+                    except (ValueError, TypeError, AttributeError):
+                        continue  # one bad window must not stop the other sessions
+                if resets and max(resets) > now:
+                    self._limit_at[session.id] = max(resets) + 60
+            elif due and now >= due:
+                tmux.send_text(session.mux, cli.after_limit, session.socket)
+                self._limit_at[session.id] = 0  # sent; cleared once it moves
+                fired.append(session.id)
+        for gone in set(self._limit_at) - seen:
+            del self._limit_at[gone]
+        return fired
+
+    def _auto_resume_loop(self) -> None:
+        while True:
+            time.sleep(60)
+            with contextlib.suppress(Exception):
+                self.auto_resume_tick()
 
     def wait_for_state(self, session_id: str, wanted: set, timeout: float) -> dict:
         """Block until a session reaches one of ``wanted`` states, or timeout.
@@ -532,20 +759,35 @@ class Panel:
            quiet. A guess, and a good one, and only as good as the config.
         3. Nothing. Most sessions, most of the time.
 
-        A pane in a real output burst never reaches tier 2: capturing it
-        would cost a subprocess per poll to learn it is not waiting. A pane
-        that has been "busy" past SETTLE is the other case — an animated
-        prompt ticks the clock forever, and that *is* a question.
+        A pane in a real output burst never reaches tier 2 for waiting/error:
+        capturing it would cost a subprocess per poll to learn it is not
+        waiting. A pane that has been "busy" past SETTLE is the other case —
+        an animated prompt ticks the clock forever, and that *is* a question.
+
+        Compacting is tier 2 as well, but checked the moment the pane is
+        busy rather than past SETTLE — see attention.detect_compacting for
+        why it cannot wait that long.
         """
         if not pane:
             return ""
         if session.signal and pane.activity <= session.signal_at:
             return session.signal
+        compacting = cli.compacting_patterns if cli else []
+        # Checked the instant the pane is busy, not gated behind settled()
+        # below: a real compaction is often faster than that delay, and
+        # there is nothing to debounce it against the way waiting/error
+        # need to rule out a burst. See attention.detect_compacting.
+        if working.busy(pane, session.socket) and attention.detect_compacting(
+            session.mux, pane.activity, compacting, session.socket
+        ):
+            return "compacting"
         if not working.settled(pane):
             return ""
         waiting = cli.waiting_patterns if cli else []
         errors = cli.error_patterns if cli else []
-        return attention.detect(session.mux, pane.activity, waiting, errors, session.socket)
+        return attention.detect(
+            session.mux, pane.activity, waiting, errors, session.socket, compacting
+        )
 
     # ------------------------------------------------------------ llm providers
     #
@@ -591,7 +833,7 @@ class Panel:
 
     #: Features that can be pointed at a specific provider. Grows as the
     #: BYOK features land (digest, copilot, …); the inbox is the first.
-    _ROUTE_FEATURES = ("inbox",)
+    _ROUTE_FEATURES = ("inbox", "theme")
 
     def llm_list(self) -> dict:
         return {
@@ -641,23 +883,129 @@ class Panel:
     def llm_delete(self, provider_id: str) -> dict | None:
         return {"ok": True} if self.store.remove_provider(provider_id) else None
 
+    def _profile_for(self, p: dict) -> tuple[dict | None, str]:
+        """A stored provider as something `llm` can call, or a reason it cannot.
+
+        The key is decrypted here and nowhere else, and it lives only as long
+        as the call. Every failure is a sentence a person can act on rather
+        than an exception: a missing crypto extra and a tampered key both look
+        like "it did not work" from the panel, and they need different fixes.
+        """
+        key = ""
+        if p.get("key_enc"):
+            if not secretbox.available():
+                return None, f"encryption unavailable — {secretbox.SecretsUnavailable.HINT}"
+            try:
+                key = secretbox.decrypt(p["key_enc"], self._secret_key_path())
+            except Exception:  # noqa: BLE001 — a corrupt/tampered key is a failure, not a 500
+                return None, "the stored key could not be decrypted"
+        return {"kind": p["kind"], "base_url": p["base_url"], "model": p["model"], "key": key}, ""
+
     def llm_test(self, provider_id: str) -> dict | None:
         p = self.store.provider(provider_id)
         if not p:
             return None
-        key = ""
-        if p.get("key_enc"):
-            if not secretbox.available():
-                return {
-                    "ok": False,
-                    "error": f"encryption unavailable — {secretbox.SecretsUnavailable.HINT}",
-                }
-            try:
-                key = secretbox.decrypt(p["key_enc"], self._secret_key_path())
-            except Exception:  # noqa: BLE001 — a corrupt/tampered key is a failed test, not a 500
-                return {"ok": False, "error": "the stored key could not be decrypted"}
-        profile = {"kind": p["kind"], "base_url": p["base_url"], "model": p["model"], "key": key}
+        profile, why = self._profile_for(p)
+        if not profile:
+            return {"ok": False, "error": why}
         return llm.test(profile)
+
+    def usage_now(self, *, force: bool = False, all_installed: bool = False) -> dict:
+        """What is left of each CLI's plan.
+
+        By default, only CLIs that declare a probe *and* have a session open
+        are asked. A panel with nothing running makes no outbound call at
+        all, which is the behaviour anyone would want from a tool they just
+        installed and have not configured.
+
+        `all_installed=True` widens that to every installed CLI with a
+        probe, session or not — an explicit ask (opening the usage panel),
+        not something the routine poll does on its own.
+        """
+        if not self.store.settings.get("usage_bar", True):
+            return {"usage": []}
+        running = {s.cli for s in self.store.sessions if s.cli}
+        wanted = [
+            (cli_id, cli)
+            for cli_id, cli in self.registry.types().items()
+            if getattr(cli, "usage", None) and (cli.installed if all_installed else cli_id in running)
+        ]
+        # Side by side: a cold read probes for real, and one slow CLI (agy
+        # shells out) should not make the others wait behind it.
+        with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as pool:
+            found = pool.map(lambda w: usage.read(w[0], w[1].usage, llm._guard_url, force=force), wanted)
+            return {"usage": [f for f in found if f]}
+
+    # ------------------------------------------------------------- themes
+
+    def themes_list(self) -> dict:
+        """Themes made here. The built-in ones ship in the front end and are
+        not repeated: this is only what a person added, so a fresh install
+        sends an empty list rather than a copy of the presets."""
+        return {
+            "themes": list(self.store.themes),
+            "can_generate": bool(self._provider_for("theme")),
+        }
+
+    def theme_add(self, seed: dict) -> dict:
+        """Turn a seed into a whole theme and keep it.
+
+        Validation and derivation are `themegen`'s, so a theme posted by hand
+        gets exactly what a generated one gets, including the contrast pass.
+        The audit afterwards is belt and braces: it should never fire, and if
+        it ever does the theme is refused rather than stored, because an
+        unreadable theme is a panel you cannot navigate to change it back.
+        """
+        built = themegen.build(seed)
+        unreadable = themegen.audit(built)
+        if unreadable:
+            raise ValueError("that theme could not be made readable: " + ", ".join(unreadable))
+        return self.store.add_theme(built)
+
+    #: What the model is asked for. Nine values that need taste; the other
+    #: eighteen are derived, so there is far less for it to get wrong.
+    _THEME_SYSTEM = (
+        "You design colour themes for a developer's terminal panel. Reply with "
+        "one JSON object and nothing else: no prose, no markdown fence.\n\n"
+        "Keys, all required:\n"
+        '  "label"   a short name for the theme, two or three words\n'
+        '  "base"    "dark" or "light", whichever suits the description\n'
+        '  "bg"      the background\n'
+        '  "fg"      the main text colour, which must be easy to read on bg\n'
+        '  "accent"  one colour for buttons, links and the cursor\n'
+        '  "red" "green" "yellow" "blue" "magenta" "cyan"  the six terminal '
+        "hues, each recognisably its own colour and readable on bg\n\n"
+        "Every colour is a #rrggbb string. Interpret the description as a mood "
+        "and commit to it: a theme that hedges toward grey is a worse answer "
+        "than one that is too bold."
+    )
+
+    def theme_generate(self, prompt: str) -> dict:
+        """Describe a theme, get a theme. Uses the caller's own provider.
+
+        The model supplies a seed and nothing more, so the failure modes are
+        small: bad JSON, or a colour that is not a colour. Both come back as a
+        sentence. What it cannot do is produce something unreadable, because
+        the ladder in `themegen` fixes contrast before this ever sees it.
+        """
+        wanted = " ".join(str(prompt or "").split())[:300]
+        if not wanted:
+            raise ValueError("describe the theme you want")
+        provider = self._provider_for("theme")
+        if not provider:
+            raise ValueError("no model provider is set up for themes — add one in Settings, Models")
+        profile, why = self._profile_for(provider)
+        if not profile:
+            raise ValueError(why)
+        reply = llm.complete(
+            profile,
+            [
+                {"role": "system", "content": self._THEME_SYSTEM},
+                {"role": "user", "content": wanted},
+            ],
+            max_tokens=700,
+        )
+        return self.theme_add(_theme_seed(reply, wanted))
 
     def state(self, *, reveal_urls: bool = False) -> dict:
         panes = self.live()
@@ -672,9 +1020,18 @@ class Panel:
                     "color": f.color,
                     "emoji": f.emoji,
                     "collapsed": f.collapsed,
+                    "auto_resume": f.auto_resume,
                     "order": f.order,
                 }
                 for f in sorted(self.store.folders, key=lambda f: f.order)
+            ],
+            # Working groups: sessions opened and seen together. Sent whole
+            # rather than by id, because the tab strip has to colour a tab by
+            # its group on the first paint and a second round trip for that is
+            # a flicker nobody asked for.
+            "groups": [
+                dataclasses.asdict(g)
+                for g in sorted(self.store.groups, key=lambda g: (g.order, g.name.lower()))
             ],
             "sessions": self.sessions_view(panes),
             "clis": [c.as_dict() for c in self.registry.types().values()],
@@ -757,6 +1114,8 @@ class Panel:
         # session can clean it up. The name and everything below then see the
         # worktree as the working directory, because it is.
         worktree = ""
+        setup_sh = None
+        repo, made = "", ""
         if body.get("worktree"):
             repo = gitinfo.repo_root(cwd)
             if not repo:
@@ -768,6 +1127,21 @@ class Panel:
             if not made:
                 raise ValueError(why)
             cwd = worktree = made
+        try:
+            if worktree:
+                # .clique-copy and .clique-setup, if the repo declares either —
+                # see gitinfo.worktree_setup for why both live in the repo rather
+                # than in CLIque's own config.
+                setup_sh = gitinfo.worktree_setup(repo, made)
+            return self._start_session(body, cli_id, cwd, worktree, setup_sh)
+        except BaseException:
+            # Unwind the worktree this call made so a failed create leaks nothing.
+            if worktree:
+                with contextlib.suppress(Exception):
+                    gitinfo.remove_worktree(worktree)
+            raise
+
+    def _start_session(self, body: dict, cli_id: str, cwd: str, worktree: str, setup_sh) -> dict:
         name = (body.get("name") or "").strip() or Path(cwd).name or cli_id
         mode = body.get("mode")
         # Resuming a past conversation is the same code path as starting a new
@@ -793,31 +1167,45 @@ class Panel:
 
         mux = tmux.mux_name(session_id)
         tmux.bootstrap()
-        tmux.create(
-            mux,
-            cwd,
-            argv + self._hooks_argv(cli),
-            env=self._pane_env(session_id),
-        )
-        session = self.store.add_session(
-            Session(
-                id=session_id,
-                name=name,
-                cli=cli_id,
-                cwd=cwd,
-                mux=mux,
-                socket=tmux.SOCKET,
-                mode=mode or cli.default_mode,
-                # Deliberately not auto-filed. A session you started yourself
-                # lands in Ungrouped, at the top, where you will see it — filing
-                # it is a decision made afterwards, if at all. Auto-filing by
-                # directory stays where it earns its keep: adoption, where there
-                # is nobody to ask.
-                folder=body.get("folder") or None,
-                cli_session_id=prior,
-                worktree=worktree,
+        launch = argv + self._hooks_argv(cli)
+        if setup_sh:
+            # `sh -c '<setup>; exec "$@"' sh <real argv...>` — the setup runs
+            # in the pane, as the first thing printed, and `exec` replaces the
+            # shell with the CLI once it is done, win or lose. `"$@"` carries
+            # `launch` through untouched: no element of it is ever interpolated
+            # into the script string, so a space or a quote in a session name
+            # or a path cannot reshape the command that runs.
+            launch = ["sh", "-c", f'{setup_sh}; exec "$@"', "sh", *launch]
+        try:
+            tmux.create(
+                mux,
+                cwd,
+                launch,
+                env=self._pane_env(session_id),
             )
-        )
+            session = self.store.add_session(
+                Session(
+                    id=session_id,
+                    name=name,
+                    cli=cli_id,
+                    cwd=cwd,
+                    mux=mux,
+                    socket=tmux.SOCKET,
+                    mode=mode or cli.default_mode,
+                    # Deliberately not auto-filed. A session you started yourself
+                    # lands in Ungrouped, at the top, where you will see it — filing
+                    # it is a decision made afterwards, if at all. Auto-filing by
+                    # directory stays where it earns its keep: adoption, where there
+                    # is nobody to ask.
+                    folder=body.get("folder") or None,
+                    cli_session_id=prior,
+                    worktree=worktree,
+                )
+            )
+        except BaseException:
+            with contextlib.suppress(Exception):
+                tmux.kill(mux)
+            raise
         return {"id": session.id, "worktree": worktree}
 
     def spawn(self, body: dict) -> dict:
@@ -988,6 +1376,8 @@ class Panel:
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
+        with self._lock:
+            self._resume_watch.discard(session_id)
         with contextlib.suppress(tmux.TmuxError):
             if tmux.exists(session.mux, session.socket):
                 tmux.kill(session.mux, session.socket, force=session.adopted)
@@ -1017,6 +1407,7 @@ class Panel:
         if not loose:
             return []
         rss_map = sysinfo.rss_by_root([p.pid for p in loose])
+        cpu_map = sysinfo.cpu_percent_by_root([p.pid for p in loose])
         return [
             {
                 "mux": p.mux,
@@ -1024,6 +1415,7 @@ class Panel:
                 "pid": p.pid,
                 "idle": round(now - p.activity),
                 "rss": rss_map.get(p.pid, 0) * 1024,
+                "cpu": cpu_map.get(p.pid, 0.0),
             }
             for p in sorted(loose, key=lambda p: -rss_map.get(p.pid, 0))
         ]
@@ -1045,13 +1437,41 @@ class Panel:
                 killed.append(mux)
         return {"killed": killed}
 
-    def start_session(self, session_id: str) -> dict:
+    def pair_start(self) -> dict:
+        """Mint a pairing code for a device that cannot be typed at."""
+        code, seconds = self.pairing.start()
+        return {"code": pairing.grouped(code), "expires_in": seconds}
+
+    def pair_waiting(self) -> dict:
+        return {"expires_in": self.pairing.waiting()}
+
+    def pair_cancel(self) -> dict:
+        self.pairing.cancel()
+        return {"expires_in": 0}
+
+    def pair_claim(self, body: dict) -> dict | None:
+        """Trade a correct code for a token, once. None means no.
+
+        Deliberately one answer for every kind of no: wrong code, expired
+        code, no code outstanding, too many attempts. Telling a caller which
+        of those it was is telling them how to search.
+        """
+        if not self.pairing.redeem(str(body.get("code") or "")):
+            return None
+        name = str(body.get("name") or "").strip()[:60] or "paired device"
+        token, raw = self.tokens.create(name)
+        return {"token": raw, "id": token.id, "name": token.name}
+
+    def start_session(self, session_id: str, *, allow_resume: bool = True) -> dict:
         """Start a stopped session again. Same id, name, folder, directory.
 
         When the CLI was first launched with our session id (Claude's
         ``--session-id``), that is also the resume key. Other CLIs resume
         only if we already stored ``cli_session_id``. A shell has nothing
         to resume — it starts again in the same place.
+
+        ``allow_resume=False`` is the fresh start _recover_dead_resume falls
+        back to, and the only caller that passes it.
         """
         session = self.store.session(session_id)
         if not session:
@@ -1063,8 +1483,8 @@ class Panel:
         cli = self.registry.get(session.cli)
         if not cli.installed:
             raise ValueError(f"{cli.label}: '{cli.command}' is not installed on this box")
-        prior = session.cli_session_id
-        if not prior and cli.resume:
+        prior = session.cli_session_id if allow_resume else None
+        if allow_resume and not prior and cli.resume:
             # Only treat our id as theirs if the first launch handed it over.
             tokens = " ".join(cli.args)
             if "{id}" in tokens or "{uuid}" in tokens:
@@ -1087,12 +1507,73 @@ class Panel:
         )
         if prior and not session.cli_session_id:
             self.store.update_session(session.id, cli_session_id=prior)
-        return {"id": session.id}
+        if prior == session.id:
+            self._recover_dead_resume(session.id)
+        return {"id": session.id, "resumed": bool(prior)}
+
+    #: How long a resumed CLI has to prove it started, and how often the pane
+    #: is looked at while it does. Claude Code refuses a stale --resume in
+    #: about 1.5 seconds; a real one is still drawing its first frame long
+    #: after that. Watching rather than sleeping the whole window is what
+    #: keeps the recovery quick -- the usual case is over in two seconds and
+    #: the eight is only there for a slow box.
+    RESUME_GRACE = 8.0
+    RESUME_POLL = 0.5
+
+    def _recover_dead_resume(self, session_id: str) -> None:
+        """Watch a resume long enough to see it refuse, then start clean.
+
+        A resume key outlives the conversation it points at. Open a session,
+        never type in it, let the idle reaper stop it, and the CLI has nothing
+        on disk to come back to: the launch exits inside two seconds and the
+        tab goes quiet. No pane, no error, nothing to click — which is exactly
+        what one of Justin's sessions had been doing for a week when this was
+        found on 2026-09-01.
+
+        Only for a key that is *our own session id*, which is the one case we
+        know how it got there: we handed it over at first launch, so throwing
+        it away costs nothing the next start cannot derive again. A key that
+        came from somewhere else was typed deliberately and is left alone.
+
+        Process state and nothing else — the pane is gone or it is not.
+        Deciding *why* would mean reading the CLI's output, which is the line
+        the core does not cross.
+        """
+        with self._lock:
+            self._resume_watch.add(session_id)
+
+        def watch() -> None:
+            deadline = time.time() + self.RESUME_GRACE
+            while True:
+                time.sleep(self.RESUME_POLL)
+                with self._lock:
+                    if session_id not in self._resume_watch:
+                        return  # stopped or deleted while we watched
+                session = self.store.session(session_id)
+                if not session:
+                    return
+                if not tmux.exists(session.mux, session.socket):
+                    break
+                if time.time() >= deadline:
+                    return  # still up, so the resume took
+            with self._lock:
+                if session_id not in self._resume_watch:
+                    return
+                self._resume_watch.discard(session_id)
+            if session.cli_session_id != session.id:
+                return  # somebody changed the key under us
+            self.store.update_session(session_id, cli_session_id="")
+            with contextlib.suppress(Exception):
+                self.start_session(session_id, allow_resume=False)
+
+        threading.Thread(target=watch, daemon=True, name=f"resume-{session_id[:8]}").start()
 
     def delete_session(self, session_id: str) -> dict:
         session = self.store.session(session_id)
         if not session:
             raise KeyError(session_id)
+        with self._lock:
+            self._resume_watch.discard(session_id)
         # Adopted sessions do not carry our name prefix, so the engine's guard
         # would refuse them. Deleting one is explicit, which is what force means.
         if tmux.exists(session.mux, session.socket):
@@ -1128,56 +1609,8 @@ class Server(ThreadingHTTPServer):
     request_queue_size = 128
 
 
-#: Where a pasted image lands: inside the session's own working directory, so
-#: the CLI can read it with a relative path and it travels with the project.
-#: The name matches what the tool CLIque replaces used, so existing habits and
-#: any .gitignore already covering it keep working.
-PASTE_DIR = ".claude-images"
-
-#: Biggest image accepted. A screenshot is well under a megabyte; ten is
-#: generous and stops a paste being a memory attack.
-MAX_PASTE_BYTES = 10 * 1024 * 1024
-
 #: And the ceiling on any request body, base64 overhead included.
-MAX_BODY_BYTES = MAX_PASTE_BYTES * 4 // 3 + 8192
-
-#: Leading bytes -> extension. The type comes from the *content*, never from a
-#: filename or a Content-Type the browser supplied: this route writes a file
-#: into a working directory, so what it is has to be established here.
-IMAGE_MAGIC = (
-    (b"\x89PNG\r\n\x1a\n", ".png"),
-    (b"\xff\xd8\xff", ".jpg"),
-    (b"GIF87a", ".gif"),
-    (b"GIF89a", ".gif"),
-    (b"BM", ".bmp"),
-)
-
-
-#: Containment, defined once. The paste route and the artifact routes are the
-#: two places a working directory is touched, and they must agree about what
-#: "inside it" means.
-_inside = artifacts.inside
-
-
-#: Extension -> the type it is served as. Beside IMAGE_MAGIC so the two cannot
-#: drift: nothing is ever served as a type the magic did not establish.
-IMAGE_TYPES = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".gif": "image/gif",
-    ".bmp": "image/bmp",
-    ".webp": "image/webp",
-}
-
-
-def image_extension(data: bytes) -> str:
-    """The extension for these bytes, or "" if they are not an image we know."""
-    for magic, ext in IMAGE_MAGIC:
-        if data.startswith(magic):
-            return ext
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return ".webp"
-    return ""
+MAX_BODY_BYTES = file_routes.MAX_PASTE_BYTES * 4 // 3 + 8192
 
 
 #: Paths served without a session. Brand images, the favicon and the web app
@@ -1192,7 +1625,11 @@ def image_extension(data: bytes) -> str:
 #: Deliberately a prefix allowlist and not "any file", because everything else
 #: under web/ — the app shell, its JavaScript, its stylesheet — describes the
 #: panel to someone who has not signed in.
-PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest")
+#: `/brand/` is a directory and is matched by containment; the rest are exact
+#: files. `sw.js` is here so the login page can register the worker, which is
+#: what makes Chrome offer to install from it: installability is judged on the
+#: page you are standing on, and before you sign in that is the login page.
+PUBLIC_ASSETS = ("/brand/", "/favicon.ico", "/manifest.webmanifest", "/sw.js")
 
 
 #: Settings that are credentials, not preferences. They go to the browser as a
@@ -1222,40 +1659,30 @@ def redacted(settings: dict, *, reveal_urls: bool = False) -> dict:
 #: unauthenticated caller gets to send, so it is capped hard and separately.
 MAX_LOGIN_BYTES = 8 * 1024
 
-#: A terminal is at most this big. Unbounded values arrive from a query string
-#: and from control frames — both are the client talking — and both end up in
-#: an ioctl and in `tmux resize-window`.
-MAX_COLS, MAX_ROWS = 500, 300
+#: How many lines of a pane's tail the briefing endpoint quotes. Not
+#: PEEK_DEFAULT: that six is sized for a tooltip next to a row you are
+#: already looking at, and a briefing row has no pane beside it to fall back
+#: on, so it gets closer to PEEK_MAX's worth of context instead.
+BRIEFING_LINES = 20
 
-#: A peek is a glance, not a window. Enough lines to see a question and the
-#: line before it; not so many that a tooltip becomes a second terminal.
-PEEK_DEFAULT, PEEK_MIN, PEEK_MAX = 6, 2, 40
-
-#: Scrollback searched to find those lines. Larger than what is shown, because
-#: the frame is dropped afterwards and a pane can be almost entirely frame.
-PEEK_WINDOW = 160
-
-#: How many panes keep a cached peek. Small on purpose — this is a convenience
-#: for the handful of rows a pointer actually crosses, not an index.
-PEEK_CACHE = 64
-
-#: mux -> ((mux, activity, lines), rows). Module level, because a request
-#: handler is built and thrown away per request and a cache on one would be a
-#: cache of exactly one lookup.
-_PEEKED: dict[str, tuple[tuple, list[str]]] = {}
-_PEEK_LOCK = threading.Lock()
-
-
-def _terminal_size(cols, rows) -> tuple[int, int]:
-    """Clamp a client-supplied terminal size, tolerating rubbish."""
-
-    def one(value, fallback: int, ceiling: int) -> int:
-        try:
-            return max(2, min(int(value), ceiling))
-        except (TypeError, ValueError):
-            return fallback
-
-    return one(cols, 120, MAX_COLS), one(rows, 32, MAX_ROWS)
+#: Which of sessions_view()'s fields a briefing row keeps, straight through.
+#: One list rather than twelve `"x": row["x"]` lines: the JSON key and the
+#: lookup key are the same field named once, not the same word typed twice
+#: with a chance to drift between the two.
+BRIEFING_KEYS = (
+    "id",
+    "name",
+    "cli",
+    "cwd",
+    "folder",
+    "branch",
+    "dirty",
+    "state",
+    "activity",
+    "rss",
+    "cpu",
+    "draft",
+)
 
 
 def _is_public_asset(path: str) -> bool:
@@ -1266,13 +1693,32 @@ def _is_public_asset(path: str) -> bool:
     test and `_static` happily resolved it back to the application shell,
     which is the one thing the check exists to keep behind the password.
 
-    Resolve first, then ask whether the answer is still inside the directory.
+    Resolve first, then ask whether the answer is one of the things allowed.
+    Comparing *resolved* paths is what keeps the traversal closed: a request
+    for `/brand/../app.js` resolves to the shell and matches nothing, while
+    `/brand/../manifest.webmanifest` resolves to the manifest, which is
+    allowed anyway.
+
+    The named files matter more than they look. Closing the traversal hole
+    replaced the whole check with the `brand/` containment test, which quietly
+    made `PUBLIC_ASSETS` dead code: the manifest and the favicon had been
+    listed as public since they were added and had silently stopped being
+    served that way. A browser cannot offer to install an app whose manifest
+    it is not allowed to read, so CLIque was uninstallable from the one page
+    anyone actually arrives on.
     """
     target = (WEB / path.lstrip("/")).resolve()
-    return artifacts.inside(target, (WEB / "brand").resolve())
+    if artifacts.inside(target, (WEB / "brand").resolve()):
+        return True
+    return any(
+        target == (WEB / name.lstrip("/")).resolve()
+        for name in PUBLIC_ASSETS
+        if not name.endswith("/")
+    )
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes, provider_routes.ProviderRoutes,
+              session_routes.SessionRoutes):
     panel: Panel = None  # set by serve()
     server_version = "clique"  # no version: it tells a scanner what to try
     protocol_version = "HTTP/1.1"
@@ -1330,7 +1776,7 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, obj, status: int = 200) -> None:
         self._send(status, json.dumps(obj).encode(), "application/json")
 
-    def _body(self) -> dict:
+    def _body(self) -> dict | None:
         # A Content-Length that is not a number is a malformed request, not a
         # 500. `int("abc")` here used to take the whole response down.
         try:
@@ -1343,12 +1789,20 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         # Bounded, because a pasted image arrives through here and an unbounded
         # Content-Length is a one-request way to exhaust memory.
+        # The unread body would be parsed as the next request on a keep-alive
+        # connection, so answer 413 and close. Returns None: already answered.
         if length > MAX_BODY_BYTES:
-            return {}
+            self.close_connection = True
+            self._send(413, b'{"error": "request too large"}', "application/json")
+            return None
         try:
-            return json.loads(self.rfile.read(length) or b"{}")
+            data = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
-            return {}
+            data = None
+        if not isinstance(data, dict):
+            self._json({"error": "request body must be a JSON object"}, 400)
+            return None
+        return data
 
     @property
     def _bearer(self):
@@ -1454,6 +1908,28 @@ class Handler(BaseHTTPRequestHandler):
             self.panel.trust_proxy and self.headers.get("X-Forwarded-Proto", "").lower() == "https"
         )
 
+    def _refuse_host(self) -> None:
+        """403, naming the host it objected to.
+
+        The bare "host not allowed" was a dead end: this panel is meant to sit
+        behind a proxy, the proxy decides what Host the panel sees, and the
+        message named neither the value nor the setting that fixes it. On
+        2026-09-17 that cost an afternoon on a deployment where every other
+        check passed. Reflected as text/plain and clipped, because the value
+        is whatever the caller sent.
+        """
+        seen = "".join(c for c in self._fwd_host() if c.isprintable())[:100]
+        self._send(
+            403,
+            (
+                f"host not allowed: {seen or '(none sent)'}\n"
+                "This panel refuses a Host it does not recognise, which is what "
+                "stops a hostile page rebinding DNS at it. Behind a proxy, name "
+                "the host in CLIQUE_ALLOWED_HOSTS.\n"
+            ).encode(),
+            "text/plain",
+        )
+
     def _host_ok(self) -> bool:
         """Runs before anything else, including auth.
 
@@ -1474,7 +1950,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, query = self._route()
 
         if path == "/ws":
@@ -1489,11 +1965,19 @@ class Handler(BaseHTTPRequestHandler):
             if _is_public_asset(path):
                 return self._static(path)
             nonce = secrets.token_urlsafe(16)
-            return self._send(200, login_page(nonce=nonce), "text/html; charset=utf-8", nonce=nonce)
+            # pairing already normalises dash and case, so the query value is
+            # passed through as-is. An already-signed-in request never reaches
+            # here: it gets the panel, not a login page.
+            pair = (query.get("pair") or "") if path == "/" else ""
+            return self._send(
+                200, login_page(nonce=nonce, pair=pair), "text/html; charset=utf-8", nonce=nonce
+            )
 
         try:
             if path == "/api/state":
                 return self._json(self.panel.state(reveal_urls=self._cookie_authed))
+            if path == "/api/pair":
+                return self._json(self.panel.pair_waiting())
             if path == "/api/stats":
                 snap = sysinfo.snapshot(self.panel.clients)
                 snap["guard"] = self.panel.resource_guard()
@@ -1522,6 +2006,11 @@ class Handler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     limit = 400
                 return self._json(self.panel.conversations.prompts(limit=limit))
+            if path == "/api/briefing":
+                # Which sessions actually need a person, so a script or an
+                # agent driving CLIque can ask that once instead of polling
+                # /api/state and reasoning about every row itself.
+                return self._json(self.panel.briefing())
             if path == "/api/changelog":
                 # Parsed from the same CHANGELOG.md the repo ships, so the
                 # release notes in the app cannot drift from the ones on disk.
@@ -1531,18 +2020,35 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json([p.as_dict() for p in tmux.adoptable() if p.mux not in known])
             if path == "/api/orphans":
                 return self._json(self.panel.orphans())
-            if path == "/api/llm/providers":
-                return self._json(self.panel.llm_list())
+            if self._provider_GET(path):
+                return
+            if path == "/api/themes":
+                return self._json(self.panel.themes_list())
+            if path == "/api/usage":
+                return self._json(
+                    self.panel.usage_now(
+                        force=query.get("refresh") == "1",
+                        all_installed=query.get("all") == "1",
+                    )
+                )
             if path == "/api/storage":
                 usage = files.shares_usage(tuple(self._share_cwds()))
                 usage["cleanup_days"] = int(
                     self.panel.store.settings.get("drop_cleanup_days", 0) or 0
                 )
                 return self._json(usage)
-            if path.startswith("/api/sessions/") and path.endswith("/note"):
-                return self._get_note(path.split("/")[3])
+            if path.startswith("/api/sessions/") and path.endswith("/notes"):
+                return self._get_notes(path.split("/")[3])
             if path == "/api/browse":
                 return self._json({"dirs": workspace.complete(query.get("path") or "")})
+            if path == "/api/projects":
+                return self._json(
+                    projects.search(
+                        query.get("q") or "",
+                        self.panel.store.settings.get("project_roots") or [],
+                        force=query.get("refresh") == "1",
+                    )
+                )
             if path == "/api/workspace":
                 return self._json(
                     workspace.look(
@@ -1625,75 +2131,6 @@ class Handler(BaseHTTPRequestHandler):
         data = self.panel.conversations.session_usage(session.cli, tid)
         return self._json({"name": session.name, "cli": session.cli, **data})
 
-    def _peek(self, session_id: str, want: str) -> None:
-        """The last few lines of a pane, without opening it.
-
-        The question this answers is "is that one waiting on me", asked about a
-        session you are not looking at. Answering it today means opening the
-        tab, which changes what you are looking at — and then changes it back.
-
-        Deliberately a *pull*. Nothing captures a pane until somebody hovers
-        over a row and stays there, so a sidebar of twenty sessions costs
-        exactly nothing until it is asked a question. That is the same bargain
-        the attention ladder makes, and it is why neither of them shows up in
-        an idle panel's cost.
-
-        Colour is stripped rather than rendered. A peek is a glance at what the
-        text says; carrying ANSI across the wire would mean a second terminal
-        renderer in the panel for something that is eight lines in a tooltip.
-        """
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        try:
-            lines = max(PEEK_MIN, min(int(want), PEEK_MAX))
-        except (TypeError, ValueError):
-            lines = PEEK_DEFAULT
-
-        pane = self.panel.live().get(session.mux)
-        if pane is None:
-            return self._json({"lines": [], "alive": False, "activity": 0})
-
-        # Cached against the pane's own activity clock, exactly as the
-        # attention tier is: the entry is invalid the moment anything is
-        # printed and valid forever while nothing is. Hovering back and forth
-        # across a quiet sidebar is one capture, not one per pass.
-        activity = int(pane.activity or 0)
-        key = (session.mux, activity, lines)
-        with _PEEK_LOCK:
-            hit = _PEEKED.get(session.mux)
-            if hit and hit[0] == key:
-                return self._json({"lines": hit[1], "alive": True, "activity": activity})
-
-        try:
-            # A generous window, then filtered down to `lines`. Capturing only
-            # what is to be shown was wrong once the frame started being
-            # dropped: on a pane that is mostly box drawing, eight captured
-            # lines can contain one that says anything.
-            text = tmux.capture(session.mux, session.socket, lines=PEEK_WINDOW, styled=False)
-        except (tmux.TmuxError, OSError):
-            return self._json({"lines": [], "alive": True, "activity": activity})
-
-        # What a peek is for is the last thing that *said* something, and a
-        # modern CLI's pane is mostly frame: box rules, separators, an input
-        # box drawn around nothing. Showing eight raw lines of that buries the
-        # one line that answers the question under seven that do not.
-        #
-        # So the decoration is dropped. Not by knowing anything about any CLI —
-        # a line is dropped when every character in it is a box-drawing glyph,
-        # a rule or whitespace, which is a property of the text and true of
-        # every tool that draws a frame.
-        rows = attention.content_lines(text)
-        rows = rows[-lines:]
-        with _PEEK_LOCK:
-            _PEEKED[session.mux] = (key, rows)
-            # Bounded, because a panel that runs for weeks creates and destroys
-            # sessions all day and every one of them would leave an entry.
-            if len(_PEEKED) > PEEK_CACHE:
-                for stale in list(_PEEKED)[:-PEEK_CACHE]:
-                    del _PEEKED[stale]
-        return self._json({"lines": rows, "alive": True, "activity": activity})
-
     def _static(self, path: str) -> None:
         name = "index.html" if path == "/" else path.lstrip("/")
         target = (WEB / name).resolve()
@@ -1724,7 +2161,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, _ = self._route()
 
         if path == "/":
@@ -1740,16 +2177,26 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(413, b"too large", "text/plain")
             form = urllib.parse.parse_qs(self.rfile.read(length).decode(errors="replace"))
             attempt = (form.get("password") or [""])[0]
+            pair_code = (form.get("pair") or [""])[0]
             who = self.client_address[0] if self.client_address else "?"
-            throttled = self._throttled(who)
-            # Check the password even when throttled, so a correct one always
+            throttled = self._reserve_attempt(who)
+            # Check even when throttled, so a correct password or code always
             # gets through. Behind a tunnel every request arrives from the same
             # loopback address, so a per-IP lockout would lock out the only
             # legitimate user along with the attacker — which is a denial of
             # service dressed as a protection.
-            if not self.panel.auth.check_password(attempt):
+            #
+            # Pairing is not new authority: the same code already buys a full
+            # bearer token through /api/pair/claim, so redeeming it for a
+            # browser cookie grants nothing it did not already grant.
+            if not attempt and pair_code:
+                accepted = self.panel.pairing.redeem(pair_code)
+                refused = "That code is no longer valid."
+            else:
+                accepted = self.panel.auth.check_password(attempt)
+                refused = "Wrong password."
+            if not accepted:
                 if throttled:
-                    self._record_failure(who)
                     time.sleep(2.0)
                     nonce = secrets.token_urlsafe(16)
                     return self._send(
@@ -1761,16 +2208,16 @@ class Handler(BaseHTTPRequestHandler):
                 # Deliberately slow, and counted: this endpoint is reachable by
                 # anyone who can reach the tunnel, and guessing should be both
                 # expensive and self-limiting.
-                self._record_failure(who)
                 time.sleep(1.0)
                 nonce = secrets.token_urlsafe(16)
                 return self._send(
                     401,
-                    login_page("Wrong password.", nonce),
+                    login_page(refused, nonce),
                     "text/html; charset=utf-8",
                     nonce=nonce,
                 )
-            self.panel.failures.pop(who, None)
+            with self.panel.failures_lock:
+                self.panel.failures.pop(who, None)
             token = self.panel.auth.issue()
             # Secure whenever the external leg is TLS. A forged X-Forwarded-Proto
             # can only *restrict* where the cookie is sent (https-only), never
@@ -1805,13 +2252,30 @@ class Handler(BaseHTTPRequestHandler):
             # from before per-session tokens) is still accepted for any session.
             and (not token.session or token.session == path.split("/")[3])
         )
-        if not attention_only:
+        # Claiming a pairing code is the other write an unauthenticated caller
+        # may make, and that is the entire point of it: the device doing it
+        # has no credential yet, which is what it is here to collect. The code
+        # is the gate, and the box chose and displayed it. Minting the code
+        # still requires being inside the panel; only the redemption is open.
+        pair_claim = path == "/api/pair/claim"
+        if not attention_only and not pair_claim:
             allowed, reason = self._may_write()
             if not allowed:
                 return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
 
         try:
             body = self._body()
+            if body is None:
+                return
+            if path == "/api/pair":
+                return self._json(self.panel.pair_start())
+            if path == "/api/pair/claim":
+                paired = self.panel.pair_claim(body)
+                # One answer for every kind of no. Which kind it was is a hint
+                # about how to search, and there is nothing to gain by giving it.
+                if not paired:
+                    return self._json({"error": "pairing code not accepted"}, 403)
+                return self._json(paired, 201)
             if path == "/api/sessions":
                 return self._json(self.panel.create_session(body), 201)
             if path == "/api/sessions/adopt":
@@ -1822,27 +2286,33 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.panel.spawn(body), 201)
             if path == "/api/orphans/reap":
                 return self._json(self.panel.reap_orphans(body.get("muxes")))
-            if path == "/api/llm/providers":
-                return self._json(self.panel.llm_create(body), 201)
+            if path == "/api/themes":
+                return self._json(self.panel.theme_add(body), 201)
+            if path == "/api/themes/generate":
+                return self._json(self.panel.theme_generate(body.get("prompt") or ""), 201)
+            if path == "/api/themes/rotate":
+                # Ignores the schedule and the on/off switch on purpose: this
+                # is the button next to them, and its whole job is "not this
+                # one, give me another".
+                picked = self.panel._rotate_theme(force=True)
+                if picked is None:
+                    return self._json({"error": "no themes are in the rotation"}, 400)
+                return self._json({"theme": picked})
+            # Spelled with `parts` rather than `endswith("/delete")`, which is
+            # how the router matches every other id-in-the-middle route and,
+            # not incidentally, the only spelling `tools/api_drift.py` reads
+            # as anything other than a session verb.
+            parts = path.strip("/").split("/")
+            if len(parts) == 4 and parts[1] == "themes" and parts[3] == "delete":
+                if not self.panel.store.delete_theme(parts[2]):
+                    return self._json({"error": "no such theme"}, 404)
+                return self._json({"ok": True})
+            if self._provider_POST(path, body):
+                return
             if path == "/api/llm/routes":
                 return self._json(
-                    self.panel.llm_set_route(body.get("feature"), body.get("provider_id"))
+                    self.panel.llm_set_route(body.get("feature") or "", body.get("provider_id"))
                 )
-            if path.startswith("/api/llm/providers/"):
-                parts = path.split("/")
-                provider_id = parts[4]
-                action = parts[5] if len(parts) > 5 else ""
-                if action == "test":
-                    result = self.panel.llm_test(provider_id)
-                elif action == "delete":
-                    result = self.panel.llm_delete(provider_id)
-                elif not action:
-                    result = self.panel.llm_update(provider_id, body)
-                else:
-                    return self._json({"error": "not found"}, 404)
-                if result is None:
-                    return self._json({"error": "no such provider"}, 404)
-                return self._json(result)
             if path == "/api/workspace":
                 # A directory that does not exist yet is the commonest reason a
                 # new session fails, and "go and find a shell" is a poor answer
@@ -1871,6 +2341,36 @@ class Handler(BaseHTTPRequestHandler):
                 # refused, and "the API is the whole surface" means a script
                 # should be able to see what it created without a second GET.
                 return self._json(dataclasses.asdict(folder), 201)
+            if path.startswith("/api/groups/"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4 and parts[3] == "delete":
+                    gone = self.panel.store.delete_group(parts[2])
+                    return self._json({"ok": gone}, 200 if gone else 404)
+                if len(parts) == 4 and parts[3] == "add":
+                    group = self.panel.store.group_add_session(
+                        parts[2], str(body.get("session") or "")
+                    )
+                    if not group:
+                        return self._json({"error": "no such group or session"}, 404)
+                    return self._json(dataclasses.asdict(group))
+                if len(parts) == 4 and parts[3] == "remove":
+                    group = self.panel.store.group_remove_session(
+                        parts[2], str(body.get("session") or "")
+                    )
+                    if not group:
+                        return self._json({"error": "no such group"}, 404)
+                    return self._json(dataclasses.asdict(group))
+                if len(parts) == 4 and parts[3] == "open":
+                    return self._open_group(parts[2], bool(body.get("recreate")))
+            if path == "/api/groups":
+                group = self.panel.store.add_group(
+                    body.get("name") or "New group",
+                    body.get("color"),
+                    body.get("members"),
+                )
+                if group is None:
+                    return self._json({"error": "too many groups"}, 400)
+                return self._json(dataclasses.asdict(group), 201)
             if path == "/api/reorder":
                 sessions = body.get("sessions") or []
                 folders = body.get("folders") or []
@@ -1891,8 +2391,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._checkpoint(path.split("/")[3], body)
             if path.startswith("/api/sessions/") and path.endswith("/export"):
                 return self._export_scrollback(path.split("/")[3], body)
-            if path.startswith("/api/sessions/") and path.endswith("/note"):
-                return self._save_note(path.split("/")[3], body)
+            if path.startswith("/api/sessions/") and path.endswith("/notes"):
+                return self._save_notes(path.split("/")[3], body)
             if path == "/api/storage/purge":
                 freed = files.purge_shares(tuple(self._share_cwds()))
                 return self._json({"ok": True, **freed})
@@ -1942,397 +2442,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
 
-    def _attention(self, session_id: str, body: dict) -> None:
-        """Let a session say, itself, that it is stuck.
-
-        The top tier of the attention ladder, and the only one that is not a
-        guess. A user wires this to whatever hook their CLI already offers —
-        a Claude Code hook, a shell trap, the last line of a script — and
-        CLIque believes what arrives without ever learning what sent it.
-
-        That inversion is the point: the vendor-specific knowledge lives in
-        someone's own hook config, where they can fix it the day it changes,
-        instead of in this codebase where it would be a release.
-        """
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        state = str(body.get("state") or "").strip().lower()
-        if state not in ("waiting", "error", "clear"):
-            return self._json({"error": 'state must be "waiting", "error" or "clear"'}, 400)
-        # Optional "why", bounded — a hook's matcher name, not free text.
-        note = str(body.get("note") or "").strip().lower()[:16]
-
-        pane = self.panel.live().get(session.mux)
-        # Stamped with the pane's own clock rather than the wall clock, so the
-        # staleness test downstream compares like with like.
-        updated = self.panel.store.update_session(
-            session_id,
-            signal="" if state == "clear" else state,
-            signal_at=float(pane.activity if pane else 0),
-            signal_note="" if state == "clear" else note,
-        )
-        return self._json({"ok": True, "signal": updated.signal if updated else ""})
-
-    def _file(self, session_id: str, asked: str) -> None:
-        """Read-only glance at a path the pane printed.
-
-        Relative to the session's working directory, or absolute / ``~/``.
-        Text is capped; images are described here and served by `_file_raw`.
-        """
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        return self._json(files.inspect(session.cwd, asked))
-
-    def _file_write(self, session_id: str, body: dict) -> None:
-        """Save edited text back to a file, behind the write gate.
-
-        The path is resolved and fenced exactly as a read is (`files.write` reuses
-        `files.resolve`), so a save cannot escape the session directory or touch a
-        credential file, and only ever overwrites an existing regular file. The
-        write scope is already enforced by the gate above — an `attention`-only
-        hook token, which every pane carries, cannot reach here."""
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        text = body.get("text")
-        asked = str(body.get("path") or "")
-        if not isinstance(text, str):
-            return self._json({"error": "text is required"}, 400)
-        try:
-            written = files.write(session.cwd, asked, text)
-        except ValueError as exc:
-            return self._json({"error": str(exc)}, 400)
-        except OSError:
-            return self._json({"error": "could not save the file"}, 500)
-        return self._json({"ok": True, "bytes": written})
-
-    def _file_raw(self, session_id: str, asked: str) -> None:
-        """The bytes of an image the pane pointed at."""
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        info = files.inspect(session.cwd, asked)
-        if info["kind"] != "image" or not info["path"]:
-            return self._json({"error": "not an image"}, 415)
-        target = Path(info["path"])
-        try:
-            if target.stat().st_size > MAX_PASTE_BYTES:
-                return self._json({"error": "image too large"}, 413)
-            raw = target.read_bytes()
-        except OSError:
-            return self._json({"error": "could not read it"}, 404)
-        kind = IMAGE_TYPES.get(image_extension(raw))
-        if not kind:
-            return self._json({"error": "not an image this understands"}, 415)
-        return self._send(200, raw, kind, {"Cache-Control": "no-store"})
-
-    def _artifacts(self, session_id: str) -> None:
-        """What this session's working directory has to show.
-
-        The other half of paste. A terminal cannot draw a picture, so an agent
-        that takes a screenshot has, until it is listed here, produced
-        something you have to leave the panel to look at.
-        """
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        settings = self.panel.store.settings
-        if not settings.get("artifacts_show", True):
-            return self._json([])
-        return self._json(
-            artifacts.scan(
-                session.cwd,
-                settings.get("artifact_dirs") or [],
-                # Only what appeared while this session has been running. A
-                # directory full of committed images is the project, not the work.
-                since=session.created,
-            )
-        )
-
-    def _artifact(self, session_id: str, relative: str) -> None:
-        """Serve one image out of a session's working directory.
-
-        The type comes from the bytes, never from the extension: this reads a
-        file a browser asked for by name, and what a name claims about its
-        contents is not evidence.
-        """
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        target = artifacts.locate(session.cwd, relative)
-        if target is None:
-            return self._json({"error": "not an artifact of this session"}, 404)
-        try:
-            if target.stat().st_size > MAX_PASTE_BYTES:
-                return self._json({"error": "image too large"}, 413)
-            raw = target.read_bytes()
-        except OSError:
-            return self._json({"error": "could not read it"}, 404)
-        kind = IMAGE_TYPES.get(image_extension(raw))
-        if not kind:
-            return self._json({"error": "not an image this understands"}, 415)
-        # No-store, because the file behind a name can be overwritten by the
-        # next screenshot and a cached one would be a lie.
-        return self._send(200, raw, kind, {"Cache-Control": "no-store"})
-
-    def _paste_image(self, session_id: str, body: dict) -> None:
-        """Write a pasted image into the session's directory and say where.
-
-        Sharing a screenshot with an agent is otherwise impossible: a terminal
-        has no way to carry an image, so the only thing that can cross is a
-        path. The browser has the bytes, the pane has the CLI, and this is the
-        bridge — it saves the file and hands back a path the CLI can open.
-
-        Containment is checked *after* resolution, not before, because that is
-        the only order that survives a symlinked working directory. The write
-        can only ever land inside `<cwd>/.claude-images`.
-        """
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-
-        try:
-            raw = base64.b64decode(body.get("data") or "", validate=True)
-        except (ValueError, binascii.Error):
-            return self._json({"error": "not valid base64"}, 400)
-        if not raw:
-            return self._json({"error": "empty paste"}, 400)
-        if len(raw) > MAX_PASTE_BYTES:
-            return self._json({"error": "image too large"}, 413)
-
-        ext = image_extension(raw)
-        if not ext:
-            return self._json({"error": "not an image this understands"}, 415)
-
-        try:
-            root = Path(session.cwd).resolve(strict=True)
-        except OSError:
-            return self._json({"error": "working directory is gone"}, 409)
-        if not root.is_dir():
-            return self._json({"error": "working directory is gone"}, 409)
-
-        target_dir = (root / PASTE_DIR).resolve()
-        if target_dir != root / PASTE_DIR and not _inside(target_dir, root):
-            return self._json({"error": "refused: escapes the working directory"}, 403)
-        try:
-            target_dir.mkdir(parents=True, exist_ok=True)
-            target_dir = target_dir.resolve(strict=True)
-            if not _inside(target_dir, root):
-                return self._json({"error": "refused: escapes the working directory"}, 403)
-            name = f"paste-{int(time.time() * 1000)}-{secrets.token_hex(4)}{ext}"
-            target = target_dir / name
-            # Exclusive create: never overwrite something already there, even
-            # if a name somehow collides.
-            with open(target, "xb") as fh:
-                fh.write(raw)
-        except OSError as exc:
-            return self._json({"error": f"could not save: {exc}"}, 500)
-
-        return self._json(
-            {
-                "path": str(target),
-                "relative": f"{PASTE_DIR}/{name}",
-                "bytes": len(raw),
-            },
-            201,
-        )
-
-    def _upload_file(self, session_id: str, body: dict) -> None:
-        """Write a dropped file into the session's directory and say where.
-
-        The drag-and-drop sibling of `_paste_image`: a paste is a nameless image,
-        a drop is a named file of any kind — a PDF, a log, a spreadsheet — that
-        the agent then opens by the path this hands back. The name is the user's,
-        so it is reduced to a safe basename and put through the same credential
-        and directory gate a read is (`files.store_upload` reuses the read gate):
-        a drop cannot escape the session directory, overwrite an existing file,
-        or land a credential name."""
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        try:
-            raw = base64.b64decode(body.get("data") or "", validate=True)
-        except (ValueError, binascii.Error):
-            return self._json({"error": "not valid base64"}, 400)
-        if not raw:
-            return self._json({"error": "empty file"}, 400)
-        if len(raw) > files.UPLOAD_CAP:
-            return self._json({"error": "file too large"}, 413)
-        try:
-            target = files.store_upload(session.cwd, str(body.get("name") or ""), raw)
-        except ValueError as exc:
-            return self._json({"error": str(exc)}, 400)
-        except OSError as exc:
-            return self._json({"error": f"could not save: {exc}"}, 500)
-        try:
-            rel = str(target.relative_to(Path(session.cwd).resolve()))
-        except ValueError:
-            rel = target.name
-        return self._json({"path": str(target), "relative": rel, "bytes": len(raw)}, 201)
-
-    def _checkpoint(self, session_id: str, body: dict) -> None:
-        """Save a before-you-run snapshot of the session's git checkout.
-
-        A record, not a lock. `gitinfo.checkpoint` reads the current HEAD, branch
-        and uncommitted diff; this writes them to a timestamped file under
-        `.clique-checkpoints/` so you can see — or `git apply -R` — exactly what
-        an agent changed after you turned it loose. 400 when the directory is not
-        a git repository."""
-        session = self.panel.store.session(session_id)
-        if not session or not session.cwd:
-            return self._json({"error": "no such session"}, 404)
-        snap = gitinfo.checkpoint(session.cwd)
-        if snap is None:
-            return self._json({"error": "not a git repository"}, 400)
-        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-        head = snap["head"] or "unborn"
-        lines = [
-            f"# CLIque checkpoint — {stamp} UTC",
-            f"# branch {snap['branch']}, HEAD {head}",
-            f"# {snap['shortstat'] or 'no uncommitted changes'}",
-            "# Uncommitted changes are below; `git apply -R <this file>` undoes them.",
-            "",
-        ]
-        if snap["stat"]:
-            lines += [snap["stat"], ""]
-        text = "\n".join(lines) + (snap["diff"] or "")
-        cpdir = Path(session.cwd) / ".clique-checkpoints"
-        try:
-            cpdir.mkdir(parents=True, exist_ok=True)
-            target = cpdir / f"checkpoint-{stamp}-{secrets.token_hex(3)}.diff"
-            target.write_text(text, encoding="utf-8")
-        except OSError as exc:
-            return self._json({"error": f"could not save: {exc}"}, 500)
-        try:
-            rel = str(target.relative_to(Path(session.cwd).resolve()))
-        except ValueError:
-            rel = target.name
-        return self._json(
-            {
-                "path": str(target),
-                "relative": rel,
-                "head": head,
-                "branch": snap["branch"],
-                "shortstat": snap["shortstat"],
-                "empty": snap["empty"],
-            },
-            201,
-        )
-
-    def _export_scrollback(self, session_id: str, body: dict) -> None:
-        """Write the session's scrollback to a timestamped text file.
-
-        tmux already holds the history; this captures it unstyled (a clean log,
-        no colour codes) and drops it under `.clique-exports/`, so a run can be
-        kept, searched or shared after the fact. 400 when there is nothing to
-        capture, which is what a session that is not running looks like: no pane
-        to read."""
-        session = self.panel.store.session(session_id)
-        if not session or not session.cwd:
-            return self._json({"error": "no such session"}, 404)
-        text = tmux.capture(session.mux, session.socket, lines=50000, styled=False)
-        if not text.strip():
-            return self._json({"error": "nothing to export"}, 400)
-        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-        header = (
-            "# CLIque scrollback export\n"
-            f"# session {session.name} ({session.cli})\n"
-            f"# {session.cwd}\n"
-            f"# {stamp} UTC\n\n"
-        )
-        content = header + text
-        if not content.endswith("\n"):
-            content += "\n"
-        outdir = Path(session.cwd) / ".clique-exports"
-        try:
-            outdir.mkdir(parents=True, exist_ok=True)
-            target = outdir / f"scrollback-{stamp}-{secrets.token_hex(3)}.txt"
-            target.write_text(content, encoding="utf-8")
-        except OSError as exc:
-            return self._json({"error": f"could not save: {exc}"}, 500)
-        try:
-            rel = str(target.relative_to(Path(session.cwd).resolve()))
-        except ValueError:
-            rel = target.name
-        return self._json(
-            {
-                "path": str(target),
-                "relative": rel,
-                "bytes": len(content.encode("utf-8")),
-                "lines": text.count("\n") + 1,
-            },
-            201,
-        )
-
-    def _note_path(self, session_id: str) -> Path:
-        """Where a session's note lives: a sidecar `.md` under the panel's home,
-        keyed by session id. Kept out of the project directory on purpose, so a
-        note never shows up as an untracked file in the repo it is about."""
-        return self.panel.store.path.parent / "notes" / f"{session_id}.md"
-
-    def _get_note(self, session_id: str) -> None:
-        if not self.panel.store.session(session_id):
-            return self._json({"error": "no such session"}, 404)
-        path = self._note_path(session_id)
-        try:
-            note = path.read_text(encoding="utf-8") if path.is_file() else ""
-        except OSError:
-            note = ""
-        return self._json({"note": note})
-
-    def _save_note(self, session_id: str, body: dict) -> None:
-        """Save (or, when emptied, delete) a session's sidecar note."""
-        if not self.panel.store.session(session_id):
-            return self._json({"error": "no such session"}, 404)
-        note = str(body.get("note") or "")
-        if len(note.encode("utf-8")) > NOTE_CAP:
-            return self._json({"error": "note too long"}, 413)
-        path = self._note_path(session_id)
-        try:
-            if note.strip():
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(note, encoding="utf-8")
-            elif path.exists():
-                path.unlink()  # an emptied note is a deleted note
-        except OSError as exc:
-            return self._json({"error": f"could not save: {exc}"}, 500)
-        return self._json({"ok": True, "bytes": len(note.encode("utf-8"))})
-
-    def _share_cwds(self) -> set:
-        """Every working directory that might hold shared files, deduped.
-
-        Archived sessions included on purpose: their scratch files are on disk
-        just the same, and the storage readout and its purge would be lying if
-        they ignored them."""
-        return {s.cwd for s in self.panel.store.sessions if s.cwd}
-
-    def _send_input(self, session_id: str, body: dict) -> None:
-        session = self.panel.store.session(session_id)
-        if not session:
-            return self._json({"error": "no such session"}, 404)
-        if body.get("key"):
-            tmux.send_key(session.mux, body["key"], session.socket)
-        else:
-            tmux.send_text(
-                session.mux,
-                body.get("text", ""),
-                session.socket,
-                enter=bool(body.get("enter", True)),
-            )
-        return self._json({"ok": True})
-
-    # --------------------------------------------------------- PATCH / DELETE
-
     def do_PATCH(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, _ = self._route()
         allowed, reason = self._may_write()
         if not allowed:
             return self._json({"error": reason}, 401 if reason == "unauthorized" else 403)
         body = self._body()
+        if body is None:
+            return
         parts = path.strip("/").split("/")
         try:
             if len(parts) == 2 and parts[1] == "settings":
@@ -2356,6 +2475,13 @@ class Handler(BaseHTTPRequestHandler):
                 fields = {k: v for k, v in body.items() if k in allowed}
                 updated = self.panel.store.update_session(parts[2], **fields)
                 return self._json({"ok": bool(updated)}, 200 if updated else 404)
+            if len(parts) == 3 and parts[1] == "groups":
+                allowed_keys = {"name", "color", "members", "order"}
+                fields = {k: v for k, v in body.items() if k in allowed_keys}
+                updated = self.panel.store.update_group(parts[2], **fields)
+                if not updated:
+                    return self._json({"ok": False}, 404)
+                return self._json(dataclasses.asdict(updated))
             if len(parts) == 3 and parts[1] == "folders":
                 updated = self.panel.store.update_folder(
                     parts[2],
@@ -2363,6 +2489,9 @@ class Handler(BaseHTTPRequestHandler):
                     color=body.get("color"),
                     emoji=body.get("emoji"),
                     collapsed=body.get("collapsed"),
+                    auto_resume=None
+                    if body.get("auto_resume") is None
+                    else bool(body["auto_resume"]),
                 )
                 # The record, for the same reason POST returns it: a colour
                 # that failed validation is kept, and `{"ok": true}` is not a
@@ -2376,7 +2505,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         if not self._host_ok():
-            return self._send(403, b"host not allowed", "text/plain")
+            return self._refuse_host()
         path, _ = self._route()
         allowed, reason = self._may_write()
         if not allowed:
@@ -2385,6 +2514,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if len(parts) == 3 and parts[1] == "sessions":
                 return self._json(self.panel.delete_session(parts[2]))
+            # Taking a code back off the screen, rather than waiting it out.
+            if path == "/api/pair":
+                return self._json(self.panel.pair_cancel())
             if len(parts) == 3 and parts[1] == "folders":
                 ok = self.panel.store.remove_folder(parts[2])
                 return self._json({"ok": ok}, 200 if ok else 404)
@@ -2400,14 +2532,21 @@ class Handler(BaseHTTPRequestHandler):
     MAX_FAILURES = 8
     FAILURE_WINDOW = 300
 
-    def _throttled(self, who: str) -> bool:
-        cutoff = time.time() - self.FAILURE_WINDOW
-        recent = [t for t in self.panel.failures.get(who, []) if t > cutoff]
-        self.panel.failures[who] = recent
-        return len(recent) >= self.MAX_FAILURES
-
-    def _record_failure(self, who: str) -> None:
-        self.panel.failures.setdefault(who, []).append(time.time())
+    def _reserve_attempt(self, who: str) -> bool:
+        """Count this attempt as a failure and say whether it was already over
+        the limit, in one locked step. Concurrent attempts each see the others'
+        reservations; a success clears the entry."""
+        now = time.time()
+        cutoff = now - self.FAILURE_WINDOW
+        with self.panel.failures_lock:
+            failures = self.panel.failures
+            for addr in [a for a, ts in failures.items() if not ts or ts[-1] <= cutoff]:
+                del failures[addr]  # aged out: no entry lingers per address
+            recent = [t for t in failures.get(who, []) if t > cutoff]
+            over = len(recent) >= self.MAX_FAILURES
+            recent.append(now)
+            failures[who] = recent
+            return over
 
     def _fail(self, exc: Exception) -> None:
         # Full traceback to the server's stderr only; the client gets a generic
@@ -2415,219 +2554,13 @@ class Handler(BaseHTTPRequestHandler):
         traceback.print_exc()
         self._json({"error": "internal error"}, 500)
 
-    # -------------------------------------------------------------- terminal
-
-    def _websocket(self, query: dict) -> None:
-        """Attach one browser to one tmux session for as long as it stays.
-
-        The PTY is created here and destroyed in the finally block, which is
-        the entire resource story: no viewer, no process.
-        """
-        self.close_connection = True
-
-        # Cross-Site WebSocket Hijacking. A WebSocket handshake is not subject
-        # to CORS and SameSite=Lax does not cover it, so a hostile page can
-        # open a socket to this origin and the browser will attach the session
-        # cookie. Without this check that page gets a live root terminal. The
-        # Origin header is the only thing separating "our page" from "any page
-        # the user happened to visit", and it must be checked before the
-        # handshake completes.
-        origin = self.headers.get("Origin")
-        if origin is not None and not self._same_origin():
-            return self._send(403, b"cross-site websocket blocked", "text/plain")
-
-        if not self._may_read():
-            return self._send(401, b"unauthorized", "text/plain")
-
-        # A cookie without an Origin header is not a browser. Every browser
-        # sends Origin on a WebSocket handshake without exception, so a
-        # cookie-authenticated handshake that lacks one did not come from a
-        # page — and the cookie is the credential a hostile page would be
-        # borrowing. Token callers are exempt: an Authorization header is
-        # never attached by a browser on its own, so it proves intent.
-        if self._bearer is None and origin is None:
-            return self._send(403, b"cross-site websocket blocked", "text/plain")
-
-        # Read-only tokens may *watch*. They may not type.
-        #
-        # This gate was missing entirely: the socket checked only that the
-        # caller was authenticated, and control frames send keystrokes, so a
-        # token issued as read-only could open a terminal and run anything.
-        # Every other write path in the server is scoped; this one was the
-        # hole under it.
-        may_write, _reason = self._may_write()
-
-        key = self.headers.get("Sec-WebSocket-Key")
-        if not key:
-            return self._send(400, b"not a websocket request", "text/plain")
-
-        session = self.panel.store.session(query.get("id", ""))
-        if not session:
-            return self._send(404, b"no such session", "text/plain")
-
-        if not tmux.exists(session.mux, session.socket):
-            return self._send(409, b"session is no longer running", "text/plain")
-
-        cols, rows = _terminal_size(query.get("cols"), query.get("rows"))
-
-        self.wfile.write(handshake_response(key))
-        self.wfile.flush()
-        ws = WebSocket(self.connection)
-
-        with self.panel._lock:
-            self.panel.clients += 1
-
-        bridge: PtyBridge | None = None
-        viewer: str | None = None
-        try:
-            # Size the window before anything is drawn into it.
-            #
-            # This used to happen *after* the attach, and that is where the
-            # overlapping text came from. A session is created at 200x50 and a
-            # browser is rarely that; attaching first made tmux paint a whole
-            # frame at the old width, which the terminal wrapped at the new
-            # one, and the correct redraw then landed on top of the wreckage.
-            # An interactive menu was the reliable way to see it — two cursors,
-            # a duplicated choice, and fragments of one line inside another.
-            #
-            # The window is shared with every other client on it and its size
-            # is one number, so this also claims it for the browser that just
-            # opened rather than inheriting whatever the last tool left —
-            # otherwise an adopted session opens as a small pane in a sea of
-            # tmux dot-fill.
-            #
-            # `passive=1` is a background viewer: same size as the window
-            # already is, and it must not become the thing that resizes it.
-            # A hidden tab warming up in a second window used to steal the
-            # pane the first window was looking at.
-            #
-            # The window's size is `manual`, so attaching a PTY cannot move
-            # it — only `resize-window` can. We still skip that call for a
-            # passive viewer, and still birth the PTY at the window's
-            # current size so this client is not drawing a different grid
-            # than the one tmux is painting.
-            if query.get("passive") not in {"1", "true", "yes"}:
-                tmux.resize_window(session.mux, cols, rows, session.socket)
-            else:
-                pane = self.panel.live().get(session.mux)
-                if pane and pane.width >= 2 and pane.height >= 2:
-                    cols, rows = pane.width, pane.height
-
-            # Then scrollback, which is now captured at the width it will be
-            # displayed at, and then the attach. History only — tmux redraws
-            # the visible frame itself, and sending it twice reads as the CLI
-            # having repeated its last screen.
-            cli = self.panel.registry.types().get(session.cli)
-            # Boxed CLIs turn mouse tracking on. Hidden from the browser so
-            # drag-select still works; a click we encode ourselves still
-            # reaches the program in tmux.
-            filt = termstrip.boxed_stream() if (cli and cli.own_input) else None
-
-            def outbound(data: bytes, _filt=filt) -> None:
-                if _filt is not None:
-                    data = _filt.feed(data)
-                    if not data:
-                        return
-                ws.send(data)
-
-            try:
-                history = tmux.capture(session.mux, session.socket, history_only=True)
-                if history.strip():
-                    outbound(history.replace("\n", "\r\n").encode())
-            except tmux.TmuxError:
-                pass  # a session that died between the check and here
-
-            # Attach through a private view rather than the session itself, so
-            # this browser detaching does not detach anyone else and two
-            # browsers can sit on different windows.
-            viewer = tmux.create_viewer(session.mux, session.socket)
-            bridge = PtyBridge(
-                tmux.attach_argv(viewer, session.socket),
-                on_output=outbound,
-                on_exit=ws.close,
-                cols=cols,
-                rows=rows,
-            )
-            bridge.start()
-
-            stop = threading.Event()
-            threading.Thread(target=self._keepalive, args=(ws, stop), daemon=True).start()
-            try:
-                while True:
-                    message = ws.recv()
-                    if message is None:
-                        break
-                    opcode, payload = message
-                    if opcode == OP_TEXT:
-                        self._control(session, bridge, payload, may_write)
-                    elif may_write:
-                        bridge.write(payload)
-            finally:
-                stop.set()
-        finally:
-            if bridge:
-                bridge.close()
-            if viewer:
-                # The view goes; the session it looked at does not.
-                with contextlib.suppress(tmux.TmuxError):
-                    tmux.kill(viewer, session.socket)
-            ws.close()
-            with self.panel._lock:
-                self.panel.clients = max(self.panel.clients - 1, 0)
-
-    def _control(self, session, bridge: PtyBridge, payload: bytes, may_write: bool = True) -> None:
-        """Text frames are control; binary frames are keystrokes.
-
-        Everything here is attacker-shaped: it is JSON from a socket, so a
-        missing key or a string where a number belongs must be ignored rather
-        than raise. An exception in this call unwinds the read loop and drops
-        a working terminal.
-        """
-        try:
-            message = json.loads(payload)
-        except ValueError:
-            return
-        if not isinstance(message, dict):
-            return
-        kind = message.get("type")
-        if kind == "resize":
-            cols, rows = _terminal_size(message.get("cols"), message.get("rows"))
-            bridge.resize(cols, rows)
-            # The PTY resize only tells tmux how big *this client* is. The
-            # window is `manual` and shared, so it also has to be told, or
-            # the browser gets a small pane padded out with dots.
-            # A read-only viewer does not get to resize what others are
-            # looking at — its own view, yes; the shared window, no.
-            # Tiny sizes are a collapsed or hidden tab measuring itself,
-            # not a phone — those still clear 20x8. Applying them is how
-            # a background reconnect left a screen of dots.
-            if may_write:
-                tmux.resize_window(session.mux, cols, rows, session.socket)
-        elif not may_write:
-            return  # watching is allowed; typing is not
-        elif kind == "key":
-            tmux.send_key(session.mux, str(message.get("key") or ""), session.socket)
-        elif kind == "run":
-            tmux.send_text(
-                session.mux,
-                str(message.get("text", "")),
-                session.socket,
-                enter=bool(message.get("enter", True)),
-            )
-
-    @staticmethod
-    def _keepalive(ws: WebSocket, stop: threading.Event) -> None:
-        while not stop.wait(PING_SECONDS):
-            if ws.closed:
-                return
-            ws.ping()
-
 
 def serve(host: str, port: int, panel: Panel) -> None:
     Handler.panel = panel
     # So a session's pane can be told where to report its state back to.
     panel.host, panel.port = host, port
     panel.history.start()
+    threading.Thread(target=panel._auto_resume_loop, daemon=True, name="auto-resume").start()
     tmux.bootstrap()
     # A crash leaves viewer sessions behind. They hold no work, so clearing
     # them at startup is free and keeps `tmux ls` honest.

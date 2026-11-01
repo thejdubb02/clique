@@ -566,10 +566,9 @@ TMPL = """\
         <span class="host">clique @ 127.0.0.1:3200</span>
         <button type="button" class="copybtn" hidden data-idle="{copy}" data-done="{copied}" data-copy="{clone}">{copy}</button>
       </div>
-<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
-<span class="ps">$</span> cd clique
-<span class="ps">$</span> python3 -m clique password
-<span class="ps">$</span> python3 -m clique</code></pre>
+<pre><code><span class="ps">$</span> pip install clique-panel
+<span class="ps">$</span> clique password
+<span class="ps">$</span> clique</code></pre>
     </div>
     <p class="then">{then}</p>
     <p class="badges">
@@ -684,10 +683,9 @@ TMPL = """\
         <span class="host">clique @ 127.0.0.1:3200</span>
         <button type="button" class="copybtn" hidden data-idle="{copy}" data-done="{copied}" data-copy="{clone}">{copy}</button>
       </div>
-<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
-<span class="ps">$</span> cd clique
-<span class="ps">$</span> python3 -m clique password
-<span class="ps">$</span> python3 -m clique</code></pre>
+<pre><code><span class="ps">$</span> pip install clique-panel
+<span class="ps">$</span> clique password
+<span class="ps">$</span> clique</code></pre>
     </div>
     <p class="then gh-row">
       <a class="btn-gh btn-star" href="https://github.com/thejdubb02/clique" rel="noopener">

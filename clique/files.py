@@ -15,12 +15,17 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import tempfile
 import time
 from pathlib import Path
 
 #: How much text the sheet will hold. Bigger than that is still copyable;
 #: we just will not dump it into the browser.
 TEXT_CAP = 256 * 1024
+
+#: How many children a directory listing will name. The rest are still there
+#: on disk; the sheet is a glance, not a file manager.
+DIR_CAP = 200
 
 #: File-preview reads are fenced by default: a read may not escape the session's
 #: working directory. A trusted-local deployment can opt out with
@@ -93,7 +98,13 @@ def _is_credential(target: Path) -> bool:
     return bool({p.lower() for p in target.parts} & _BLOCKED_DIRS)
 
 
-def _fence(cwd: str, target: Path) -> None:
+#: Where a CLI keeps its scratch files (Claude Code's scratchpad, for one),
+#: and the paths it prints most often from outside the project. Readable,
+#: never writable: `write` keeps the session-directory fence.
+_TEMP = Path(tempfile.gettempdir()).resolve()
+
+
+def _fence(cwd: str, target: Path, *, read: bool = False) -> None:
     """Directory containment: a read may not resolve outside the session's cwd.
 
     Checked *after* resolution so a symlink cannot smuggle a path out — both
@@ -101,6 +112,8 @@ def _fence(cwd: str, target: Path) -> None:
     credential block above is not.
     """
     base = Path(cwd).resolve()
+    if read and _TEMP in target.parents:
+        return
     if target != base and base not in target.parents:
         raise ValueError("outside the session directory")
 
@@ -123,10 +136,13 @@ def clean(raw: str) -> str:
     """The path a click meant, minus the line number a CLI stuck on the end."""
     text = str(raw or "").strip().replace("\x00", "")[:1024]
     text = _LINECOL.sub("", text)
+    # "." and ".." are this folder and its parent, not trailing punctuation.
+    if text in {".", ".."}:
+        return text
     return text.rstrip(".,;:!?)\"'")
 
 
-def resolve(cwd: str, raw: str) -> Path:
+def resolve(cwd: str, raw: str, *, read: bool = False) -> Path:
     """Turn what was printed into an absolute path.
 
     ``~/`` follows the user that started the panel, not a username. Relative
@@ -144,7 +160,7 @@ def resolve(cwd: str, raw: str) -> Path:
     if _is_credential(target):
         raise ValueError("blocked credential file")
     if _FENCE:
-        _fence(cwd, target)
+        _fence(cwd, target, read=read)
     return target
 
 
@@ -171,9 +187,11 @@ def write(cwd: str, raw: str, text: str) -> int:
     if not target.is_file():
         raise ValueError("not an editable file")
     mode = target.stat().st_mode & 0o777
-    tmp = target.with_name(target.name + ".clique-save")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    # Unique per call, so two saves at once cannot share (and interleave) a temp.
+    fd, name = tempfile.mkstemp(dir=target.parent, prefix=target.name + ".", suffix=".clique-save")
+    tmp = Path(name)
     try:
+        os.fchmod(fd, mode)
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
         os.replace(tmp, target)
@@ -182,6 +200,60 @@ def write(cwd: str, raw: str, text: str) -> int:
             tmp.unlink()
         raise
     return len(data)
+
+
+def _entry_kind(entry: os.DirEntry) -> str:
+    """``dir`` or ``file`` for a listing row, without leaving this folder.
+
+    A symlink is classified by what it points at so a linked folder still
+    looks like one, but the path we hand back is the name *in this folder*.
+    The click still goes through ``resolve``, which follows and fences.
+    """
+    try:
+        if entry.is_dir(follow_symlinks=False):
+            return "dir"
+        if entry.is_symlink() and entry.is_dir(follow_symlinks=True):
+            return "dir"
+        if entry.is_file(follow_symlinks=False) or entry.is_symlink():
+            return "file"
+    except OSError:
+        return ""
+    return ""
+
+
+def _dir_entries(cwd: str, target: Path) -> tuple[list[dict], bool]:
+    """Children of a directory already proven inside the fence.
+
+    Paths are the child as named here, not the symlink target: putting a
+    resolved outside path in the listing would leak it. ``..`` is included
+    only when the parent is still inside the session directory.
+    """
+    rows: list[dict] = []
+    try:
+        base = Path(cwd).resolve()
+    except OSError:
+        base = Path(cwd)
+    if target != base and (base == target.parent or base in target.parents):
+        rows.append({"name": "..", "kind": "dir", "path": str(target.parent)})
+    try:
+        kids = list(os.scandir(target))
+    except OSError:
+        return rows, False
+    kids.sort(key=lambda e: (_entry_kind(e) != "dir", e.name.lower()))
+    truncated = False
+    n = 0
+    for entry in kids:
+        if n >= DIR_CAP:
+            truncated = True
+            break
+        kind = _entry_kind(entry)
+        if not kind:
+            continue
+        # Lexical join, never resolved: a symlink that climbs out stays a
+        # name in this folder until a click asks inspect to follow it.
+        rows.append({"name": entry.name, "kind": kind, "path": str(target / entry.name)})
+        n += 1
+    return rows, truncated
 
 
 def inspect(cwd: str, raw: str) -> dict:
@@ -199,8 +271,11 @@ def inspect(cwd: str, raw: str) -> dict:
     if not asked:
         return out
     try:
-        target = resolve(cwd, asked)
-    except (OSError, RuntimeError, ValueError):
+        target = resolve(cwd, asked, read=True)
+    except ValueError as exc:
+        out["error"] = str(exc)
+        return out
+    except (OSError, RuntimeError):
         return out
     out["path"] = str(target)
     out["name"] = target.name
@@ -208,6 +283,9 @@ def inspect(cwd: str, raw: str) -> dict:
         if target.is_dir():
             out["kind"] = "dir"
             out["size"] = 0
+            entries, truncated = _dir_entries(cwd, target)
+            out["entries"] = entries
+            out["truncated"] = truncated
             return out
         if not target.is_file():
             return out
@@ -293,24 +371,38 @@ def store_upload(cwd: str, filename: str, data: bytes) -> Path:
         _fence(cwd, target)
     drops.mkdir(parents=True, exist_ok=True)
     stem, suffix, parent = target.stem, target.suffix, target.parent
-    n = 0
-    while True:
-        candidate = target if n == 0 else parent / f"{stem} ({n}){suffix}"
-        try:
-            fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            n += 1
-            if n > 9999:
-                raise ValueError("too many files by that name") from None
-            continue
-        break
+    # Pin the directory by fd and re-fence what the fd really is: a symlink
+    # swapped in after the check above would otherwise redirect the create.
+    dfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-    except OSError:
-        with contextlib.suppress(OSError):
-            candidate.unlink()
-        raise
+        if _FENCE:
+            # Re-fence what is there now, and prove the fd is that very
+            # directory (no /proc needed): a swap on either side fails one.
+            real = Path(os.path.realpath(parent))
+            _fence(cwd, real)
+            a, b = os.fstat(dfd), os.stat(real)
+            if (a.st_dev, a.st_ino) != (b.st_dev, b.st_ino):
+                raise ValueError("outside the session directory")
+        n = 0
+        while True:
+            candidate = target if n == 0 else parent / f"{stem} ({n}){suffix}"
+            try:
+                fd = os.open(candidate.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644, dir_fd=dfd)
+            except FileExistsError:
+                n += 1
+                if n > 9999:
+                    raise ValueError("too many files by that name") from None
+                continue
+            break
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+        except OSError:
+            with contextlib.suppress(OSError):
+                os.unlink(candidate.name, dir_fd=dfd)
+            raise
+    finally:
+        os.close(dfd)
     return candidate
 
 

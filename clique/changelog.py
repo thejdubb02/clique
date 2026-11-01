@@ -26,9 +26,9 @@ _CANDIDATES = (
 
 # "## 0.5.0 — 2026-08-18 20:29 PDT — **now CLIque**"
 _HEAD = re.compile(
-    r"^## (?P<ver>\S+) — (?P<date>\d{4}-\d{2}-\d{2})"
+    r"^## (?P<ver>\S+) [—-] (?P<date>\d{4}-\d{2}-\d{2})"
     r"(?: (?P<time>\d{2}:\d{2}) (?P<zone>[A-Z]{2,5}))?"
-    r"(?: — (?P<extra>.+))?$"
+    r"(?: [—-] (?P<extra>.+))?$"
 )
 _INLINE = re.compile(r"(\*\*.+?\*\*|`[^`]+`|\*[^*]+\*)")
 

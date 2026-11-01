@@ -60,7 +60,7 @@ include = ["clique*"]
 [tool.setuptools.package-data]
 clique = [
   "web/*.html", "web/*.css", "web/*.js", "web/*.webmanifest",
-  "web/vendor/*", "web/icons/*", "web/brand/*",
+  "web/vendor/*", "web/icons/*", "web/brand/*", "web/art/*",
   "config/*.toml",
 ]
 

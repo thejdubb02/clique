@@ -1,7 +1,7 @@
 /* Pure front-end logic, tested without a browser.
  *
- * app.js has no build step and no module system, which is the point — and it
- * also means the functions in it have nowhere to be tested from. Most of the
+ * The panel scripts have no build step and no module system, which is the point
+ * — and it also means the functions in them have nowhere to be tested from. Most of the
  * file is DOM work that only makes sense in a page, but the decisions are not:
  * what needs you first, and what counts as unread, are sorts over plain data,
  * and they are exactly the kind of thing that breaks quietly.
@@ -17,7 +17,9 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const SRC = fs.readFileSync(path.join(ROOT, "clique/web/app.js"), "utf8");
+const SRC = ["file-preview.js", "providers.js", "panes.js", "app.js"]
+  .map((name) => fs.readFileSync(path.join(ROOT, "clique/web", name), "utf8"))
+  .join("\n");
 
 let passed = 0;
 let failed = 0;
@@ -27,7 +29,7 @@ function check(label, cond, detail) {
   else { failed++; console.log(`  FAIL ${label} ${detail === undefined ? "" : detail}`); }
 }
 
-/* A named region of app.js, so a test names the code it covers rather than a
+/* A named region of the panel scripts, so a test names the code it covers rather than a
  * line number that moves the next time anything is inserted above it. */
 function region(from, to) {
   const start = SRC.indexOf(from);
@@ -145,13 +147,41 @@ console.log("directories the panel already knows");
   check("a directory with both is running, not recent", kindOf("/srv/dupe") === "running");
 }
 
+console.log("which app is holding this page");
+{
+  const code = region("function shellLabel", "function renderVersion");
+  const { shellLabel } = new Function(code + "; return { shellLabel };")();
+
+  check("a desktop shell is named with its version",
+        shellLabel({ kind: "desktop", version: "0.3.12" }) === "desktop 0.3.12");
+  check("a browser has no shell, so nothing is drawn",
+        shellLabel(undefined) === "");
+  check("and neither does a page that never set it",
+        shellLabel(null) === "");
+  check("a shell with no version still says what it is",
+        shellLabel({ kind: "desktop" }) === "desktop");
+  check("whitespace is not a version",
+        shellLabel({ kind: "desktop", version: "   " }) === "desktop");
+  check("a shell with no kind says nothing, because the version alone would " +
+        "read as the panel's",
+        shellLabel({ version: "0.3.12" }) === "");
+  check("a non-string version is ignored rather than printed",
+        shellLabel({ kind: "desktop", version: 3 }) === "desktop");
+  check("something that is not an object is not a shell",
+        shellLabel("desktop 0.3.12") === "");
+}
+
 console.log("paths a pane printed");
 {
   const code = region("const LINK_RE", "function openLink");
   // const in eval is trapped in the eval; a Function returns the bindings.
-  const { PATH_RE, trimPath } = new Function(code + "; return { PATH_RE, trimPath };")();
+  const { PATH_RE, trimPath, pathFromText } = new Function(
+    code + "; return { PATH_RE, trimPath, pathFromText };")();
   check("strips a compiler suffix", trimPath("src/app.js:42:7") === "src/app.js");
   check("strips a trailing period", trimPath("docs/foo.md.") === "docs/foo.md");
+  check("a selected relative path is a path", pathFromText("docs/foo.md") === "docs/foo.md");
+  check("a selected absolute path is a path", pathFromText("/tmp/foo.md") === "/tmp/foo.md");
+  check("a selected sentence is not a path", pathFromText("hello world") === "");
   const paths = (text) => {
     const out = [];
     PATH_RE.lastIndex = 0;
@@ -198,6 +228,93 @@ console.log("a login link that wrapped is still one link");
   check("copying a wrapped URL drops the line break",
         tidyCopiedLink("https://auth.openai.com/codex/device\n/extra")
           === "https://auth.openai.com/codex/device/extra");
+}
+
+console.log("a path that wrapped is still one link");
+{
+  const code = region("function paneRowsText", "function openLink");
+  const { panePathLinks } = new Function(code + "; return { panePathLinks };")();
+  const full = "/root/platform/clique/.claude-images/paste-1789750882398-fc77b1bf.png";
+  // 69 characters, so a narrow pane or a phone splits it. Each half on its own
+  // matches nothing, which is why long paths were the ones that never worked.
+  const parts = [
+    { y: 12, text: "wrote /root/platform/clique/.claude-imag" },
+    { y: 13, text: "es/paste-1789750882398-fc77b1bf.png" },
+  ];
+  const first = panePathLinks(parts, 12);
+  const second = panePathLinks(parts, 13);
+  check("the first row carries a link", first.length === 1, first);
+  check("so does the second", second.length === 1, second);
+  check("both name the whole path, not their own half",
+        first[0] && second[0] && first[0].path === full && second[0].path === full,
+        [first, second]);
+  check("the first row's slice starts after the word before it",
+        first[0] && first[0].x0 === 7 && first[0].x1 === 40, first);
+  check("the second row's slice is the remainder",
+        second[0] && second[0].x0 === 1 && second[0].x1 === 35, second);
+  const one = panePathLinks([{ y: 3, text: "see /tmp/foo.md here" }], 3);
+  check("a path that fits on one row still works",
+        one.length === 1 && one[0].path === "/tmp/foo.md", one);
+  check("and a URL is still not a path",
+        panePathLinks([{ y: 4, text: "https://example.com/docs/foo.md" }], 4).length === 0);
+}
+
+console.log("a host with no https:// in front of it");
+{
+  const code = region("function paneRowsText", "function openLink");
+  const { paneBareLinks, panePathLinks } = new Function(
+    code + "; return { paneBareLinks, panePathLinks };")();
+  const bare = (text, y) => paneBareLinks([{ y: y || 1, text }], y || 1);
+  check("our own output is a link",
+        bare("repo at fdroid.useclique.dev/repo (ver")[0]
+          && bare("repo at fdroid.useclique.dev/repo (ver")[0].url
+             === "https://fdroid.useclique.dev/repo", bare("repo at fdroid.useclique.dev/repo (ver"));
+  check("the scheme is added, not assumed present",
+        bare("see github.com/thejdubb02/clique")[0].url
+          === "https://github.com/thejdubb02/clique");
+  check("a trailing period belongs to the sentence",
+        bare("go to useclique.dev/docs.")[0].url === "https://useclique.dev/docs");
+  check("and a wrapping bracket to the prose",
+        bare("(useclique.dev/docs)")[0].url === "https://useclique.dev/docs");
+  // The slash is the whole defence against filenames: .md, .sh, .pl, .zip and
+  // .mov are all real TLDs, so a bare dotted word can never be enough.
+  check("README.md is not a domain", bare("edit README.md now").length === 0);
+  check("neither is build.sh", bare("run build.sh now").length === 0);
+  check("nor a Perl script", bare("perl gen.pl now").length === 0);
+  check("a dotted directory in a path is not a host",
+        bare("wrote /root/.claude/projects/x").length === 0);
+  check("an email address is not a host",
+        bare("mail user@host.com/x").length === 0);
+  check("the tail of a real URL is not matched a second time",
+        bare("https://example.com/docs").length === 0);
+  check("a version number is not a TLD", bare("in v1.2/file.txt").length === 0);
+  const parts = [
+    { y: 5, text: "install from fdroid.usecliq" },
+    { y: 6, text: "ue.dev/repo today" },
+  ];
+  check("a host that wrapped is still one link",
+        paneBareLinks(parts, 5).length === 1 && paneBareLinks(parts, 6).length === 1
+          && paneBareLinks(parts, 5)[0].url === "https://fdroid.useclique.dev/repo",
+        [paneBareLinks(parts, 5), paneBareLinks(parts, 6)]);
+  // The two passes must not both claim the same text, or the pane gets two
+  // overlapping links on one run of characters.
+  check("a host with a file on the end is a link, not a path",
+        panePathLinks([{ y: 7, text: "see fdroid.useclique.dev/repo/index.xml" }], 7).length === 0);
+  check("and a real relative path is still a path",
+        panePathLinks([{ y: 8, text: "wrote docs/foo.md" }], 8).length === 1);
+}
+
+console.log("a suggested shell command, stitched back into one line");
+{
+  const code = region("const SHELL_SUGGEST_RE", "const PATH_RE");
+  const { SHELL_SUGGEST_RE } = new Function(code + "; return { SHELL_SUGGEST_RE };")();
+  const run = (text) => { const m = SHELL_SUGGEST_RE.exec(text); SHELL_SUGGEST_RE.lastIndex = 0; return m; };
+  const hit = run("! cd /root/ventures/x && git push");
+  check("the command is everything after '! '",
+        hit && hit[1] === "cd /root/ventures/x && git push", hit);
+  check("ordinary output starting with '!' but no space is not a suggestion",
+        !run("!important: read this"));
+  check("a line with no leading '!' is not a suggestion", !run("cd /root/ventures/x"));
 }
 
 console.log("things that sit on top of other things");
@@ -284,9 +401,9 @@ console.log("copy from a pane that is eating the mouse");
 
   const code = region("const PANE_DRAG_PX", "function wirePaneClipboard");
   const {
-    paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse,
+    paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse, paneEdgeScrollDir,
   } = new Function(code +
-    "; return { paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse };")();
+    "; return { paneForceSelectMods, paneDragFarEnough, paneShouldStealMouse, paneEdgeScrollDir };")();
   const click = { button: 0, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false };
   check("a Mac uses Option, not Shift, to force a select",
         paneForceSelectMods("MacIntel").altKey && !paneForceSelectMods("MacIntel").shiftKey);
@@ -300,6 +417,11 @@ console.log("copy from a pane that is eating the mouse");
         !paneShouldStealMouse({ ...click, shiftKey: true }, true, true));
   check("and so is Ctrl-click, which drops a path",
         !paneShouldStealMouse({ ...click, ctrlKey: true }, true, true));
+  check("past the top edge scrolls up", paneEdgeScrollDir(5, 10, 110, 24) === -1);
+  check("past the bottom edge scrolls down", paneEdgeScrollDir(95, 10, 110, 24) === 1);
+  check("mid-pane does not scroll", paneEdgeScrollDir(50, 10, 110, 24) === 0);
+  check("exactly on the threshold does not scroll yet",
+        paneEdgeScrollDir(34, 10, 110, 24) === 0 && paneEdgeScrollDir(86, 10, 110, 24) === 0);
   check("a phone is not stolen from — the Copy chip is the way",
         !paneShouldStealMouse(click, true, false));
   check("and a shell with no mouse tracking selects on its own",
@@ -309,17 +431,74 @@ console.log("copy from a pane that is eating the mouse");
                               true, true));
 }
 
+console.log("the terminal wears the theme");
+{
+  const code = region("function mix(", "function currentTheme");
+  const { mix, termTokens, luminanceOf } = new Function(
+    "function luminance(hex){const v=hex.replace('#','');"
+    + "const f=v.length===3?[...v].map(c=>c+c).join(''):v;"
+    + "const ch=[0,2,4].map(i=>parseInt(f.slice(i,i+2),16)/255)"
+    + ".map(c=>c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4));"
+    + "return 0.2126*ch[0]+0.7152*ch[1]+0.0722*ch[2];}"
+    + "const _termThemes = new WeakMap();"
+    + code + "; return { mix, termTokens, luminanceOf: luminance };")();
+  check("halfway between black and white is grey",
+        mix("#000000", "#ffffff", 0.5) === "#808080");
+  check("no distance is the colour you started from",
+        mix("#1e1e1e", "#ffffff", 0) === "#1e1e1e");
+  check("short hex is read the same as long",
+        mix("#fff", "#000000", 0) === "#ffffff");
+
+  const dark = { term: { background: "#1e1e1e", selectionBackground: "#264f78" } };
+  const light = { term: { background: "#ffffff", selectionBackground: "#b6d7ff" } };
+  check("the character under a block cursor gets the theme's background",
+        termTokens(dark).cursorAccent === "#1e1e1e");
+  check("a dark selection is written on in light text",
+        termTokens(dark).selectionForeground === "#f5f5f5");
+  check("and a pale one in dark text",
+        termTokens(light).selectionForeground === "#101010");
+  check("an unfocused selection sits halfway back to the background",
+        termTokens(dark).selectionInactiveBackground === mix("#264f78", "#1e1e1e", 0.5));
+  check("a theme that states these keeps them",
+        termTokens({ term: { background: "#000", selectionBackground: "#333",
+                             selectionForeground: "#0f0" } }).selectionForeground === "#0f0");
+  check("and a theme with no selection colour is left alone",
+        termTokens({ term: { background: "#000" } }).selectionForeground === undefined);
+
+  /* Every shipped theme, not just a made-up one. The point of deriving these
+   * is that a new theme cannot arrive with a selection you cannot read on, so
+   * the guarantee is worth asserting against the real list. */
+  const themeSrc = fs.readFileSync(
+    path.join(__dirname, "..", "clique", "web", "themes.js"), "utf8");
+  const themes = new Function("const window = {}; " + themeSrc
+    + "; return window.CLIQUE_THEMES;")();
+  const names = Object.keys(themes);
+  check("there are themes to check", names.length >= 4, names.length);
+  const contrast = (a, b) => {
+    const [hi, lo] = [luminanceOf(a), luminanceOf(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const thin = names.filter((name) => {
+    const t = termTokens(themes[name]);
+    if (!t.selectionBackground) return false;
+    return contrast(t.selectionForeground, t.selectionBackground) < 4.5;
+  });
+  check("every theme's selection can be read on", thin.length === 0, thin);
+  const noCursor = names.filter((name) => !termTokens(themes[name]).cursorAccent);
+  check("and every theme says what sits under its cursor", noCursor.length === 0, noCursor);
+}
+
 console.log("zoom a boxed pane instead of wrapping it");
 {
   const code = region("const PANE_ZOOM_MIN", "function paneForceSelectMods");
   const {
-    paneZoomScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN,
+    paneWidthScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN,
   } = new Function(code +
-    "; return { paneZoomScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN };")();
+    "; return { paneWidthScale, paneShouldZoom, paneQueueOut, PANE_ZOOM_MIN };")();
   check("room to spare is no zoom",
-        paneZoomScale(800, 400, 80, 24, 8, 16) === 1);
+        paneWidthScale(800, 80, 8) === 1);
   check("half the width zooms to half",
-        Math.abs(paneZoomScale(320, 400, 80, 24, 8, 16) - 0.5) < 0.01);
+        Math.abs(paneWidthScale(320, 80, 8) - 0.5) < 0.01);
   check("a boxed CLI at half size zooms",
         paneShouldZoom(true, 0.5));
   check("a shell never zooms",
@@ -350,6 +529,267 @@ console.log("what's new");
         !changelogHasNews("0.50.24", "0.50.24"));
   check("and neither is a first look, before anything is stamped",
         !changelogHasNews("0.50.24", ""));
+}
+
+console.log("pairing QR sign-in URL");
+{
+  const code = region(
+    "function pairSignInTarget(base, code, origin)",
+    "/* ------------------------------------------------------------------- modal */"
+  );
+  const { pairSignInTarget } = new Function(
+    code + "; return { pairSignInTarget };"
+  )();
+  check(
+    "a public URL plus a code is the sign-in link",
+    pairSignInTarget("https://box.tail1234.ts.net/clique", "K7PM-3XQF", "")
+      === "https://box.tail1234.ts.net/clique/?pair=K7PM-3XQF"
+  );
+  check(
+    "a trailing slash is not doubled",
+    pairSignInTarget("https://box.example.ts.net/clique/", "ABCD-EFGH", "")
+      === "https://box.example.ts.net/clique/?pair=ABCD-EFGH"
+  );
+  check(
+    "localhost is not a QR",
+    pairSignInTarget("http://localhost:3200", "ABCD-EFGH", "") === ""
+  );
+  check(
+    "127.0.0.1 is not a QR",
+    pairSignInTarget("http://127.0.0.1:3200", "ABCD-EFGH", "https://ok.example") === ""
+  );
+  check(
+    "IPv6 loopback is not a QR either",
+    pairSignInTarget("http://[::1]:3200", "ABCD-EFGH", "") === ""
+  );
+  check(
+    "an empty setting falls back to the page origin",
+    pairSignInTarget("", "ABCD-EFGH", "https://box.example.ts.net")
+      === "https://box.example.ts.net/?pair=ABCD-EFGH"
+  );
+  check(
+    "and a loopback origin with no setting is still not a QR",
+    pairSignInTarget("", "ABCD-EFGH", "http://127.0.0.1:3200") === ""
+  );
+  check(
+    "a hostname that merely contains 127.0.0.1 is fine",
+    pairSignInTarget("https://127.0.0.1.example.com", "ABCD-EFGH", "")
+      === "https://127.0.0.1.example.com/?pair=ABCD-EFGH"
+  );
+  check(
+    "a scheme-less public host is accepted",
+    pairSignInTarget("box.example.ts.net/clique", "ABCD-EFGH", "")
+      === "https://box.example.ts.net/clique/?pair=ABCD-EFGH"
+  );
+}
+
+console.log("markdown in the file sheet");
+{
+  const code = region(
+    "/* parseMarkdown: blocks from a string, no DOM. */",
+    "function renderMarkdown("
+  );
+  const { parseMarkdown } = new Function(code + "; return { parseMarkdown };")();
+  const walk = (n, acc) => {
+    if (!n) return acc;
+    if (Array.isArray(n)) { n.forEach((x) => walk(x, acc)); return acc; }
+    acc.push(n);
+    walk(n.inlines, acc); walk(n.children, acc); walk(n.items, acc);
+    walk(n.header, acc); walk(n.rows, acc);
+    return acc;
+  };
+
+  for (let n = 1; n <= 6; n++) {
+    const b = parseMarkdown("#".repeat(n) + " Title")[0];
+    check("heading h" + n, b && b.type === "heading" && b.level === n, b);
+  }
+
+  const para = parseMarkdown("hello world")[0];
+  check("a paragraph", para && para.type === "paragraph"
+    && para.inlines[0] && para.inlines[0].text === "hello world", para);
+
+  const fenced = parseMarkdown("```js\n# not a heading\n- not a list\n```");
+  check("fenced contents are not markdown",
+        fenced.length === 1 && fenced[0].type === "code"
+        && fenced[0].text.indexOf("# not a heading") >= 0
+        && fenced[0].text.indexOf("- not a list") >= 0, fenced);
+  check("and keeps the language", fenced[0] && fenced[0].lang === "js", fenced[0]);
+
+  const tildes = parseMarkdown("~~~\n# still code\n~~~")[0];
+  check("tilde fences are code too",
+        tildes && tildes.type === "code" && tildes.text.indexOf("# still code") >= 0,
+        tildes);
+
+  const ul = parseMarkdown("- a\n- b")[0];
+  check("unordered list",
+        ul && ul.type === "list" && !ul.ordered && ul.items.length === 2, ul);
+
+  const ol = parseMarkdown("1. a\n2. b")[0];
+  check("ordered list",
+        ol && ol.type === "list" && ol.ordered && ol.items.length === 2, ol);
+
+  const table = parseMarkdown("| a | b |\n| --- | ---: |\n| 1 | 2 |")[0];
+  check("a table", table && table.type === "table" && table.rows.length === 1, table);
+  check("and its alignment row",
+        table && table.align && table.align[1] === "right", table && table.align);
+
+  const hr = parseMarkdown("---")[0];
+  check("a rule", hr && hr.type === "hr", hr);
+
+  const quote = parseMarkdown("> quoted")[0];
+  check("a blockquote", quote && quote.type === "blockquote", quote);
+
+  const inline = parseMarkdown(
+    "use `x` **bold** __also__ *em* _em2_ [ok](https://ex.com) "
+    + "[bad](javascript:alert(1)) \\*star\\*"
+  )[0];
+  const nodes = walk(inline, []);
+  check("inline code", nodes.some((n) => n.type === "code" && n.text === "x"));
+  check("** and __ are bold", nodes.filter((n) => n.type === "strong").length === 2);
+  check("* and _ are italic", nodes.filter((n) => n.type === "em").length === 2);
+  check("http link survives",
+        nodes.some((n) => n.type === "link" && n.href === "https://ex.com"));
+  check("javascript: is not a link",
+        !nodes.some((n) => n.type === "link" && /javascript:/i.test(n.href || "")),
+        nodes.filter((n) => n.type === "link"));
+  const jsOnly = parseMarkdown("[XSS](javascript:alert(1))")[0];
+  const jsText = walk(jsOnly, []).filter((n) => n.type === "text").map((n) => n.text).join("");
+  check("and it does not leave a stray parenthesis", jsText === "XSS", jsText);
+  const esc = parseMarkdown("\\*star\\*")[0];
+  check("escaped asterisk is text",
+        esc && esc.type === "paragraph"
+        && esc.inlines.length === 1
+        && esc.inlines[0].type === "text"
+        && esc.inlines[0].text === "*star*",
+        esc);
+}
+
+console.log("settings queue, send errors, file save race, hidden polling");
+{
+  const toasts = [];
+  const toast = (t, bad) => toasts.push(t);
+  let state = { settings: {} }, calls = [], pend = [];
+  const api = () => new Promise((res, rej) => { pend.push({ res, rej }); });
+  const applySettings = () => {}, reclaimSize = () => {}, renderTree = () => {}, renderGroups = () => {}, renderTabs = () => {};
+  eval(region("let settingsQueue", "function fmtSize") + "; globalThis.__s = saveSettings;");
+  const save = globalThis.__s;
+  const tick = () => new Promise((r) => setTimeout(r, 5));
+  const pre = (async () => {
+    const a = save({ a: 1 }), b = save({ b: 1 });
+    await tick();
+    check("second settings write waits for the first", pend.length === 1, pend.length);
+    pend[0].res({ v: "first" }); await tick();
+    pend[1].res({ v: "second" }); await a; await b;
+    check("settings responses apply in order", state.settings.v === "second", state.settings);
+    pend = [];
+    const c = save({ c: 1 }); await tick(); pend[0].rej(new Error("down"));
+    let threw = false; try { await c; } catch { threw = true; }
+    check("a failed settings save is shown AND rejected to the caller", threw && toasts.some((t) => /down/.test(t)), toasts);
+    const d = save({ d: 1 }); await tick();
+    check("and the queue keeps working after a failure", pend.length === 2); pend[1].res({ v: "ok" }); await d;
+
+    // prompt send failure keeps the draft and says so
+    toasts.length = 0; pend = [];
+    let sending = false, activeId = "s", repeat = 1, cleared = 0;
+    const reviewLockedOf = () => false, hintReviewLocked = () => {}, session = () => ({ name: "n" });
+    const okToSend = async () => true, control = () => false, maybeAutoTitle = () => {};
+    const clearPrompt = () => { cleared++; }, saveDraft = () => {}, setRepeat = () => {};
+    eval(region("async function run(text)", "async function runShell") + "; globalThis.__run = run;");
+    const r = globalThis.__run("hello"); await tick(); pend[0].rej(new Error("503")); await r;
+    check("a failed prompt send shows an error and keeps the draft",
+          toasts.some((t) => /503/.test(t)) && cleared === 0 && sending === false, [toasts, cleared]);
+
+    // file save finishing after the sheet moved on
+    toasts.length = 0; pend = [];
+    let fileEditing = true, fileSession = "s", fileAsked = "a.txt", shown = 0;
+    let currentFile = { path: "a.txt", name: "a.txt", text: "old" };
+    const btn = { disabled: false };
+    const $ = (q) => (q === "#fileSave" ? btn : { value: "new", hidden: false });
+    const showFile = () => { shown++; };
+    eval(region("let fileSaveSeq", "function closeFileSheet") + "; globalThis.__sf = saveFileEdit; globalThis.__swap = () => { currentFile = { path: 'b.txt', name: 'b.txt', text: 'B' }; }; globalThis.__cf = () => currentFile;");
+    const f = globalThis.__sf(); await tick(); globalThis.__swap(); pend[0].res({}); await f;
+    check("a late file save does not repaint another file", shown === 0 && globalThis.__cf().text === "B", [shown, globalThis.__cf()]);
+
+    // two overlapping saves: the first finishing must not free the button
+    pend = [];
+    currentFile = null; globalThis.__swap(); fileEditing = true;
+    const f1 = globalThis.__sf(); const f2 = globalThis.__sf(); await tick();
+    pend[0].res({}); await f1;
+    check("an older save finishing leaves Save disabled for the newer one", btn.disabled === true);
+    pend[1].res({}); await f2;
+    check("and the newest finishing re-enables it", btn.disabled === false);
+
+    // runShell failing after it switched tabs goes back with the command kept
+    toasts.length = 0; pend = [];
+    let act = "src", boxv = "", saved = [];
+    const box = { get value() { return boxv; }, set value(v) { boxv = v; } };
+    const $2 = () => box;
+    const growPrompt = () => {}, refresh = async () => {};
+    const openSession = async (id) => { act = id; boxv = id === "src" ? "" : "shell draft"; };
+    const sessionX = (id) => ({ id, cwd: "/w", folder: "f", cli: "x" });
+    const stateX = { sessions: [{ id: "sh", cli: "shell", cwd: "/w", alive: true }] };
+    const rs = new Function("session", "state", "activeId", "reviewLockedOf", "hintReviewLocked", "okToSend", "api", "openSession", "toast", "clearPrompt", "saveDraft", "$", "growPrompt", "refresh", "sending",
+      "return (" + region("async function runShell", "function setRepeat").replace(/^async function runShell/, "async function") + ")")(
+      sessionX, stateX, "src", () => false, () => {}, async () => true, () => new Promise((res, rej) => pend.push({ res, rej })),
+      openSession, (t) => toasts.push(t), () => {}, (n) => saved.push(boxv), $2, growPrompt, refresh, false);
+    const p = rs("ls -la"); await tick(); pend[0].rej(new Error("boom")); await p;
+    check("a failed shell send returns to the source tab with the command in the draft",
+          act === "src" && boxv === "ls -la" && toasts.some((t) => /boom/.test(t)), [act, boxv, toasts]);
+  })().then(() => {
+    // hidden tabs do not poll
+    let fn = null, calls2 = 0;
+    const setInterval = (f) => { if (!fn) fn = f; };
+    const document = { hidden: true }; const refresh = () => { calls2++; };
+    const pollArtifacts = () => {}, ART_POLL_MS = 1, renderClock = () => {}, activeId = null;
+    eval(region("setInterval(() => { if (!document.hidden) refresh", "// Slower than the sidebar"));
+    fn(); check("a hidden tab does not poll state", calls2 === 0, calls2);
+    document.hidden = false; fn(); check("a visible tab does", calls2 === 1, calls2);
+    const listeners = {}; let n3 = 0;
+    const doc = { hidden: false, addEventListener: (e, f) => { listeners[e] = f; } };
+    const mk = (document, refresh) => new Function("document", "refresh", "pollArtifacts", "scheduleWake",
+      region('document.addEventListener("visibilitychange", () => {\n  if (!document.hidden) {\n    refresh', 'addEventListener("focus"') .replace(/\naddEventListener\("focus"[\s\S]*$/, "") + "");
+    mk(doc, () => { n3++; })(doc, () => { n3++; }, () => {}, () => {});
+    listeners.visibilitychange();
+    check("coming back to the tab refreshes (listener is on document)", typeof listeners.visibilitychange === "function" && n3 === 1, n3);
+  });
+  globalThis.__pre = pre;
+}
+
+console.log("stale polls, artifact races, vanished sessions");
+{
+  const code = region("let refreshSeq", "  if (!workspaceRestored) restoreWorkspace();") + "  return true;\n}\n"
+    + region("async function pollArtifacts", "function setArtifacts");
+  let state = { sessions: [] }, openTabs = [], activeId = "a", pollFailures = 0, artItems = [];
+  const terms = new Map(), closed = [], set = [];
+  const session = (id) => state.sessions.find((x) => x.id === id);
+  const closeTab = (id) => { closed.push(id); terms.delete(id); };
+  const setArtifacts = (i) => set.push(i);
+  const $ = () => ({}); const document = { hidden: false };
+  let pending = [];
+  const api = () => new Promise((res) => pending.push(res));
+  eval(code + "; globalThis.__t = { refresh, pollArtifacts, setActive: (v) => { activeId = v; }, st: () => state };");
+  const t = globalThis.__t;
+  (async () => {
+    await globalThis.__pre;
+    const r1 = t.refresh(), r2 = t.refresh();
+    pending[1]({ sessions: [{ id: "a" }], v: "new" });
+    await r2;
+    pending[0]({ sessions: [], v: "old" });
+    await r1;
+    check("an older poll finishing late does not replace newer state", t.st().v === "new", t.st().v);
+    pending = [];
+    state = { sessions: [{ id: "a" }], settings: {} };
+    terms.set("gone", {});
+    const r3 = t.refresh(); pending[0]({ sessions: [{ id: "a" }], settings: {} }); await r3;
+    check("a terminal whose session vanished is torn down", closed.includes("gone") && !terms.has("gone"), closed);
+    pending = [];
+    const p = t.pollArtifacts(); t.setActive("b"); pending[0]([{ rel: "x" }]); await p;
+    check("artifacts for a tab we left are dropped", set.length === 0, set);
+  })().then(() => {
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+  });
+  return;
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

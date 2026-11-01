@@ -32,7 +32,7 @@ ZONE = ZoneInfo("America/Los_Angeles")
 
 # "## 0.5.0 — 2026-08-19 — **now CLIque**" — version, date, then anything else
 # the heading wanted to say, which is preserved untouched.
-HEAD = re.compile(r"^## (?P<ver>\S+) — (?P<date>\d{4}-\d{2}-\d{2})(?P<rest>.*)$")
+HEAD = re.compile(r"^## (?P<ver>\S+) [—-] (?P<date>\d{4}-\d{2}-\d{2})(?P<rest>.*)$")
 STAMPED = re.compile(r"^ \d{2}:\d{2} ")
 
 
@@ -47,7 +47,9 @@ def release_times() -> dict[str, datetime]:
         iso, _, subject = line.partition("\x1f")
         # Releases name their version in parentheses at the end; the very
         # first one predates that habit and just says "v0.1.0".
+        # Later ones lead with it: "0.95.0: keep scrollback, ...".
         match = (re.search(r"\((\d+\.\d+\.\d+)\)\s*$", subject)
+                 or re.match(r"(\d+\.\d+\.\d+):", subject)
                  or re.search(r"\bv(\d+\.\d+\.\d+)\b", subject))
         if not match:
             continue
@@ -73,7 +75,7 @@ def main() -> int:
             # Not committed yet — this is the entry being written right now,
             # and "now" is within a minute of the commit that follows.
             when = now
-        lines[i] = (f"## {match.group('ver')} — {when:%Y-%m-%d %H:%M %Z}"
+        lines[i] = (f"## {match.group('ver')} - {when:%Y-%m-%d %H:%M %Z}"
                     f"{match.group('rest')}")
         changed += 1
 
