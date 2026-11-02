@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.95.8
+
+**A zoomed pane stays inside its box, and the site says there is an Android app.**
+
+- A zoomed pane drew about 3px past the bottom of its box, because the row
+  count included the pane's padding. It now measures from where the
+  terminal starts, as the width already did. `redraw_check.py` proves it
+  (CLQ-106).
+- useclique.dev has a new question, "Is there a phone app?", in all six
+  languages, linking the Android source and its F-Droid repository (CLQ-28).
+- Tests only: a visual check that a notification link opens its session
+  (CLQ-58), and two visual checks that wait on a condition instead of a
+  fixed time.
+
 ## 0.95.7 - 2026-11-01 09:52 PST
 
 **Line height and letter spacing for the terminal, and a click that went missing.**
