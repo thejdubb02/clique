@@ -910,7 +910,16 @@ def _run(panel) -> int:
         page.evaluate("openModal()")
         page.wait_for_timeout(400)
         page.fill("#newForm [name=cwd]", "clique")
-        page.wait_for_timeout(1200)
+        # The search walks the disk, and on a busy box that outlasts any fixed
+        # wait. Wait for its answer; a timeout falls through to the checks.
+        try:
+            page.wait_for_function(
+                """() => [...document.querySelectorAll('#cwdList option')]
+                         .some((o) => o.textContent.includes(' · '))""",
+                timeout=8000,
+            )
+        except Exception as err:  # noqa: BLE001 - the checks below name what failed
+            print(f"       the project search did not answer: {err}")
         listed = page.evaluate(
             """() => [...document.querySelectorAll('#cwdList option')]
                      .map((o) => ({value: o.value, label: o.textContent}))"""
@@ -1266,7 +1275,10 @@ def _run(panel) -> int:
                 boxed_box["x"] + min(boxed_box["width"] - 12, 360), boxed_box["y"] + 18, steps=8
             )
             page.mouse.up()
-            page.wait_for_timeout(400)
+            try:
+                page.locator("#copySel").wait_for(state="visible", timeout=3000)
+            except Exception as err:  # noqa: BLE001 - the check below names the failure
+                print(f"       no copy button after the drag: {err}")
             check(
                 "a drag on a boxed pane shows the copy button",
                 page.locator("#copySel").is_visible(),
@@ -1321,6 +1333,7 @@ def _run(panel) -> int:
                   const line = buf.getLine(buf.viewportY);
                   return {
                     cols: e.term.cols,
+                    owns: sessionOwnsInput(activeId),
                     transform: e.term.element.style.transform || "",
                     text: line ? line.translateToString(true) : ""
                   };

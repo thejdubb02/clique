@@ -5410,7 +5410,11 @@ function layoutPane(entry) {
     // this the panel opened, the grid scaled down to clear it, and the
     // bottom fifth of the terminal went dead black. Columns are left exactly
     // where they are: keeping them is the entire reason this zooms.
-    const fitRows = Math.floor(entry.el.clientHeight / (cell.h * scale));
+    // Height from where the terminal starts too, for the same reason as the
+    // width: clientHeight counts the pane's padding, and the picture spilled
+    // that much past the bottom.
+    const fitRows = Math.floor((box.bottom - (entry.term.element
+      ? entry.term.element.getBoundingClientRect().top : box.top)) / (cell.h * scale));
     if (fitRows >= 4 && fitRows !== entry.term.rows) {
       // Resize unscaled, so the terminal measures itself in honest pixels,
       // and put the transform back afterwards.
