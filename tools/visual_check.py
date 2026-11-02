@@ -1949,6 +1949,25 @@ def _run(panel) -> int:
 
         page.screenshot(path=str(SHOTS / "theme-maker.png"))
 
+        # A notification's link is the panel with ?session=<id>. Opening it has
+        # to put that session in front and drop the parameter, or a reload
+        # would keep dragging you back to it (CLQ-58).
+        linked = _api("/api/sessions", "POST", {"cli": "shell", "cwd": "/tmp", "name": "linked"})[
+            "id"
+        ]
+        try:
+            page.goto(BASE + "/?session=" + linked, wait_until="networkidle")
+            try:
+                page.wait_for_function("(id) => activeId === id", arg=linked, timeout=8000)
+            except Exception as err:  # noqa: BLE001 - the check below names what failed
+                print("the linked session never came to the front:", err)
+            check(
+                "a notification link opens its session", page.evaluate("() => activeId") == linked
+            )
+            check("the link's ?session= is dropped after", "session=" not in page.url, page.url)
+        finally:
+            _remove_session(linked)
+
         # Phone build, first pass: a narrow viewport, reloaded so the mobile
         # bootstrap runs (drawer starts closed), then the drawer opened over the
         # pane. Not asserted yet — screenshots to iterate the layout on.
