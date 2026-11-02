@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.95.8
+## 0.95.8 - 2026-11-02 09:56 PST
 
 **A zoomed pane stays inside its box, and the site says there is an Android app.**
 
