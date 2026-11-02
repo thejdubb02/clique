@@ -88,6 +88,15 @@ notch and does not run in standalone mode.
 
 ## Shipped off this list
 
+- **Off-panel cleanup, 2026-11-02.** Not in a release; pushed only.
+  CLQ-48: Gatus on vps1 now watches the tailnet route
+  (`wsg-devbox.tail7de7a3.ts.net/clique/healthz`) as well as the public one,
+  since the phone and desktop app come in through `tailscale serve`, not nginx.
+  CLQ-23: the F-Droid repo shows the CLIque icon; `fdroid update` copies
+  `repo_icon` from the repo root, so `publish.py` puts it there. CLQ-28: the
+  site FAQ points at the Android app in all six languages. CLQ-58: a visual
+  check proves a notification's `?session=` link opens that session; the rest
+  of that card is desktop work, blocked on the signing key (CLQ-101).
 - **A folder can resume its sessions after a usage limit resets**, 0.88.0.
   CLQ-68. Opt in per folder from the folder menu. A session qualifies only when
   it is idle and its last lines match the CLI's `attention.limited` patterns in
