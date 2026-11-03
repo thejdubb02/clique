@@ -316,8 +316,16 @@ class TerminalHandler(BaseHTTPRequestHandler):
             # purpose: no tmux call, no resize, just the timestamp. Needed
             # because a phone that already owns the window has nothing to
             # resize and would otherwise let the hold lapse under itself.
+            # A hold that finds no claim (released on pause, or never made
+            # after attach) is the phone coming back to a window a desktop
+            # has resized: take it back at this PTY's size, or the phone
+            # sits in dot-fill until its own size happens to change.
             if may_write:
+                with _handheld_lock:
+                    had = session.mux in _handheld
                 _may_size_window(session.mux, True)
+                if not had:
+                    tmux.resize_window(session.mux, bridge.cols, bridge.rows, session.socket)
         elif kind == "release":
             # A phone going into a pocket. The timer below is the backstop for
             # one that vanishes without saying so; this is the ordinary case,

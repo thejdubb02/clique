@@ -927,6 +927,19 @@ def main() -> int:
         )
         check("and the phone's hold is gone", "sm-restore" not in _handheld, dict(_handheld))
 
+        # Back from the background, the phone only says hold. It has to
+        # take the window back at its own size, once, not on every poll.
+        bridge.cols, bridge.rows = 53, 20
+        resizes.clear()
+        control(b'{"type":"hold"}')
+        check(
+            "a hold after release reclaims the phone's size",
+            resizes == [("sm-restore", 53, 20)],
+            resizes,
+        )
+        control(b'{"type":"hold"}')
+        check("and a hold while held does not resize again", len(resizes) == 1, resizes)
+
         _handheld.clear()
         _desktop_size.clear()
         resizes.clear()
@@ -1471,7 +1484,14 @@ def main() -> int:
     if not node:
         print("  · no node; skipping the parse check")
     else:
-        for name in ("app.js", "sidebar-status.js", "file-preview.js", "providers.js", "panes.js", "themes.js"):
+        for name in (
+            "app.js",
+            "sidebar-status.js",
+            "file-preview.js",
+            "providers.js",
+            "panes.js",
+            "themes.js",
+        ):
             script = ROOT / "clique" / "web" / name
             done = subprocess.run([node, "--check", str(script)], capture_output=True, text=True)
             check(
@@ -1604,7 +1624,8 @@ def main() -> int:
     qc_store.update_settings({"term_line_height": 999, "term_letter_spacing": -3})
     check(
         "line height and letter spacing are clamped, not stored raw",
-        (qc_store.settings["term_line_height"], qc_store.settings["term_letter_spacing"]) == (160, 0),
+        (qc_store.settings["term_line_height"], qc_store.settings["term_letter_spacing"])
+        == (160, 0),
         (qc_store.settings["term_line_height"], qc_store.settings["term_letter_spacing"]),
     )
     qc_store.update_settings({"snippets": []})
