@@ -35,15 +35,12 @@ LENGTH = 8
 #: screen is not a standing invitation.
 LIFETIME = 120.0
 
-#: Wrong guesses that burn the code. Typing it wrong twice is a person; five
-#: times is not, and the cost of being wrong is that they ask for a new code.
-MAX_TRIES = 5
-
-#: A ceiling across all codes, so guessing cannot be parallelised by asking
-#: for code after code. Attempts, not codes: the expensive thing to allow is
-#: the guess.
-WINDOW = 60.0
-WINDOW_TRIES = 12
+# No guess counter, on purpose. Redeeming is open to anyone who can reach the
+# tunnel, so any counter that refuses or burns the code is a switch a stranger
+# can hold down to keep pairing broken (it was: twelve junk posts a minute
+# locked the owner out for good). What keeps guessing hopeless is the space
+# instead: 30**8 codes, one live at a time, for two minutes. Even ten thousand
+# guesses a second for a code's whole life wins once in roughly 550,000 codes.
 
 
 def _normalise(text: str) -> str:
@@ -54,8 +51,7 @@ def _normalise(text: str) -> str:
 @dataclass
 class Pending:
     code: str
-    expires: float
-    tries: int = 0
+    expires: float  # time.monotonic(), so a clock stepped back cannot revive a code
 
 
 @dataclass
@@ -64,7 +60,6 @@ class Desk:
 
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _open: Pending | None = None
-    _attempts: list[float] = field(default_factory=list)
 
     def start(self) -> tuple[str, int]:
         """Mint a code, replacing any code already waiting.
@@ -75,15 +70,16 @@ class Desk:
         """
         code = "".join(secrets.choice(ALPHABET) for _ in range(LENGTH))
         with self._lock:
-            self._open = Pending(code=code, expires=time.time() + LIFETIME)
+            self._open = Pending(code=code, expires=time.monotonic() + LIFETIME)
         return code, int(LIFETIME)
 
     def waiting(self) -> int:
         """Seconds left on the outstanding code, or 0 if there is not one."""
         with self._lock:
-            if not self._open:
-                return 0
-            return max(0, int(self._open.expires - time.time()))
+            left = self._open.expires - time.monotonic() if self._open else 0.0
+            if left <= 0:
+                self._open = None
+            return max(0, int(left))
 
     def cancel(self) -> None:
         with self._lock:
@@ -92,24 +88,17 @@ class Desk:
     def redeem(self, typed: str) -> bool:
         """True exactly once, for the right code, before it expires."""
         offered = _normalise(typed)
-        now = time.time()
+        if len(offered) != LENGTH:
+            return False
         with self._lock:
-            self._attempts = [t for t in self._attempts if now - t < WINDOW]
-            if len(self._attempts) >= WINDOW_TRIES:
-                return False
-            self._attempts.append(now)
-
             pending = self._open
-            if not pending or now >= pending.expires:
+            if not pending or time.monotonic() >= pending.expires:
                 self._open = None
                 return False
             # Compared in constant time even though the code is short-lived:
             # the timing of a comparison does not care how long the secret
             # lives, and this is the one place a remote caller gets to probe.
             if not secrets.compare_digest(offered, pending.code):
-                pending.tries += 1
-                if pending.tries >= MAX_TRIES:
-                    self._open = None
                 return False
             self._open = None  # single use
             return True

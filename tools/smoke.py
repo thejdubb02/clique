@@ -704,8 +704,36 @@ def main() -> int:
     check("a wrong code does not redeem", not desk.redeem("ZZZZZZZZ"))
 
     expired, _ = desk.start()
-    desk._open.expires = time.time() - 1
+    desk._open.expires = time.monotonic() - 1
     check("an expired code does not redeem", not desk.redeem(expired))
+
+    # Redeeming is open to strangers, so nothing they send may lock the owner
+    # out: not a flood of junk, not a run of wrong guesses at the live code.
+    live, _ = desk.start()
+    for _ in range(40):
+        desk.redeem("")
+        desk.redeem("ZZZZZZZZ")
+    check("junk and wrong guesses cannot lock out the real code", desk.redeem(live))
+
+    # A clock stepped back must not revive a code the panel already showed
+    # as expired.
+    import clique.pairing as pairing_mod
+
+    desk = Desk()
+    stale, _ = desk.start()
+    real_time, real_mono = time.time, time.monotonic
+    try:
+        pairing_mod.time.time = lambda: real_time() + 121  # type: ignore[assignment]
+        pairing_mod.time.monotonic = lambda: real_mono() + 121  # type: ignore[assignment]
+        shown = desk.waiting()
+        pairing_mod.time.time, pairing_mod.time.monotonic = real_time, real_mono
+        check(
+            "an expired code stays dead when the clock steps back",
+            shown == 0 and not desk.redeem(stale),
+            shown,
+        )
+    finally:
+        pairing_mod.time.time, pairing_mod.time.monotonic = real_time, real_mono
 
     # The Android claim path is Desk.redeem then tokens.create. Hitting the
     # real method, not a copy of it, is what keeps a refactor from changing
