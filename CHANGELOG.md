@@ -2,7 +2,7 @@
 
 ## 0.95.9 - 2026-11-06 13:59 PST
 
-**Pairing cannot be jammed by a stranger, and half-typed drafts survive a fast tab switch.**
+**Pairing cannot be jammed by a stranger, and half-typed drafts and prompts stay with their own tab.**
 
 - Anyone who could reach the tunnel could keep device pairing broken by
   sending junk codes: twelve a minute filled a shared limit, and five wrong
@@ -13,6 +13,12 @@
 - A draft typed and then left with a fast tab switch, or a closing page, was
   sometimes lost or overwritten by an older save. Drafts now save in order,
   flush when the page hides, and show a message if a save fails (#32).
+- A prompt sent from one tab, then a quick switch to another, could send
+  its repeats, its auto-title and its draft clear to the tab in front. The
+  send now stays with the tab it came from (#33).
+- A folder set to match `/srv/work` also took sessions in `/srv/workshop`.
+  Matching is now by whole directory, and a new session made with no folder
+  lands in Ungrouped instead of being filed by directory (#35).
 - Deleting every folder now stays deleted after a restart, instead of the
   default folders coming back (#34).
 - Project search keeps its time and size limits inside one very large
