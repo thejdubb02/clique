@@ -6,8 +6,9 @@ import contextlib
 import json
 import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
+from typing import Any
 
 from . import termstrip, tmux
 from .stream import PtyBridge

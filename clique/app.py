@@ -29,22 +29,22 @@ import traceback
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from . import (
     artifacts,
     attention,
     changelog,
-    files,
     file_routes,
+    files,
     gitinfo,
     llm,
     migrate,
     notify,
     pairing,
-    provider_routes,
     projects,
+    provider_routes,
     secretbox,
     services,
     session_routes,
@@ -63,7 +63,6 @@ from .registry import Registry, RegistryError
 from .registry import icon_is_full_colour as registry_icon_is_colour
 from .store import DEFAULT_SETTINGS, Session, Store, auto_folder, clock_time, new_id
 from .tokens import TokenStore
-
 
 WEB = Path(__file__).parent / "web"
 

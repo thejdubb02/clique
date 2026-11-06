@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
-from typing import Any, Callable
+from typing import Any
 
 
 class ProviderRoutes(BaseHTTPRequestHandler):

@@ -164,7 +164,7 @@ def complete(profile: dict, messages: list, *, max_tokens: int = 1024, timeout: 
         url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST"
     )
     try:
-        with _OPENER.open(req, timeout=timeout) as resp:  # noqa: S310 — see _guard_url
+        with _OPENER.open(req, timeout=timeout) as resp:
             raw = resp.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise LLMError("provider response was too large")

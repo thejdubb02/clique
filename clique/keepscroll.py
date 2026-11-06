@@ -63,7 +63,7 @@ def main(argv: list[str]) -> int:
     pid, master = pty.fork()
     if pid == 0:
         try:
-            os.execvp(argv[0], argv)
+            os.execvp(argv[0], argv)  # noqa: S606 - the wrapped CLI is the point; argv, no shell
         except OSError as err:
             print(f"{argv[0]}: {err.strerror}", file=sys.stderr)
             os._exit(127)

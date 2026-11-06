@@ -885,8 +885,8 @@ def main() -> int:
     # by document.hasFocus(), which is per browser window: a desktop on one
     # machine and a phone in your hand both report true, so both claimed it
     # every poll and the CLI reflowed between 162 and 42 columns forever.
-    from clique.terminal_handler import HANDHELD_HOLD, _desktop_size, _handheld, _may_size_window
     from clique.app import Handler
+    from clique.terminal_handler import HANDHELD_HOLD, _desktop_size, _handheld, _may_size_window
 
     _handheld.clear()
     _desktop_size.clear()

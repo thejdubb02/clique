@@ -250,7 +250,7 @@ LOGIN_PAGE = """<!doctype html>
 #: without touching the rest of LOGIN_PAGE. With pair empty, login_page is
 #: byte-for-byte the original substitutions.
 _PASSWORD_BLOCK = (
-    '  <input type="password" name="password" placeholder="Password"\n'
+    '  <input type="password" name="password" placeholder="Password"\n'  # noqa: S105 - HTML for the password field, not a credential
     '         autocomplete="current-password" autofocus required>\n'
     '  <button type="submit">Sign in</button>\n'
     '</form>'

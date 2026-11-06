@@ -37,3 +37,23 @@ jobs:
         run: python3 tools/rotate_check.py
       - name: pairing a device
         run: python3 tools/pair_check.py
+      - name: backend hardening
+        run: python3 tools/hardening_check.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: front-end logic
+        run: node tools/frontend_check.js
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Pinned so a new ruff release cannot turn the build red on its own.
+      - run: pip install ruff==0.16.0
+      - run: ruff check clique tools

@@ -33,7 +33,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .llm import _OPENER  # refuses redirects: the guard vets only the first URL
@@ -172,7 +172,7 @@ def _fetch(spec: dict, guard) -> dict:
     # is not http(s) to a public host, which is the check S310 is asking for.
     request = urllib.request.Request(url, headers=headers)  # noqa: S310
     try:
-        with _OPENER.open(request, timeout=TIMEOUT) as response:  # noqa: S310
+        with _OPENER.open(request, timeout=TIMEOUT) as response:
             if response.status != 200:
                 raise _Miss(f"HTTP {response.status}")
             body = response.read(MAX_BYTES + 1)
@@ -200,7 +200,7 @@ def _resets_at(value: object) -> str | None:
         return value
     if isinstance(value, (int, float)) and value > 0:
         try:
-            return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+            return datetime.fromtimestamp(value, tz=UTC).isoformat()
         except (OverflowError, OSError, ValueError):
             return None  # a number no clock can hold is no reset time
     return None

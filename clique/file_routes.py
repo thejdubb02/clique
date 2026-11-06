@@ -6,9 +6,10 @@ import base64
 import binascii
 import secrets
 import time
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from . import artifacts, files
 

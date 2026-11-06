@@ -17,7 +17,6 @@ Exit status is 0 on pass, 1 on fail.
 from __future__ import annotations
 
 import http.server
-import io
 import shutil
 import sys
 import tempfile
@@ -135,7 +134,7 @@ def _rollback_run(fail: str) -> list[str]:
             boom()
 
     gitinfo.repo_root = lambda c: c
-    gitinfo.add_worktree = lambda r, b: (wt, "")
+    gitinfo.add_worktree = lambda _r, _b: (wt, "")
     gitinfo.worktree_setup = boom if fail == "setup" else (lambda r, m: None)
     gitinfo.remove_worktree = lambda p: log.append("rmworktree")
     tmux.bootstrap = lambda: None
