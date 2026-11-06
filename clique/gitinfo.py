@@ -17,6 +17,8 @@ import threading
 import time
 from pathlib import Path
 
+# --no-optional-locks on every call: the timeout SIGKILLs git, and a killed
+# `git status` left index.lock behind in every open repo at once (devbox#5).
 TIMEOUT = 1.0
 TTL = 8.0
 TTL_MISS = 30.0
@@ -31,7 +33,7 @@ def _git(cwd: Path, *args: str) -> str | None:
     """A git command in ``cwd``, or None if git cannot answer."""
     try:
         done = subprocess.run(  # noqa: S603 — argv list, no shell
-            ["git", "-C", str(cwd), *args],  # noqa: S607 — git from PATH, as documented
+            ["git", "--no-optional-locks", "-C", str(cwd), *args],  # noqa: S607 — git from PATH, as documented
             capture_output=True,
             text=True,
             timeout=TIMEOUT,
@@ -297,7 +299,7 @@ def _git_diff(cwd: Path, *args: str) -> str:
     how ``git diff --no-index`` (and ``--exit-code``) report that files differ."""
     try:
         done = subprocess.run(  # noqa: S603 — argv list, no shell
-            ["git", "-C", str(cwd), *args],  # noqa: S607 — git from PATH
+            ["git", "--no-optional-locks", "-C", str(cwd), *args],  # noqa: S607 — git from PATH
             capture_output=True,
             text=True,
             timeout=DIFF_TIMEOUT,
