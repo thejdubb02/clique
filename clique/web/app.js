@@ -6077,8 +6077,8 @@ async function attachNow(id) {
   });
 }
 
-function control(message) {
-  const entry = terms.get(activeId);
+function control(message, id = activeId) {
+  const entry = terms.get(id);
   if (entry && entry.ws && entry.ws.readyState === 1) {
     entry.ws.send(JSON.stringify(message));
     return true;
@@ -6212,6 +6212,17 @@ function clearPrompt(sent) {
   }
 }
 
+/* Take what was sent out of the session it was sent from, and nothing else.
+ *
+ * A send awaits, and meanwhile the tab in front, or the text in the box, can
+ * change. So the box is emptied only if it still holds that session's copy of
+ * exactly what was sent; otherwise that session's stored draft is, if it is
+ * still the sent text. A quick command never touches a different draft. */
+function clearSent(id, text) {
+  if (draftFor === id && $("#prompt").value === text) { clearPrompt(text); saveDraft(true); }
+  else if (draftOf(id) === text) writeDraft(id, "", true);
+}
+
 /* One send at a time.
  *
  * `run` waits on a confirm and then on a request, and the box is not emptied
@@ -6221,23 +6232,24 @@ function clearPrompt(sent) {
 let sending = false;
 
 async function run(text) {
-  if (!text.trim() || !activeId || sending) return;
-  if (reviewLockedOf(activeId)) { hintReviewLocked(); return; }
+  // Pinned now: every await below can return with another tab in front.
+  const id = activeId, times = repeat;
+  if (!text.trim() || !id || sending) return;
+  if (reviewLockedOf(id)) { hintReviewLocked(); return; }
   sending = true;
   try {
-    const who = session(activeId);
+    const who = session(id);
     if (!await okToSend(text, `“${who ? who.name : "this session"}”`)) return;
-    for (let i = 0; i < repeat; i++) {
-      if (!control({ type: "run", text, enter: true })) {
-        await api(`api/sessions/${activeId}/send`, {
+    for (let i = 0; i < times; i++) {
+      if (!control({ type: "run", text, enter: true }, id)) {
+        await api(`api/sessions/${id}/send`, {
           method: "POST", body: JSON.stringify({ text, enter: true }),
         });
       }
     }
-    maybeAutoTitle(activeId, text);
-    clearPrompt(text);
-    saveDraft(true);   // sent, so there is no longer a draft
-    setRepeat(1);
+    maybeAutoTitle(id, text);
+    clearSent(id, text);   // sent, so there is no longer a draft
+    if (repeat === times) setRepeat(1);   // not if it was set again meanwhile
   } catch (err) {
     // The prompt box is only emptied after success, so the draft is still there.
     toast("Could not send: " + (err.message || err), true);
@@ -6278,8 +6290,7 @@ async function runShell(text) {
     await api(`api/sessions/${shell.id}/send`, {
       method: "POST", body: JSON.stringify({ text, enter: true }),
     });
-    clearPrompt(text);
-    saveDraft(true);   // sent, so there is no longer a draft
+    clearSent(current.id, text);   // the command was saved as the source tab's draft
     switched = false;
   } catch (err) {
     toast("Could not send: " + (err.message || err), true);

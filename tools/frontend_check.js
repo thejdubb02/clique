@@ -728,13 +728,19 @@ console.log("settings queue, send errors, file save race, hidden polling");
     const openSession = async (id) => { act = id; boxv = id === "src" ? "" : "shell draft"; };
     const sessionX = (id) => ({ id, cwd: "/w", folder: "f", cli: "x" });
     const stateX = { sessions: [{ id: "sh", cli: "shell", cwd: "/w", alive: true }] };
-    const rs = new Function("session", "state", "activeId", "reviewLockedOf", "hintReviewLocked", "okToSend", "api", "openSession", "toast", "clearPrompt", "saveDraft", "$", "growPrompt", "refresh", "sending",
+    const rs = new Function("session", "state", "activeId", "reviewLockedOf", "hintReviewLocked", "okToSend", "api", "openSession", "toast", "clearPrompt", "saveDraft", "$", "growPrompt", "refresh", "sending", "clearSent",
       "return (" + region("async function runShell", "function setRepeat").replace(/^async function runShell/, "async function") + ")")(
       sessionX, stateX, "src", () => false, () => {}, async () => true, () => new Promise((res, rej) => pend.push({ res, rej })),
-      openSession, (t) => toasts.push(t), () => {}, (n) => saved.push(boxv), $2, growPrompt, refresh, false);
+      openSession, (t) => toasts.push(t), () => {}, (n) => saved.push(boxv), $2, growPrompt, refresh, false,
+      (id, text) => clearedFor.push(id + ":" + text));
+    const clearedFor = [];
     const p = rs("ls -la"); await tick(); pend[0].rej(new Error("boom")); await p;
     check("a failed shell send returns to the source tab with the command in the draft",
           act === "src" && boxv === "ls -la" && toasts.some((t) => /boom/.test(t)), [act, boxv, toasts]);
+    pend = []; act = "src"; boxv = "pwd";
+    const ok = rs("pwd"); await tick(); pend[0].res({}); await ok;
+    check("a sent shell command clears the source tab's draft, not the shell's",
+          clearedFor.join() === "src:pwd" && boxv === "shell draft", [clearedFor, boxv]);
   })().then(() => {
     // hidden tabs do not poll
     let fn = null, calls2 = 0;
@@ -851,6 +857,75 @@ globalThis.__pre = globalThis.__pre.then(async () => {
 
   const src = region('document.addEventListener("visibilitychange", () => {\n    if (document.visibilityState === "hidden")', '$("#palQ").oninput');
   check("hide and pagehide both flush every session's drafts", (src.match(/flushDrafts\(\)/g) || []).length === 2, src);
+});
+
+/* Issue #33: a send awaits, and the tab in front or the text in the box can
+ * change before it returns. Every send and every follow-up must stay with the
+ * session it was started from. Runs the shipped clearPrompt .. run region. */
+globalThis.__pre = globalThis.__pre.then(async () => {
+  console.log("a prompt send stays bound to the session it started in");
+  const code = region("function clearPrompt(sent)", "async function runShell");
+  const settle = () => new Promise((r) => setImmediate(r));
+  const mk = (repeat = 1) => {
+    const w = { activeId: "a", repeat, draftFor: "a", reqs: [], titled: [], writes: [], toasts: [], repeatSet: [],
+      drafts: { a: "", b: "" }, box: { value: "", style: {}, blur() {}, focus() {} } };
+    w.run = new Function("w", `
+      let repeat = w.repeat, activeId = w.activeId;
+      const $ = () => w.box, handheld = () => false, document = {}, growPrompt = () => {}, showDraftMove = () => {};
+      const requestAnimationFrame = (f) => f();
+      const reviewLockedOf = () => false, hintReviewLocked = () => {}, okToSend = async () => true;
+      const session = (id) => ({ id, name: id });
+      const control = () => false;
+      const api = (path) => new Promise((res, rej) => w.reqs.push({ path, res, rej }));
+      const maybeAutoTitle = (id) => w.titled.push(id);
+      const toast = (t) => w.toasts.push(t);
+      const setRepeat = (v) => { repeat = v; w.repeatSet.push(v); };
+      const draftOf = (id) => w.drafts[id];
+      const writeDraft = (id, text) => { w.drafts[id] = text; w.writes.push(id + ":" + text); };
+      const saveDraft = () => { w.drafts[draftFor] = w.box.value; w.writes.push(draftFor + ":" + w.box.value); };
+      let draftFor = w.draftFor;
+      w.switchTo = (id) => { saveDraft(); activeId = id; draftFor = id; w.box.value = w.drafts[id]; };
+      ${code}
+      return run;`)(w);
+    return w;
+  };
+  const sent = (w) => w.reqs.map((r) => r.path);
+
+  // the reported case: repeat 2, HTTP fallback, switch to B while the first is held
+  let w = mk(2); w.box.value = "prompt for A"; w.drafts.b = "B's own words";
+  let p = w.run("prompt for A"); await settle();
+  w.switchTo("b"); w.reqs[0].res({}); await settle(); w.reqs[1] && w.reqs[1].res({}); await p;
+  check("every repeat goes to the session it was sent from",
+        sent(w).length === 2 && sent(w).every((x) => x === "api/sessions/a/send"), sent(w));
+  check("the follow-up title is for that session, not the one in front", w.titled.join() === "a", w.titled);
+  check("text composed in the other tab is left alone", w.box.value === "B's own words" && w.drafts.b === "B's own words", [w.box.value, w.drafts]);
+  check("and the source session's sent draft is cleared", w.drafts.a === "", w.drafts);
+
+  // repeat 1, still on A, but a newer draft was typed while in flight
+  w = mk(); w.box.value = "first";
+  p = w.run("first"); await settle();
+  w.box.value = "second thought"; w.reqs[0].res({}); await p;
+  check("a newer draft typed while sending is not cleared", w.box.value === "second thought", w.box.value);
+  check("and it is not overwritten with an empty draft", !w.writes.includes("a:"), w.writes);
+
+  // repeat 1, nothing changed: the ordinary send still empties the box
+  w = mk(); w.box.value = "plain";
+  p = w.run("plain"); await settle(); w.reqs[0].res({}); await p;
+  check("an ordinary send still empties the box and the draft", w.box.value === "" && w.drafts.a === "", [w.box.value, w.drafts]);
+  check("and resets repeat", w.repeatSet.join() === "1", w.repeatSet);
+
+  // a quick command sent while the box holds something else
+  w = mk(); w.box.value = "half a sentence"; w.drafts.a = "half a sentence";
+  p = w.run("git status"); await settle(); w.reqs[0].res({}); await p;
+  check("a quick command does not wipe the half-typed box", w.box.value === "half a sentence", w.box.value);
+
+  // failed send after switching tabs: nothing cleared anywhere
+  w = mk(2); w.box.value = "doomed";
+  p = w.run("doomed"); await settle(); w.switchTo("b");
+  w.reqs[0].rej(new Error("503")); await p;
+  check("a failed send keeps the source draft and touches nothing else",
+        w.drafts.a === "doomed" && w.box.value === "" && w.titled.length === 0 && w.toasts.some((t) => /503/.test(t)),
+        [w.drafts, w.box.value, w.titled, w.toasts]);
 });
 
 console.log("stale polls, artifact races, vanished sessions");
