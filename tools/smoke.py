@@ -1694,6 +1694,22 @@ def main() -> int:
         ef_store.remove_folder(f.id)
     reloaded = store_mod.Store(ef_dir / "state.json")
     check("deleting every folder survives a restart", reloaded.folders == [], reloaded.folders)
+    print("draft writes land in order")
+
+    dr_dir = Path(tempfile.mkdtemp(prefix="clique-draftrev-"))
+    dr_store = store_mod.Store(dr_dir / "state.json")
+    dr_session = store_mod.Session("s1", "s1", "shell", "/tmp", "sm-dr", None)
+    dr_store.add_session(dr_session)
+    # The page-exit order: newest (n=2) arrives first, the older save second.
+    dr_store.update_session("s1", draft="latest", draft_rev=["pg", 2])
+    dr_store.update_session("s1", draft="older", draft_rev=["pg", 1])
+    check("an older draft from the same page landing late is ignored",
+          dr_session.draft == "latest", dr_session.draft)
+    dr_store.update_session("s1", draft="other tab", draft_rev=["pg2", 1])
+    check("another page's draft still applies", dr_session.draft == "other tab")
+    dr_store.update_session("s1", draft="plain")
+    check("a draft with no rev applies as before", dr_session.draft == "plain")
+    shutil.rmtree(dr_dir, ignore_errors=True)
 
     print("snippets on the bar")
     # Real Store, not a fake — the thing worth catching here is the old
@@ -2193,4 +2209,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    finally:  # the socket is per run, so no later run would clean up after a crash
+        tmux._run(["kill-server"], SOCKET, check=False)

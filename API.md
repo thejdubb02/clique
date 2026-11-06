@@ -305,6 +305,12 @@ Fields: `name`, `folder` (`null` means Ungrouped), `mode`, `archived`, `pinned`,
 Only the fields you send are touched — absent and `null` are different, so a
 rename cannot silently unfile a session.
 
+`draft_rev` is optional and only matters with `draft`: `[writer, n]`, a string
+naming the page and a number it increases on every draft write. A draft whose
+`n` is not above the last one applied from the same writer is ignored, so a
+save that lands late cannot overwrite a newer one. Without it, `draft` applies
+as sent.
+
 ### `POST /api/sessions/<id>/kill`
 
 Stops the process. The record stays in its folder, stopped. Start it again

@@ -4787,10 +4787,9 @@ function toast(text, bad, action) {
  * that puts settings there and leaves sidebar width in the browser.
  *
  * Written on a debounce rather than per keystroke: thinking with the box open
- * should not be a request per character. The local session object is updated
- * at the same time, so the next poll does not arrive with a stale draft and
- * overwrite what is being typed. */
-let draftTimer = null;
+ * should not be a request per character. Each session keeps its own pending
+ * text, timer and in-flight write (see writeDraft), so typing in B can never
+ * cancel A's save, and a flush always sends what the server has not got. */
 let draftFor = null;          // whose draft is in the box right now
 
 /* The move control appears with the text and goes with it. An always-there
@@ -4818,27 +4817,90 @@ function growPrompt(box) {
 
 function loadDraft(id) {
   const box = $("#prompt");
-  const s = session(id);
-  box.value = (s && s.draft) || "";
+  box.value = draftOf(id);
   growPrompt(box);
   draftFor = id;
   showDraftMove();
 }
 
 function saveDraft(now) {
-  const id = draftFor;
   showDraftMove();
-  if (!id) return;
-  const text = $("#prompt").value;
+  if (draftFor) writeDraft(draftFor, $("#prompt").value, now);
+}
+
+// id -> { want, saved, sent, busy, timer, warned }: what was typed, what the
+// server has confirmed, what was last sent, writes in flight. Kept apart so a flush never mistakes the
+// optimistic local copy for a saved one.
+const drafts = new Map();
+// Stamped on every write so the server can drop one that lands out of order.
+const draftWriter = Math.random().toString(36).slice(2);
+let draftRev = 0;
+
+/* The text to show for a session: unsent typing wins over a poll that may
+ * have brought back the server's older copy. */
+function draftOf(id) {
+  const d = drafts.get(id), s = session(id);
+  return d && d.want !== d.saved ? d.want : (s && s.draft) || "";
+}
+
+function writeDraft(id, text, now) {
   const s = session(id);
-  if (s && (s.draft || "") === text) return;      // nothing actually moved
-  if (s) s.draft = text;
-  clearTimeout(draftTimer);
-  const send = () => api(`api/sessions/${id}`, {
-    method: "PATCH", body: JSON.stringify({ draft: text }),
-  }).catch(() => {});
-  if (now) send();
-  else draftTimer = setTimeout(send, 600);
+  let d = drafts.get(id);
+  if (!d) {
+    const had = (s && s.draft) || "";
+    drafts.set(id, d = { want: had, saved: had, busy: 0, timer: null, warned: false });
+  }
+  d.want = text;
+  if (s) s.draft = text;      // the stop prompt and the next render see it now
+  clearTimeout(d.timer);
+  d.timer = null;
+  if (d.want === d.saved) return;      // nothing moved; a reply in flight re-checks
+  if (now) sendDraft(id, now === "exit");
+  else d.timer = setTimeout(() => sendDraft(id), 600);
+}
+
+/* One write per session at a time, so an older body can never land after a
+ * newer one; the reply sends whatever was typed meanwhile. The exception is
+ * the page going away: there is no later, so it goes at once with keepalive,
+ * and the server uses draft_rev to ignore the older one if it lands second. */
+function sendDraft(id, exiting) {
+  const d = drafts.get(id);
+  clearTimeout(d.timer);
+  d.timer = null;
+  // In flight, the thing to beat is what was last sent, not what was confirmed:
+  // clearing "hello" while it is on its way still needs the "" to follow it.
+  if (d.busy ? !exiting || d.want === d.sent : d.want === d.saved) return;
+  const text = d.sent = d.want;
+  const body = JSON.stringify({ draft: text, draft_rev: [draftWriter, ++draftRev] });
+  d.busy++;
+  // keepalive survives a closing tab, but browsers cap it near 64 KB.
+  api(`api/sessions/${id}`, { method: "PATCH", body, keepalive: body.length < 60000 })
+    .then(() => {
+      d.saved = text;
+      // A poll may have swapped in a session object read before this landed;
+      // once want === saved, draftOf trusts that object, so it must be current.
+      // shortcut: a poll read before the save but delivered after it can still
+      // bring the old text back; fixing that needs the poll ordered against writes.
+      const s = session(id);
+      if (s) s.draft = d.want;
+      if (d.warned) toast("Draft saved");
+      d.warned = false;
+    }, () => {
+      if (!d.warned) toast("Draft not saved yet, retrying", true);
+      d.warned = true;
+    })
+    .then(() => {
+      d.busy--;
+      if (!session(id)) return void drafts.delete(id);   // removed: nothing to retry into
+      if (d.busy || d.want === d.saved || d.timer) return;
+      if (d.warned) d.timer = setTimeout(() => sendDraft(id), 5000);
+      else sendDraft(id);
+    });
+}
+
+// Hiding or leaving the page: everything the server has not got goes now.
+function flushDrafts() {
+  for (const id of drafts.keys()) sendDraft(id, true);
 }
 
 /* Move a half-typed thought to the session it actually belongs in.
@@ -4869,21 +4931,13 @@ async function moveDraft(toId) {
   // Appended, never overwritten: arriving text must not silently destroy a
   // draft that was already waiting in the target. A blank line between them
   // so two thoughts do not become one sentence.
-  const already = (target.draft || "").trim();
+  const already = draftOf(toId).trim();
   const merged = already ? `${already}\n\n${text.trim()}` : text;
 
-  clearTimeout(draftTimer);          // the debounced save would race this
-  target.draft = merged;
-  await api(`api/sessions/${toId}`, {
-    method: "PATCH", body: JSON.stringify({ draft: merged }),
-  });
-  if (from) {
-    const source = session(from);
-    if (source) source.draft = "";
-    await api(`api/sessions/${from}`, {
-      method: "PATCH", body: JSON.stringify({ draft: "" }),
-    }).catch(() => {});
-  }
+  // Through the same per-session queue as typing, so a debounced or in-flight
+  // save cannot land after this and undo the move.
+  writeDraft(toId, merged, true);
+  if (from) writeDraft(from, "", true);
   $("#prompt").value = "";
   await openSession(toId);
   loadDraft(toId);
@@ -8449,13 +8503,15 @@ function wire() {
    * lost exactly when someone most expects the box to still hold their words. */
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
-      saveDraft(true);
+      saveDraft();
+      flushDrafts();
       saveWorkspace(true);
     }
   });
   // Closing the window is not always a visibilitychange. pagehide is.
   addEventListener("pagehide", () => {
-    saveDraft(true);
+    saveDraft();
+    flushDrafts();
     saveWorkspace(true);
   });
 

@@ -1723,7 +1723,7 @@ class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes, provider
     server_version = "clique"  # no version: it tells a scanner what to try
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, fmt: str, *args) -> None:
+    def log_message(self, _fmt: str, *_args) -> None:
         # One line per request would drown the journal in terminal polling.
         pass
 
@@ -2471,7 +2471,7 @@ class Handler(terminal_handler.TerminalHandler, file_routes.FileRoutes, provider
                 # real value (drag to Ungrouped), so "absent" and "null" have
                 # to stay distinguishable — passing body.get() for every field
                 # would make a rename silently unfile the session.
-                allowed = {"name", "folder", "mode", "archived", "draft", "pinned"}
+                allowed = {"name", "folder", "mode", "archived", "draft", "draft_rev", "pinned"}
                 fields = {k: v for k, v in body.items() if k in allowed}
                 updated = self.panel.store.update_session(parts[2], **fields)
                 return self._json({"ok": bool(updated)}, 200 if updated else 404)

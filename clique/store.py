@@ -647,6 +647,9 @@ class Store:
                 "-- pass $CLIQUE_HOME/state.json, not $CLIQUE_HOME"
             )
         self._lock = threading.RLock()
+        #: session id -> (writer, n) of the last draft applied. In memory: it
+        #: only has to order writes that are in flight at the same moment.
+        self._draft_revs: dict[str, tuple[str, int]] = {}
         self.folders: list[Folder] = []
         self.groups: list[Group] = []
         self.sessions: list[Session] = []
@@ -813,12 +816,34 @@ class Store:
                 self._write()
             return found
 
+    def _stale_draft(self, session_id: str, rev) -> bool:
+        """True if this draft is older than one already applied from the same page.
+
+        A page closing sends its last draft without waiting for the one already
+        in flight, so the older can land second. Caller holds the lock.
+        ponytail: one writer remembered per session, so a second device writing
+        in between lets a late older write through; key by writer if two
+        devices ever type into one session at once.
+        """
+        if not (isinstance(rev, list) and len(rev) == 2
+                and isinstance(rev[0], str) and type(rev[1]) is int):
+            return False
+        writer, n = rev[0][:64], rev[1]
+        last = self._draft_revs.get(session_id)
+        if last and last[0] == writer and n <= last[1]:
+            return True
+        self._draft_revs[session_id] = (writer, n)
+        return False
+
     def update_session(self, session_id: str, **fields) -> Session | None:
         """Apply supplied fields. See the None handling below — it is load-bearing."""
+        rev = fields.pop("draft_rev", None)
         with self._lock:
             found = self.session(session_id)
             if not found:
                 return None
+            if "draft" in fields and self._stale_draft(session_id, rev):
+                del fields["draft"]
             for key, value in fields.items():
                 if not hasattr(found, key):
                     continue

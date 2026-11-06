@@ -755,6 +755,104 @@ console.log("settings queue, send errors, file save race, hidden polling");
   globalThis.__pre = pre;
 }
 
+/* Drafts: the shipped loadDraft/saveDraft region, fake timers, a hand-driven
+ * server. Issue #32: typing in B used to cancel A's pending save, and a flush
+ * on hide sent nothing because the optimistic copy already "matched". */
+globalThis.__pre = globalThis.__pre.then(async () => {
+  console.log("drafts survive tab switches, hiding, slow and failed saves");
+  const code = region("function loadDraft(id)", "/* Move a half-typed thought");
+  let timers = [], reqs = [], toasts = [];
+  const box = { value: "", style: {}, scrollHeight: 0 };
+  const state = { sessions: [{ id: "A", draft: "" }, { id: "B", draft: "" }] };
+  const f = new Function("$", "session", "showDraftMove", "growPrompt", "api", "toast",
+    "setTimeout", "clearTimeout", "state",
+    "let draftFor = null, draftTimer = null;\n" + code
+    + "\nreturn { loadDraft, saveDraft, flush: typeof flushDrafts === 'function' ? flushDrafts : () => saveDraft(true) };")(
+    () => box, (id) => state.sessions.find((s) => s.id === id), () => {}, () => {},
+    (path, opts) => new Promise((res, rej) => reqs.push({ id: path.split("/").pop(), draft: JSON.parse(opts.body).draft, rev: JSON.parse(opts.body).draft_rev, keepalive: opts.keepalive, res, rej })),
+    (t) => toasts.push(t),
+    (fn) => { const t = { fn, live: true }; timers.push(t); return t; },
+    (t) => { if (t) t.live = false; }, state);
+  const fire = () => { const due = timers.filter((t) => t.live); timers = []; due.forEach((t) => { t.live = false; t.fn(); }); };
+  const settle = () => new Promise((r) => setImmediate(r));
+  const type = (text) => { box.value = text; f.saveDraft(); };
+  const sent = () => reqs.map((r) => `${r.id}:${r.draft}`);
+
+  // rapid A -> B: the shipped switch path is saveDraft(true) then loadDraft
+  f.loadDraft("A"); type("for A");
+  f.saveDraft(true); f.loadDraft("B"); type("for B");
+  fire(); await settle();
+  check("switching A to B mid-debounce still saves A's draft", sent().includes("A:for A"), sent());
+  reqs.forEach((r) => r.res({})); await settle(); reqs = [];
+
+  // hide / pagehide during the debounce
+  type("for B, more");
+  f.flush(); await settle();
+  check("a flush on hide sends the pending text at once", sent().includes("B:for B, more"), sent());
+  check("and asks for keepalive so a closing page does not abort it", reqs.length > 0 && reqs.every((r) => r.keepalive), reqs.map((r) => r.keepalive));
+  reqs.forEach((r) => r.res({})); await settle(); reqs = []; fire();
+
+  // delayed response: a newer draft waits for the older write, never races it
+  type("v1"); fire(); await settle();
+  type("v2"); fire(); await settle();
+  check("only one write per session is in flight", reqs.length === 1 && reqs[0].draft === "v1", sent());
+  reqs.shift().res({}); await settle();
+  check("the newer draft goes after the older reply", reqs.length === 1 && reqs[0].draft === "v2", sent());
+  reqs.shift().res({}); await settle(); fire();
+  check("and nothing else is sent once they match", reqs.length === 0, sent());
+
+  // page closes while a save is in flight: the exit write cannot wait, so it
+  // must carry a later rev from the same writer for the server to keep it
+  type("older"); fire(); await settle();
+  type("latest"); f.flush(); await settle();
+  const [older, latest] = reqs;
+  check("an exit save goes out even with one in flight", reqs.length === 2 && latest.draft === "latest", sent());
+  check("and outranks it, so the server drops the older if it lands second",
+        older && latest && older.rev && latest.rev && older.rev[0] === latest.rev[0] && latest.rev[1] > older.rev[1],
+        reqs.map((r) => r.rev));
+  reqs.forEach((r) => r.res({})); await settle(); reqs.forEach((r) => r.res({})); await settle(); reqs = []; fire();
+
+  // cleared while a save is in flight, then the page closes: the clear must
+  // still go, or the old text comes back on reload
+  type(""); fire(); await settle(); reqs.forEach((r) => r.res({})); await settle(); reqs = [];
+  check("starting from a saved empty draft", reqs.length === 0 && timers.every((t) => !t.live), sent());
+  type("hello"); fire(); await settle();
+  type(""); f.flush(); await settle();
+  check("clearing during a save and then closing still sends the clear",
+        reqs.length === 2 && reqs[1].draft === "" && reqs[1].rev[1] > reqs[0].rev[1], sent());
+  reqs.forEach((r) => r.res({})); await settle(); reqs.forEach((r) => r.res({})); await settle(); reqs = []; fire();
+
+  // a poll replaces A's object with a stale copy while A's save is in flight:
+  // after the save lands, coming back to A must show the saved text, and the
+  // next switch must not write the stale copy over it
+  f.loadDraft("A"); type("keep A"); f.saveDraft(true); f.loadDraft("B"); await settle();
+  state.sessions = state.sessions.map((x) => ({ ...x, draft: x.id === "A" ? "" : x.draft }));
+  reqs.forEach((r) => r.res({})); await settle(); reqs = [];
+  f.saveDraft(true); f.loadDraft("A");
+  check("a stale poll during A's save does not empty A's box", box.value === "keep A", box.value);
+  f.saveDraft(true); f.loadDraft("B"); await settle();
+  check("and switching away does not write the stale copy back", !reqs.some((r) => r.id === "A"), sent());
+  reqs.forEach((r) => r.res({})); await settle(); reqs = []; fire();
+
+  // failed save: visible, retried, not forgotten
+  type("keep me"); fire(); await settle();
+  reqs.shift().rej(new Error("offline")); await settle();
+  check("a failed draft save is shown", toasts.some((t) => /not saved/i.test(t)), toasts);
+  fire(); await settle();
+  check("and retried", reqs.length === 1 && reqs[0].draft === "keep me", sent());
+  reqs.shift().res({}); await settle();
+  f.loadDraft("A"); f.loadDraft("B");
+  check("the retried text is what the box reloads", box.value === "keep me", box.value);
+
+  type("orphan"); fire(); await settle();
+  state.sessions = state.sessions.filter((s) => s.id !== "B");
+  reqs.shift().rej(new Error("gone")); await settle(); fire(); await settle();
+  check("a removed session's draft is not retried forever", reqs.length === 0, sent());
+
+  const src = region('document.addEventListener("visibilitychange", () => {\n    if (document.visibilityState === "hidden")', '$("#palQ").oninput');
+  check("hide and pagehide both flush every session's drafts", (src.match(/flushDrafts\(\)/g) || []).length === 2, src);
+});
+
 console.log("stale polls, artifact races, vanished sessions");
 {
   const code = region("let refreshSeq", "  if (!workspaceRestored) restoreWorkspace();") + "  return true;\n}\n"
