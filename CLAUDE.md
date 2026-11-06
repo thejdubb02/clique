@@ -9,7 +9,7 @@ Docs, each with one job — read the one that matches the question:
 
 | Question | File |
 |---|---|
-| What is being built next, in order | the **CLIque** board in Kaneo, one card per job |
+| What is being built next, in order | GitHub issues on `thejdubb02/clique`, one issue per job |
 | Why it is ranked that way, what was measured | `docs/next.md` |
 | The argument, and what is refused | `ROADMAP.md` |
 | Raised but not committed to | `docs/ideas-inbox.md` |
