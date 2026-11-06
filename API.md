@@ -280,6 +280,9 @@ names, no counts. With a cookie or a token it adds `version`, `uptime`, `tmux`
 Only `cli` and `cwd` matter; the name defaults to the directory. `mode` is one
 the CLI declares. `cli_session_id` resumes a past conversation — the same code
 path as starting a new one, differing only in the argv the registry returns.
+With no `folder` the session lands in Ungrouped; a folder's directory `match`
+only auto-files adopted sessions, by whole directory (`/srv/work` files
+`/srv/work/app`, never `/srv/workshop`), longest match first.
 
 Pass `worktree: true` with a `branch` to run the session in a fresh git worktree
 of the repo at `cwd` — an isolated checkout, so several agents can work the same

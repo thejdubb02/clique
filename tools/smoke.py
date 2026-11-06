@@ -1722,6 +1722,62 @@ def main() -> int:
         ef_store.remove_folder(f.id)
     reloaded = store_mod.Store(ef_dir / "state.json")
     check("deleting every folder survives a restart", reloaded.folders == [], reloaded.folders)
+    print("folder routing by directory")
+
+    rt_folders = [
+        store_mod.Folder("work", "Work", "#c7915b", match=["/tmp/work"]),
+        store_mod.Folder("app", "App", "#2d7d46", match=["/tmp/work/app/"]),
+    ]
+    rt = store_mod.auto_folder
+    check(
+        "a sibling sharing a prefix is not filed",
+        rt("/tmp/workshop", rt_folders) is None,
+        rt("/tmp/workshop", rt_folders),
+    )
+    check("the exact directory is filed", rt("/tmp/work", rt_folders) == "work")
+    check("a trailing slash on the cwd is ignored", rt("/tmp/work/", rt_folders) == "work")
+    check("a nested directory is filed", rt("/tmp/work/repo/src", rt_folders) == "work")
+    check("the longest match wins", rt("/tmp/work/app/src", rt_folders) == "app")
+    check("a trailing slash on the match is ignored", rt("/tmp/work/app", rt_folders) == "app")
+    check("a sibling of the longer match falls back", rt("/tmp/work/apple", rt_folders) == "work")
+    rt_root = [store_mod.Folder("all", "All", "#c7915b", match=["/"])]
+    check(
+        "a root match files everything",
+        rt("/tmp/x", rt_root) == "all" and rt("/", rt_root) == "all",
+    )
+
+    rt_dir = Path(tempfile.mkdtemp(prefix="clique-routing-"))
+    rt_store = store_mod.Store(rt_dir / "state.json")
+    rt_store.folders = rt_folders
+    made = rt_store.add_session(
+        store_mod.Session("u1", "u1", "shell", "/tmp/work/repo", "sm-u1", None)
+    )
+    check("a session created with no folder lands in Ungrouped", made.folder is None, made.folder)
+    made = rt_store.add_session(
+        store_mod.Session("c1", "c1", "shell", "/tmp/work/repo", "sm-c1", None, folder="app")
+    )
+    check("a session created with a chosen folder keeps it", made.folder == "app", made.folder)
+
+    real_adoptable, real_lock = app_mod.tmux.adoptable, app_mod.tmux.lock_size
+    real_names, real_cwds = app_mod.migrate.codeman_names, app_mod.migrate.codeman_cwds
+    try:
+        app_mod.tmux.adoptable = lambda: [
+            SimpleNamespace(mux="sm-a1", cwd="/tmp/work/app/x", socket="codeman", created=1),
+            SimpleNamespace(mux="sm-a2", cwd="/tmp/workshop", socket="codeman", created=1),
+        ]
+        app_mod.tmux.lock_size = lambda *_: None
+        app_mod.migrate.codeman_names = dict
+        app_mod.migrate.codeman_cwds = dict
+        fake = SimpleNamespace(store=rt_store, detect_cli=lambda _: "shell")
+        app_mod.Panel.adopt(fake)  # pyright: ignore[reportArgumentType]
+    finally:
+        app_mod.tmux.adoptable, app_mod.tmux.lock_size = real_adoptable, real_lock
+        app_mod.migrate.codeman_names, app_mod.migrate.codeman_cwds = real_names, real_cwds
+    adopted = {s.mux: s.folder for s in rt_store.sessions}
+    check("adoption still auto-files by directory", adopted.get("sm-a1") == "app", adopted)
+    check("adoption does not file a prefix sibling", adopted.get("sm-a2") is None, adopted)
+    shutil.rmtree(rt_dir, ignore_errors=True)
+
     print("draft writes land in order")
 
     dr_dir = Path(tempfile.mkdtemp(prefix="clique-draftrev-"))

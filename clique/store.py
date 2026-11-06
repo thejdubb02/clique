@@ -478,12 +478,19 @@ def auto_folder(cwd: str, folders: list[Folder]) -> str | None:
     Longest match wins, so ``/home/you/work/app`` beats ``/home/you/work`` if
     both are configured. A session the user has dragged somewhere keeps that
     folder — this only ever decides the *initial* home.
+
+    Matching is by whole directory: ``/tmp/work`` files ``/tmp/work`` and
+    ``/tmp/work/repo`` but not ``/tmp/workshop``. Trailing slashes are ignored.
     """
+    path = cwd.rstrip("/")
     best: tuple[int, str] | None = None
     for folder in folders:
         for prefix in folder.match:
-            if cwd.startswith(prefix) and (best is None or len(prefix) > best[0]):
-                best = (len(prefix), folder.id)
+            if not prefix:
+                continue
+            root = prefix.rstrip("/")  # "/" becomes "", which matches every absolute path
+            if (path == root or path.startswith(root + "/")) and (best is None or len(root) > best[0]):
+                best = (len(root), folder.id)
     return best[1] if best else None
 
 
@@ -798,9 +805,9 @@ class Store:
             return next((s for s in self.sessions if s.id == session_id), None)
 
     def add_session(self, session: Session) -> Session:
+        # The folder is stored as given: None is Ungrouped. Callers that want
+        # auto-filing (adoption) call auto_folder themselves.
         with self._lock:
-            if session.folder is None:
-                session.folder = auto_folder(session.cwd, self.folders)
             if not session.created:
                 session.created = time.time()
             session.order = len(self.sessions)
