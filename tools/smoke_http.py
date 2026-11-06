@@ -39,9 +39,12 @@ from clique import notify, tmux
 from clique.wsproto import OP_BINARY, OP_TEXT
 
 ROOT = Path(__file__).resolve().parents[1]
-OWN_PORT = 3298
-OWN_SOCKET = "clique-http-smoke"
-OWN_HOME = Path("/tmp/clique-http-smoke-home")
+# Per process: two worktrees running this at once must not share a panel or socket.
+with socket.socket() as _probe:
+    _probe.bind(("127.0.0.1", 0))
+    OWN_PORT = _probe.getsockname()[1]
+OWN_SOCKET = f"clique-http-smoke-{os.getpid()}"
+OWN_HOME = Path(f"/tmp/clique-http-smoke-home-{os.getpid()}")
 OWN_PASSWORD = "http-smoke-check"  # noqa: S105 — throwaway panel on loopback, seconds
 
 #: Set in ``main`` before any request. Empty until then so a missing setup

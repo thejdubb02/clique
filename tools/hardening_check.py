@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import http.server
 import io
+import shutil
 import sys
 import tempfile
 import threading
@@ -208,6 +209,84 @@ def check_upload_symlink_swap() -> bool:
     return msg == "outside the session directory" and not list(outside.iterdir())
 
 
+def check_share_cleanup_contained() -> bool:
+    """Scratch cleanup touches only flat regular files in a real scratch folder:
+    a linked scratch folder (either name), a child symlink, and a folder swapped
+    for a link mid-sweep must never lead it to delete outside the project."""
+    import os
+
+    base = Path(tempfile.mkdtemp())
+    proj, out = base / "project", base / "outside"
+    proj.mkdir()
+    out.mkdir()
+    old = 0  # mtime of the epoch: past any age cutoff
+
+    def keep(name: str) -> Path:
+        f = out / name
+        f.write_text("keep")
+        os.utime(f, (old, old))
+        return f
+
+    results = []
+    # Both SHARE_DIRS as links to outside: usage, purge and prune all refuse.
+    for name in files.SHARE_DIRS:
+        f = keep("keep.txt")
+        (proj / name).symlink_to(out)
+        results.append(files.shares_usage([str(proj)])["files"] == 0)
+        results.append(files.prune_shares([str(proj)], 1) == 0 and f.exists())
+        results.append(files.purge_shares([str(proj)])["files"] == 0 and f.exists())
+        (proj / name).unlink()
+    # A normal scratch folder: a child symlink is left alone; age cutoff holds.
+    drops = proj / files.DROP_DIR
+    drops.mkdir()
+    target = keep("target.txt")
+    (drops / "link").symlink_to(target)
+    (drops / "new.txt").write_text("n")
+    stale = drops / "old.txt"
+    stale.write_text("o")
+    os.utime(stale, (old, old))
+    results.append(files.shares_usage([str(proj)])["files"] == 2)
+    results.append(
+        files.prune_shares([str(proj)], 1) == 1
+        and not stale.exists()
+        and (drops / "new.txt").exists()
+    )
+    results.append(
+        files.purge_shares([str(proj)])["files"] == 1
+        and target.exists()
+        and (drops / "link").is_symlink()
+    )
+    # Swap the folder for a link to outside after it is listed, before deletes.
+    (drops / "link").unlink()
+    (drops / "victim.txt").write_text("v")
+    victim = keep("victim.txt")
+    moved = proj / "moved"
+    real_scandir = os.scandir
+
+    class Swap:
+        """scandir that lists the real folder, then swaps it for a link."""
+
+        def __init__(self, *a):
+            self.entries = list(real_scandir(*a))
+            os.rename(drops, moved)
+            drops.symlink_to(out)
+
+        def __enter__(self):
+            return iter(self.entries)
+
+        def __exit__(self, *a):
+            return False
+
+    files.os.scandir = Swap
+    try:
+        files.purge_shares([str(proj)])
+    finally:
+        files.os.scandir = real_scandir
+    results.append(victim.exists() and not (moved / "victim.txt").exists())
+    shutil.rmtree(base)
+    return all(results)
+
+
 def check_login_throttle() -> bool:
     """N threads attempt at once (each sleeps in the check, as a real one does
     between check and failure): at most MAX_FAILURES may pass, and a success
@@ -235,6 +314,9 @@ def check_login_throttle() -> bool:
 def check_llm_response_cap() -> bool:
     class H(http.server.BaseHTTPRequestHandler):
         def do_POST(self):
+            # Drain the request: closing with it unread makes the kernel send RST,
+            # and the client sees "connection reset" instead of the oversized body.
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b'{"choices":[{"message":{"content":"' + b"a" * (llm.MAX_RESPONSE_BYTES + 10) + b'"}}]}')
@@ -332,11 +414,42 @@ def check_auto_resume_bad_timestamp() -> bool:
     return "b" in panel._limit_at
 
 
+def check_diff_reads_bounded() -> bool:
+    import subprocess
+
+    repo = Path(tempfile.mkdtemp())
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    big = b"large line contents\n" * 150_000  # ~3 MB each, far past MAX_DIFF_BYTES
+    for name in ("a.txt", "b.txt", "c.txt"):
+        (repo / name).write_bytes(big)
+    reads: list[int] = []
+    orig = gitinfo._git_diff
+
+    def counted(*a, **k):
+        out = orig(*a, **k)
+        reads.append(len(out))
+        return out
+
+    gitinfo._git_diff = counted
+    try:
+        info = gitinfo.diff(str(repo)) or {}
+        diff_reads = list(reads)
+        cp = gitinfo.checkpoint(str(repo)) or {}
+    finally:
+        gitinfo._git_diff = orig
+    # Bounded reading, not just a short reply: diff() pulls one budget's worth
+    # from git in total, and checkpoint() reuses the same capped reads.
+    return (info.get("truncated") and cp.get("truncated") and "large line" in info.get("diff", "")
+            and sum(diff_reads) <= gitinfo.MAX_DIFF_BYTES + 1
+            and sum(reads) <= 2 * gitinfo.MAX_DIFF_BYTES + 10_000)
+
+
 def main() -> int:
     ok = True
     for fn in (check_llm_redirect, check_body_413, check_write_temp_unique, check_write_chmod_failure_cleans_up, check_create_rollback,
-               check_upload_symlink_swap, check_login_throttle, check_llm_response_cap,
-               check_body_must_be_object, check_store_bad_shape_uses_backup, check_store_bad_settings_uses_backup, check_auto_resume_bad_timestamp):
+               check_upload_symlink_swap, check_share_cleanup_contained, check_login_throttle, check_llm_response_cap,
+               check_body_must_be_object, check_store_bad_shape_uses_backup, check_store_bad_settings_uses_backup, check_auto_resume_bad_timestamp,
+               check_diff_reads_bounded):
         try:
             good = fn()
         except Exception as exc:  # noqa: BLE001

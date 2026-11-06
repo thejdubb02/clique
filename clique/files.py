@@ -413,27 +413,37 @@ def _iter_share_files(cwds):
     flat drop of files, and the sweep must not chase a link out of the folder it
     is meant to be tidying. Skips anything it cannot read rather than raising —
     housekeeping does not get to take the panel down.
+
+    Yields ``(dfd, entry)``. The folder is opened O_NOFOLLOW (a linked scratch
+    folder is skipped) and pinned by that fd: callers stat and unlink through
+    ``dir_fd=dfd``, so swapping the folder mid-sweep cannot redirect a delete.
     """
     for cwd in cwds:
         for name in SHARE_DIRS:
-            directory = Path(cwd) / name
             try:
-                entries = list(os.scandir(directory))
+                dfd = os.open(Path(cwd) / name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             except OSError:
                 continue
-            for entry in entries:
-                try:
-                    if entry.is_file(follow_symlinks=False):
-                        yield entry
-                except OSError:
-                    continue
+            try:
+                with os.scandir(dfd) as it:
+                    entries = list(it)
+                for entry in entries:
+                    try:
+                        if entry.is_file(follow_symlinks=False):
+                            yield dfd, entry
+                    except OSError:
+                        continue
+            except OSError:
+                continue
+            finally:
+                os.close(dfd)
 
 
 def shares_usage(cwds) -> dict:
     """How much the scratch folders hold: a file count and a byte total."""
     count = 0
     total = 0
-    for entry in _iter_share_files(cwds):
+    for _dfd, entry in _iter_share_files(cwds):
         with contextlib.suppress(OSError):
             total += entry.stat(follow_symlinks=False).st_size
             count += 1
@@ -450,10 +460,10 @@ def prune_shares(cwds, older_than_days: int) -> int:
         return 0
     cutoff = time.time() - older_than_days * 86400
     removed = 0
-    for entry in _iter_share_files(cwds):
+    for dfd, entry in _iter_share_files(cwds):
         try:
             if entry.stat(follow_symlinks=False).st_mtime < cutoff:
-                os.unlink(entry.path)
+                os.unlink(entry.name, dir_fd=dfd)
                 removed += 1
         except OSError:
             continue
@@ -468,10 +478,10 @@ def purge_shares(cwds) -> dict:
     """
     count = 0
     total = 0
-    for entry in _iter_share_files(cwds):
+    for dfd, entry in _iter_share_files(cwds):
         try:
             size = entry.stat(follow_symlinks=False).st_size
-            os.unlink(entry.path)
+            os.unlink(entry.name, dir_fd=dfd)
             count += 1
             total += size
         except OSError:

@@ -38,7 +38,8 @@ from clique import (
 from clique.__main__ import config_path
 from clique.registry import Registry, RegistryError
 
-SOCKET = "clique-smoke"
+# Per process: two worktrees running this at once must not kill each other's sessions.
+SOCKET = f"clique-smoke-{os.getpid()}"
 ROOT = Path(__file__).resolve().parents[1]
 
 passed = failed = 0
@@ -68,8 +69,8 @@ def check_mcp() -> None:
     import urllib.request
 
     print("mcp")
-    home = Path("/tmp/clique-mcp-smoke-home")
-    socket_name = "clique-mcp-smoke"
+    home = Path(f"/tmp/clique-mcp-smoke-home-{os.getpid()}")
+    socket_name = f"clique-mcp-smoke-{os.getpid()}"
     # Throwaway panel on loopback. Gone before this function returns.
     password = "mcp-smoke-check"  # noqa: S105
     env = dict(os.environ, CLIQUE_HOME=str(home), CLIQUE_TMUX_SOCKET=socket_name)
@@ -596,7 +597,7 @@ def main() -> int:
     )
     check("preserves the file's mode on save", ((tmp / "note.md").stat().st_mode & 0o777) == 0o640)
 
-    def _refused(reason, *args):
+    def _refused(_reason, *args):
         try:
             files.write(*args)
         except (ValueError, OSError):
@@ -738,7 +739,8 @@ def main() -> int:
     import tempfile
 
     gitinfo.clear()
-    plain = Path(tempfile.mkdtemp(prefix="clique-git-plain-"))
+    # /tmp, not $TMPDIR: a TMPDIR inside a checkout would make this "plain" folder a repo.
+    plain = Path(tempfile.mkdtemp(prefix="clique-git-plain-", dir="/tmp"))
     check(
         "a directory that is not a repo says nothing",
         gitinfo.probe(str(plain))["branch"] == "" and gitinfo.probe(str(plain))["dirty"] == 0,
@@ -1845,6 +1847,7 @@ def main() -> int:
     seen_cli_ids: list[str] = []
 
     def fake_usage_read(cli_id, spec, guard, *, force=False):
+        del spec, force  # same signature as the real reader
         seen_cli_ids.append(cli_id)
         return {"cli": cli_id, "windows": [], "checked": 0}
 

@@ -16,6 +16,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import IO, cast
 
 # --no-optional-locks on every call: the timeout SIGKILLs git, and a killed
 # `git status` left index.lock behind in every open repo at once (devbox#5).
@@ -294,20 +295,34 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 DIFF_TIMEOUT = 5.0
 
 
-def _git_diff(cwd: Path, *args: str) -> str:
+def _git_diff(cwd: Path, *args: str, limit: int = MAX_DIFF_BYTES) -> bytes:
     """Like ``_git`` but for diff: keep stdout even when git exits 1, which is
-    how ``git diff --no-index`` (and ``--exit-code``) report that files differ."""
+    how ``git diff --no-index`` (and ``--exit-code``) report that files differ.
+
+    Reads at most ``limit + 1`` bytes, so a caller can tell the output ran past
+    ``limit``; git is killed there, or at ``DIFF_TIMEOUT``, and always reaped."""
     try:
-        done = subprocess.run(  # noqa: S603 — argv list, no shell
+        proc = subprocess.Popen(  # noqa: S603 — argv list, no shell
             ["git", "--no-optional-locks", "-C", str(cwd), *args],  # noqa: S607 — git from PATH
-            capture_output=True,
-            text=True,
-            timeout=DIFF_TIMEOUT,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return done.stdout if done.returncode in (0, 1) else ""
+    except OSError:
+        return b""
+    stream = cast("IO[bytes]", proc.stdout)  # stdout=PIPE always sets it
+    timer = threading.Timer(DIFF_TIMEOUT, proc.kill)
+    timer.start()
+    cut = True
+    try:
+        out = stream.read(max(limit, 0) + 1)
+        cut = len(out) > limit
+    finally:
+        if cut:  # past the budget, or the read failed: stop git rather than drain it
+            proc.kill()
+        stream.close()
+        code = proc.wait()
+        timer.cancel()
+    return out if cut or code in (0, 1) else b""
 
 
 def diff(cwd: str) -> dict | None:
@@ -326,26 +341,30 @@ def diff(cwd: str) -> dict | None:
         return None
     # `git diff HEAD` errors in a repo with no commit; diff the empty tree there.
     base = "HEAD" if _git(path, "rev-parse", "--verify", "-q", "HEAD") else EMPTY_TREE
-    parts = []
-    tracked = _git_diff(path, "-c", "core.quotepath=false", "diff", base)
-    if tracked.strip():
-        parts.append(tracked)
     # -z gives NUL-separated, un-quoted, individual file paths — no folder
     # collapsing and no escaping to misparse, unlike `status --porcelain`.
     listed = _git(path, "ls-files", "--others", "--exclude-standard", "-z") or ""
     untracked = [name for name in listed.split("\0") if name]
     shown = untracked[:MAX_UNTRACKED]
-    for name in shown:
-        one = _git_diff(
-            path, "-c", "core.quotepath=false", "diff", "--no-index", "--", "/dev/null", name
-        )
-        if one.strip():
-            parts.append(one)
-    full = "\n".join(parts)
-    encoded = full.encode("utf-8", "replace")
-    truncated = len(encoded) > MAX_DIFF_BYTES
+    # One byte budget across every git call: each reads only what is left, and
+    # the first one to run past it ends the collection.
+    calls = [("diff", base)] + [("diff", "--no-index", "--", "/dev/null", name) for name in shown]
+    parts: list[bytes] = []
+    used = 0
+    truncated = False
+    for args in calls:
+        room = MAX_DIFF_BYTES - used
+        one = _git_diff(path, "-c", "core.quotepath=false", *args, limit=room)
+        if not one.strip():
+            continue
+        if len(one) > room:
+            truncated = True
+            parts.append(one[:room])
+            break
+        parts.append(one)
+        used += len(one) + 1  # the joining newline
+    full = b"\n".join(parts).decode("utf-8", "replace")
     if truncated:
-        full = encoded[:MAX_DIFF_BYTES].decode("utf-8", "ignore")
         full += "\n\n… diff truncated — too large to show in full.\n"
     return {
         "diff": full,
@@ -369,14 +388,14 @@ def checkpoint(cwd: str) -> dict | None:
     head = (_git(path, "rev-parse", "--short", "HEAD") or "").strip() if has_head else ""
     branch = (_git(path, "symbolic-ref", "--short", "HEAD") or "").strip() or "detached"
     base = "HEAD" if has_head else EMPTY_TREE
-    stat = _git_diff(path, "-c", "core.quotepath=false", "diff", base, "--stat").rstrip()
-    shortstat = _git_diff(path, "diff", base, "--shortstat").strip()
+    stat = _git_diff(path, "-c", "core.quotepath=false", "diff", base, "--stat")
+    shortstat = _git_diff(path, "diff", base, "--shortstat")
     detail = diff(cwd) or {}
     return {
         "head": head,
         "branch": branch,
-        "stat": stat,
-        "shortstat": shortstat,
+        "stat": stat.decode("utf-8", "replace").rstrip(),
+        "shortstat": shortstat.decode("utf-8", "replace").strip(),
         "diff": detail.get("diff", ""),
         "empty": bool(detail.get("empty", True)),
         "truncated": bool(detail.get("truncated", False)),
