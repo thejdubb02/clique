@@ -1275,14 +1275,16 @@ def _run(panel) -> int:
                 boxed_box["x"] + min(boxed_box["width"] - 12, 360), boxed_box["y"] + 18, steps=8
             )
             page.mouse.up()
+            # The wait is the check: a late repaint can clear the selection a
+            # moment after the button shows, and a second is_visible() then
+            # reads that later state instead of what the drag did.
             try:
                 page.locator("#copySel").wait_for(state="visible", timeout=3000)
+                shown = True
             except Exception as err:  # noqa: BLE001 - the check below names the failure
                 print(f"       no copy button after the drag: {err}")
-            check(
-                "a drag on a boxed pane shows the copy button",
-                page.locator("#copySel").is_visible(),
-            )
+                shown = False
+            check("a drag on a boxed pane shows the copy button", shown)
             try:
                 taken = page.evaluate("() => navigator.clipboard.readText()")
             except Exception as err:  # noqa: BLE001 — the check names the failure
@@ -1670,10 +1672,13 @@ def _run(panel) -> int:
 
         # The desktop update badge, drawn beside the version it updates —
         # same path the desktop shell drives through window.cliqueUpdateBadge.
-        page.evaluate(
+        # Read the class in the same call: a poll can repaint the footer
+        # before a later read, and only the first paint carries "arrive".
+        arrived = page.evaluate(
             """() => {
               window.cliqueUpdateBadge = { version: "0.76.1", state: "ready" };
               renderVersion();
+              return document.querySelector("#version .version-update").className;
             }"""
         )
         page.wait_for_timeout(150)
@@ -1690,7 +1695,7 @@ def _run(panel) -> int:
         )
         check(
             "it arrives with motion the first time",
-            "arrive" in (update_btn.get_attribute("class") or ""),
+            "arrive" in arrived,
         )
         page.evaluate("() => renderVersion()")
         page.wait_for_timeout(50)
@@ -2299,6 +2304,11 @@ def _run(panel) -> int:
               await openSession(id);
               await wait(1200);
               const entry = terms.get(id);
+              // A late replay or repaint would drop the guess; type once the pane is quiet.
+              let last = Date.now();
+              const quiet = entry.term.onWriteParsed(() => { last = Date.now(); });
+              while (Date.now() - last < 500) await wait(100);
+              quiet.dispose();
               const real = entry.ws.send.bind(entry.ws);
               entry.ws.send = (b) => setTimeout(() => real(b), 600);
               const shown = () => (entry.echoEl && entry.echoEl.textContent) || "";
