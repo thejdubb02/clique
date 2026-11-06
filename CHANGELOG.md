@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.95.9 - 2026-11-06 13:59 PST
+
+**Pairing cannot be jammed by a stranger, and half-typed drafts survive a fast tab switch.**
+
+- Anyone who could reach the tunnel could keep device pairing broken by
+  sending junk codes: twelve a minute filled a shared limit, and five wrong
+  guesses burned the live code. Both counters are gone; a 30^8 code space,
+  one live code and a two-minute life keep guessing hopeless (#40).
+- An expired pairing code could work again if the system clock stepped back.
+  Expiry now uses a monotonic clock, and an expired code is dropped (#41).
+- A draft typed and then left with a fast tab switch, or a closing page, was
+  sometimes lost or overwritten by an older save. Drafts now save in order,
+  flush when the page hides, and show a message if a save fails (#32).
+- Deleting every folder now stays deleted after a restart, instead of the
+  default folders coming back (#34).
+- Project search keeps its time and size limits inside one very large
+  directory, and lists the named directory itself when it is a project (#36).
+- Scratch cleanup stays inside the project, and git diff reads are bounded
+  (#31, #37).
+
 ## 0.95.8 - 2026-11-02 09:56 PST
 
 **A zoomed pane stays inside its box, and the site says there is an Android app.**
