@@ -901,7 +901,7 @@ def main() -> int:
     app_mod.tmux.resize_window = capture_resize
     try:
         session = SimpleNamespace(mux="sm-restore", socket=SOCKET)
-        bridge = SimpleNamespace(resize=lambda *a, **k: None)
+        bridge = SimpleNamespace(resize=lambda *_a, **_k: None)
         handler = object.__new__(Handler)
 
         def control(payload: bytes) -> None:
@@ -1593,11 +1593,20 @@ def main() -> int:
         "no icon carries a colour of its own", painted <= {"none", "currentColor"}, sorted(painted)
     )
 
+    from clique import store as store_mod
+
+    print("an emptied folder list stays empty")
+    ef_dir = Path(tempfile.mkdtemp(prefix="clique-nofolders-", dir="/tmp"))
+    ef_store = store_mod.Store(ef_dir / "state.json")
+    check("first run seeds the default folders", len(ef_store.folders) == 2, ef_store.folders)
+    for f in list(ef_store.folders):
+        ef_store.remove_folder(f.id)
+    reloaded = store_mod.Store(ef_dir / "state.json")
+    check("deleting every folder survives a restart", reloaded.folders == [], reloaded.folders)
+
     print("snippets on the bar")
     # Real Store, not a fake — the thing worth catching here is the old
     # custom_quick_commands shape surviving the merge into snippets.
-    from clique import store as store_mod
-
     qc_dir = Path(tempfile.mkdtemp(prefix="clique-quickcmd-"))
     qc_store = store_mod.Store(qc_dir / "state.json")
     qc_store.update_settings(
@@ -1825,7 +1834,7 @@ def main() -> int:
         usage.read(
             "smoke-cmd",
             {"cmd": [sys.executable, "-c", "import sys; sys.exit(1)"]},
-            lambda url: None,
+            lambda _url: None,
             force=True,
         )
         or {}
@@ -1837,7 +1846,7 @@ def main() -> int:
     )
     check(
         "a spec with neither cmd nor url is None",
-        usage.read("smoke-none", {}, lambda url: None, force=True) is None,
+        usage.read("smoke-none", {}, lambda _url: None, force=True) is None,
     )
 
     print("usage: running-only by default, every installed CLI on an explicit ask")
@@ -1847,7 +1856,7 @@ def main() -> int:
     seen_cli_ids: list[str] = []
 
     def fake_usage_read(cli_id, spec, guard, *, force=False):
-        del spec, force  # same signature as the real reader
+        del spec, guard, force  # same signature as the real reader
         seen_cli_ids.append(cli_id)
         return {"cli": cli_id, "windows": [], "checked": 0}
 
@@ -1903,7 +1912,7 @@ def main() -> int:
     reset = {"at": "2030-01-01T00:00:00+00:00"}
     t0 = datetime.datetime.fromisoformat(reset["at"]).timestamp()
     saved = (usage.read, app_mod.tmux.capture, app_mod.tmux.send_text)
-    usage.read = lambda *a, **k: {"windows": [{"percent": 100, "resets_at": reset["at"]}]}
+    usage.read = lambda *_a, **_k: {"windows": [{"percent": 100, "resets_at": reset["at"]}]}
     app_mod.tmux.capture = lambda mux, socket, **k: screen[mux]
     app_mod.tmux.send_text = lambda mux, text, socket, **k: sent.append((mux, text))
     try:

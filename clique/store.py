@@ -663,7 +663,10 @@ class Store:
                 raw = json.loads(candidate.read_text())
                 # Valid JSON of the wrong shape is corruption too: build the
                 # records now, so a bad one falls through to the backup.
-                folders = raw.get("folders") or DEFAULT_FOLDERS
+                # Only a missing key seeds defaults: [] means he deleted them all.
+                folders = raw.get("folders")
+                if folders is None:
+                    folders = DEFAULT_FOLDERS
                 built = (
                     [Folder(**{k: v for k, v in f.items() if k in Folder.__annotations__}) for f in folders],
                     [
