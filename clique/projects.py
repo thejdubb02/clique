@@ -112,46 +112,75 @@ class Project:
 _cache: dict[str, object] = {"at": 0.0, "key": "", "found": [], "partial": False}
 
 
-def _mark(entry: os.DirEntry) -> str:
-    """What kind of project this directory is, or "" if it is not one."""
+def _mark(path: str, deadline: float) -> str | None:
+    """What kind of project this directory is, "" if it is not one, or None if
+    the clock ran out before it could say. Timed per marker, because on a slow
+    mount each of these is a round trip."""
     for marker, kind in MARKERS:
-        if os.path.exists(os.path.join(entry.path, marker)):
+        if time.monotonic() > deadline:
+            return None
+        if os.path.exists(os.path.join(path, marker)):
             return kind
     return ""
 
 
-def _walk(root: Path, depth: int, deadline: float, out: list[Project]) -> bool:
-    """Depth-first from `root`. Returns False if it ran out of room or time."""
+def _walk(
+    root: Path, depth: int, deadline: float, out: list[Project], own: bool
+) -> bool:
+    """Depth-first from `root`. Returns False if it ran out of room or time.
+
+    Both bounds are checked per entry, not per directory: one directory with
+    ten thousand children must not get to finish just because it started.
+    """
+
+    def add(path: str, name: str) -> bool:
+        kind = _mark(path, deadline)
+        if kind is None:
+            return False
+        if kind:
+            if len(out) >= LIMIT:
+                return False
+            out.append(Project(path, name, kind))
+        return True
+
+    # A named root counts too: naming a repo as a root should find that repo.
+    # Not the home fallback, where a dotfiles repo would top every list.
+    if own and not add(str(root), root.name or str(root)):
+        return False
     stack: list[tuple[str, int]] = [(str(root), 0)]
     while stack:
         here, level = stack.pop()
-        if len(out) >= LIMIT or time.monotonic() > deadline:
+        # Also here: an empty directory yields no entry to check the clock on.
+        if time.monotonic() > deadline:
             return False
         try:
-            entries = sorted(os.scandir(here), key=lambda e: e.name.lower())
-        except (OSError, PermissionError):
+            with os.scandir(here) as it:
+                # Each child is judged as it is listed, never collected first:
+                # a budget that runs out mid-directory keeps what it found.
+                for entry in it:
+                    if time.monotonic() > deadline:
+                        return False
+                    if entry.name.startswith(".") or entry.name in SKIP:
+                        continue
+                    try:
+                        # follow_symlinks=False: a link back up the tree is how
+                        # a walk like this turns into an infinite one, and a
+                        # symlinked repo is still reachable by its real path.
+                        if not entry.is_dir(follow_symlinks=False):
+                            continue
+                    except OSError:
+                        continue
+                    if not add(entry.path, entry.name):
+                        return False
+                    # Deliberately no stop at a project root. A project inside
+                    # a project is ordinary (a repo of client directories, a
+                    # monorepo of packages), and treating a root as a leaf made
+                    # every one of those unreachable. Measured at 0.39s against
+                    # 0.45s for the version that stopped, so nothing to buy.
+                    if level + 1 < depth:
+                        stack.append((entry.path, level + 1))
+        except OSError:
             continue
-        for entry in entries:
-            try:
-                # follow_symlinks=False: a link back up the tree is how a walk
-                # like this turns into an infinite one, and a symlinked repo is
-                # still reachable by its real path.
-                if not entry.is_dir(follow_symlinks=False):
-                    continue
-            except OSError:
-                continue
-            if entry.name.startswith(".") or entry.name in SKIP:
-                continue
-            kind = _mark(entry)
-            if kind:
-                out.append(Project(entry.path, entry.name, kind))
-            # Deliberately not `continue` here. A project inside a project is
-            # ordinary — a repo of client directories, a monorepo of packages —
-            # and treating a root as a leaf made every one of those
-            # unreachable. Measured at 0.39s against 0.45s for the version that
-            # stopped, so there was never anything to buy with it.
-            if level + 1 < depth:
-                stack.append((entry.path, level + 1))
     return True
 
 
@@ -189,8 +218,9 @@ def index(
     found: list[Project] = []
     whole = True
     deadline = now + BUDGET
+    named = any(str(p).strip() and Path(p).expanduser().is_dir() for p in extra or [])
     for root in _roots(extra, home):
-        if not _walk(root, depth, deadline, found):
+        if not _walk(root, depth, deadline, found, own=named):
             whole = False
             break
     _cache.update(at=now, key=key, found=found, partial=not whole)

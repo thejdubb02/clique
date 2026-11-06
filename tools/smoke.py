@@ -1049,6 +1049,97 @@ def main() -> int:
         "a root inside another root is not walked twice",
         len(projects._roots([str(sand), str(sand / "work")], sand)) == 1,
     )
+    # A named root that is itself a project is found, once, even when another
+    # named root overlaps it.
+    projects.forget()
+    own = [p.path for p in projects.index([str(sand / "clients")], home=sand)[0]]
+    check("a named root that is a project is listed", str(sand / "clients") in own, own)
+    projects.forget()
+    both = [
+        p.path for p in projects.index([str(sand / "clients"), str(sand)], home=sand, force=True)[0]
+    ]
+    check("overlapping roots list it once", both.count(str(sand / "clients")) == 1, both)
+    projects.forget()
+    lone = Path(tempfile.mkdtemp(prefix="clique-lone-"))
+    (lone / "package.json").write_text("{}", encoding="utf-8")
+    alone = projects.index([str(lone)], home=sand, force=True)[0]
+    check("a root-only project is found", [p.path for p in alone] == [str(lone)], alone)
+    shutil.rmtree(lone, ignore_errors=True)
+
+    # One wide directory must not get to finish just because it started.
+    wide = Path(tempfile.mkdtemp(prefix="clique-wide-"))
+    for i in range(8):
+        (wide / f"p{i}").mkdir()
+        (wide / f"p{i}" / "package.json").write_text("{}", encoding="utf-8")
+    real_limit = projects.LIMIT
+    projects.LIMIT = 3
+    try:
+        projects.forget()
+        got, cut = projects.index([str(wide)], home=sand, force=True)
+        check("the result cap holds inside one directory", len(got) == 3, len(got))
+        check("and says it stopped", cut is True)
+        projects.LIMIT = 8
+        got, cut = projects.index([str(wide)], home=sand, force=True)
+        check("exactly at the cap is not partial", (len(got), cut) == (8, False), (len(got), cut))
+    finally:
+        projects.LIMIT = real_limit
+    # A fake clock that runs out once `n` directories have been judged, so
+    # the tests say where the budget ends rather than count clock reads.
+    real_time, real_mark = projects.time, projects._mark
+    judged = [0]
+    limit_at = [0]
+
+    def counted_mark(path, deadline):
+        kind = real_mark(path, deadline)
+        judged[0] += 1
+        return kind
+
+    def expire_after(n):
+        judged[0], limit_at[0] = 0, n
+        projects.forget()
+
+    projects._mark = counted_mark
+    projects.time = SimpleNamespace(
+        monotonic=lambda: projects.BUDGET + 1 if judged[0] >= limit_at[0] else 0.0
+    )
+    try:
+        # Out of time while the directory is still being listed: the root and
+        # three children judged, and those three are kept, not dropped.
+        expire_after(4)
+        got, cut = projects.index([str(wide)], home=sand, force=True)
+        check(
+            "the time budget holds mid-listing and keeps what it saw",
+            (len(got), cut) == (3, True),
+            len(got),
+        )
+        # Cached: the same call inside the TTL does not walk again.
+        again = projects.index([str(wide)], home=sand)
+        check("a cached walk keeps its partial flag", again == (got, True), again)
+        # Out of time after the last entry, with empty directories still
+        # queued: that is still a walk that stopped short.
+        hollow = Path(tempfile.mkdtemp(prefix="clique-hollow-"))
+        for i in range(3):
+            (hollow / f"e{i}").mkdir()
+        expire_after(4)
+        got, cut = projects.index([str(hollow)], home=sand, force=True)
+        check("running out with directories still queued is partial", cut is True, got)
+        shutil.rmtree(hollow, ignore_errors=True)
+        # Out of time inside one marker check: a slow mount must not get all
+        # nine lookups. Two clock reads (cache stamp, first marker) then done.
+        projects._mark = real_mark
+        slow = Path(tempfile.mkdtemp(prefix="clique-slow-"))
+        (slow / "CMakeLists.txt").write_text("", encoding="utf-8")
+        ticks = iter(range(10_000))
+        projects.time = SimpleNamespace(
+            monotonic=lambda: 0.0 if next(ticks) < 2 else projects.BUDGET + 1
+        )
+        projects.forget()
+        got, cut = projects.index([str(slow)], home=sand, force=True)
+        check("the budget holds between marker checks", (got, cut) == ([], True), (got, cut))
+        shutil.rmtree(slow, ignore_errors=True)
+    finally:
+        projects.time, projects._mark = real_time, real_mark
+    shutil.rmtree(wide, ignore_errors=True)
     shutil.rmtree(sand, ignore_errors=True)
     projects.forget()
 
