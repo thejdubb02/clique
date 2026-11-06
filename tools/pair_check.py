@@ -9,8 +9,8 @@ What this holds down, in the order it matters:
 
 1. A correct code returns a token, and that token actually works.
 2. The code works exactly once.
-3. A wrong code is refused, and enough wrong guesses burn the code, so the
-   short length is not a weakness.
+3. A wrong code is refused, and no run of wrong guesses from a stranger can
+   lock out the real one (the 30**8 space, not a counter, stops guessing).
 4. Minting a code needs authentication. Only redeeming one is open, and it is
    open because the device doing it has no credential yet.
 5. Every refusal reads the same. Distinguishing wrong from expired from none
@@ -119,15 +119,17 @@ def main() -> int:
         again, status = call("/api/pair/claim", "POST", {"code": code})
         res["a_code_cannot_be_used_twice"] = status == 403
 
-        # A wrong code, and then enough wrong codes to burn a live one.
+        # A wrong code, and then a run of wrong codes that must not lock out
+        # the live one: redeeming is open, so a counter would be a stranger's
+        # off switch.
         fresh = str(call("/api/pair", "POST", token=admin)[0].get("code", ""))
         wrong, wrong_status = call("/api/pair/claim", "POST", {"code": "ZZZZ-ZZZZ"})
         res["a_wrong_code_is_refused"] = wrong_status == 403
         res["and_says_nothing_about_why"] = wrong.get("error") == again.get("error")
-        for _ in range(5):
+        for _ in range(15):
             call("/api/pair/claim", "POST", {"code": "ZZZZ-ZZZZ"})
         _, status = call("/api/pair/claim", "POST", {"code": fresh})
-        res["guessing_burns_the_code"] = status == 403
+        res["wrong_guesses_cannot_lock_out_the_real_code"] = status == 201
 
         # Cancelling takes it back off the screen.
         third = str(call("/api/pair", "POST", token=admin)[0].get("code", ""))
