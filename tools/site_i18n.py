@@ -189,8 +189,7 @@ def translation_problems() -> list[str]:
         was = previous.get(key) or {}
         now_en = _sha(PAGES["en"][key])
         if not was:
-            problems.append(f"{key}: new English string, translate it in every language then regenerate")
-            continue
+            continue  # a new key: the missing-key check above makes every language carry it
         if was.get("en") == now_en:
             continue
         for lang in PAGES:
@@ -238,6 +237,8 @@ PAGES = {
         a3="Python {python} and tmux. Nothing else. No Node, no Docker, no account.",
         q4="How do I add another coding CLI?",
         a4="Four lines in config. Reload the page. If it ever needs a code change, the design has failed.",
+        q5="Is there a phone app?",
+        a5='Yes, for Android: <a href="https://github.com/thejdubb02/clique-android">clique-android</a>. It pairs to your own panel with a short code, lists your sessions and opens a terminal. Add <a href="https://fdroid.useclique.dev/repo">fdroid.useclique.dev/repo</a> in F-Droid and it updates itself. On any other phone, the panel works in the browser.',
         get_h="Install it",
         coffee='<a href="https://buymeacoffee.com/jdubb">Buy me a coffee</a> if it saved you an afternoon.',
         search="Search sessions…",
@@ -289,6 +290,8 @@ PAGES = {
         a3="Python {python} 和 tmux。没了。不要 Node，不要 Docker，不要账号。",
         q4="怎么再加一套编程 CLI？",
         a4="配置里四行。刷新页面。如果还得改代码，设计就失败了。",
+        q5="有手机 App 吗？",
+        a5='有，Android 版：<a href="https://github.com/thejdubb02/clique-android">clique-android</a>。用一个短码和你自己的面板配对，列出会话，打开终端。在 F-Droid 里添加 <a href="https://fdroid.useclique.dev/repo">fdroid.useclique.dev/repo</a>，之后自动更新。其他手机直接用浏览器打开面板就行。',
         get_h="安装",
         coffee='<a href="https://buymeacoffee.com/jdubb">请我喝杯咖啡</a>，如果它替你省了一个下午。',
         search="搜索会话…",
@@ -340,6 +343,8 @@ PAGES = {
         a3="Python {python} と tmux。それだけ。Node も Docker もアカウントも不要です。",
         q4="コーディング CLI を足すには？",
         a4="設定に4行。ページを再読み込み。コード変更が要るなら、設計は失敗しています。",
+        q5="スマホアプリはありますか？",
+        a5='Android 版があります：<a href="https://github.com/thejdubb02/clique-android">clique-android</a>。短いコードで自分のパネルとペアリングし、セッション一覧とターミナルを開けます。F-Droid に <a href="https://fdroid.useclique.dev/repo">fdroid.useclique.dev/repo</a> を追加すれば自動で更新されます。ほかのスマホではブラウザでパネルがそのまま使えます。',
         get_h="インストール",
         coffee='午後をひとつ節約できたら、<a href="https://buymeacoffee.com/jdubb">コーヒーをおごってください</a>。',
         search="セッションを検索…",
@@ -391,6 +396,8 @@ PAGES = {
         a3="Python {python}와 tmux. 그게 전부입니다. Node도 Docker도 계정도 필요 없습니다.",
         q4="코딩 CLI를 더하려면?",
         a4="설정에 네 줄. 페이지를 새로고침. 코드 변경이 필요하면 설계가 실패한 겁니다.",
+        q5="휴대폰 앱이 있나요?",
+        a5='Android용이 있습니다: <a href="https://github.com/thejdubb02/clique-android">clique-android</a>. 짧은 코드로 내 패널과 페어링하고, 세션 목록을 보고 터미널을 엽니다. F-Droid에 <a href="https://fdroid.useclique.dev/repo">fdroid.useclique.dev/repo</a>를 추가하면 알아서 업데이트됩니다. 다른 휴대폰에서는 브라우저로 패널을 그대로 쓰면 됩니다.',
         get_h="설치하기",
         coffee='오후 하나를 아껴 줬다면, <a href="https://buymeacoffee.com/jdubb">커피 한 잔</a>이요.',
         search="세션 검색…",
@@ -442,6 +449,8 @@ PAGES = {
         a3="Python {python} e tmux. Só isso. Sem Node, sem Docker, sem conta.",
         q4="Como acrescento outra CLI de código?",
         a4="Quatro linhas na config. Recarregue a página. Se precisar mudar código, o desenho falhou.",
+        q5="Tem app para celular?",
+        a5='Sim, para Android: <a href="https://github.com/thejdubb02/clique-android">clique-android</a>. Ele pareia com o seu próprio painel usando um código curto, lista as sessões e abre um terminal. Adicione <a href="https://fdroid.useclique.dev/repo">fdroid.useclique.dev/repo</a> no F-Droid e ele se atualiza sozinho. Em qualquer outro celular, o painel funciona no navegador.',
         get_h="Instalar",
         coffee='<a href="https://buymeacoffee.com/jdubb">Pague um café</a> se isso te poupou uma tarde.',
         search="Buscar sessões…",
@@ -493,6 +502,8 @@ PAGES = {
         a3="Python {python} und tmux. Sonst nichts. Kein Node, kein Docker, kein Konto.",
         q4="Wie füge ich eine weitere Coding-CLI hinzu?",
         a4="Vier Zeilen in der Config. Seite neu laden. Wenn das Code braucht, ist das Design gescheitert.",
+        q5="Gibt es eine Handy-App?",
+        a5='Ja, für Android: <a href="https://github.com/thejdubb02/clique-android">clique-android</a>. Sie koppelt sich per kurzem Code mit deinem eigenen Panel, listet die Sessions und öffnet ein Terminal. Füge <a href="https://fdroid.useclique.dev/repo">fdroid.useclique.dev/repo</a> in F-Droid hinzu, dann aktualisiert sie sich selbst. Auf jedem anderen Handy läuft das Panel im Browser.',
         get_h="Installieren",
         coffee='<a href="https://buymeacoffee.com/jdubb">Kauf mir einen Kaffee</a>, wenn es dir einen Nachmittag gespart hat.',
         search="Sessions suchen…",
@@ -566,10 +577,9 @@ TMPL = """\
         <span class="host">clique @ 127.0.0.1:3200</span>
         <button type="button" class="copybtn" hidden data-idle="{copy}" data-done="{copied}" data-copy="{clone}">{copy}</button>
       </div>
-<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
-<span class="ps">$</span> cd clique
-<span class="ps">$</span> python3 -m clique password
-<span class="ps">$</span> python3 -m clique</code></pre>
+<pre><code><span class="ps">$</span> pip install clique-panel
+<span class="ps">$</span> clique password
+<span class="ps">$</span> clique</code></pre>
     </div>
     <p class="then">{then}</p>
     <p class="badges">
@@ -675,6 +685,10 @@ TMPL = """\
       <summary>{q4}</summary>
       <p>{a4}</p>
     </details>
+    <details>
+      <summary>{q5}</summary>
+      <p>{a5}</p>
+    </details>
   </section>
 
   <section class="get">
@@ -684,10 +698,9 @@ TMPL = """\
         <span class="host">clique @ 127.0.0.1:3200</span>
         <button type="button" class="copybtn" hidden data-idle="{copy}" data-done="{copied}" data-copy="{clone}">{copy}</button>
       </div>
-<pre><code><span class="ps">$</span> git clone https://github.com/thejdubb02/clique.git
-<span class="ps">$</span> cd clique
-<span class="ps">$</span> python3 -m clique password
-<span class="ps">$</span> python3 -m clique</code></pre>
+<pre><code><span class="ps">$</span> pip install clique-panel
+<span class="ps">$</span> clique password
+<span class="ps">$</span> clique</code></pre>
     </div>
     <p class="then gh-row">
       <a class="btn-gh btn-star" href="https://github.com/thejdubb02/clique" rel="noopener">

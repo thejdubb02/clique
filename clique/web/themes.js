@@ -154,4 +154,145 @@ window.CLIQUE_THEMES = {
             brightBlack: "#002b36", brightRed: "#cb4b16", brightGreen: "#586e75", brightYellow: "#657b83",
             brightBlue: "#839496", brightMagenta: "#6c71c4", brightCyan: "#93a1a1", brightWhite: "#fdf6e3" },
   },
+
+  /* ------------------------------------------------------------ characters
+   *
+   * The seven below carry an `art` block as well as a palette: a hand-drawn
+   * anime figure watermarked into the bottom-right of the pane, behind the
+   * text. One line each, naming a file in web/art/.
+   *
+   * Drawn for us rather than borrowed, and the distinction took work. Asked
+   * plainly for "a moustachioed plumber in a red cap and blue dungarees", an
+   * image model returns Nintendo's Mario line for line, because that is what
+   * the phrase points at. The archetype is ours to use and the likeness is
+   * not, so every prompt carries an explicit instruction to invent the face,
+   * the costume and the proportions fresh and to avoid resembling the famous
+   * one. Anything regenerated here has to keep that, or this package ends up
+   * distributing somebody else's characters under our name.
+   *
+   * tools/art_prep.py is what turns an illustration into one of these: keys
+   * out the flat background it was drawn on, crops to the figure, scales it
+   * and quantises it. A megabyte of magenta field becomes about a hundred
+   * kilobytes of exactly the character.
+   *
+   * Composited normally at low opacity rather than with the `lighten` and
+   * `darken` blends app.js uses for a palette we control. Those two keep text
+   * perfectly untouched, but only because a grid's colours are all mid-tones
+   * by construction; a real drawing has blacks and whites in it and the
+   * extremes eat precisely those. See the note above themeArt in app.js.
+   */
+
+  plumber: {
+    label: "Plumber", base: "dark",
+    panel: { bg: "#141a2e", panel: "#1b2340", row: "#25304f", sel: "#33406b",
+             field: "#1f2846", fg: "#e8ecf7", dim: "#8d99c0", line: "#2a3457",
+             accent: "#e5372c" },
+    term: { background: "#141a2e", foreground: "#e8ecf7", cursor: "#f2c14e",
+            selectionBackground: "#33406b",
+            black: "#1b2340", red: "#e5372c", green: "#4caf50", yellow: "#f2c14e",
+            blue: "#3d7bd9", magenta: "#d95f9e", cyan: "#49c4d6", white: "#dbe2f2",
+            brightBlack: "#5b688f", brightRed: "#ff5c4d", brightGreen: "#6ede72",
+            brightYellow: "#ffd76a", brightBlue: "#5f9dff", brightMagenta: "#ff86c2",
+            brightCyan: "#6fe0ef", brightWhite: "#ffffff" },
+    art: { src: "art/plumber.png" },
+  },
+
+  triforce: {
+    label: "Triforce", base: "dark",
+    panel: { bg: "#101a14", panel: "#16241b", row: "#1e3125", sel: "#2b4a33",
+             field: "#1a2b20", fg: "#e4f0e2", dim: "#87a58e", line: "#22382a",
+             accent: "#f2c14e" },
+    term: { background: "#101a14", foreground: "#dcecd8", cursor: "#f2c14e",
+            selectionBackground: "#2b4a33",
+            black: "#16241b", red: "#d9534f", green: "#3fa34d", yellow: "#e0b13c",
+            blue: "#3f8fd0", magenta: "#b06fc4", cyan: "#4bb8a8", white: "#cfe0cb",
+            brightBlack: "#4b6b54", brightRed: "#ff7a72", brightGreen: "#63d477",
+            brightYellow: "#ffd76a", brightBlue: "#68b6f5", brightMagenta: "#d59aec",
+            brightCyan: "#6fe0cd", brightWhite: "#f2fbf0" },
+    art: { src: "art/triforce.png" },
+  },
+
+  /* Named for the company rather than the ring, because the ring is the part
+   * that is drawn and a theme called after it would be the one thing on this
+   * list claiming to be the artefact itself. */
+  fellowship: {
+    label: "Fellowship", base: "dark",
+    panel: { bg: "#15130f", panel: "#1c1a15", row: "#26231c", sel: "#3a3427",
+             field: "#201d17", fg: "#e8dcc0", dim: "#9a8f76", line: "#2b271f",
+             accent: "#c9a227" },
+    term: { background: "#15130f", foreground: "#e0d4b8", cursor: "#c9a227",
+            selectionBackground: "#3a3427",
+            black: "#1c1a15", red: "#b5453c", green: "#7d8c4a", yellow: "#c9a227",
+            blue: "#5a7a8c", magenta: "#96637f", cyan: "#6d9188", white: "#cdc1a4",
+            brightBlack: "#5c5545", brightRed: "#e0685c", brightGreen: "#a8ba6a",
+            brightYellow: "#eac54f", brightBlue: "#84a7bd", brightMagenta: "#c08fa8",
+            brightCyan: "#95bdb2", brightWhite: "#f5ecd8" },
+    art: { src: "art/fellowship.png" },
+  },
+
+  drizzt: {
+    label: "Drizzt", base: "dark",
+    panel: { bg: "#0f0c18", panel: "#171226", row: "#211a33", sel: "#332a52",
+             field: "#1a1430", fg: "#e6e1f5", dim: "#8f86b5", line: "#241d3a",
+             accent: "#b39ddb" },
+    term: { background: "#0f0c18", foreground: "#ded8f0", cursor: "#b39ddb",
+            selectionBackground: "#332a52",
+            black: "#171226", red: "#c8546b", green: "#5aa88b", yellow: "#c9a86a",
+            blue: "#6f7fd0", magenta: "#a375d6", cyan: "#5fb0c9", white: "#c9c2e0",
+            brightBlack: "#544a7a", brightRed: "#ef7a90", brightGreen: "#79d4ad",
+            brightYellow: "#e8ca8c", brightBlue: "#93a3f5", brightMagenta: "#c79bf5",
+            brightCyan: "#84d6ef", brightWhite: "#f2eefc" },
+    art: { src: "art/drizzt.png" },
+  },
+
+  chompy: {
+    label: "Chompy", base: "dark",
+    panel: { bg: "#08080f", panel: "#101024", row: "#181838", sel: "#22225a",
+             field: "#12122c", fg: "#f0f0d8", dim: "#8a8ab0", line: "#1c1c40",
+             accent: "#ffd93b" },
+    term: { background: "#08080f", foreground: "#f0e6c8", cursor: "#ffd93b",
+            selectionBackground: "#22225a",
+            black: "#101024", red: "#ff4d4d", green: "#5ad46a", yellow: "#ffd93b",
+            blue: "#2b5df0", magenta: "#ff9ecb", cyan: "#5adcf0", white: "#e8e8d0",
+            brightBlack: "#4a4a80", brightRed: "#ff7a7a", brightGreen: "#84f08f",
+            brightYellow: "#ffe870", brightBlue: "#5f8bff", brightMagenta: "#ffb8dc",
+            brightCyan: "#8aeaff", brightWhite: "#ffffff" },
+    art: { src: "art/chompy.png" },
+  },
+
+  /* The one theme here whose palette is not a costume: the seven ANSI slots
+   * that matter are the seven tetrominoes, which happen to be seven colours
+   * chosen decades ago to be told apart at a glance under pressure. */
+  bricks: {
+    label: "Bricks", base: "dark",
+    panel: { bg: "#0d1226", panel: "#141b36", row: "#1d2749", sel: "#2a3766",
+             field: "#17203f", fg: "#e6ecff", dim: "#8996c4", line: "#212c53",
+             accent: "#31c7de" },
+    term: { background: "#0d1226", foreground: "#dfe6ff", cursor: "#31c7de",
+            selectionBackground: "#2a3766",
+            black: "#141b36", red: "#e5504a", green: "#4fc26b", yellow: "#f2d03b",
+            blue: "#3f7fe0", magenta: "#a558d0", cyan: "#31c7de", white: "#ccd6f0",
+            brightBlack: "#4b5788", brightRed: "#ff7a72", brightGreen: "#74e08c",
+            brightYellow: "#ffe66a", brightBlue: "#6fa5ff", brightMagenta: "#c684ef",
+            brightCyan: "#6ce4f5", brightWhite: "#f2f6ff" },
+    /* Deliberately coarse: a tetromino is a four-cell shape and drawing it at
+     * fourteen cells wide would only make the cells smaller, not the pieces
+     * clearer. Seven across means the blocks land about the size they were. */
+    art: { src: "art/bricks.png" },
+  },
+
+  aincrad: {
+    label: "Aincrad", base: "dark",
+    panel: { bg: "#0a0d14", panel: "#111620", row: "#1a2130", sel: "#26334a",
+             field: "#141a26", fg: "#e2e9f2", dim: "#8595a8", line: "#1d2534",
+             accent: "#4fc3f7" },
+    term: { background: "#0a0d14", foreground: "#dce5f0", cursor: "#4fc3f7",
+            selectionBackground: "#26334a",
+            black: "#111620", red: "#e0505f", green: "#4fbf8b", yellow: "#e0b451",
+            blue: "#4a8fe0", magenta: "#9d7ae0", cyan: "#4fc3f7", white: "#c4d0de",
+            brightBlack: "#4b5a6e", brightRed: "#ff707d", brightGreen: "#6fdfa8",
+            brightYellow: "#ffd479", brightBlue: "#74b1ff", brightMagenta: "#bfa0ff",
+            brightCyan: "#8adcff", brightWhite: "#f0f6ff" },
+    art: { src: "art/aincrad.png" },
+  },
 };

@@ -22,3 +22,7 @@ dist/
 *.egg-info/
 __pycache__/
 *.pyc
+
+# Images pasted into a session, and APK/screenshot drops. Local scratch.
+.claude-images/
+.clique-drops/

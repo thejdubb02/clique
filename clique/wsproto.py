@@ -73,6 +73,9 @@ class WebSocket:
         self.sock = sock
         self._send_lock = threading.Lock()
         self._closed = False
+        #: When the peer last proved it was there. A pong counts, so a healthy
+        #: connection refreshes this every ping interval even while idle.
+        self.last_recv = time.monotonic()
 
     # ------------------------------------------------------------------ send
 
@@ -113,6 +116,20 @@ class WebSocket:
                 with contextlib.suppress(OSError):
                     self.sock.shutdown(socket.SHUT_RDWR)
 
+    def drop(self) -> None:
+        """Tear the socket down without waiting for the send lock.
+
+        `close` is the polite path: it writes a close frame first, so it needs
+        the lock, and a `sendall` parked on a peer that stopped reading holds
+        that lock for as long as the peer stays gone. This one is for a peer
+        already judged dead, where the point is to unpark every thread on the
+        socket rather than to say goodbye. The shutdown does both: a blocked
+        `recv` returns empty and a blocked `sendall` raises.
+        """
+        self._closed = True
+        with contextlib.suppress(OSError):
+            self.sock.shutdown(socket.SHUT_RDWR)
+
     @property
     def closed(self) -> bool:
         return self._closed
@@ -145,6 +162,7 @@ class WebSocket:
             if not chunk:
                 raise WebSocketError("connection closed mid-frame")
             chunks += chunk
+            self.last_recv = time.monotonic()
             if deadline is None and len(chunks) < count:
                 deadline = time.monotonic() + FRAME_TIMEOUT
         return bytes(chunks)
@@ -212,7 +230,18 @@ class WebSocket:
             if opcode == OP_PONG:
                 continue
 
-            if opcode in (OP_TEXT, OP_BINARY):
+            # RFC 6455 §5.4: continuation (0x0) must follow an unfinished data
+            # frame, and a new data opcode must not start before the previous
+            # one's fin. Either mismatch lets a client braid two messages
+            # into one, so it is a protocol error, not a thing to merge.
+            if opcode == OP_CONT:
+                if message_op is None:
+                    self.close(1002)
+                    return None
+            elif opcode in (OP_TEXT, OP_BINARY):
+                if message_op is not None:
+                    self.close(1002)
+                    return None
                 message_op = opcode
             # Checked before appending, not after: appending first means the
             # buffer legitimately holds MAX_MESSAGE plus one whole frame at
@@ -228,3 +257,29 @@ class WebSocket:
 def mask_free_random(length: int) -> bytes:
     """Only used by the test client — servers never mask."""
     return os.urandom(length)
+
+
+def _frame(opcode: int, payload: bytes, fin: bool = True) -> bytes:
+    mask = mask_free_random(4)
+    masked_payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    header = bytearray([(0x80 if fin else 0) | opcode, 0x80 | len(payload)])
+    return bytes(header) + mask + masked_payload
+
+
+def _demo() -> None:
+    """A data opcode starting before the previous one's FIN is a protocol
+    error (RFC 6455 5.4), not two messages to merge."""
+    a, b = socket.socketpair()
+    try:
+        a.sendall(_frame(OP_TEXT, b"one", fin=False) + _frame(OP_TEXT, b"two", fin=True))
+        ws = WebSocket(b)
+        if ws.recv() is not None or not ws.closed:
+            raise AssertionError("accepted a data frame mid-fragment")
+    finally:
+        a.close()
+        b.close()
+
+
+if __name__ == "__main__":
+    _demo()
+    print("ok")

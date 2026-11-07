@@ -127,6 +127,7 @@ class TokenStore:
         per-session ``attention`` token that lives in that pane's environment.
         """
         with self._lock:
+            self._reload_if_changed()
             return self._create(name, scopes, session)
 
     def _create(self, name: str, scopes: list[str] | None, session: str = "") -> tuple[Token, str]:
@@ -145,6 +146,7 @@ class TokenStore:
 
     def revoke(self, token_id: str) -> bool:
         with self._lock:
+            self._reload_if_changed()
             found = next((t for t in self.tokens if t.id == token_id), None)
             if not found:
                 return False
@@ -160,6 +162,7 @@ class TokenStore:
         if not session_id:
             return 0
         with self._lock:
+            self._reload_if_changed()
             keep = [t for t in self.tokens if t.session != session_id]
             dropped = len(self.tokens) - len(keep)
             if dropped:
@@ -210,3 +213,22 @@ class TokenStore:
     def touch(self) -> None:
         """Persist last_used timestamps. Called on shutdown, not per request."""
         self._write()
+
+
+def _demo() -> None:
+    """Two stores over one file must not drop each other's writes."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "tokens.json"
+        a, b = TokenStore(path), TokenStore(path)
+        a.create("agent-a")
+        b.create("agent-b")
+        names = {t.name for t in TokenStore(path).tokens}
+        if names != {"agent-a", "agent-b"}:
+            raise AssertionError(f"lost a write: {names}")
+
+
+if __name__ == "__main__":
+    _demo()
+    print("ok")

@@ -12,3 +12,11 @@ if [ -n "$blocked" ]; then
     echo "If this really is public, commit with --no-verify and mean it." >&2
     exit 1
 fi
+
+# core.hooksPath above points at this directory instead of the default, which
+# REPLACES the estate's global hook chain rather than adding to it. Without the
+# next line, gitleaks and the bad-author guard in /root/.githooks/pre-commit
+# never run in this repo. Chain to it once our own check has passed.
+GLOBAL_HOOK=/root/.githooks/pre-commit
+[ -x "$GLOBAL_HOOK" ] && exec "$GLOBAL_HOOK" "$@"
+exit 0
