@@ -1327,6 +1327,12 @@ def _run(panel) -> int:
             )
             page.set_viewport_size({"width": 1200, "height": 720})
             page.wait_for_timeout(700)
+            # Force the race that failed 2 runs in 5 (#22): a poll's settings
+            # repaint landing after the resize must keep the zoom, not refit.
+            page.evaluate(
+                "() => { for (const e of terms.values()) e.painted = ''; applySettings(); }"
+            )
+            page.wait_for_timeout(200)
             zoomed = page.evaluate(
                 """() => {
                   const e = terms.get(activeId);

@@ -3158,7 +3158,7 @@ function wirePanelResizer() {
         frame = requestAnimationFrame(() => {
           frame = 0;
           const entry = terms.get(activeId);
-          if (entry) { try { entry.fit.fit(); } catch (err) { /* hidden */ } }
+          if (entry) { try { layoutPane(entry); } catch (err) { /* hidden */ } }
         });
       }
     };
@@ -7215,7 +7215,9 @@ function applySettings() {
     entry.term.options.lineHeight = termLineHeight();
     entry.term.options.letterSpacing = s.term_letter_spacing || 0;
     entry.term.options.theme = termTheme(theme);
-    try { entry.fit.fit(); } catch (err) { /* not visible yet */ }
+    // Through layoutPane, never a bare fit(): a boxed pane keeps its columns
+    // and zooms, and a raw fit here on a poll is what cut one to 128 (#22).
+    try { layoutPane(entry); } catch (err) { /* not visible yet */ }
   }
 
   // Order matters and is documented in the settings sheet: both, panel, then
@@ -8928,7 +8930,7 @@ function wireResizer() {
         frame = requestAnimationFrame(() => {
           frame = 0;
           const entry = terms.get(activeId);
-          if (entry) { try { entry.fit.fit(); } catch (err) { /* hidden */ } }
+          if (entry) { try { layoutPane(entry); } catch (err) { /* hidden */ } }
         });
       }
     };
