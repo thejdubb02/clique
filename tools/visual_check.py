@@ -1616,8 +1616,20 @@ def _run(panel) -> int:
             "the mark is off until there is something to read",
             page.locator("#whatsNew").is_hidden(),
         )
-        page.evaluate("() => { state.settings.changelog_seen = '0.1.0'; renderVersion(); }")
-        page.wait_for_timeout(150)
+        # On the server, not just state.settings: a poll landing in between
+        # would put the real value back and the mark would go out again.
+        page.evaluate(
+            """async () => {
+              await fetch('/api/settings', {method:'PATCH',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({changelog_seen: '0.1.0'})});
+              await refresh();
+            }"""
+        )
+        try:
+            page.wait_for_selector("#whatsNew", state="visible", timeout=3000)
+        except Exception as err:  # noqa: BLE001 — the check below names what failed
+            print(f"       the mark never lit: {err}")
         check("an unread release lights the bottom bar", page.locator("#whatsNew").is_visible())
         page.locator("#whatsNew").click()
         page.wait_for_timeout(800)
