@@ -1611,6 +1611,7 @@ def main() -> int:
             "file-preview.js",
             "providers.js",
             "panes.js",
+            "review.js",
             "themes.js",
         ):
             script = ROOT / "clique" / "web" / name
@@ -1631,7 +1632,7 @@ def main() -> int:
         # the menu idiom throughout, so that is what this reads.
         source = "\n".join(
             (ROOT / "clique" / "web" / name).read_text(encoding="utf-8")
-            for name in ("file-preview.js", "providers.js", "panes.js", "app.js")
+            for name in ("file-preview.js", "providers.js", "panes.js", "review.js", "app.js")
         )
         declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", source))
         called = set(re.findall(r"\(\)\s*=>\s*([A-Za-z_$][\w$]*)\s*\(", source))

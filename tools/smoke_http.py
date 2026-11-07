@@ -427,6 +427,7 @@ def _run() -> int:
         "/file-preview.js",
         "/providers.js",
         "/panes.js",
+        "/review.js",
         "/index.html",
         "/app.css",
         "/themes.js",
@@ -859,7 +860,7 @@ def _run() -> int:
             self.send_header("Content-Length", "0")
             self.end_headers()
 
-        def log_message(self, *a):
+        def log_message(self, *_args):
             pass
 
     receiver = http.server.HTTPServer(("127.0.0.1", 0), Catcher)
@@ -1184,6 +1185,13 @@ def _run() -> int:
         check(
             "serves split panes code",
             res.status == 200 and b"Notes, Git, Session info and Export panes" in res.read()[:400],
+        )
+    req = urllib.request.Request(BASE + "/review.js")
+    req.add_header("Cookie", cookie)
+    with urllib.request.urlopen(req, timeout=10) as res:
+        check(
+            "serves split review code",
+            res.status == 200 and b"Review changes sheet" in res.read()[:400],
         )
     # Every inline <script> must carry a nonce the CSP header actually allows.
     # This exists because curl does not enforce CSP: the policy shipped with a

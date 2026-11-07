@@ -376,9 +376,9 @@ critical, high and medium ones for the server and browser shipped in 0.94.0.
 Still open, each a card on the board:
 
 - **Monolith splits, one at a time, behind the existing checks:** `clique/app.py`
-  (terminal handler done in 0.95.3 as `terminal_handler.py`, file routes in 0.95.4 as `file_routes.py`, provider routes in 0.95.5 as `provider_routes.py`, session peek, groups, checkpoints, export and notes in 0.95.6 as `session_routes.py`; now about 2.6k lines),
+  (terminal handler done in 0.95.3 as `terminal_handler.py`, file routes in 0.95.4 as `file_routes.py`, provider routes in 0.95.5 as `provider_routes.py`, session peek, groups, checkpoints, export and notes in 0.95.6 as `session_routes.py`, password and pairing-code sign-in as `login_routes.py`; now about 2.5k lines),
   `web/app.js` (no build step so plain scripts; sidebar usage
-  and stats done in 0.95.3 as `web/sidebar-status.js`, file preview in 0.95.4 as `web/file-preview.js`, providers, palette and pane helpers in 0.95.5 as `web/providers.js`, Notes, Git, Session info and Export panes in 0.95.6 as `web/panes.js`; now about 9.3k lines), Android `SessionFragment.kt` and `SessionsFragment.kt`,
+  and stats done in 0.95.3 as `web/sidebar-status.js`, file preview in 0.95.4 as `web/file-preview.js`, providers, palette and pane helpers in 0.95.5 as `web/providers.js`, Notes, Git, Session info and Export panes in 0.95.6 as `web/panes.js`, Review changes sheet as `web/review.js`; now about 9.3k lines), Android `SessionFragment.kt` and `SessionsFragment.kt`,
   `terminal.html` link handling.
 - **Browser:** eager WebSockets for every tab and a 50k-line xterm buffer each
   (a deliberate trade for instant tab switches; the buffer matches tmux's
