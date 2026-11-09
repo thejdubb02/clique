@@ -26,7 +26,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from clique.store import DEFAULT_SETTINGS
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / "clique" / "app.py").read_text(encoding="utf-8")
+# app.py plus the route mixins split out of it, so a moved route stays checked.
+SOURCE = "\n".join(
+    (ROOT / "clique" / name).read_text(encoding="utf-8")
+    for name in ("app.py", "file_routes.py", "provider_routes.py", "session_routes.py", "terminal_handler.py")
+)
 REFERENCE = (ROOT / "API.md").read_text(encoding="utf-8")
 
 

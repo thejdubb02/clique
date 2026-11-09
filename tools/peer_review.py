@@ -29,7 +29,7 @@ ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 
 #: Cheapest first, in the order the house rules put them. Both are strong on
 #: code and both take a context large enough to hold this whole codebase.
-MODELS = ("google/gemini-2.5-flash", "deepseek/deepseek-chat")
+MODELS = ("google/gemini-3.7-flash", "deepseek/deepseek-chat")
 
 #: Reviewed in groups rather than all at once. A model given eight thousand
 #: lines returns eight general observations; a model given one subsystem

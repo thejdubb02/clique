@@ -130,7 +130,7 @@ def main() -> int:
             ).read_text() == "# Edited via CLIque\nnew body\n"
             res["back_to_preview"] = page.evaluate(
                 "() => document.getElementById('fileEdit').hidden "
-                "&& !document.getElementById('fileText').hidden"
+                "&& !document.getElementById('fileDoc').hidden"
             )
 
             page.evaluate("(id) => openFileSheet(id, '.env')", sid)
