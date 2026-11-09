@@ -8951,6 +8951,7 @@ function reclaimSize(force) {
   const s = session(activeId);
   if (!entry || !s || !s.alive) return;
   if (!entry.ws || entry.ws.readyState !== 1) return;
+  if (force && !handheld()) regrowBoxed(entry);
   const cols = entry.term.cols;
   const rows = entry.term.rows;
   if (!claimable(cols, rows)) return;
@@ -8961,6 +8962,23 @@ function reclaimSize(force) {
   if (!force && s.cols && s.rows && cols === s.cols && rows === s.rows) return;
   entry.claimedAt = Date.now();
   entry.ws.send(JSON.stringify({ type: "resize", cols, rows, handheld: handheld() }));
+}
+
+/* A boxed CLI keeps its columns (layoutPane), and a pane attaches at the
+ * shared window's size, so once a phone had the window the desktop drew at the
+ * phone's 53 columns for good: through a reload, a restart, and the server
+ * handing it the width back, because it only ever asked for 53. A real action
+ * on a desktop whose grid is far narrower than its pane refits to the pane.
+ * ponytail: "far" is under three quarters, so a sidebar toggle rarely trips
+ * it; track the desktop's own last fit if that ever proves too blunt. */
+function regrowBoxed(entry) {
+  if (!sessionOwnsInput(entry.id) || !entry.fit.proposeDimensions) return;
+  applyPaneZoom(entry.term, 1);
+  const dims = entry.fit.proposeDimensions();
+  if (dims && dims.cols > 0 && entry.term.cols < dims.cols * 0.75) {
+    fitPaneRows(entry, paneCellPx(entry.term), entry.el.getBoundingClientRect());
+  }
+  layoutPane(entry);
 }
 
 function refitAll() {

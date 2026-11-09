@@ -241,8 +241,15 @@ class TerminalHandler(BaseHTTPRequestHandler):
             # passive viewer, and still birth the PTY at the window's
             # current size so this client is not drawing a different grid
             # than the one tmux is painting.
+            #
+            # Nor does a connect take the window from whoever holds it: a
+            # phone reconnecting put it back to 53 columns under a desktop
+            # that had just typed its way to owning it. Hold and typing decide.
+            with _handheld_lock:
+                claimed = session.mux in _handheld or session.mux in _desktop_took
             if query.get("passive") not in {"1", "true", "yes"}:
-                tmux.resize_window(session.mux, cols, rows, session.socket)
+                if not claimed:
+                    tmux.resize_window(session.mux, cols, rows, session.socket)
             else:
                 pane = self.panel.live().get(session.mux)
                 if pane and pane.width >= 2 and pane.height >= 2:
