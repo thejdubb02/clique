@@ -62,6 +62,8 @@ class PtyBridge:
         self.on_exit = on_exit
         self.cols = cols
         self.rows = rows
+        #: Set by the terminal handler once this client shows it is a phone.
+        self.handheld = False
         self.pid: int | None = None
         self.fd: int | None = None
         self._reader: threading.Thread | None = None

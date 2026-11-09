@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
+from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -886,7 +886,14 @@ def main() -> int:
     # machine and a phone in your hand both report true, so both claimed it
     # every poll and the CLI reflowed between 162 and 42 columns forever.
     from clique.app import Handler
-    from clique.terminal_handler import HANDHELD_HOLD, _desktop_size, _handheld, _may_size_window
+    from clique.terminal_handler import (
+        HANDHELD_HOLD,
+        _desktop_size,
+        _desktop_took,
+        _handheld,
+        _may_size_window,
+        _typed,
+    )
 
     _handheld.clear()
     _desktop_size.clear()
@@ -1004,10 +1011,50 @@ def main() -> int:
             "sm-restore" in _desktop_size,
             dict(_desktop_size),
         )
+
+        # A phone left awake on the desk holds every poll. Typing on the
+        # desktop has to take the width anyway, and the phone's next hold or
+        # poll resize must not snatch it back; only the phone typing does.
+        _handheld.clear()
+        _desktop_size.clear()
+        def pty(cols, rows) -> Any:  # sizes itself on resize, as PtyBridge does
+            b = SimpleNamespace(cols=cols, rows=rows)
+            b.resize = lambda c, r: b.__dict__.update(cols=c, rows=r)
+            return b
+
+        phone, desk = pty(53, 20), pty(235, 60)
+        handler._control(session, phone, b'{"type":"hold"}', True)
+        resizes.clear()
+        _typed(session, desk)
+        check(
+            "typing on the desktop takes the width", resizes == [("sm-restore", 235, 60)], resizes
+        )
+        handler._control(session, phone, b'{"type":"hold"}', True)
+        handler._control(
+            session, phone, b'{"type":"resize","cols":53,"rows":21,"handheld":true}', True
+        )
+        check(
+            "the idle phone's hold and poll resize do not take it back", len(resizes) == 1, resizes
+        )
+        _typed(session, desk)
+        check("and more desktop typing does not resize again", len(resizes) == 1, resizes)
+        _typed(session, phone, b"\x1b[12;40R")
+        check("the idle phone answering a cursor query is not typing", len(resizes) == 1, resizes)
+        _typed(session, phone)
+        check("typing on the phone takes it back", resizes[-1] == ("sm-restore", 53, 21), resizes)
+        handler._control(session, phone, b'{"type":"release"}', True)
+        resizes.clear()
+        handler._control(session, phone, b'{"type":"hold"}', True)
+        check(
+            "a phone woken after letting go still reclaims",
+            resizes == [("sm-restore", 53, 21)],
+            resizes,
+        )
     finally:
         app_mod.tmux.resize_window = real_resize
         _handheld.clear()
         _desktop_size.clear()
+        _desktop_took.clear()
 
     print("finding a project by name")
     import tempfile
@@ -1788,8 +1835,11 @@ def main() -> int:
     # The page-exit order: newest (n=2) arrives first, the older save second.
     dr_store.update_session("s1", draft="latest", draft_rev=["pg", 2])
     dr_store.update_session("s1", draft="older", draft_rev=["pg", 1])
-    check("an older draft from the same page landing late is ignored",
-          dr_session.draft == "latest", dr_session.draft)
+    check(
+        "an older draft from the same page landing late is ignored",
+        dr_session.draft == "latest",
+        dr_session.draft,
+    )
     dr_store.update_session("s1", draft="other tab", draft_rev=["pg2", 1])
     check("another page's draft still applies", dr_session.draft == "other tab")
     dr_store.update_session("s1", draft="plain")

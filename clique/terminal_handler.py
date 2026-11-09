@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -33,6 +34,11 @@ HANDHELD_HOLD = 90.0
 _handheld: dict[str, float] = {}
 #: mux name -> last (cols, rows, when) a non-handheld client asked for.
 _desktop_size: dict[str, tuple[int, int, float]] = {}
+#: mux name -> when a desktop last took the window back from a phone by
+#: typing in it. While set, a phone's routine `hold` and its poll resizes do
+#: not take it back; the phone typing, or letting go and waking again, does.
+#: Refreshed by each refused hold, so it lapses with a phone that vanished.
+_desktop_took: dict[str, float] = {}
 _handheld_lock = threading.Lock()
 
 
@@ -75,10 +81,52 @@ def _may_size_window(mux: str, handheld: bool) -> bool:
             if now - rec[2] > HANDHELD_HOLD and k not in _handheld
         ]:
             del _desktop_size[name]
+        for name in [k for k, at in _desktop_took.items() if now - at > HANDHELD_HOLD]:
+            del _desktop_took[name]
         if handheld:
+            if mux in _desktop_took:
+                _desktop_took[mux] = now
+                return False
             _handheld[mux] = now
             return True
         return mux not in _handheld
+
+
+#: What a terminal sends by itself rather than because someone typed: answers
+#: to cursor, device and mode queries, focus in/out, mouse reports, OSC and DCS
+#: replies. An idle phone's xterm answers the CLI's queries, and counting those
+#: as typing let it take the width back with nobody touching it.
+_NOT_TYPING = re.compile(
+    rb"(?:\x1b\[[?>=]?[\d;]*(?:[cRnIOt]|\$y)|\x1b\[<[\d;]*[Mm]"
+    rb"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[^\x1b]*\x1b\\)+"
+)
+
+
+def _typed(session, bridge, payload: bytes = b"x") -> None:
+    """Whoever types owns the window's width.
+
+    A phone left on the desk with its screen on holds the window every poll,
+    and a handheld wins, so a desktop being typed into sat at the phone's
+    width for as long as the phone stayed awake. Typing is the one signal
+    that cannot be idle: the device being typed into is the one in use.
+    Called on every keystroke, so it is a dict lookup unless ownership moves.
+    """
+    if _NOT_TYPING.fullmatch(payload):
+        return
+    handheld = getattr(bridge, "handheld", False)
+    # ponytail: the resize runs outside the lock, so a phone hold landing in
+    # the same millisecond can win; serialize resizes if that is ever seen.
+    with _handheld_lock:
+        if handheld:
+            took = _desktop_took.pop(session.mux, None) is not None
+            if took:
+                _handheld[session.mux] = time.time()
+        else:
+            took = _handheld.pop(session.mux, None) is not None
+            if took:
+                _desktop_took[session.mux] = time.time()
+    if took:
+        tmux.resize_window(session.mux, bridge.cols, bridge.rows, session.socket)
 
 
 def _terminal_size(cols, rows) -> tuple[int, int]:
@@ -255,6 +303,7 @@ class TerminalHandler(BaseHTTPRequestHandler):
                         self._control(session, bridge, payload, may_write, viewer)
                     elif may_write:
                         bridge.write(payload)
+                        _typed(session, bridge, payload)
             finally:
                 stop.set()
         finally:
@@ -302,6 +351,8 @@ class TerminalHandler(BaseHTTPRequestHandler):
             # not a phone — those still clear 20x8. Applying them is how
             # a background reconnect left a screen of dots.
             handheld = bool(message.get("handheld"))
+            if handheld:
+                bridge.handheld = True
             if may_write and not handheld:
                 # Last size a desktop asked for, whether or not it was
                 # allowed to move the window *then*. A desktop refused while
@@ -321,11 +372,11 @@ class TerminalHandler(BaseHTTPRequestHandler):
             # after attach) is the phone coming back to a window a desktop
             # has resized: take it back at this PTY's size, or the phone
             # sits in dot-fill until its own size happens to change.
+            bridge.handheld = True
             if may_write:
                 with _handheld_lock:
                     had = session.mux in _handheld
-                _may_size_window(session.mux, True)
-                if not had:
+                if _may_size_window(session.mux, True) and not had:
                     tmux.resize_window(session.mux, bridge.cols, bridge.rows, session.socket)
         elif kind == "release":
             # A phone going into a pocket. The timer below is the backstop for
@@ -336,6 +387,7 @@ class TerminalHandler(BaseHTTPRequestHandler):
                 remembered = None
                 with _handheld_lock:
                     _handheld.pop(session.mux, None)
+                    _desktop_took.pop(session.mux, None)
                     remembered = _desktop_size.get(session.mux)
                 if remembered:
                     tmux.resize_window(session.mux, remembered[0], remembered[1], session.socket)
@@ -351,7 +403,9 @@ class TerminalHandler(BaseHTTPRequestHandler):
             return  # watching is allowed; typing is not
         elif kind == "key":
             tmux.send_key(session.mux, str(message.get("key") or ""), session.socket)
+            _typed(session, bridge)
         elif kind == "run":
+            _typed(session, bridge)
             tmux.send_text(
                 session.mux,
                 str(message.get("text", "")),
